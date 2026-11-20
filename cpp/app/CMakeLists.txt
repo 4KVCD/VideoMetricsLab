@@ -54,6 +54,7 @@ add_library(vml_app STATIC
     self_test.cpp
     series_colors.cpp
     settings_panel.cpp
+    settings_appearance.cpp
     settings_notifications.cpp
     stream_records.cpp
     theme.cpp

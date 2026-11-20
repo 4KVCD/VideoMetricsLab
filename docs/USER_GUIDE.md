@@ -105,24 +105,25 @@ and how many test videos Video Compare decodes), **Metrics** (the defaults for
 newly added videos, and the GPU metrics), **Weak segments**, **Storage** and
 **Notifications** (see [Notifications](#notifications)).
 
-**Settings > General > Window** chooses the theme (the system's, Light or Dark)
-and whether the app reopens the videos it had open when it was last closed (off
-by default).
+**Settings > General > Window** chooses whether the app reopens the videos it
+had open when it was last closed (off by default).
 
-**Interface** chooses how the window looks; nothing else changes with it:
+**Settings > Appearance** chooses how the window looks; nothing else changes
+with it. **Interface** is a card each, with a picture of it:
 
 - **VML Classic** (the default): the window as it has always been, in the
   system's own controls.
 - **VML Modern**: boxes as cards, each tab's main action (**Calculate
   metrics**, **Open in Metric Graphs**, **Play**, **Calculate bitrate**) in the
   accent colour, actions that delete in red, and ticked boxes and the selection
-  in the accent. It follows the theme, light or dark.
+  in the accent.
 
 VML Modern shows at once; VML Classic, chosen while VML Modern is shown, when
 the app is next started. **Accent**, usable with VML Modern, is the system's
-(**Same as Windows**), one of six, or **Custom...**, a colour picked in a
-dialog; text on it is dark or light, whichever reads. VML Classic keeps the
-system's accent.
+(**Same as Windows**), one of six colours, a colour picked with **Custom...**,
+or one typed as `#RRGGBB` in the box beside it; text on it is dark or light,
+whichever reads. VML Classic keeps the system's accent. **Light or dark** is
+the system's (**Same as Windows**), **Light** or **Dark**, in either interface.
 
 While metrics are calculated, Settings stays open, but the ffmpeg folder, the
 saved results' folder and **Clear saved results** are locked until the run

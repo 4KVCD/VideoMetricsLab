@@ -624,6 +624,12 @@ QGroupBox[vmlRole="unboxed"] { background: transparent; border: 0; border-radius
 QWidget[vmlRole="footer"] { background: {card_alt}; border: 0; border-top: 1px solid {border}; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; }
 QLabel[vmlRole="title"] { font-weight: 600; color: {text}; }
 QLabel[vmlRole="hint"] { color: {text_muted}; }
+QFrame[vmlRole="choice"] { background: {raised}; border: 1px solid {border_strong}; border-radius: 10px; }
+QFrame[vmlRole="choice"][checked="true"] { background: {accent_tint}; border: 2px solid {accent}; }
+QWidget[vmlRole="segments"] { background: {field}; border: 1px solid {border}; border-radius: 8px; }
+QWidget[vmlRole="segments"] QPushButton { background: transparent; color: {text_soft}; border: 0; border-radius: 5px; padding: 4px 12px; min-height: 18px; }
+QWidget[vmlRole="segments"] QPushButton:hover:!checked { background: {hover}; color: {text}; }
+QWidget[vmlRole="segments"] QPushButton:checked { background: {hover}; color: {text}; font-weight: 600; }
 QLabel[vmlRole="notice"] { background: {accent_tint}; color: {text}; border: 1px solid {border}; border-radius: 8px; padding: 8px 12px; }
 QPushButton { background: {raised}; color: {text}; border: 1px solid {border_strong}; border-radius: 6px; padding: 4px 12px; min-height: 18px; }
 QPushButton:hover { background: {hover}; }

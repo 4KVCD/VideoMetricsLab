@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
+#include <QButtonGroup>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDateTime>
@@ -131,6 +132,7 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
         sections->addTab(page, name);
     };
     add_section(app::tr("General"), {build_ffmpeg_box(), build_window_box(), build_compare_box()});
+    sections->addTab(build_appearance_page(), app::tr("Appearance"));
     add_section(app::tr("Metrics"), {build_defaults_box(), build_gpu_box()});
     add_section(app::tr("Weak segments"), {build_weak_segments_box()});
     add_section(app::tr("Storage"), {build_storage_box()});
@@ -852,98 +854,6 @@ QGroupBox* SettingsPanel::build_window_box() {
     language_row->addWidget(language);
     language_row->addStretch(1);
     window_layout->addLayout(language_row);
-    // Light or dark, at once; "Same as Windows" (macOS) also follows the
-    // system changing while the app is open.
-    theme = new QComboBox;
-#ifdef __APPLE__
-    theme->addItem(app::tr("Same as macOS"), "");
-#else
-    theme->addItem(app::tr("Same as Windows"), "");
-#endif
-    theme->addItem(app::tr("Light"), "light");
-    theme->addItem(app::tr("Dark"), "dark");
-    theme->setCurrentIndex(std::max(0, theme->findData(text_of(settings_.theme))));
-    theme->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    theme->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    connect(theme, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
-    auto* theme_row = new QHBoxLayout;
-    theme_row->addWidget(new QLabel(app::tr("Theme:")));
-    theme_row->addWidget(theme);
-    theme_row->addStretch(1);
-    window_layout->addLayout(theme_row);
-    // The interface and the accent, at once (theme::apply_appearance).
-    interface_choice = new QComboBox;
-    interface_choice->addItem(app::tr("VML Classic"), "classic");
-    interface_choice->addItem(app::tr("VML Modern"), "modern");
-    interface_choice->setCurrentIndex(theme::interface_of(settings_.interface_style) == theme::Interface::modern ? 1 : 0);
-    interface_choice->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    interface_choice->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    interface_choice->setToolTip(app::tr("VML Classic: the window as it has always been, in the system's own "
-                                         "controls. VML Modern: boxes as cards, a tab's main action in the accent "
-                                         "color, and scores that read first. VML Modern shows at once, VML "
-                                         "Classic when the app is next started; nothing else changes with them."));
-    connect(interface_choice, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
-    auto* interface_row = new QHBoxLayout;
-    interface_row->addWidget(new QLabel(app::tr("Interface:")));
-    interface_row->addWidget(interface_choice);
-    interface_row->addStretch(1);
-    window_layout->addLayout(interface_row);
-    accent_choice = new QComboBox;
-    const auto swatch = [](const QColor& colour) {
-        QPixmap pixmap(14, 14);
-        pixmap.fill(colour);
-        QPainter painter(&pixmap);
-        painter.setPen(QColor(128, 128, 128));
-        painter.drawRect(0, 0, 13, 13);
-        painter.end();
-        return QIcon(pixmap);
-    };
-#ifdef __APPLE__
-    accent_choice->addItem(app::tr("Same as macOS"), "");
-#else
-    accent_choice->addItem(app::tr("Same as Windows"), "");
-#endif
-    const std::pair<const char*, const char*> presets[] = {
-        {N_("Lilac"), "#c38fe8"}, {N_("Blue"), "#4f8fe8"},  {N_("Teal"), "#2fa9b2"},
-        {N_("Green"), "#3fa66b"}, {N_("Amber"), "#d98a2b"}, {N_("Rose"), "#e0607e"},
-    };
-    for (const auto& [name, hex] : presets) {
-        accent_choice->addItem(swatch(QColor(hex)), app::tr(name), QString::fromLatin1(hex));
-    }
-    accent_choice->addItem(app::tr("Custom..."), "");
-    const QString chosen_accent = text_of(settings_.accent_colour).toLower();
-    int accent_index = chosen_accent.isEmpty() ? 0 : accent_choice->findData(chosen_accent);
-    if (accent_index < 0 && theme::accent_of(settings_.accent_colour)) {
-        // A colour of one's own: the Custom item holds it.
-        accent_index = accent_choice->count() - 1;
-        accent_choice->setItemData(accent_index, chosen_accent);
-        accent_choice->setItemText(accent_index, app::tr("Custom ({color})", {{"color", chosen_accent.toUpper()}}));
-        accent_choice->setItemIcon(accent_index, swatch(QColor(chosen_accent)));
-    }
-    accent_choice->setCurrentIndex(std::max(0, accent_index));
-    accent_choice->setProperty("previous", accent_choice->currentIndex());
-    accent_choice->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    accent_choice->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    accent_choice->setToolTip(app::tr("VML Modern's color for each tab's main button, ticked boxes and the "
-                                      "selection; text on it is dark or light, whichever reads. VML Classic keeps "
-                                      "the system's."));
-    // Modern's alone (theme::apply_palette): usable while it is chosen.
-    accent_choice->setEnabled(interface_choice->currentData().toString() == "modern");
-    connect(interface_choice, &QComboBox::currentIndexChanged, accent_choice,
-            [this] { accent_choice->setEnabled(interface_choice->currentData().toString() == "modern"); });
-    connect(accent_choice, &QComboBox::activated, this, [this](int index) {
-        if (index == accent_choice->count() - 1) {
-            choose_custom_accent();
-            return;
-        }
-        accent_choice->setProperty("previous", index);
-        on_edited();
-    });
-    auto* accent_row = new QHBoxLayout;
-    accent_row->addWidget(new QLabel(app::tr("Accent:")));
-    accent_row->addWidget(accent_choice);
-    accent_row->addStretch(1);
-    window_layout->addLayout(accent_row);
     remember_size = new QCheckBox(app::tr("Reopen where and at the size the window was last closed"));
     remember_size->setChecked(settings_.remember_window_size);
     connect(remember_size, &QCheckBox::toggled, this, [this] { on_edited(); });
@@ -1166,9 +1076,9 @@ void SettingsPanel::read_controls() {
     }
     settings_.check_for_updates = check_updates->isChecked();
     settings_.language = language->currentData().toString().toStdString();
-    settings_.theme = theme->currentData().toString().toStdString();
-    settings_.interface_style = interface_choice->currentData().toString().toStdString();
-    settings_.accent_colour = accent_choice->currentData().toString().toStdString();
+    settings_.theme = theme_buttons->checkedButton()->property("value").toString().toStdString();
+    settings_.interface_style = interface_buttons->checkedId() == 1 ? "modern" : "classic";
+    settings_.accent_colour = accent_value.toStdString();
     settings_.gpu_metrics_together = gpu_together->isChecked();
     if (gpu_choice != nullptr) {
         settings_.gpu = gpu_choice->currentData().toString().toStdString();
@@ -1266,39 +1176,6 @@ void SettingsPanel::choose_export_color(QPushButton* button, const QString& titl
         return;
     }
     button->setProperty("chosen", reset ? QString() : dialog.currentColor().name());
-    on_edited();
-}
-
-void SettingsPanel::choose_custom_accent() {
-    // Starts at the accent in use: the chosen one, else the palette's.
-    const int custom = accent_choice->count() - 1;
-    const std::optional<QColor> current = theme::accent_of(settings_.accent_colour);
-    QColorDialog dialog(current.value_or(QApplication::palette().color(QPalette::Accent)), this);
-    dialog.setWindowTitle(app::tr("Accent color"));
-    dialog.setOption(QColorDialog::DontUseNativeDialog, true);
-    if (dialog.exec() != QDialog::Accepted) {
-        const QSignalBlocker blocker(accent_choice);
-        accent_choice->setCurrentIndex(accent_choice->property("previous").toInt());
-        return;
-    }
-    const QString hex = dialog.currentColor().name().toLower();
-    const int preset = accent_choice->findData(hex);
-    const QSignalBlocker blocker(accent_choice);
-    if (preset >= 0 && preset != custom) {
-        accent_choice->setCurrentIndex(preset);  // a preset's own colour: that preset
-    } else {
-        QPixmap pixmap(14, 14);
-        pixmap.fill(QColor(hex));
-        QPainter painter(&pixmap);
-        painter.setPen(QColor(128, 128, 128));
-        painter.drawRect(0, 0, 13, 13);
-        painter.end();
-        accent_choice->setItemData(custom, hex);
-        accent_choice->setItemText(custom, app::tr("Custom ({color})", {{"color", hex.toUpper()}}));
-        accent_choice->setItemIcon(custom, QIcon(pixmap));
-        accent_choice->setCurrentIndex(custom);
-    }
-    accent_choice->setProperty("previous", accent_choice->currentIndex());
     on_edited();
 }
 

@@ -25,6 +25,7 @@
 #include "vml/ffmpeg_tools.h"
 #include "vml/settings.h"
 
+class QButtonGroup;
 class QCheckBox;
 class QComboBox;
 class QGroupBox;
@@ -152,12 +153,18 @@ public:
     SegmentRulesEditor* weak_segments = nullptr;
     QComboBox* decoded_videos = nullptr;
     QComboBox* language = nullptr;
-    QComboBox* theme = nullptr;
-    // Settings > Window > Interface and Accent (theme::apply_appearance).
-    // Accent's items hold "#rrggbb", "" for the system's; its last item,
-    // Custom..., the colour chosen in its dialog, if any.
-    QComboBox* interface_choice = nullptr;
-    QComboBox* accent_choice = nullptr;
+    // Settings > Appearance (settings_appearance.cpp, theme::apply_appearance):
+    // the interface (0 Classic, 1 Modern), its cards; Modern's accent, the
+    // system's ("") or "#rrggbb", its choices (each button's "hex"), the
+    // code shown and typed, and Modern's card's picture of it; light or
+    // dark (each button's "value": "", "light" or "dark").
+    QButtonGroup* interface_buttons = nullptr;
+    QButtonGroup* accent_buttons = nullptr;
+    QWidget* accent_controls = nullptr;
+    QLineEdit* accent_hex = nullptr;
+    QWidget* modern_preview = nullptr;
+    QString accent_value;
+    QButtonGroup* theme_buttons = nullptr;
     QCheckBox* remember_size = nullptr;
     QCheckBox* remember_videos = nullptr;
     QCheckBox* check_updates = nullptr;
@@ -238,6 +245,9 @@ private:
     QHBoxLayout* build_vvc_decoder_row();
     QGroupBox* build_compare_box();
     QGroupBox* build_window_box();
+    QWidget* build_appearance_page();
+    // The accent chosen (accent_value): its choice ticked, its code shown.
+    void set_accent(const QString& hex);
     QWidget* build_notifications_page();
     QGroupBox* build_notify_when_box();
     QGroupBox* build_services_box();
@@ -283,8 +293,7 @@ private:
     // Lets the user choose a colour for `button` (or go back to the
     // palette's, with Reset color), and saves it.
     void choose_export_color(QPushButton* button, const QString& title);
-    // Accent's Custom... chosen: a colour picked in a dialog, or the choice
-    // before it back if the dialog is closed.
+    // Accent's Custom...: a colour picked in a dialog; none if it is closed.
     void choose_custom_accent();
     // Fills the profile list from Settings, the one in use picked, and
     // shows its rules; no edit.
