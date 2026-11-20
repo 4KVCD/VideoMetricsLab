@@ -854,7 +854,9 @@ is recognised by its video stream: its codec, picture size, frame rate,
 colour and length, and five pictures decoded from it. The reference's
 stream is only looked at when the test video has saved scores, so a new
 encode costs nothing to look up. A remux that changes the stream's colour
-tags, or a re-encode, is another video and is scored again.
+tags, or a re-encode, is another video and is scored again. Scores found
+this way belong to the files where they are now: Video Compare plays those,
+and a run file exported from the row names them.
 
 With **Settings > Storage > Recognize test videos remuxed after scoring**
 (off by default; the command line's `--test-remuxes on`), a test video

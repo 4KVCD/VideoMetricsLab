@@ -672,8 +672,14 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
     if (found) {
         // The files as they are now: the folder may be one saved for them
         // under other paths (recipe_directory), its context.json naming those.
+        // Their details' paths too, which a run file exported from the row
+        // keeps, and Video Compare decodes once it is loaded: `distorted` is
+        // the file decoded (a companion row's or a resolution test's identity
+        // file), and a resolution test decodes the reference.
         found->first.source = source;
         found->first.distorted = distorted;
+        found->first.source_info.path = source;
+        found->first.distorted_info.path = found->first.resample_target ? source : distorted;
         // A folder saved before files were recorded is recorded by the
         // caller, once the scores are shown (record_saved_files).
     }
