@@ -63,15 +63,12 @@ bool still_reading(const BitratePanel& panel, const std::filesystem::path& path)
     return state == BitrateState::queued || state == BitrateState::reading || state == BitrateState::packets_read;
 }
 
-// The files whose bitrate an export draws: its reference, then each video
-// with a file of its own (not a resolution test's).
+// The files whose bitrate an export draws (bitrate_files), by path.
 std::vector<std::filesystem::path> bitrate_paths(const std::filesystem::path& reference,
                                                 const std::vector<BundleVideo>& videos) {
-    std::vector<std::filesystem::path> paths{reference};
-    for (const BundleVideo& video : videos) {
-        if (!video.result->resample_target) {
-            paths.push_back(video.path);
-        }
+    std::vector<std::filesystem::path> paths;
+    for (const VideoInfo& file : bitrate_files(reference, videos)) {
+        paths.push_back(file.path);
     }
     return paths;
 }
@@ -360,20 +357,15 @@ void MainWindow::export_automatically(const RowData& row_data) {
 void MainWindow::queue_bundle(PendingBundle bundle) {
     // What the Bitrate tab has not read, nor is reading, is read now: a
     // video loaded with saved scores, say. A file it could not read is not
-    // tried again.
-    const std::vector<std::filesystem::path> paths = bitrate_paths(bundle.reference, bundle.videos);
-    const bool unread = std::any_of(paths.begin(), paths.end(), [this](const std::filesystem::path& path) {
-        const std::optional<BitrateState> state = bitrate_panel_->state_of(path);
+    // tried again. They are read where they are now, the paths the export
+    // looks their bitrate up by, not where saved scores say they were.
+    const std::vector<VideoInfo> files = bitrate_files(bundle.reference, bundle.videos);
+    const bool unread = std::any_of(files.begin(), files.end(), [this](const VideoInfo& file) {
+        const std::optional<BitrateState> state = bitrate_panel_->state_of(file.path);
         return !state || state == BitrateState::ready || state == BitrateState::stopped;
     });
     if (unread) {
-        std::vector<VideoInfo> infos{bundle.videos.front().result->source_info};
-        for (const BundleVideo& video : bundle.videos) {
-            if (!video.result->resample_target) {
-                infos.push_back(video.result->distorted_info);
-            }
-        }
-        bitrate_panel_->add_and_analyze(infos);
+        bitrate_panel_->add_and_analyze(files);
     }
     pending_bundles_.push_back(std::move(bundle));
     write_ready_bundles();

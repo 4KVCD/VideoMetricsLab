@@ -105,6 +105,22 @@ std::vector<BundleFile> metric_graph_files(const std::vector<BundleVideo>& video
     return files;
 }
 
+std::vector<VideoInfo> bitrate_files(const std::filesystem::path& reference, const std::vector<BundleVideo>& videos) {
+    std::vector<VideoInfo> files;
+    if (videos.empty()) {
+        return files;
+    }
+    files.push_back(videos.front().result->source_info);
+    files.back().path = reference;
+    for (const BundleVideo& video : videos) {
+        if (!video.result->resample_target) {
+            files.push_back(video.result->distorted_info);
+            files.back().path = video.path;
+        }
+    }
+    return files;
+}
+
 std::vector<BundleFile> bitrate_graph_files(const BitratePanel& read, const std::filesystem::path& reference,
                                             const std::vector<BundleVideo>& videos, const BundleStyle& style,
                                             std::vector<QString>& missing) {
