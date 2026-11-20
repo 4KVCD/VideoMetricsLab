@@ -135,7 +135,7 @@ void StillSaveWorker::run() {
 
 // Previous / Next worst with where the list is, the loop, and Export frame as PNG:
 // centred, as the controls above and the frame's line below are.
-void FrameComparePanel::add_inspect_row(QVBoxLayout* root) {
+void FrameComparePanel::add_inspect_row(QBoxLayout* root) {
     auto* row = new QHBoxLayout;
     inspect_row_ = row;
     row->addStretch(1);
