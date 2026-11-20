@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cerrno>
 #include <chrono>
+#include <ctime>
 #include <condition_variable>
 #include <fstream>
 #include <functional>
@@ -22,6 +23,7 @@
 #include "batch_file.h"
 #include "common.h"
 #include "file_names.h"
+#include "notify.h"
 #include "report.h"
 #include "weak_report.h"
 #include "vml/app_log.h"
@@ -1882,6 +1884,44 @@ bool write_results(const CompareArguments& arguments, const Comparisons& compari
     return written;
 }
 
+// --notify: the run as its notification tells it (notify.h): how it ended
+// (cancelled; with failures where a video or a metric failed; else
+// finished), how long the command took, the references, and each test video
+// compared; sent as Settings > Notifications say, and said on `progress`.
+void notify_of_run(const Settings& settings, const Comparisons& comparisons, bool cancelled, bool every_ok,
+                   double seconds, Progress& progress) {
+    NotifiedRun run;
+    run.outcome = cancelled ? RunOutcome::cancelled
+                  : every_ok ? RunOutcome::finished
+                             : RunOutcome::finished_with_failures;
+    run.outcome_text = cancelled ? "Cancelled" : every_ok ? "Finished" : "Finished with failures";
+    run.seconds = seconds;
+    run.app = std::string("VideoMetricsLab ") + VML_VERSION;
+    const std::tm now = platform::local_time(std::time(nullptr));
+    char finished[32];
+    std::strftime(finished, sizeof finished, "%Y-%m-%d %H:%M", &now);
+    run.finished_at = finished;
+    for (const std::unique_ptr<Comparison>& comparison : comparisons) {
+        run.reference += (run.reference.empty() ? "" : ", ") + platform::path_text(comparison->reference.filename());
+        if (!comparison->planner) {
+            continue;
+        }
+        for (const TestVideo& video : comparison->planner->videos) {
+            if (!video.for_display_only) {
+                run.videos.push_back(notified_video(video, cancelled));
+            }
+        }
+    }
+    for (const NotifyLine& line : notify_run_end(settings, run, post_notification,
+                                                 utc_text(std::chrono::system_clock::now()))) {
+        if (line.problem) {
+            progress.problem(line.text);
+        } else {
+            progress.message(line.text);
+        }
+    }
+}
+
 // The fields of --json's, --scores-csv's and --log-file's paths replaced
 // (file_names.h): the run's, and with one test video its own and its
 // reference's. Why one cannot be (a video's field with several test videos,
@@ -2226,6 +2266,9 @@ int compare(const CompareArguments& given) {
                      1,
                      this_machine(tools.ffmpeg.path, format_version(tools.ffmpeg.version))};
     const bool written = write_results(arguments, comparisons, cancelled, record, fields, *progress);
+    if (arguments.notify) {
+        notify_of_run(settings, comparisons, cancelled, every_ok, record.wall_seconds.value_or(0.0), *progress);
+    }
     if (test_remuxes && !cancelled) {
         record_test_streams(comparisons, cache_folder, *progress, cancel);  // after the results: nothing waits
     }

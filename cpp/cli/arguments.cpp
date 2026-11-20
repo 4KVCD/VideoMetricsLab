@@ -59,8 +59,8 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--segment-merge-frames N]
                                    [--segments-dir FOLDER]
                                    [--segments-report FILE] [--run-dir FOLDER]
-                                   [--log-file FILE] [--name TEMPLATE] [-q]
-                                   [-v]
+                                   [--log-file FILE] [--name TEMPLATE]
+                                   [--notify] [-q] [-v]
                                    [REFERENCE] [TEST ...]
 )";
 
@@ -361,6 +361,11 @@ options:
                         {sequence} (--batch's); {{ and }} are braces. The same
                         fields are replaced in --json's and --scores-csv's
                         paths
+  --notify              send a notification as the run ends, as the app's
+                        Settings > Notifications say: to the services on
+                        there, with its message, for the outcomes and run
+                        lengths it is on for. Whether it was sent is said on
+                        the progress lines; the exit code is the run's
   -q, --quiet           no progress, only the results
   -v, --verbose         the app's log as well
 
@@ -1235,6 +1240,7 @@ Parser compare_parser(CompareArguments& parsed) {
         option({"--run-dir"}, [&parsed](const std::string& value) { parsed.run_dir = value; }),
         option({"--log-file"}, [&parsed](const std::string& value) { parsed.log_file = value; }),
         option({"--name"}, [&parsed](const std::string& value) { parsed.name = value; }),
+        flag({"--notify"}, parsed.notify),
         flag({"-q", "--quiet"}, parsed.quiet),
         flag({"-v", "--verbose"}, parsed.verbose),
     };

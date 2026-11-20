@@ -98,6 +98,8 @@ struct CompareArguments {
     std::optional<std::string> log_file;
     // --name: the template each test video's files are named after, in place of its file's name (file_names.h).
     std::optional<std::string> name;
+    // --notify: the run's notification as it ends, as the app's Settings > Notifications say (notify.h).
+    bool notify = false;
     bool quiet = false;
     bool verbose = false;
 };
