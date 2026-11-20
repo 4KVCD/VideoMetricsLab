@@ -1,5 +1,5 @@
-// A result's per-frame scores as CSV, as the window's Export CSV writes
-// them (a port of export_csv and its file-name helpers in
+// A result's per-frame scores as CSV, as the window's per-frame scores
+// exports write them (a port of export_csv and its file-name helpers in
 // vmaf_app/core/run_io.py), or as JSON.
 #pragma once
 

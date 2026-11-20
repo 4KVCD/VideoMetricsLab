@@ -11,6 +11,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "dialogs.h"
@@ -58,13 +59,18 @@ public:
     void show_list(std::vector<SavedComparison> list);
     // While metrics are calculated, Delete is locked: the run writes there.
     void set_run_active(bool active);
-    // The weak segment rules offered: the profile in use, every profile and
-    // every preset (filled again when the tab is shown).
-    void fill_segment_rules();
-
     // The selected comparisons, read with the scores picked.
     std::vector<LoadedSavedResult> selected_results() const;
-    // The rules the weak segments export uses: the one picked.
+    // The weak segment rules offered under Export > Weak segments, by their
+    // choice ("in-use", "profile:<name>", "preset:<key>") with their text:
+    // the profile in use, every profile and every preset, as they are now.
+    std::vector<std::pair<QString, QString>> segment_rule_choices() const;
+    // Picks the rules by their choice, and the one picked (the profile in
+    // use until another is picked, or after the one picked is gone).
+    void pick_segment_rules(const QString& choice);
+    QString segment_rule_choice() const;
+    // The rules the weak segments are found by, in both of the tab's
+    // exports: the ones picked.
     SegmentRules segment_rules() const;
 
     // For the tests.
@@ -72,7 +78,11 @@ public:
     QLineEdit* filter() const { return filter_; }
     // The list a metric's saved score is picked from: none where it has one.
     QComboBox* score_choice(const std::string& key) const;
-    QComboBox* rules_choice() const { return rules_combo_; }
+    // The Export button's menu, made as it opens: the right-click menu's
+    // export, then results, per-frame scores, graphs and weak segments each
+    // on its own.
+    QMenu* export_menu() const { return export_menu_; }
+    void fill_export_menu(QMenu& menu);
     void delete_selected();
     // The table's right-click menu: the selected comparisons' export, of
     // what Settings' Exports include and named after it ("this video's"
@@ -107,12 +117,10 @@ private:
     QGroupBox* details_ = nullptr;
     QGridLayout* details_grid_ = nullptr;
     std::map<std::string, QComboBox*> score_combos_;
-    QComboBox* rules_combo_ = nullptr;
+    QString rules_choice_ = QStringLiteral("in-use");
     QPushButton* open_button_ = nullptr;
-    QPushButton* results_button_ = nullptr;
-    QPushButton* frames_button_ = nullptr;
-    QPushButton* graphs_button_ = nullptr;
-    QPushButton* segments_button_ = nullptr;
+    QPushButton* export_button_ = nullptr;
+    QMenu* export_menu_ = nullptr;
     QPushButton* delete_button_ = nullptr;
 };
 

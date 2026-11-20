@@ -54,7 +54,7 @@ nlohmann::ordered_json results_document(const VideoInfo& source, const std::vect
                                         const std::optional<nlohmann::ordered_json>& difference = std::nullopt,
                                         const RunRecord* record = nullptr);
 
-// Each result's per-frame scores as the window's Export CSV writes them, in
+// Each result's per-frame scores as the window's per-frame CSV export writes them, in
 // `folder`; `message` says what was written and `failed` what could not be
 // or was written under another name (shown with -q too). False if one could
 // not be. Each video's csv_file says where it went.

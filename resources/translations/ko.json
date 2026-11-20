@@ -1,7 +1,10 @@
 {
  "strings": {
+  "Export the difference": "차이 내보내기",
+  "Export the difference as CSV...": "차이를 CSV로 내보내기...",
+  "Exporting the difference to {path}...": "차이를 {path}(으)로 내보내는 중...",
+  "Graphs as ZIP...": "그래프를 ZIP으로...",
   "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "각 지표의 모든 프레임 점수를 선택한 형식으로: 동영상마다 파일 하나(<video> - frames.json). 긴 동영상은 파일이 큽니다.",
-  "Export per-frame scores": "프레임별 점수 내보내기",
   "Export per-frame scores to": "프레임별 점수를 내보낼 위치",
   "Per-frame scores": "프레임별 점수",
   "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "결과, 프레임별 점수, 약한 구간을 스프레드시트용 CSV 파일로. JSON과 CSV 모두 선택하지 않으면 그래프만 내보냅니다.",
@@ -494,9 +497,6 @@
   "Export complete: {path}": "내보내기 완료: {path}",
   "Export graph": "그래프 내보내기",
   "PNG image (*.png)": "PNG 이미지 (*.png)",
-  "No data": "데이터 없음",
-  "There are no series to export.": "내보낼 계열이 없습니다.",
-  "Choose export folder": "내보내기 폴더 선택",
   "{identical} frames identical to the reference are included in the XPSNR sequence average: zero distortion, with their frames included in the count.": "참조 영상과 같은 {identical}개 프레임은 XPSNR 시퀀스 평균에 포함됩니다. 왜곡 0으로 처리되며 프레임 수에도 포함됩니다.",
   "Remove {label} from the graph": "그래프에서 {label} 제거",
   "Use seconds, M:SS, or H:MM:SS.sss": "초, M:SS 또는 H:MM:SS.sss 형식을 사용하세요",
@@ -1139,7 +1139,6 @@
   "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "각 영상의 지표별 그래프와, 같은 참조 영상의 영상이 여러 개면 지표별로 모두를 함께 담은 그래프. 영상이 아직 있으면 비트레이트 그래프도 포함됩니다.",
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "앱이 점수를 저장한 모든 비교입니다. 영상을 다시 추가하지 않고도 지표 그래프에서 열거나 결과, 프레임별 점수, 그래프, 약한 구간을 내보낼 수 있습니다.",
   "Export graphs": "그래프 내보내기",
-  "Export graphs as ZIP...": "그래프를 ZIP으로 내보내기...",
   "Export weak segments...": "약한 구간 내보내기...",
   "Filter by file name": "파일 이름으로 필터",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "그래프는 같은 참조 영상의 테스트 영상에 대해 내보냅니다. 참조 영상이 같은 비교를 선택하세요.",
@@ -1234,9 +1233,6 @@
   ],
   "Removed {count} saved result.": [
    "저장된 결과 {count}개를 제거했습니다."
-  ],
-  "Exporting {count} CSV file to {directory}...": [
-   "CSV 파일 {count}개를 {directory}(으)로 내보내는 중..."
   ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "체크한 영상 {count}개에 이미 비트레이트 결과가 있습니다.\n\n다시 계산할까요? 결과를 유지하고 결과가 없는 파일만 계산하려면 [아니요]를 선택하세요."

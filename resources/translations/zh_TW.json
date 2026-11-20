@@ -1,7 +1,10 @@
 {
  "strings": {
+  "Export the difference": "匯出差值",
+  "Export the difference as CSV...": "將差值匯出為 CSV...",
+  "Exporting the difference to {path}...": "正在將差值匯出到 {path}...",
+  "Graphs as ZIP...": "圖表匯出為 ZIP...",
   "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "每個指標每一格的分數，以勾選的格式：每個影片一個檔案（<video> - frames.json）。長影片的檔案很大。",
-  "Export per-frame scores": "匯出逐格分數",
   "Export per-frame scores to": "將逐格分數匯出到",
   "Per-frame scores": "逐格分數",
   "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "結果、逐格分數和弱片段儲存為 CSV 檔案，供試算表使用。JSON 和 CSV 都未勾選時，只匯出圖表。",
@@ -494,9 +497,6 @@
   "Export complete: {path}": "匯出完成：{path}",
   "Export graph": "匯出圖表",
   "PNG image (*.png)": "PNG 影像 (*.png)",
-  "No data": "沒有資料",
-  "There are no series to export.": "沒有可匯出的數列。",
-  "Choose export folder": "選擇匯出資料夾",
   "{identical} frames identical to the reference are included in the XPSNR sequence average: zero distortion, with their frames included in the count.": "與參考影片相同的 {identical} 格計入 XPSNR 序列平均值：零失真，並計入影格數。",
   "Remove {label} from the graph": "從圖表移除 {label}",
   "Use seconds, M:SS, or H:MM:SS.sss": "請使用秒數、M:SS 或 H:MM:SS.sss",
@@ -1139,7 +1139,6 @@
   "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "每部影片各指標的圖表，同一參考影片有多部影片時還有包含所有影片的各指標圖表；影片仍在時還有位元速率圖表。",
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "應用程式已儲存分數的所有比較。無需重新新增影片，即可在指標圖表中開啟，或匯出其結果、逐格分數、圖表和弱片段。",
   "Export graphs": "匯出圖表",
-  "Export graphs as ZIP...": "將圖表匯出為 ZIP...",
   "Export weak segments...": "匯出弱片段...",
   "Filter by file name": "依檔案名稱篩選",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "圖表依同一參考影片的測試影片匯出：請選取參考影片相同的比較。",
@@ -1234,9 +1233,6 @@
   ],
   "Removed {count} saved result.": [
    "已移除 {count} 個已儲存的結果。"
-  ],
-  "Exporting {count} CSV file to {directory}...": [
-   "正在將 {count} 個 CSV 檔案匯出到 {directory}..."
   ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "勾選的 {count} 部影片已有位元速率結果。\n\n要重新計算這些檔案嗎？選擇「否」可保留其結果，只計算沒有結果的檔案。"

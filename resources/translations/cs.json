@@ -1,7 +1,10 @@
 {
  "strings": {
+  "Export the difference": "Exportovat rozdíl",
+  "Export the difference as CSV...": "Exportovat rozdíl jako CSV...",
+  "Exporting the difference to {path}...": "Exportuje se rozdíl do {path}...",
+  "Graphs as ZIP...": "Grafy jako ZIP...",
   "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "Skóre každého snímku u každé metriky v zaškrtnutých formátech: soubor pro každé video (<video> - frames.json). U dlouhého videa jsou velké.",
-  "Export per-frame scores": "Exportovat skóre po snímcích",
   "Export per-frame scores to": "Exportovat skóre po snímcích do",
   "Per-frame scores": "Skóre po snímcích",
   "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "Výsledky, skóre po snímcích a slabé úseky jako soubory CSV, pro tabulkové procesory. Když není zaškrtnuto JSON ani CSV, exportují se jen grafy.",
@@ -494,9 +497,6 @@
   "Export complete: {path}": "Export dokončen: {path}",
   "Export graph": "Exportovat graf",
   "PNG image (*.png)": "Obrázek PNG (*.png)",
-  "No data": "Žádná data",
-  "There are no series to export.": "Žádné řady k exportu.",
-  "Choose export folder": "Vyberte složku exportu",
   "{identical} frames identical to the reference are included in the XPSNR sequence average: zero distortion, with their frames included in the count.": "{identical} snímků shodných s referencí je zahrnuto v průměru sekvence XPSNR: nulové zkreslení, jejich snímky se započítávají.",
   "Remove {label} from the graph": "Odebrat {label} z grafu",
   "Use seconds, M:SS, or H:MM:SS.sss": "Použijte sekundy, M:SS nebo H:MM:SS.sss",
@@ -1139,7 +1139,6 @@
   "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "Graf každého videa pro každou metriku a při více videích jedné reference každá metrika se všemi; grafy datového toku tam, kde videa stále jsou.",
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Všechna porovnání, jejichž skóre aplikace uložila. Otevřete je v Grafech metrik nebo exportujte jejich výsledky, skóre po snímcích, grafy a slabé úseky, aniž byste videa přidávali znovu.",
   "Export graphs": "Exportovat grafy",
-  "Export graphs as ZIP...": "Exportovat grafy jako ZIP...",
   "Export weak segments...": "Exportovat slabé úseky...",
   "Filter by file name": "Filtrovat podle názvu souboru",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "Grafy se exportují pro testovací videa jedné reference: vyberte porovnání, která ji sdílejí.",
@@ -1272,11 +1271,6 @@
    "Odebrán {count} uložený výsledek.",
    "Odebrány {count} uložené výsledky.",
    "Odebráno {count} uložených výsledků."
-  ],
-  "Exporting {count} CSV file to {directory}...": [
-   "Export {count} souboru CSV do {directory}...",
-   "Export {count} souborů CSV do {directory}...",
-   "Export {count} souborů CSV do {directory}..."
   ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "{count} vybrané video už má výsledky bitrate.\n\nPřepočítat jej? Zvolte Ne pro zachování výsledků a výpočet jen souborů bez výsledků.",

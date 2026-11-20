@@ -1,7 +1,10 @@
 {
  "strings": {
+  "Export the difference": "Экспорт разницы",
+  "Export the difference as CSV...": "Экспорт разницы в CSV...",
+  "Exporting the difference to {path}...": "Экспорт разницы в {path}...",
+  "Graphs as ZIP...": "Графики в ZIP...",
   "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "Оценка каждого кадра по каждой метрике в отмеченных форматах: по файлу на видео (<video> - frames.json). У длинного видео они большие.",
-  "Export per-frame scores": "Экспорт покадровых оценок",
   "Export per-frame scores to": "Папка для покадровых оценок",
   "Per-frame scores": "Покадровые оценки",
   "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "Результаты, покадровые оценки и слабые фрагменты в файлах CSV, для электронных таблиц. Если не отмечены ни JSON, ни CSV, экспортируются только графики.",
@@ -494,9 +497,6 @@
   "Export complete: {path}": "Экспорт завершён: {path}",
   "Export graph": "Экспорт графика",
   "PNG image (*.png)": "Изображение PNG (*.png)",
-  "No data": "Нет данных",
-  "There are no series to export.": "Нет рядов для экспорта.",
-  "Choose export folder": "Выберите папку экспорта",
   "{identical} frames identical to the reference are included in the XPSNR sequence average: zero distortion, with their frames included in the count.": "{identical} кадров, совпадающих с эталоном, включены в среднее по последовательности XPSNR: нулевое искажение, и их кадры учитываются в числе.",
   "Remove {label} from the graph": "Убрать {label} с графика",
   "Use seconds, M:SS, or H:MM:SS.sss": "Используйте секунды, M:SS или H:MM:SS.sss",
@@ -1139,7 +1139,6 @@
   "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "График каждого видео по каждой метрике, а при нескольких видео одного эталона — каждая метрика со всеми ними; графики битрейта там, где видео ещё на месте.",
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Все сравнения, оценки которых сохранило приложение. Откройте их в графиках метрик или экспортируйте их результаты, покадровые оценки, графики и слабые участки, не добавляя видео заново.",
   "Export graphs": "Экспорт графиков",
-  "Export graphs as ZIP...": "Экспорт графиков в ZIP...",
   "Export weak segments...": "Экспорт слабых участков...",
   "Filter by file name": "Фильтр по имени файла",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "Графики экспортируются для тестовых видео одного эталона: выберите сравнения с общим эталоном.",
@@ -1272,11 +1271,6 @@
    "Удалён {count} сохранённый результат.",
    "Удалено {count} сохранённых результата.",
    "Удалено {count} сохранённых результатов."
-  ],
-  "Exporting {count} CSV file to {directory}...": [
-   "Экспорт {count} CSV-файла в {directory}...",
-   "Экспорт {count} CSV-файлов в {directory}...",
-   "Экспорт {count} CSV-файлов в {directory}..."
   ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "У {count} отмеченного видео уже есть результаты битрейта.\n\nПересчитать его? Выберите «Нет», чтобы сохранить результаты и вычислить только файлы без результатов.",

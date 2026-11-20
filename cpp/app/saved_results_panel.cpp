@@ -1,6 +1,7 @@
 #include "saved_results_panel.h"
 
 #include <QAction>
+#include <QActionGroup>
 #include <QComboBox>
 #include <QDateTime>
 #include <QFont>
@@ -162,45 +163,19 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     open_button_ = new QPushButton(app::tr("Open in Metric Graphs"));
     connect(open_button_, &QPushButton::clicked, this, [this] { emit open_requested(selected_results()); });
     buttons->addWidget(open_button_);
-    results_button_ = new QPushButton(app::tr("Export results"));
-    auto* results_menu = new QMenu(results_button_);
-    connect(results_menu->addAction(app::tr("As JSON...")), &QAction::triggered, this,
-            [this] { emit export_requested(Export::results_json, selected_results()); });
-    connect(results_menu->addAction(app::tr("As CSV...")), &QAction::triggered, this,
-            [this] { emit export_requested(Export::results_csv, selected_results()); });
-    results_button_->setMenu(results_menu);
-    buttons->addWidget(results_button_);
-    frames_button_ = new QPushButton(app::tr("Export per-frame scores"));
-    auto* frames_menu = new QMenu(frames_button_);
-    connect(frames_menu->addAction(app::tr("As JSON...")), &QAction::triggered, this,
-            [this] { emit export_requested(Export::frames_json, selected_results()); });
-    connect(frames_menu->addAction(app::tr("As CSV...")), &QAction::triggered, this,
-            [this] { emit export_requested(Export::frames_csv, selected_results()); });
-    frames_button_->setMenu(frames_menu);
-    buttons->addWidget(frames_button_);
-    graphs_button_ = new QPushButton(app::tr("Export graphs as ZIP..."));
-    graphs_button_->setToolTip(app::tr("Each video's graph of every metric, and with several of one reference "
-                                       "every metric with all of them; the bitrate graphs where the videos are "
-                                       "still there."));
-    connect(graphs_button_, &QPushButton::clicked, this,
-            [this] { emit export_requested(Export::graphs, selected_results()); });
-    buttons->addWidget(graphs_button_);
-    buttons->addSpacing(12);
-    rules_combo_ = new QComboBox;
-    rules_combo_->setToolTip(app::tr("The rules the weak segments are found by: they are not saved with the "
-                                     "scores, but found from them now."));
-    buttons->addWidget(rules_combo_);
-    segments_button_ = new QPushButton(app::tr("Export weak segments..."));
-    connect(segments_button_, &QPushButton::clicked, this,
-            [this] { emit export_requested(Export::segments, selected_results()); });
-    buttons->addWidget(segments_button_);
+    // One Export button: its menu is made as it opens (fill_export_menu).
+    export_button_ = new QPushButton(app::tr("Export"));
+    export_menu_ = new QMenu(export_button_);
+    export_menu_->setToolTipsVisible(true);
+    connect(export_menu_, &QMenu::aboutToShow, this, [this] { fill_export_menu(*export_menu_); });
+    export_button_->setMenu(export_menu_);
+    buttons->addWidget(export_button_);
     buttons->addStretch(1);
     delete_button_ = new QPushButton(app::tr("Delete..."));
     connect(delete_button_, &QPushButton::clicked, this, [this] { delete_selected(); });
     buttons->addWidget(delete_button_);
     layout->addLayout(buttons);
 
-    fill_segment_rules();
     show_details();
     update_buttons();
 }
@@ -381,28 +356,31 @@ std::vector<LoadedSavedResult> SavedResultsPanel::selected_results() const {
     return results;
 }
 
-void SavedResultsPanel::fill_segment_rules() {
-    const QString current = rules_combo_->currentData().toString();
-    const QSignalBlocker blocker(rules_combo_);
-    rules_combo_->clear();
+std::vector<std::pair<QString, QString>> SavedResultsPanel::segment_rule_choices() const {
+    std::vector<std::pair<QString, QString>> choices;
     const SegmentProfile in_use = segment_profile_in_use(settings_);
-    rules_combo_->addItem(app::tr("Profile in use ({name})",
-                                  {{"name", in_use.name.empty() ? app::tr("Default") : qt_text(in_use.name)}}),
-                          QStringLiteral("in-use"));
+    choices.emplace_back(QStringLiteral("in-use"),
+                         app::tr("Profile in use ({name})",
+                                 {{"name", in_use.name.empty() ? app::tr("Default") : qt_text(in_use.name)}}));
     for (const SegmentProfile& profile : segment_profiles(settings_)) {
-        rules_combo_->addItem(app::tr("Profile: {name}",
-                                      {{"name", profile.name.empty() ? app::tr("Default") : qt_text(profile.name)}}),
-                              QStringLiteral("profile:") + qt_text(profile.name));
+        choices.emplace_back(QStringLiteral("profile:") + qt_text(profile.name),
+                             app::tr("Profile: {name}",
+                                     {{"name", profile.name.empty() ? app::tr("Default") : qt_text(profile.name)}}));
     }
     for (const SegmentPreset& preset : segment_presets()) {
-        rules_combo_->addItem(app::tr("Preset: {name}", {{"name", app::tr(preset.name)}}),
-                              QStringLiteral("preset:") + qt_text(std::string(preset.key)));
+        choices.emplace_back(QStringLiteral("preset:") + qt_text(std::string(preset.key)),
+                             app::tr("Preset: {name}", {{"name", app::tr(preset.name)}}));
     }
-    rules_combo_->setCurrentIndex(std::max(rules_combo_->findData(current), 0));
+    return choices;
+}
+
+void SavedResultsPanel::pick_segment_rules(const QString& choice) {
+    rules_choice_ = choice;
 }
 
 SegmentRules SavedResultsPanel::segment_rules() const {
-    const std::string choice = rules_combo_->currentData().toString().toStdString();
+    // The rules picked, while they are still there; else the profile in use.
+    const std::string choice = rules_choice_.toStdString();
     if (choice.starts_with("preset:")) {
         if (const SegmentPreset* preset = segment_preset(choice.substr(7))) {
             return preset->rules;
@@ -422,13 +400,69 @@ void SavedResultsPanel::set_run_active(bool active) {
 
 void SavedResultsPanel::update_buttons() {
     const std::size_t count = selected().size();
-    for (QPushButton* button : {open_button_, results_button_, frames_button_, graphs_button_, segments_button_}) {
-        button->setEnabled(count > 0);
-    }
+    open_button_->setEnabled(count > 0);
+    export_button_->setEnabled(count > 0);
     delete_button_->setEnabled(count > 0 && !run_active_);
     delete_button_->setToolTip(run_active_ ? app::tr("Locked while metrics are calculated: the run saves its "
                                                      "scores there.")
                                            : QString());
+}
+
+void SavedResultsPanel::fill_export_menu(QMenu& menu) {
+    // The right-click menu's export first; then each kind on its own, for a
+    // one-off: results and per-frame scores as JSON or CSV, the graphs as a
+    // .zip, and the weak segments, by the rules picked under them.
+    menu.clear();
+    for (QMenu* kind : menu.findChildren<QMenu*>(Qt::FindDirectChildrenOnly)) {
+        delete kind;  // clear() leaves the menus addMenu made
+    }
+    if (const QAction* contents = fill_menu(menu)) {
+        connect(contents, &QAction::triggered, this,
+                [this] { emit export_requested(Export::contents, selected_results()); });
+    }
+    if (menu.isEmpty()) {
+        return;
+    }
+    menu.addSeparator();
+    const auto add_formats = [this, &menu](const QString& title, Export json, Export csv) {
+        QMenu* kind = menu.addMenu(title);
+        connect(kind->addAction(app::tr("As JSON...")), &QAction::triggered, this,
+                [this, json] { emit export_requested(json, selected_results()); });
+        connect(kind->addAction(app::tr("As CSV...")), &QAction::triggered, this,
+                [this, csv] { emit export_requested(csv, selected_results()); });
+    };
+    add_formats(app::tr("Results"), Export::results_json, Export::results_csv);
+    add_formats(app::tr("Per-frame scores"), Export::frames_json, Export::frames_csv);
+    QAction* graphs = menu.addAction(app::tr("Graphs as ZIP..."));
+    graphs->setToolTip(app::tr("Each video's graph of every metric, and with several of one reference every metric "
+                               "with all of them; the bitrate graphs where the videos are still there."));
+    connect(graphs, &QAction::triggered, this, [this] { emit export_requested(Export::graphs, selected_results()); });
+    QMenu* segments = menu.addMenu(app::tr("Weak segments"));
+    segments->setToolTipsVisible(true);
+    connect(segments->addAction(app::tr("Export weak segments...")), &QAction::triggered, this,
+            [this] { emit export_requested(Export::segments, selected_results()); });
+    segments->addSeparator();
+    // The rules, one picked: this export's and the first entry's.
+    auto* rules = new QActionGroup(segments);
+    const QString picked = segment_rule_choice();
+    for (const auto& [choice, text] : segment_rule_choices()) {
+        QAction* action = segments->addAction(text);
+        action->setCheckable(true);
+        action->setChecked(choice == picked);
+        action->setToolTip(app::tr("The rules the weak segments are found by: they are not saved with the scores, "
+                                   "but found from them now."));
+        rules->addAction(action);
+        connect(action, &QAction::triggered, this, [this, choice] { pick_segment_rules(choice); });
+    }
+}
+
+QString SavedResultsPanel::segment_rule_choice() const {
+    for (const auto& [choice, text] : segment_rule_choices()) {
+        if (choice == rules_choice_) {
+            return choice;
+        }
+    }
+    return QStringLiteral("in-use");  // the one picked is gone (a profile deleted)
 }
 
 QAction* SavedResultsPanel::fill_menu(QMenu& menu) const {

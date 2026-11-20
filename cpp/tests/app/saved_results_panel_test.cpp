@@ -2,6 +2,7 @@
 // results cache listed and filtered, a comparison's saved scores shown, the
 // selection read back for Metric Graphs and the exports, the weak segment
 // rules picked, and Delete (locked during a run).
+#include <QAction>
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QLayout>
@@ -106,11 +107,47 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
     emit table.cellDoubleClicked(0, 0);
     EXPECT_EQ(opened.count(), 1);
 
-    // The weak segment rules: the profile in use, else the one picked.
+    // The Export button's menu: the right-click menu's export, then each
+    // kind on its own; under Weak segments, the rules, the one picked ticked.
+    QMenu& menu = *panel.export_menu();
+    panel.fill_export_menu(menu);
+    QStringList texts;
+    for (const QAction* action : menu.actions()) {
+        if (!action->isSeparator()) {
+            texts << action->text();
+        }
+    }
+    EXPECT_EQ(texts, (QStringList{"Export this video's results, graphs and weak segments...", "Results",
+                                  "Per-frame scores", "Graphs as ZIP...", "Weak segments"}));
+    QSignalSpy exports(&panel, &SavedResultsPanel::export_requested);
+    menu.actions().first()->trigger();
+    ASSERT_EQ(exports.count(), 1);
+    EXPECT_EQ(exports.at(0).at(0).value<SavedResultsPanel::Export>(), SavedResultsPanel::Export::contents);
+    QMenu* frames = menu.actions().at(3)->menu();
+    ASSERT_NE(frames, nullptr);
+    frames->actions().first()->trigger();  // As JSON...
+    EXPECT_EQ(exports.at(1).at(0).value<SavedResultsPanel::Export>(), SavedResultsPanel::Export::frames_json);
+    QMenu* segments = menu.actions().last()->menu();
+    ASSERT_NE(segments, nullptr);
+    QStringList ticked;
+    QAction* animation = nullptr;
+    for (QAction* action : segments->actions()) {
+        if (action->isChecked()) {
+            ticked << action->text();
+        }
+        if (action->text().contains("Animation")) {
+            animation = action;
+        }
+    }
+    EXPECT_EQ(ticked, QStringList{"Profile in use (Default)"});
     EXPECT_EQ(condition_texts(panel.segment_rules().conditions), settings.weak_segment_conditions);
-    panel.rules_choice()->setCurrentIndex(panel.rules_choice()->findData("preset:animation"));
+    ASSERT_NE(animation, nullptr);
+    animation->trigger();
+    EXPECT_EQ(panel.segment_rule_choice(), "preset:animation");
     EXPECT_EQ(condition_texts(panel.segment_rules().conditions),
               condition_texts(segment_preset("animation")->rules.conditions));
+    panel.fill_export_menu(menu);  // made again as it opens: the same entries, no menu left behind
+    EXPECT_EQ(menu.findChildren<QMenu*>(Qt::FindDirectChildrenOnly).size(), 3);
 
     // Delete: locked during a run; else, asked and done.
     QPushButton* remove = nullptr;
