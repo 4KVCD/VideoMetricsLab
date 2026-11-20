@@ -4,8 +4,9 @@
 #include <QComboBox>
 #include <QDateTime>
 #include <QFont>
-#include <QFormLayout>
+#include <QFrame>
 #include <QFutureWatcher>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -13,6 +14,8 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QStyle>
 #include <QTableWidget>
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrentRun>
@@ -114,9 +117,36 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     connect(table_, &QTableWidget::cellDoubleClicked, this, [this] { emit open_requested(selected_results()); });
     layout->addWidget(table_, 1);
 
+    // The selected comparison's scores, two metrics a row, in a box as tall as
+    // every metric needs whatever is selected: were it to grow when a row is
+    // clicked, the table would shrink under the pointer and scroll to keep
+    // the row in view.
     details_ = new QGroupBox(app::tr("Saved scores"));
-    details_form_ = new QFormLayout(details_);
-    details_form_->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
+    auto* details_layout = new QVBoxLayout(details_);
+    auto* scroll = new QScrollArea;
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidgetResizable(true);
+    auto* grid_holder = new QWidget;
+    // The rows at the top, the box's spare height under them: a comparison
+    // of few metrics would otherwise have its rows spread down the box.
+    auto* holder_layout = new QVBoxLayout(grid_holder);
+    holder_layout->setContentsMargins(0, 0, 0, 0);
+    details_grid_ = new QGridLayout;
+    holder_layout->addLayout(details_grid_);
+    holder_layout->addStretch(1);
+    details_grid_->setContentsMargins(0, 0, 0, 0);
+    details_grid_->setColumnMinimumWidth(2, 24);  // between the two metrics of a row
+    details_grid_->setColumnStretch(5, 1);
+    scroll->setWidget(grid_holder);
+    scroll->viewport()->setAutoFillBackground(false);  // the box's own background
+    grid_holder->setAutoFillBackground(false);
+    details_layout->addWidget(scroll);
+    const int rows = (static_cast<int>(metrics().size()) + 1) / 2;
+    const int row_height = QComboBox().sizeHint().height();
+    const int spacing = details_grid_->verticalSpacing() >= 0 ? details_grid_->verticalSpacing()
+                                                               : style()->pixelMetric(QStyle::PM_LayoutVerticalSpacing);
+    scroll->setFixedHeight(rows * row_height + (rows - 1) * std::max(spacing, 0) + 2);
+    details_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     layout->addWidget(details_);
 
     auto* buttons = new QHBoxLayout;
@@ -245,17 +275,29 @@ std::vector<const SavedComparison*> SavedResultsPanel::selected() const {
 }
 
 void SavedResultsPanel::show_details() {
-    while (details_form_->rowCount() > 0) {
-        details_form_->removeRow(0);
+    while (QLayoutItem* item = details_grid_->takeAt(0)) {
+        delete item->widget();
+        delete item;
     }
     score_combos_.clear();
     const std::vector<const SavedComparison*> chosen = selected();
     if (chosen.size() != 1) {
         details_->setTitle(app::tr("Saved scores"));
-        details_form_->addRow(new QLabel(chosen.empty() ? app::tr("Select a comparison to see its saved scores.")
-                                                        : app::tr("Select one comparison to see its saved scores.")));
+        details_grid_->addWidget(new QLabel(chosen.empty() ? app::tr("Select a comparison to see its saved scores.")
+                                                           : app::tr("Select one comparison to see its saved scores.")),
+                                 0, 0, 1, -1, Qt::AlignLeft | Qt::AlignTop);
         return;
     }
+    // Two metrics a row: a metric's label, then its score or the list to pick
+    // one from.
+    int placed = 0;
+    const auto add_row = [this, &placed](const QString& label, QWidget* field) {
+        const int row = placed / 2;
+        const int column = (placed % 2) * 3;
+        details_grid_->addWidget(new QLabel(label), row, column);
+        details_grid_->addWidget(field, row, column + 1, Qt::AlignLeft);
+        ++placed;
+    };
     const SavedComparison& saved = *chosen.front();
     details_->setTitle(app::tr("Saved scores of {name}", {{"name", qt_text(saved.label)}}));
     for (const std::string& key : saved.keys()) {
@@ -293,7 +335,7 @@ void SavedResultsPanel::show_details() {
         }
         if (combo->count() == 1) {
             // Nothing to pick: its one score, as text (a disabled list is hard to read).
-            details_form_->addRow(metric_label(key) + ":", new QLabel(combo->itemText(0)));
+            add_row(metric_label(key) + ":", new QLabel(combo->itemText(0)));
             delete combo;
             continue;
         }
@@ -302,7 +344,7 @@ void SavedResultsPanel::show_details() {
         connect(combo, &QComboBox::currentIndexChanged, this, [this, combo, folder = saved.folder, key] {
             picked_[folder][key] = path_of(combo->currentData().toString());
         });
-        details_form_->addRow(metric_label(key) + ":", combo);
+        add_row(metric_label(key) + ":", combo);
         score_combos_[key] = combo;
     }
 }
