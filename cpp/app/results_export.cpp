@@ -11,6 +11,7 @@
 #include "i18n.h"
 #include "window_helpers.h"
 #include "vml/build_info.h"
+#include "vml/export_csv.h"
 #include "vml/frame_pairing.h"
 #include "vml/metrics.h"
 #include "vml/platform/system.h"
@@ -141,6 +142,9 @@ QString export_contents(const std::vector<std::string>& items) {
     if (has("results")) {
         kinds << app::tr("results");
     }
+    if (has("frames")) {
+        kinds << app::tr("per-frame scores");
+    }
     if (has("graphs")) {
         kinds << app::tr("graphs");
     }
@@ -205,6 +209,19 @@ std::vector<BundleFile> export_files(const Settings& settings, const std::vector
         }
         if (csv) {
             files.push_back({stem + ".csv", results_csv(made)});
+        }
+    }
+    if (wanted("frames")) {
+        // A file for each video, named as its graphs are.
+        const std::vector<QString> names = bundle_names(videos);
+        for (std::size_t i = 0; i < videos.size(); ++i) {
+            const std::string stem = file_safe(names[i] + QStringLiteral(" - frames")).toStdString();
+            if (json) {
+                files.push_back({stem + ".json", per_frame_json(*videos[i].result)});
+            }
+            if (csv) {
+                files.push_back({stem + ".csv", per_frame_csv(*videos[i].result)});
+            }
         }
     }
     if (!wanted("weak_segments") || videos.empty()) {

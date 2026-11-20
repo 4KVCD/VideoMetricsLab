@@ -181,3 +181,20 @@ For the reference and each test video:
 | `bit_depth`, `chroma_subsampling` | From the pixel format (`4:2:0`). |
 | `colour` | `range`, `matrix`, `transfer`, `primaries`, `chroma_location`, as the app reads the video: its tags, or those given or taken from the other video where it has none. |
 | `writing_library`, `encoder`, `encoder_settings` | The container's and the stream's encoder tags (`Lavf63.1.101`, `Lavc63.1.101 libx264`) and the encoder settings tag where the file has one. |
+
+## Per-frame scores as JSON
+
+**Export per-frame scores** on the Saved results tab, and exports with
+**Per-frame scores** and **JSON** ticked in Settings > Storage > Exports
+include, write each video's per-frame scores as JSON: the same table as
+their CSV, for scripts that read JSON.
+
+| Key | Meaning |
+| --- | --- |
+| `reference`, `test` | The videos' paths. |
+| `fps` | The comparison's frame rate, the one `time_s` counts in. |
+| `columns` | The CSV's header: `frame`, `time_s`, then a column per frame metric (`vmaf`, `vmaf_neg`, `psnr`, `ssim`, `xpsnr` always first, then the others), and `cvvdp_second_jod`, `cvvdp_video_jod` where CVVDP was scored. |
+| `rows` | One list a frame, in the columns' order, each on a line of its own: a blank cell of the CSV is `null`, an endless PSNR `Infinity` (as Python's `json` writes it). `time_s` is rounded to the microsecond, as in the CSV. |
+
+In Python, `pandas.DataFrame(doc["rows"], columns=doc["columns"])` gives the
+CSV's table.

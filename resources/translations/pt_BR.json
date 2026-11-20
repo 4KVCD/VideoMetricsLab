@@ -1,9 +1,15 @@
 {
  "strings": {
+  "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "A pontuação de cada quadro em cada métrica, nos formatos marcados: um arquivo por vídeo (<video> - frames.json). As de um vídeo longo são grandes.",
+  "Export per-frame scores": "Exportar pontuações por quadro",
+  "Export per-frame scores to": "Exportar pontuações por quadro para",
+  "Per-frame scores": "Pontuações por quadro",
+  "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "Resultados, pontuações por quadro e segmentos fracos como arquivos CSV, para planilhas. Sem JSON nem CSV marcados, só os gráficos são exportados.",
+  "Results, per-frame scores and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are exported.": "Resultados, pontuações por quadro e segmentos fracos como arquivos JSON. Sem JSON nem CSV marcados, só os gráficos são exportados.",
+  "per-frame scores": "pontuações por quadro",
+  "Per-frame scores exported to {path}": "Pontuações por quadro exportadas para {path}",
   "In:": "Em:",
   "Results": "Resultados",
-  "Results and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are exported.": "Resultados e segmentos fracos como arquivos JSON. Sem JSON nem CSV marcados, só os gráficos são exportados.",
-  "Results and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "Resultados e segmentos fracos como arquivos CSV, para planilhas. Sem JSON nem CSV marcados, só os gráficos são exportados.",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "Pontuações e estatísticas, como Exportar resultados as salva, nos formatos marcados: as de um vídeo sozinho (<video> - results.json), ou as de todos os vídeos em um arquivo.",
   "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "Segmentos fracos pelo perfil em uso (Configurações > Segmentos fracos; na aba Resultados salvos, as regras escolhidas lá), nos formatos marcados: os de um vídeo (<video>.vmaf.segments.json), ou os de todos os vídeos em um relatório. Nada é salvo enquanto as regras não tiverem condição.",
   " min": " min",
@@ -1134,8 +1140,6 @@
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Toda comparação da qual o aplicativo salvou pontuações. Abra-as em Gráficos de métricas ou exporte seus resultados, pontuações por quadro, gráficos e segmentos fracos, sem adicionar os vídeos de novo.",
   "Export graphs": "Exportar gráficos",
   "Export graphs as ZIP...": "Exportar gráficos como ZIP...",
-  "Export per-frame CSV files to": "Exportar arquivos CSV por quadro para",
-  "Export per-frame CSV...": "Exportar CSV por quadro...",
   "Export weak segments...": "Exportar segmentos fracos...",
   "Filter by file name": "Filtrar por nome de arquivo",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "Os gráficos são exportados para vídeos de teste de uma mesma referência: selecione comparações que a compartilhem.",
@@ -1293,10 +1297,6 @@
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "Não foi possível excluir as pontuações salvas de {count} comparação: um arquivo dela pode estar aberto.",
    "Não foi possível excluir as pontuações salvas de {count} comparações: um arquivo delas pode estar aberto."
-  ],
-  "{count} per-frame CSV file exported to {path}": [
-   "{count} arquivo CSV por quadro exportado para {path}",
-   "{count} arquivos CSV por quadro exportados para {path}"
   ],
   "{count} saved comparison in {directory}": [
    "{count} comparação salva em {directory}",

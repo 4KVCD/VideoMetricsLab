@@ -142,7 +142,7 @@ void log_unfit(const std::string& name, const Json& value, const std::string& ki
 }  // namespace
 
 const std::vector<std::string>& export_item_keys() {
-    static const std::vector<std::string> items{"results", "graphs", "weak_segments"};
+    static const std::vector<std::string> items{"results", "frames", "graphs", "weak_segments"};
     return items;
 }
 
@@ -155,7 +155,7 @@ std::vector<std::string> exported_items(const Settings& settings) {
     const bool written = !settings.export_formats.empty();
     std::vector<std::string> items;
     for (const std::string& item : settings.export_items) {
-        if (written || item == "graphs") {
+        if (written || item == "graphs") {  // the rest are files in a format
             items.push_back(item);
         }
     }

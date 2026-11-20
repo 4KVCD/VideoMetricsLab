@@ -1,9 +1,15 @@
 {
  "strings": {
+  "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "Оцінка кожного кадру за кожною метрикою у позначених форматах: файл на кожне відео (<video> - frames.json). У довгого відео вони великі.",
+  "Export per-frame scores": "Експорт покадрових оцінок",
+  "Export per-frame scores to": "Тека для покадрових оцінок",
+  "Per-frame scores": "Покадрові оцінки",
+  "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "Результати, покадрові оцінки та слабкі фрагменти у файлах CSV, для електронних таблиць. Якщо не позначено ні JSON, ні CSV, експортуються лише графіки.",
+  "Results, per-frame scores and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are exported.": "Результати, покадрові оцінки та слабкі фрагменти у файлах JSON. Якщо не позначено ні JSON, ні CSV, експортуються лише графіки.",
+  "per-frame scores": "покадрові оцінки",
+  "Per-frame scores exported to {path}": "Покадрові оцінки експортовано в {path}",
   "In:": "У форматах:",
   "Results": "Результати",
-  "Results and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are exported.": "Результати та слабкі фрагменти у файлах JSON. Якщо не позначено ні JSON, ні CSV, експортуються лише графіки.",
-  "Results and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "Результати та слабкі фрагменти у файлах CSV, для електронних таблиць. Якщо не позначено ні JSON, ні CSV, експортуються лише графіки.",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "Оцінки та статистика, як їх зберігає Експорт результатів, у позначених форматах: одного відео окремо (<video> - results.json) або всіх відео в одному файлі.",
   "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "Слабкі фрагменти за профілем, що використовується (Налаштування > Слабкі ділянки; на вкладці Збережені результати — за вибраними там правилами), у позначених форматах: одного відео (<video>.vmaf.segments.json) або всіх відео в одному звіті. Поки правила не мають умови, нічого не зберігається.",
   " min": " хв",
@@ -1134,8 +1140,6 @@
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Усі порівняння, оцінки яких зберіг застосунок. Відкрийте їх у графіках метрик або експортуйте їхні результати, покадрові оцінки, графіки й слабкі ділянки, не додаючи відео знову.",
   "Export graphs": "Експорт графіків",
   "Export graphs as ZIP...": "Експорт графіків у ZIP...",
-  "Export per-frame CSV files to": "Тека для покадрових CSV-файлів",
-  "Export per-frame CSV...": "Експорт покадрових CSV...",
   "Export weak segments...": "Експорт слабких ділянок...",
   "Filter by file name": "Фільтр за назвою файлу",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "Графіки експортуються для тестових відео одного еталона: виберіть порівняння зі спільним еталоном.",
@@ -1323,11 +1327,6 @@
    "Не вдалося видалити збережені оцінки {count} порівняння: можливо, один з їхніх файлів відкрито.",
    "Не вдалося видалити збережені оцінки {count} порівнянь: можливо, один з їхніх файлів відкрито.",
    "Не вдалося видалити збережені оцінки {count} порівнянь: можливо, один з їхніх файлів відкрито."
-  ],
-  "{count} per-frame CSV file exported to {path}": [
-   "{count} покадровий CSV-файл експортовано в {path}",
-   "{count} покадрові CSV-файли експортовано в {path}",
-   "{count} покадрових CSV-файлів експортовано в {path}"
   ],
   "{count} saved comparison in {directory}": [
    "{count} збережене порівняння в {directory}",

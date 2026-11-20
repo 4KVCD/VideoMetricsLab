@@ -477,9 +477,12 @@ void MainWindow::export_saved_results(SavedResultsPanel::Export kind, const std:
         }
         return;
     }
+    case SavedResultsPanel::Export::frames_json:
     case SavedResultsPanel::Export::frames_csv: {
-        // A file per comparison, as Metric Graphs' Export CSV writes it.
-        const QString folder = dialogs_.choose_folder(app::tr("Export per-frame CSV files to"),
+        // A file per comparison, as Metric Graphs' Export CSV writes it, or
+        // the same table as JSON.
+        const bool json = kind == SavedResultsPanel::Export::frames_json;
+        const QString folder = dialogs_.choose_folder(app::tr("Export per-frame scores to"),
                                                       dialogs_.export_folder ? dialogs_.export_folder() : QString());
         if (folder.isEmpty()) {
             return;
@@ -488,16 +491,19 @@ void MainWindow::export_saved_results(SavedResultsPanel::Export kind, const std:
         std::vector<std::pair<std::shared_ptr<const ComparisonResult>, std::filesystem::path>> files;
         for (const LoadedSavedResult& saved : results) {
             files.emplace_back(saved.result,
-                               unique_output_path(path_of(folder), output_stem(saved.label.toStdString()), ".csv",
-                                                  reserved));
+                               unique_output_path(path_of(folder), output_stem(saved.label.toStdString()),
+                                                  json ? ".json" : ".csv", reserved));
         }
-        file_writes_->submit(app::tr("export {name}", {{"name", folder}}), [files = std::move(files)] {
+        file_writes_->submit(app::tr("export {name}", {{"name", folder}}), [files = std::move(files), json] {
             for (const auto& [result, out] : files) {
-                export_csv(*result, out);
+                if (json) {
+                    export_per_frame_json(*result, out);
+                } else {
+                    export_csv(*result, out);
+                }
             }
         });
-        show_status(ntr("{count} per-frame CSV file exported to {path}", "{count} per-frame CSV files exported to {path}",
-                        static_cast<long long>(results.size()), {{"path", folder}}));
+        show_status(app::tr("Per-frame scores exported to {path}", {{"path", folder}}));
         return;
     }
     case SavedResultsPanel::Export::graphs: {

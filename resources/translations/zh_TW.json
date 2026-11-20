@@ -1,9 +1,15 @@
 {
  "strings": {
+  "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "每個指標每一格的分數，以勾選的格式：每個影片一個檔案（<video> - frames.json）。長影片的檔案很大。",
+  "Export per-frame scores": "匯出逐格分數",
+  "Export per-frame scores to": "將逐格分數匯出到",
+  "Per-frame scores": "逐格分數",
+  "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "結果、逐格分數和弱片段儲存為 CSV 檔案，供試算表使用。JSON 和 CSV 都未勾選時，只匯出圖表。",
+  "Results, per-frame scores and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are exported.": "結果、逐格分數和弱片段儲存為 JSON 檔案。JSON 和 CSV 都未勾選時，只匯出圖表。",
+  "per-frame scores": "逐格分數",
+  "Per-frame scores exported to {path}": "逐格分數已匯出到 {path}",
   "In:": "格式：",
   "Results": "結果",
-  "Results and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are exported.": "結果和弱片段儲存為 JSON 檔案。JSON 和 CSV 都未勾選時，只匯出圖表。",
-  "Results and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "結果和弱片段儲存為 CSV 檔案，供試算表使用。JSON 和 CSV 都未勾選時，只匯出圖表。",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "分數和統計，按「匯出結果」的儲存方式，以勾選的格式：單一影片單獨儲存（<video> - results.json），或所有影片儲存在一個檔案中。",
   "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "按使用中的方案（設定 > 弱片段；在「已儲存的結果」分頁中按那裡選擇的規則）得出的弱片段，以勾選的格式：單一影片的（<video>.vmaf.segments.json），或所有影片的合為一份報告。規則沒有條件時不儲存任何內容。",
   " min": " 分鐘",
@@ -1134,8 +1140,6 @@
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "應用程式已儲存分數的所有比較。無需重新新增影片，即可在指標圖表中開啟，或匯出其結果、逐格分數、圖表和弱片段。",
   "Export graphs": "匯出圖表",
   "Export graphs as ZIP...": "將圖表匯出為 ZIP...",
-  "Export per-frame CSV files to": "將逐格 CSV 檔案匯出到",
-  "Export per-frame CSV...": "匯出逐格 CSV...",
   "Export weak segments...": "匯出弱片段...",
   "Filter by file name": "依檔案名稱篩選",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "圖表依同一參考影片的測試影片匯出：請選取參考影片相同的比較。",
@@ -1263,9 +1267,6 @@
   ],
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "無法刪除 {count} 個比較的已儲存分數：其中某個檔案可能已開啟。"
-  ],
-  "{count} per-frame CSV file exported to {path}": [
-   "{count} 個逐格 CSV 檔案已匯出到 {path}"
   ],
   "{count} saved comparison in {directory}": [
    "{count} 個已儲存的比較，位於 {directory}"
