@@ -1284,6 +1284,7 @@ void FrameComparePanel::update_enabled_state() {
     for (QWidget* widget : std::initializer_list<QWidget*>{loop_checkbox, loop_before_spin, loop_after_spin}) {
         widget->setEnabled(available && playable);
     }
+    refresh_loop_frames();  // at the frame rate of the pair now shown
     save_still_button->setEnabled(available && still_worker_ == nullptr);
     source_resolution_combo->setEnabled(playable);
     color_mode_combo->setEnabled(available);
