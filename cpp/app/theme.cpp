@@ -669,6 +669,8 @@ QScrollBar::handle:hover { background: {text_muted}; }
 QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
 QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
 QWidget[vmlRole="card"] { background: {card}; border: 1px solid {border}; border-radius: 8px; }
+QFrame[vmlRole="separator"] { background: {border_strong}; border: 0; min-width: 1px; max-width: 1px; margin: 4px 6px; }
+QWidget[vmlRole="tile"] { background: {raised}; border: 0; border-radius: 8px; }
 QWidget[vmlRole="toolbar"] { background: {raised}; border: 1px solid {border}; border-radius: 8px; }
 )");
     const QColor accent_hover = dark ? accent.lighter(112) : accent.darker(108);

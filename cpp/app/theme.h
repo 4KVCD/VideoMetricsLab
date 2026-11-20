@@ -121,11 +121,12 @@ Interface current_interface();
 
 // A widget's role in the Modern interface's style sheet: "primary" (the
 // one action a tab is for, in the accent), "danger" (one that removes
-// something), "quiet" (a lesser one, as text), "card" (a box of its own) or
-// "toolbar" (a strip of controls). On a tab bar, "segmented": its tabs a
-// row of pills, the current one in the accent (and its QTabWidget's too:
-// no frame). On a label, "notice": a note set apart, a tinted strip.
-// Classic draws every role alike.
+// something), "quiet" (a lesser one, as text), "card" (a box of its own),
+// "tile" (a figure in a card, such as a saved score) or "toolbar" (a strip
+// of controls). On a tab bar, "segmented": its tabs a row of pills, the
+// current one in the accent (and its QTabWidget's too: no frame). On a
+// label, "notice": a note set apart, a tinted strip. Classic draws every
+// role alike.
 void set_role(QWidget* widget, const char* role);
 
 // A gap between a toolbar's groups of controls: in Classic `classic_gap`

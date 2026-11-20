@@ -808,12 +808,14 @@ says so when it would delete any such, and **Settings > Storage > Clear saved
 results** keeps them, with their videos' saved bitrate, saying how many it
 kept; delete them here.
 
-**Saved scores** lists the selected comparison's scores: each metric's score
-for the whole video, as Metric Graphs' table shows it, then when and how it
-was made (GPU or CPU, the program, the VMAF model by its version, the CVVDP
-display).
+**Saved scores** shows the selected comparison's scores: each metric's score
+for the whole video, as Metric Graphs' table shows it, and when and how it was
+made (GPU or CPU, the program, the VMAF model by its version, the CVVDP
+display). In VML Modern each metric is a tile, five to a row, its score in
+large type; in VML Classic a line each, two metrics a row.
 Where a metric has more than one (CVVDP for two displays; SSIMULACRA2 on the
-GPU and the CPU), the newest is used unless another is picked there. A score
+GPU and the CPU), a list picks one: the newest is used unless another is
+picked (in VML Modern the tile's score follows the pick). A score
 the Videos tab would not use, and would calculate again (one made by an
 older version that read these videos wrongly, say), is marked "out of date"
 and is not used: not opened, exported or offered to pick.

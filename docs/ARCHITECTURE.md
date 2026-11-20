@@ -153,6 +153,7 @@ differs is drawn by the style sheet, from a role a widget is given with
 | `danger` | an action that removes something | the danger colour |
 | `quiet` | a lesser action, read as text | no frame |
 | `card` | a box of controls that belong together | a card, as group boxes are |
+| `tile` | a figure in a card, such as a saved score | a raised, rounded tile |
 | `toolbar` | a strip of controls above or below a view | a raised strip |
 | `separator` | a line between a toolbar's groups (`theme::separator()`) | a line of the border colour |
 | `segmented` | a tab bar of a few choices, and its tab widget (Settings' sections, Metric Graphs' metrics) | a row of pills, the current one in the accent |

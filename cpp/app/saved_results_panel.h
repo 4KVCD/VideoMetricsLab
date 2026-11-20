@@ -8,6 +8,7 @@
 
 #include <QSet>
 #include <QString>
+#include <QStringList>
 #include <QWidget>
 
 #include <atomic>
@@ -15,8 +16,10 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "dialogs.h"
@@ -35,6 +38,7 @@ class QLabel;
 class QLineEdit;
 class QMenu;
 class QPushButton;
+class QScrollArea;
 class QTableWidget;
 template <typename T>
 class QFutureWatcher;
@@ -106,6 +110,15 @@ public:
     QComboBox* score_choice(const std::string& key) const;
     // Waits for the selected comparison's scores to be read, and shows them.
     void wait_for_details();
+    // The Saved scores box's tiles a row.
+    static constexpr int tiles_a_row = 5;
+    // The Saved scores box as tiles (VML Modern's) or rows (Classic's), not
+    // as the interface in use has it; shown again. For tests, which run in
+    // Classic.
+    void set_tiles(bool tiles);
+    // The score read for `file` (details_read_), or nothing where it could
+    // not be read.
+    const SavedScore* read_score(const std::filesystem::path& file) const;
     // The Export button's menu, made as it opens: the right-click menu's
     // export, then results, per-frame scores, graphs and weak segments each
     // on its own.
@@ -149,6 +162,20 @@ private:
     void show_column(int column, bool shown);
     void apply_filter();
     void show_details();
+    // A metric's tile in the Saved scores box: its name and `score` shown
+    // large (`score_label`, set by the list to pick from); the caller adds
+    // how it was made, or that list.
+    QWidget* make_tile(const std::string& key, const QString& score, QLabel*& score_label) const;
+    // Whether the Saved scores box shows tiles: VML Modern's, unless a test
+    // asked (set_tiles).
+    bool showing_tiles() const;
+    // The selected comparison's scores, as tiles or as Classic's rows.
+    void show_tiles(const SavedComparison& saved);
+    void show_rows(const SavedComparison& saved);
+    // How a saved score was made, as its file records it.
+    QStringList made_of(const std::variant<FrameMetricResult, SequenceMetricResult>& score) const;
+    // A tile's height, the same for every tile: the box is sized from it.
+    int tile_height() const;
     std::vector<const SavedComparison*> selected() const;
     void update_buttons();
 
@@ -180,6 +207,11 @@ private:
     bool fitting_ = false;
     QGroupBox* details_ = nullptr;
     QGridLayout* details_grid_ = nullptr;
+    // The box's scroll area, as tall as the tiles or the rows need.
+    QScrollArea* details_scroll_ = nullptr;
+    int tiles_height_ = 0;
+    int rows_height_ = 0;
+    std::optional<bool> tiles_;  // set_tiles' choice; none: the interface's
     std::map<std::string, QComboBox*> score_combos_;
     QString rules_choice_ = QStringLiteral("in-use");
     QPushButton* open_button_ = nullptr;
