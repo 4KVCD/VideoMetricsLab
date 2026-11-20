@@ -34,6 +34,7 @@
 #include "vml/cvvdp.h"
 #include "vml/metric_cache.h"
 #include "vml/metrics.h"
+#include "vml/model_select.h"
 #include "vml/results_summary.h"
 #include "vml/segment_presets.h"
 #include "vml/segment_profiles.h"
@@ -302,7 +303,9 @@ void SavedResultsPanel::show_details() {
                 made.append(provenance.compute_backend == "gpu" ? QStringLiteral("GPU") : QStringLiteral("CPU"));
                 made.append(qt_text(provenance.implementation + " " + provenance.implementation_version).trimmed());
                 if (const auto model = provenance.parameters.find("model"); model != provenance.parameters.end()) {
-                    made.append(qt_text(model->second).remove(QLatin1Char('"')));
+                    // The model's own name for a bundled model, not its file's
+                    // path ("path=C:/.../vmaf_v1.0.16_3d0h.json").
+                    made.append(qt_text(model_shown(qt_text(model->second).remove(QLatin1Char('"')).toStdString())));
                 }
                 if (const auto* cvvdp = std::get_if<SequenceMetricResult>(&*score)) {
                     if (const std::optional<CvvdpSettings> display = cvvdp_display_of(*cvvdp)) {

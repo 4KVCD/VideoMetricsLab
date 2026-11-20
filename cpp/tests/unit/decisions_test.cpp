@@ -123,6 +123,19 @@ TEST(Decisions, AResolutionTestsSizeFollowsAWidthOrHeightTyped) {
 
 // Python's round() from the number's exact binary value: 2.5 is a true half, to
 // even; 2.675 is just under its half.
+TEST(Decisions, ABundledModelIsShownByItsVersion) {
+    // VMAF v1's model is a file of the install's: shown as the version it
+    // is, as libvmaf's own models are, whatever the path or its separators.
+    EXPECT_EQ(model_shown("path=C:/Apps/VideoMetricsLab/resources/models/vmaf_v1.0.16/vmaf_v1.0.16_3d0h.json"),
+              "version=vmaf_v1.0.16_3d0h");
+    EXPECT_EQ(model_shown("path=C:\\Apps\\models\\vmaf_v1.0.16_hfr\\vmaf_v1.0.16_hfr_3d0h_2160.json"),
+              "version=vmaf_v1.0.16_hfr_3d0h_2160");
+    EXPECT_EQ(model_shown("version=vmaf_v0.6.1neg"), "version=vmaf_v0.6.1neg");
+    // A model file of one's own keeps its path: it is what names it.
+    EXPECT_EQ(model_shown("path=Y:/models/mine.json"), "path=Y:/models/mine.json");
+    EXPECT_EQ(model_shown(""), "");
+}
+
 TEST(Decisions, RoundingIsPythons) {
     EXPECT_EQ(python_round(2.5, 0), 2.0);
     EXPECT_EQ(python_round(3.5, 0), 4.0);
