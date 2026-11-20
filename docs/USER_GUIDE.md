@@ -326,7 +326,7 @@ optional. Use still mode for frame inspection or playback mode for motion.
   in frames of the video shown, in the box beside: either one sets the
   other. The seconds are kept, so a video of another frame rate loops as
   long, in its own frames.
-- **Save still** saves the frame of the reference and of the test video as
+- **Export frame as PNG** saves the frame of the reference and of the test video as
   two PNG files in Settings' Export folder (Documents unless set), named
   after the video, the frame, its time, the Worst frames score when it is
   one, and the side. They are cropped and scaled as compared, HDR mapped to

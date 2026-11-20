@@ -232,7 +232,7 @@ TEST_F(FramePanelTest, ThePairsAreListedOnTheirCommonFramesAndStepTogether) {
 }
 
 // The row under the playback controls (the worst frames when shown, the
-// loop and the still) is centred, as the rows above and below it are.
+// loop and Export frame as PNG) is centred, as the rows above and below it are.
 TEST_F(FramePanelTest, TheLoopRowIsCentred) {
     const auto panel = make_panel();
     panel->set_runs({scored("first"), scored("second")});
@@ -254,7 +254,7 @@ TEST_F(FramePanelTest, TheLoopRowIsCentred) {
 }
 
 // Issue #24: the Worst frames list from Metric Graphs is stepped through
-// while its video is shown, and hidden for another; Save still without an
+// while its video is shown, and hidden for another; Export frame as PNG without an
 // export folder says where to choose one.
 TEST_F(FramePanelTest, TheWorstFramesListIsSteppedThroughOnItsVideo) {
     const auto panel = make_panel();
@@ -280,6 +280,7 @@ TEST_F(FramePanelTest, TheWorstFramesListIsSteppedThroughOnItsVideo) {
     QString failure;
     QObject::connect(panel.get(), &FrameComparePanel::still_failed, [&failure](const QString& error) { failure = error; });
     panel->export_folder = [] { return QString(); };
+    EXPECT_EQ(panel->save_still_button->text().toStdString(), "Export frame as PNG");  // as the graphs' exports
     panel->save_still_button->click();
     EXPECT_EQ(failure.toStdString(), "No export folder: choose one in Settings.");
     EXPECT_TRUE(idle(*panel));

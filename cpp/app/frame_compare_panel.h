@@ -81,7 +81,7 @@ long long loop_start(long long centre, double before, double fps);
 std::optional<long long> loop_restart(long long frame, long long centre, double before, double after, double fps,
                                       long long last);
 
-// The file name of a still Save still writes: the video, the frame (six
+// The file name of a still Export frame as PNG writes: the video, the frame (six
 // digits at least, as the encoder counts it), its time, the metric and
 // score when known ("PSNR 32.64"), and the side ("reference" or "test"),
 // with what Windows refuses in a name replaced.
@@ -198,7 +198,7 @@ private:
     CancelToken cancel_;
 };
 
-// Saves the reference's and the test video's frame as PNGs (Save still), on
+// Saves the reference's and the test video's frame as PNGs (Export frame as PNG), on
 // a thread of its own: Video Compare's still decode of that frame, HDR
 // converted to SDR (an 8-bit PNG), cropped and scaled as compared, written
 // as FFmpeg made them. Both files or neither: a test still that fails
@@ -263,7 +263,7 @@ public:
     void clear_worst_list();
     // The loop's seconds before and after its frame (the saved settings).
     void set_loop_seconds(double before, double after);
-    // Where Save still writes: Settings' Export folder.
+    // Where Export frame as PNG writes: Settings' Export folder.
     std::function<QString()> export_folder;
     // Shows the next (1) or previous (-1) test video.
     void cycle_distorted(int direction);
@@ -321,7 +321,7 @@ signals:
     void color_mode_changed(const QString& mode);
     // The loop's seconds changed, to save.
     void loop_seconds_changed(double before, double after);
-    // Save still wrote `files`, or could not.
+    // Export frame as PNG wrote `files`, or could not.
     void still_saved(const QStringList& files);
     void still_failed(const QString& error);
 

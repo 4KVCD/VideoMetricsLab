@@ -621,10 +621,11 @@ void MainWindow::build_ui() {
     });
     frame_compare_panel_->export_folder = dialogs_.export_folder;
     connect(frame_compare_panel_, &FrameComparePanel::still_saved, this, [this](const QStringList& files) {
-        dialogs_.inform(app::tr("Stills saved"), app::tr("Saved:\n{files}", {{"files", files.join("\n")}}));
+        // Said as the other exports say it: the files, one a line.
+        dialogs_.inform(app::tr("Export"), app::tr("Export complete: {path}", {{"path", "\n" + files.join("\n")}}));
     });
     connect(frame_compare_panel_, &FrameComparePanel::still_failed, this, [this](const QString& error) {
-        dialogs_.alert(app::tr("Save still failed"), tr_message(error));
+        dialogs_.alert(app::tr("Export failed"), tr_message(error));
     });
     tabs_->addTab(frame_compare_panel_, app::tr("Video Compare"));
     // Its own list of videos: a finished run adds its own (on_job_finished).

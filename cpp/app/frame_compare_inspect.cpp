@@ -79,7 +79,7 @@ QString still_file_name(const QString& video, long long frame, double seconds, c
     return suggested_file_name(parts.join(QStringLiteral(" - ")), QStringLiteral(".png"));
 }
 
-// ------------------------------------------------------------ Save still
+// ------------------------------------------------------------ Export frame as PNG
 
 StillSaveWorker::StillSaveWorker(std::string ffmpeg, FrameComparison comparison, long long frame,
                                  std::vector<std::filesystem::path> files, PreviewColorMode mode, QObject* parent)
@@ -133,7 +133,7 @@ void StillSaveWorker::run() {
 
 // ------------------------------------------------------------ the row
 
-// Previous / Next worst with where the list is, the loop, and Save still:
+// Previous / Next worst with where the list is, the loop, and Export frame as PNG:
 // centred, as the controls above and the frame's line below are.
 void FrameComparePanel::add_inspect_row(QVBoxLayout* root) {
     auto* row = new QHBoxLayout;
@@ -198,7 +198,7 @@ void FrameComparePanel::add_inspect_row(QVBoxLayout* root) {
     row->addWidget(loop_after_frames_spin);
     row->addSpacing(12);
 
-    save_still_button = new QPushButton(app::tr("Save still"));
+    save_still_button = new QPushButton(app::tr("Export frame as PNG"));
     save_still_button->setToolTip(app::tr("Saves this frame of the reference and of the test video as PNG files in "
                                           "Settings' Export folder, cropped and scaled as they are compared, HDR "
                                           "mapped to SDR. They are decoded as Video Compare's still frames are."));
