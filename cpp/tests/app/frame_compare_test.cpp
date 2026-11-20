@@ -278,6 +278,12 @@ TEST_F(FramePanelTest, HoldingSShowsTheSource) {
     EXPECT_TRUE(showing_source(*panel));
     QTest::keyRelease(panel->viewer, Qt::Key_S, Qt::ShiftModifier);
     EXPECT_FALSE(showing_source(*panel));
+    // Shift let go too: QTest keeps the application's modifiers as its key
+    // events left them, and a Shift still down makes the next test's
+    // selectRow() a Shift-click (SavedResultsPanel's selection came back
+    // empty after this test).
+    QTest::keyRelease(panel->viewer, Qt::Key_Shift);
+    EXPECT_EQ(QGuiApplication::keyboardModifiers(), Qt::NoModifier);
     panel->cancel();
 }
 
