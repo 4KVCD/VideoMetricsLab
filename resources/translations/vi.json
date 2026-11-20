@@ -14,7 +14,7 @@
   "In:": "Định dạng:",
   "Results": "Kết quả",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "Điểm và thống kê, như Xuất kết quả lưu, theo các định dạng đã chọn: của một video riêng (<video> - results.json), hoặc của mọi video trong một tệp.",
-  "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "Các đoạn yếu theo hồ sơ đang dùng (Cài đặt > Đoạn yếu; ở thẻ Kết quả đã lưu là quy tắc đã chọn ở đó), theo các định dạng đã chọn: của một video (<video>.vmaf.segments.json), hoặc của mọi video trong một báo cáo. Không lưu gì khi quy tắc chưa có điều kiện.",
+  "Weak segments by the profile in use (Settings > Weak segments; on the Saved Results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "Các đoạn yếu theo hồ sơ đang dùng (Cài đặt > Đoạn yếu; ở thẻ Kết quả đã lưu là quy tắc đã chọn ở đó), theo các định dạng đã chọn: của một video (<video>.vmaf.segments.json), hoặc của mọi video trong một báo cáo. Không lưu gì khi quy tắc chưa có điều kiện.",
   " min": " phút",
   "Application token:": "Mã thông báo ứng dụng:",
   "As plain text in settings.json": "Dạng văn bản thường trong settings.json",
@@ -1154,7 +1154,7 @@
   "Refresh": "Làm mới",
   "Results exported to {path}": "Đã xuất kết quả vào {path}",
   "Saved": "Ngày lưu",
-  "Saved results": "Kết quả đã lưu",
+  "Saved Results": "Kết quả đã lưu",
   "Saved scores": "Điểm đã lưu",
   "Saved scores of {name}": "Điểm đã lưu của {name}",
   "Select a comparison to see its saved scores.": "Chọn một so sánh để xem điểm đã lưu.",
@@ -1168,7 +1168,7 @@
   "{name} (saved)": "{name} (đã lưu)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "Xóa kết quả đã lưu khỏi {directory}?\n\nCác video đã chấm sẽ cần tính lại. Những kết quả có video tham chiếu không còn ở chỗ cũ sẽ được giữ lại: không thể tính lại điểm của chúng. Hãy xóa chúng trong thẻ Kết quả đã lưu.",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "Xóa kết quả đã lưu khỏi {directory}?\n\nCác video đã chấm sẽ cần tính lại. Những kết quả có video tham chiếu không còn ở chỗ cũ sẽ được giữ lại: không thể tính lại điểm của chúng. Hãy xóa chúng trong thẻ Kết quả đã lưu.",
   "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Một số kết quả không thể chấm lại: video tham chiếu của chúng không còn ở chỗ cũ (được đánh dấu \"không tìm thấy\").",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nKhông tìm thấy ở đó: không có nó, không thể tính lại các điểm này.",
   "Recognize test videos remuxed after scoring (reads each one again)": "Nhận ra video kiểm tra đã remux sau khi chấm (đọc lại từng video)",
@@ -1267,7 +1267,7 @@
   "{count} saved comparison in {directory}": [
    "{count} so sánh đã lưu trong {directory}"
   ],
-  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "Đã giữ {count} kết quả có video tham chiếu bị mất: hãy xóa trong thẻ Kết quả đã lưu."
   ]
  }

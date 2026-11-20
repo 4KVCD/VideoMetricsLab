@@ -14,7 +14,7 @@
   "In:": "Biçimler:",
   "Results": "Sonuçlar",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "Puanlar ve istatistikler, Sonuçları dışa aktar nasıl kaydediyorsa, işaretli biçimlerde: tek bir videonunki ayrı (<video> - results.json) veya tüm videolarınki tek dosyada.",
-  "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "Kullanılan profile göre zayıf bölümler (Ayarlar > Zayıf bölümler; Kaydedilen sonuçlar sekmesinde orada seçilen kurallar), işaretli biçimlerde: tek bir videonunki (<video>.vmaf.segments.json) veya tüm videolarınki tek bir raporda. Kuralların koşulu olmadığı sürece hiçbir şey kaydedilmez.",
+  "Weak segments by the profile in use (Settings > Weak segments; on the Saved Results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "Kullanılan profile göre zayıf bölümler (Ayarlar > Zayıf bölümler; Kaydedilen sonuçlar sekmesinde orada seçilen kurallar), işaretli biçimlerde: tek bir videonunki (<video>.vmaf.segments.json) veya tüm videolarınki tek bir raporda. Kuralların koşulu olmadığı sürece hiçbir şey kaydedilmez.",
   " min": " dk",
   "Application token:": "Uygulama belirteci:",
   "As plain text in settings.json": "settings.json içinde düz metin olarak",
@@ -1154,7 +1154,7 @@
   "Refresh": "Yenile",
   "Results exported to {path}": "Sonuçlar {path} konumuna aktarıldı",
   "Saved": "Kayıt tarihi",
-  "Saved results": "Kaydedilen sonuçlar",
+  "Saved Results": "Kaydedilen sonuçlar",
   "Saved scores": "Kayıtlı puanlar",
   "Saved scores of {name}": "{name} için kayıtlı puanlar",
   "Select a comparison to see its saved scores.": "Kayıtlı puanlarını görmek için bir karşılaştırma seçin.",
@@ -1168,7 +1168,7 @@
   "{name} (saved)": "{name} (kayıtlı)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "Şu konumdaki kaydedilen sonuçlar silinsin mi: {directory}\n\nZaten puanlanmış videoların yeniden hesaplanması gerekecek. Referans videosu artık eski yerinde olmayanlar saklanır: puanları yeniden hesaplanamaz. Bunları Kaydedilen sonuçlar sekmesinde silin.",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "Şu konumdaki kaydedilen sonuçlar silinsin mi: {directory}\n\nZaten puanlanmış videoların yeniden hesaplanması gerekecek. Referans videosu artık eski yerinde olmayanlar saklanır: puanları yeniden hesaplanamaz. Bunları Kaydedilen sonuçlar sekmesinde silin.",
   "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Bazıları yeniden puanlanamaz: referans videoları artık eski yerinde değil (\"bulunamadı\" olarak işaretli).",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nOrada bulunamadı: o olmadan bu puanlar yeniden hesaplanamaz.",
   "Recognize test videos remuxed after scoring (reads each one again)": "Puanlamadan sonra yeniden muxlanan test videolarını tanı (her birini yeniden okur)",
@@ -1297,7 +1297,7 @@
    "{directory} içinde {count} kayıtlı karşılaştırma",
    "{directory} içinde {count} kayıtlı karşılaştırma"
   ],
-  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "Referans videosu kaybolan {count} sonuç saklandı: Kaydedilen sonuçlar sekmesinde silin.",
    "Referans videoları kaybolan {count} sonuç saklandı: Kaydedilen sonuçlar sekmesinde silin."
   ]

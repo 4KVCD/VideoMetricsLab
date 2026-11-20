@@ -14,7 +14,7 @@
   "In:": "In:",
   "Results": "Resultaten",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "Scores en statistieken, zoals Resultaten exporteren ze opslaat, in de aangevinkte formaten: die van één video apart (<video> - results.json), of die van alle video's in één bestand.",
-  "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "Zwakke segmenten volgens het gebruikte profiel (Instellingen > Zwakke segmenten; op het tabblad Opgeslagen resultaten de daar gekozen regels), in de aangevinkte formaten: die van één video (<video>.vmaf.segments.json), of die van alle video's in één rapport. Zolang de regels geen voorwaarde hebben, wordt niets opgeslagen.",
+  "Weak segments by the profile in use (Settings > Weak segments; on the Saved Results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "Zwakke segmenten volgens het gebruikte profiel (Instellingen > Zwakke segmenten; op het tabblad Opgeslagen resultaten de daar gekozen regels), in de aangevinkte formaten: die van één video (<video>.vmaf.segments.json), of die van alle video's in één rapport. Zolang de regels geen voorwaarde hebben, wordt niets opgeslagen.",
   " min": " min",
   "Application token:": "Applicatietoken:",
   "As plain text in settings.json": "Als platte tekst in settings.json",
@@ -1154,7 +1154,7 @@
   "Refresh": "Vernieuwen",
   "Results exported to {path}": "Resultaten geëxporteerd naar {path}",
   "Saved": "Opgeslagen",
-  "Saved results": "Opgeslagen resultaten",
+  "Saved Results": "Opgeslagen resultaten",
   "Saved scores": "Opgeslagen scores",
   "Saved scores of {name}": "Opgeslagen scores van {name}",
   "Select a comparison to see its saved scores.": "Selecteer een vergelijking om de opgeslagen scores te zien.",
@@ -1168,7 +1168,7 @@
   "{name} (saved)": "{name} (opgeslagen)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "Opgeslagen resultaten verwijderen uit {directory}?\n\nVideo's die al zijn beoordeeld, moeten opnieuw worden berekend. Resultaten waarvan de referentievideo niet meer staat waar hij stond, blijven bewaard: hun scores zouden niet opnieuw te berekenen zijn. Verwijder ze op het tabblad Opgeslagen resultaten.",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "Opgeslagen resultaten verwijderen uit {directory}?\n\nVideo's die al zijn beoordeeld, moeten opnieuw worden berekend. Resultaten waarvan de referentievideo niet meer staat waar hij stond, blijven bewaard: hun scores zouden niet opnieuw te berekenen zijn. Verwijder ze op het tabblad Opgeslagen resultaten.",
   "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Sommige ervan zouden niet opnieuw te beoordelen zijn: hun referentievideo staat niet meer waar hij stond (gemarkeerd als \"niet gevonden\").",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nDaar niet gevonden: zonder deze video zouden deze scores niet opnieuw te berekenen zijn.",
   "Recognize test videos remuxed after scoring (reads each one again)": "Na het scoren opnieuw gemuxte testvideo's herkennen (leest elke opnieuw)",
@@ -1297,7 +1297,7 @@
    "{count} opgeslagen vergelijking in {directory}",
    "{count} opgeslagen vergelijkingen in {directory}"
   ],
-  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "{count} resultaat bewaard waarvan de referentievideo ontbreekt: verwijder het op het tabblad Opgeslagen resultaten.",
    "{count} resultaten bewaard waarvan de referentievideo's ontbreken: verwijder ze op het tabblad Opgeslagen resultaten."
   ]

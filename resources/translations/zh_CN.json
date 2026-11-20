@@ -14,7 +14,7 @@
   "In:": "格式：",
   "Results": "结果",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "分数和统计，按“导出结果”的保存方式，以勾选的格式：单个视频单独保存（<video> - results.json），或所有视频保存在一个文件中。",
-  "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "按使用中的方案（设置 > 弱片段；在“已保存的结果”标签页中按那里选择的规则）得出的弱片段，以勾选的格式：单个视频的（<video>.vmaf.segments.json），或所有视频的合为一份报告。规则没有条件时不保存任何内容。",
+  "Weak segments by the profile in use (Settings > Weak segments; on the Saved Results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "按使用中的方案（设置 > 弱片段；在“已保存的结果”标签页中按那里选择的规则）得出的弱片段，以勾选的格式：单个视频的（<video>.vmaf.segments.json），或所有视频的合为一份报告。规则没有条件时不保存任何内容。",
   " min": " 分钟",
   "Application token:": "应用程序令牌：",
   "As plain text in settings.json": "以明文保存在 settings.json 中",
@@ -1154,7 +1154,7 @@
   "Refresh": "刷新",
   "Results exported to {path}": "结果已导出到 {path}",
   "Saved": "保存时间",
-  "Saved results": "已保存的结果",
+  "Saved Results": "已保存的结果",
   "Saved scores": "已保存的分数",
   "Saved scores of {name}": "{name} 的已保存分数",
   "Select a comparison to see its saved scores.": "选择一个对比以查看其已保存的分数。",
@@ -1168,7 +1168,7 @@
   "{name} (saved)": "{name}（已保存）",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "要删除 {directory} 中已保存的结果吗？\n\n已评分的视频需要重新计算。参考视频已不在原位置的结果会保留：它们的分数无法再重新计算。请在“已保存的结果”选项卡中删除它们。",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "要删除 {directory} 中已保存的结果吗？\n\n已评分的视频需要重新计算。参考视频已不在原位置的结果会保留：它们的分数无法再重新计算。请在“已保存的结果”选项卡中删除它们。",
   "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "其中一些无法重新评分：它们的参考视频已不在原位置（标记为“未找到”）。",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\n在该位置找不到：没有它，就无法重新计算这些分数。",
   "Recognize test videos remuxed after scoring (reads each one again)": "识别评分后重新封装的测试视频（会再读取每个视频一次）",
@@ -1267,7 +1267,7 @@
   "{count} saved comparison in {directory}": [
    "{count} 个已保存的对比，位于 {directory}"
   ],
-  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "已保留 {count} 个参考视频已丢失的结果：请在“已保存的结果”选项卡中删除。"
   ]
  }

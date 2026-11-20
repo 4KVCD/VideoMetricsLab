@@ -916,7 +916,7 @@ TEST(MetricCache, ScoresFollowRenamedAndRemuxedFiles) {
     record_saved_files(cache, folder / "s.mkv", folder / "t.mkv", request.recipe);
     EXPECT_TRUE(std::filesystem::exists(saved / "identity.json"));
 
-    // Deleted (the Saved results tab) after a lookup read the records: no
+    // Deleted (the Saved Results tab) after a lookup read the records: no
     // longer found by the files' content.
     EXPECT_EQ(recipe_directory(cache, folder / "s copy.mkv", folder / "t renamed.mkv", request.recipe), saved);
     std::filesystem::remove_all(saved);

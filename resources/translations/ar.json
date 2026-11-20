@@ -14,7 +14,7 @@
   "In:": "بصيغ:",
   "Results": "النتائج",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "الدرجات والإحصاءات كما يحفظها «تصدير النتائج»، بالصيغ المحددة: لفيديو واحد وحده (<video> - results.json)، أو لكل الفيديوهات في ملف واحد.",
-  "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "المقاطع الضعيفة حسب ملف التعريف المستخدم (الإعدادات > المقاطع الضعيفة؛ وفي علامة تبويب النتائج المحفوظة، القواعد المختارة هناك)، بالصيغ المحددة: لفيديو واحد (<video>.vmaf.segments.json)، أو لكل الفيديوهات في تقرير واحد. لا يُحفظ شيء ما دامت القواعد بلا شرط.",
+  "Weak segments by the profile in use (Settings > Weak segments; on the Saved Results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "المقاطع الضعيفة حسب ملف التعريف المستخدم (الإعدادات > المقاطع الضعيفة؛ وفي علامة تبويب النتائج المحفوظة، القواعد المختارة هناك)، بالصيغ المحددة: لفيديو واحد (<video>.vmaf.segments.json)، أو لكل الفيديوهات في تقرير واحد. لا يُحفظ شيء ما دامت القواعد بلا شرط.",
   " min": " دقيقة",
   "Application token:": "رمز التطبيق:",
   "As plain text in settings.json": "كنص عادي في settings.json",
@@ -1154,7 +1154,7 @@
   "Refresh": "تحديث",
   "Results exported to {path}": "صُدّرت النتائج إلى {path}",
   "Saved": "تاريخ الحفظ",
-  "Saved results": "النتائج المحفوظة",
+  "Saved Results": "النتائج المحفوظة",
   "Saved scores": "الدرجات المحفوظة",
   "Saved scores of {name}": "الدرجات المحفوظة لـ {name}",
   "Select a comparison to see its saved scores.": "حدّد مقارنة لعرض درجاتها المحفوظة.",
@@ -1168,7 +1168,7 @@
   "{name} (saved)": "{name} (محفوظ)",
   "{size:.0f} KB": "{size:.0f} كيلوبايت",
   "{size:.1f} MB": "{size:.1f} ميغابايت",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "حذف النتائج المحفوظة من {directory}؟\n\nستحتاج مقاطع الفيديو التي قُيّمت إلى إعادة الحساب. تُبقى النتائج التي لم يعد فيديو المرجع الخاص بها في مكانه: لا يمكن حساب درجاتها من جديد. احذفها من علامة التبويب «النتائج المحفوظة».",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "حذف النتائج المحفوظة من {directory}؟\n\nستحتاج مقاطع الفيديو التي قُيّمت إلى إعادة الحساب. تُبقى النتائج التي لم يعد فيديو المرجع الخاص بها في مكانه: لا يمكن حساب درجاتها من جديد. احذفها من علامة التبويب «النتائج المحفوظة».",
   "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "بعضها لا يمكن تقييمه من جديد: لم يعد فيديو المرجع الخاص به في مكانه (مُعلَّم «غير موجودة»).",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nغير موجود هناك: من دونه لا يمكن حساب هذه الدرجات من جديد.",
   "Recognize test videos remuxed after scoring (reads each one again)": "التعرّف على مقاطع الفيديو المختبَرة المُعاد تغليفها بعد التقييم (يقرأ كلًّا منها مرة أخرى)",
@@ -1417,7 +1417,7 @@
    "{count} مقارنةً محفوظة في {directory}",
    "{count} مقارنة محفوظة في {directory}"
   ],
-  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "أُبقيت {count} نتيجة فيديو مرجعها مفقود: احذفها من علامة التبويب «النتائج المحفوظة».",
    "أُبقيت {count} نتيجة فيديو مرجعها مفقود: احذفها من علامة التبويب «النتائج المحفوظة».",
    "أُبقيت {count} نتيجة مقاطع الفيديو المرجعية لها مفقودة: احذفها من علامة التبويب «النتائج المحفوظة».",

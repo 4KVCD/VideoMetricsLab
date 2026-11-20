@@ -686,7 +686,7 @@ void MainWindow::build_ui() {
                 export_saved_results(kind, results);
             });
     connect(saved_results_panel_, &SavedResultsPanel::deleted, this, [this] { settings_panel_->refresh_status(); });
-    tabs_->addTab(new ScrollingPage(saved_results_panel_), app::tr("Saved results"));
+    tabs_->addTab(new ScrollingPage(saved_results_panel_), app::tr("Saved Results"));
     tabs_->addTab(new ScrollingPage(settings_panel_), app::tr("Settings"));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
 }

@@ -14,7 +14,7 @@
   "In:": "In:",
   "Results": "Risultati",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "Punteggi e statistiche, come li salva Esporta risultati, nei formati spuntati: quelli di un video da solo (<video> - results.json), o di tutti i video in un unico file.",
-  "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "Segmenti deboli secondo il profilo in uso (Impostazioni > Segmenti deboli; nella scheda Risultati salvati, le regole scelte lì), nei formati spuntati: quelli di un video (<video>.vmaf.segments.json), o di tutti i video in un unico rapporto. Non viene salvato nulla finché le regole non hanno condizioni.",
+  "Weak segments by the profile in use (Settings > Weak segments; on the Saved Results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "Segmenti deboli secondo il profilo in uso (Impostazioni > Segmenti deboli; nella scheda Risultati salvati, le regole scelte lì), nei formati spuntati: quelli di un video (<video>.vmaf.segments.json), o di tutti i video in un unico rapporto. Non viene salvato nulla finché le regole non hanno condizioni.",
   " min": " min",
   "Application token:": "Token dell'applicazione:",
   "As plain text in settings.json": "Come testo in chiaro in settings.json",
@@ -1154,7 +1154,7 @@
   "Refresh": "Aggiorna",
   "Results exported to {path}": "Risultati esportati in {path}",
   "Saved": "Salvato",
-  "Saved results": "Risultati salvati",
+  "Saved Results": "Risultati salvati",
   "Saved scores": "Punteggi salvati",
   "Saved scores of {name}": "Punteggi salvati di {name}",
   "Select a comparison to see its saved scores.": "Seleziona un confronto per vederne i punteggi salvati.",
@@ -1168,7 +1168,7 @@
   "{name} (saved)": "{name} (salvato)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "Eliminare i risultati salvati da {directory}?\n\nI video già valutati dovranno essere ricalcolati. Quelli il cui video di riferimento non è più dove si trovava vengono conservati: i loro punteggi non potrebbero essere ricalcolati. Eliminali nella scheda Risultati salvati.",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "Eliminare i risultati salvati da {directory}?\n\nI video già valutati dovranno essere ricalcolati. Quelli il cui video di riferimento non è più dove si trovava vengono conservati: i loro punteggi non potrebbero essere ricalcolati. Eliminali nella scheda Risultati salvati.",
   "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Alcuni di essi non potrebbero essere valutati di nuovo: il loro video di riferimento non è più dove si trovava (contrassegnato \"non trovata\").",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nNon trovato lì: senza di esso, questi punteggi non potrebbero essere ricalcolati.",
   "Recognize test videos remuxed after scoring (reads each one again)": "Riconosci i video di test rimuxati dopo la valutazione (rilegge ciascuno)",
@@ -1297,7 +1297,7 @@
    "{count} confronto salvato in {directory}",
    "{count} confronti salvati in {directory}"
   ],
-  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "Conservato {count} risultato il cui video di riferimento manca: eliminalo nella scheda Risultati salvati.",
    "Conservati {count} risultati i cui video di riferimento mancano: eliminali nella scheda Risultati salvati."
   ]

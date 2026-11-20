@@ -662,9 +662,9 @@ its file, every setting (defaults too), its black bars and how they were
 found, how each metric came out, the decoders used and how long each pass
 took. [The results file](RESULTS_JSON.md) describes every key.
 
-### The Saved results tab
+### The Saved Results tab
 
-**Saved results** lists every comparison whose scores the app has saved (its
+**Saved Results** lists every comparison whose scores the app has saved (its
 results cache, Settings > Storage > Saved results), newest first, with its
 test video, reference, when it was saved, its metrics and its size; **Filter**
 narrows it by file name. Select one or more to use them without adding the
@@ -757,11 +757,11 @@ named after the reference for every video), or as **Loose files** side by
 side in a folder you choose.
 
 The right-click menus of the Videos table, of Metric Graphs' statistics and
-of the Saved results tab offer an export of what is ticked, named after it:
+of the Saved Results tab offer an export of what is ticked, named after it:
 **Export this video's results, graphs and weak segments...** for the video
 clicked (once its metrics are all scored), and **Export all videos'
 results, graphs and weak segments...** for every test video scored against
-the reference (**Export the selected videos'...** on Saved results). Untick
+the reference (**Export the selected videos'...** on Saved Results). Untick
 what you never want, CSV say, and it's left out of every export. A line of a saved run loaded with **Load analysis results** has no
 export of its own (it has no row in the Videos table), but is in all the
 videos' results.

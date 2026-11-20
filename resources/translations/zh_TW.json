@@ -14,7 +14,7 @@
   "In:": "格式：",
   "Results": "結果",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "分數和統計，按「匯出結果」的儲存方式，以勾選的格式：單一影片單獨儲存（<video> - results.json），或所有影片儲存在一個檔案中。",
-  "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "按使用中的方案（設定 > 弱片段；在「已儲存的結果」分頁中按那裡選擇的規則）得出的弱片段，以勾選的格式：單一影片的（<video>.vmaf.segments.json），或所有影片的合為一份報告。規則沒有條件時不儲存任何內容。",
+  "Weak segments by the profile in use (Settings > Weak segments; on the Saved Results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "按使用中的方案（設定 > 弱片段；在「已儲存的結果」分頁中按那裡選擇的規則）得出的弱片段，以勾選的格式：單一影片的（<video>.vmaf.segments.json），或所有影片的合為一份報告。規則沒有條件時不儲存任何內容。",
   " min": " 分鐘",
   "Application token:": "應用程式權杖：",
   "As plain text in settings.json": "以純文字儲存在 settings.json 中",
@@ -1154,7 +1154,7 @@
   "Refresh": "重新整理",
   "Results exported to {path}": "結果已匯出到 {path}",
   "Saved": "儲存時間",
-  "Saved results": "已儲存的結果",
+  "Saved Results": "已儲存的結果",
   "Saved scores": "已儲存的分數",
   "Saved scores of {name}": "{name} 的已儲存分數",
   "Select a comparison to see its saved scores.": "選取一個比較以查看其已儲存的分數。",
@@ -1168,7 +1168,7 @@
   "{name} (saved)": "{name}（已儲存）",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "要刪除 {directory} 中已儲存的結果嗎？\n\n已評分的影片需要重新計算。參考影片已不在原位置的結果會保留：它們的分數無法再重新計算。請在「已儲存的結果」分頁中刪除它們。",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "要刪除 {directory} 中已儲存的結果嗎？\n\n已評分的影片需要重新計算。參考影片已不在原位置的結果會保留：它們的分數無法再重新計算。請在「已儲存的結果」分頁中刪除它們。",
   "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "其中一些無法重新評分：它們的參考影片已不在原位置（標示為「找不到」）。",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\n在該位置找不到：沒有它，就無法重新計算這些分數。",
   "Recognize test videos remuxed after scoring (reads each one again)": "辨識評分後重新封裝的測試影片（會再讀取每部影片一次）",
@@ -1267,7 +1267,7 @@
   "{count} saved comparison in {directory}": [
    "{count} 個已儲存的比較，位於 {directory}"
   ],
-  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "已保留 {count} 個參考影片已遺失的結果：請在「已儲存的結果」分頁中刪除。"
   ]
  }

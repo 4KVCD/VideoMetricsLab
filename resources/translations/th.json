@@ -14,7 +14,7 @@
   "In:": "ในรูปแบบ:",
   "Results": "ผลลัพธ์",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "คะแนนและสถิติ ตามที่ ส่งออกผลลัพธ์ บันทึก ในรูปแบบที่เลือก: ของวิดีโอเดียว (<video> - results.json) หรือของวิดีโอทั้งหมดในไฟล์เดียว",
-  "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "ช่วงที่อ่อนตามโปรไฟล์ที่ใช้อยู่ (การตั้งค่า > ช่วงที่อ่อน ส่วนในแท็บ ผลลัพธ์ที่บันทึก ใช้กฎที่เลือกไว้ที่นั่น) ในรูปแบบที่เลือก: ของวิดีโอเดียว (<video>.vmaf.segments.json) หรือของวิดีโอทั้งหมดในรายงานเดียว จะไม่บันทึกอะไรตราบใดที่กฎไม่มีเงื่อนไข",
+  "Weak segments by the profile in use (Settings > Weak segments; on the Saved Results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "ช่วงที่อ่อนตามโปรไฟล์ที่ใช้อยู่ (การตั้งค่า > ช่วงที่อ่อน ส่วนในแท็บ ผลลัพธ์ที่บันทึก ใช้กฎที่เลือกไว้ที่นั่น) ในรูปแบบที่เลือก: ของวิดีโอเดียว (<video>.vmaf.segments.json) หรือของวิดีโอทั้งหมดในรายงานเดียว จะไม่บันทึกอะไรตราบใดที่กฎไม่มีเงื่อนไข",
   " min": " นาที",
   "Application token:": "โทเค็นแอปพลิเคชัน:",
   "As plain text in settings.json": "เป็นข้อความธรรมดาใน settings.json",
@@ -1154,7 +1154,7 @@
   "Refresh": "รีเฟรช",
   "Results exported to {path}": "ส่งออกผลลัพธ์ไปที่ {path} แล้ว",
   "Saved": "บันทึกเมื่อ",
-  "Saved results": "ผลลัพธ์ที่บันทึก",
+  "Saved Results": "ผลลัพธ์ที่บันทึก",
   "Saved scores": "คะแนนที่บันทึกไว้",
   "Saved scores of {name}": "คะแนนที่บันทึกไว้ของ {name}",
   "Select a comparison to see its saved scores.": "เลือกการเปรียบเทียบเพื่อดูคะแนนที่บันทึกไว้",
@@ -1168,7 +1168,7 @@
   "{name} (saved)": "{name} (ที่บันทึกไว้)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "ลบผลลัพธ์ที่บันทึกจาก {directory} หรือไม่\n\nวิดีโอที่ให้คะแนนแล้วจะต้องคำนวณใหม่ ผลลัพธ์ที่วิดีโออ้างอิงไม่อยู่ในที่เดิมแล้วจะถูกเก็บไว้ เพราะคำนวณคะแนนใหม่ไม่ได้ ลบผลลัพธ์เหล่านั้นได้ในแท็บผลลัพธ์ที่บันทึก",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "ลบผลลัพธ์ที่บันทึกจาก {directory} หรือไม่\n\nวิดีโอที่ให้คะแนนแล้วจะต้องคำนวณใหม่ ผลลัพธ์ที่วิดีโออ้างอิงไม่อยู่ในที่เดิมแล้วจะถูกเก็บไว้ เพราะคำนวณคะแนนใหม่ไม่ได้ ลบผลลัพธ์เหล่านั้นได้ในแท็บผลลัพธ์ที่บันทึก",
   "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "บางรายการให้คะแนนใหม่ไม่ได้ เพราะวิดีโออ้างอิงไม่อยู่ในที่เดิมแล้ว (ทำเครื่องหมาย \"ไม่พบ\")",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nไม่พบที่ตำแหน่งนี้ หากไม่มีวิดีโอนี้ จะคำนวณคะแนนเหล่านี้ใหม่ไม่ได้",
   "Recognize test videos remuxed after scoring (reads each one again)": "จดจำวิดีโอทดสอบที่รีมักซ์หลังให้คะแนน (อ่านแต่ละรายการอีกครั้ง)",
@@ -1267,7 +1267,7 @@
   "{count} saved comparison in {directory}": [
    "การเปรียบเทียบที่บันทึก {count} รายการใน {directory}"
   ],
-  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "เก็บผลลัพธ์ {count} รายการที่วิดีโออ้างอิงหายไป ลบได้ในแท็บผลลัพธ์ที่บันทึก"
   ]
  }

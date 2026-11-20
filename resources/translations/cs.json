@@ -14,7 +14,7 @@
   "In:": "Ve formátech:",
   "Results": "Výsledky",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "Skóre a statistiky, jak je ukládá Exportovat výsledky, v zaškrtnutých formátech: jednoho videa samostatně (<video> - results.json), nebo všech videí v jednom souboru.",
-  "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "Slabé úseky podle používaného profilu (Nastavení > Slabé úseky; na kartě Uložené výsledky podle tam vybraných pravidel) v zaškrtnutých formátech: jednoho videa (<video>.vmaf.segments.json), nebo všech videí v jedné zprávě. Dokud pravidla nemají podmínku, nic se neuloží.",
+  "Weak segments by the profile in use (Settings > Weak segments; on the Saved Results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "Slabé úseky podle používaného profilu (Nastavení > Slabé úseky; na kartě Uložené výsledky podle tam vybraných pravidel) v zaškrtnutých formátech: jednoho videa (<video>.vmaf.segments.json), nebo všech videí v jedné zprávě. Dokud pravidla nemají podmínku, nic se neuloží.",
   " min": " min",
   "Application token:": "Token aplikace:",
   "As plain text in settings.json": "Jako prostý text v settings.json",
@@ -1154,7 +1154,7 @@
   "Refresh": "Obnovit",
   "Results exported to {path}": "Výsledky exportovány do {path}",
   "Saved": "Uloženo",
-  "Saved results": "Uložené výsledky",
+  "Saved Results": "Uložené výsledky",
   "Saved scores": "Uložená skóre",
   "Saved scores of {name}": "Uložená skóre: {name}",
   "Select a comparison to see its saved scores.": "Vyberte porovnání a zobrazí se jeho uložená skóre.",
@@ -1168,7 +1168,7 @@
   "{name} (saved)": "{name} (uloženo)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "Odstranit uložené výsledky z {directory}?\n\nVidea, která již byla ohodnocena, bude nutné přepočítat. Ty, jejichž referenční video už není tam, kde bylo, zůstanou zachovány: jejich skóre by už nešlo znovu vypočítat. Odstraňte je na kartě Uložené výsledky.",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "Odstranit uložené výsledky z {directory}?\n\nVidea, která již byla ohodnocena, bude nutné přepočítat. Ty, jejichž referenční video už není tam, kde bylo, zůstanou zachovány: jejich skóre by už nešlo znovu vypočítat. Odstraňte je na kartě Uložené výsledky.",
   "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Některé z nich by už nešlo znovu ohodnotit: jejich referenční video už není tam, kde bylo (označeno „nenalezeno“).",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nTam nenalezeno: bez něj by tato skóre už nešlo znovu vypočítat.",
   "Recognize test videos remuxed after scoring (reads each one again)": "Rozpoznávat testovaná videa přebalená po hodnocení (každé se přečte znovu)",
@@ -1327,7 +1327,7 @@
    "{count} uložená porovnání v {directory}",
    "{count} uložených porovnání v {directory}"
   ],
-  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "Zachován {count} výsledek, jehož referenční video chybí: odstraňte jej na kartě Uložené výsledky.",
    "Zachovány {count} výsledky, jejichž referenční videa chybí: odstraňte je na kartě Uložené výsledky.",
    "Zachováno {count} výsledků, jejichž referenční videa chybí: odstraňte je na kartě Uložené výsledky."

@@ -14,7 +14,7 @@
   "In:": "Formátumok:",
   "Results": "Eredmények",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "Pontszámok és statisztikák, ahogy a(z) Eredmények exportálása menti őket, a bejelölt formátumokban: egy videóé külön (<video> - results.json), vagy az összes videóé egy fájlban.",
-  "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "Gyenge szakaszok a használt profil szerint (Beállítások > Gyenge szakaszok; a(z) Mentett eredmények lapon az ott választott szabályok szerint), a bejelölt formátumokban: egy videóé (<video>.vmaf.segments.json), vagy az összes videóé egy jelentésben. Amíg a szabályoknak nincs feltétele, semmi sem mentődik.",
+  "Weak segments by the profile in use (Settings > Weak segments; on the Saved Results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "Gyenge szakaszok a használt profil szerint (Beállítások > Gyenge szakaszok; a(z) Mentett eredmények lapon az ott választott szabályok szerint), a bejelölt formátumokban: egy videóé (<video>.vmaf.segments.json), vagy az összes videóé egy jelentésben. Amíg a szabályoknak nincs feltétele, semmi sem mentődik.",
   " min": " perc",
   "Application token:": "Alkalmazástoken:",
   "As plain text in settings.json": "Egyszerű szövegként a settings.json fájlban",
@@ -1154,7 +1154,7 @@
   "Refresh": "Frissítés",
   "Results exported to {path}": "Eredmények exportálva ide: {path}",
   "Saved": "Mentve",
-  "Saved results": "Mentett eredmények",
+  "Saved Results": "Mentett eredmények",
   "Saved scores": "Mentett pontszámok",
   "Saved scores of {name}": "{name} mentett pontszámai",
   "Select a comparison to see its saved scores.": "Jelöljön ki egy összehasonlítást a mentett pontszámai megtekintéséhez.",
@@ -1168,7 +1168,7 @@
   "{name} (saved)": "{name} (mentett)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "Törli a mentett eredményeket innen: {directory}?\n\nA már pontozott videókat újra kell számolni. Azok megmaradnak, amelyek referenciavideója már nincs ott, ahol volt: a pontszámaikat nem lehetne újra kiszámolni. Ezeket a Mentett eredmények lapon törölheti.",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "Törli a mentett eredményeket innen: {directory}?\n\nA már pontozott videókat újra kell számolni. Azok megmaradnak, amelyek referenciavideója már nincs ott, ahol volt: a pontszámaikat nem lehetne újra kiszámolni. Ezeket a Mentett eredmények lapon törölheti.",
   "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Némelyiküket nem lehetne újra pontozni: a referenciavideójuk már nincs ott, ahol volt („nem található” jelöléssel).",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nOtt nem található: nélküle ezeket a pontszámokat nem lehetne újra kiszámolni.",
   "Recognize test videos remuxed after scoring (reads each one again)": "A pontozás után újramuxolt tesztvideók felismerése (mindegyiket újra beolvassa)",
@@ -1297,7 +1297,7 @@
    "{count} mentett összehasonlítás itt: {directory}",
    "{count} mentett összehasonlítás itt: {directory}"
   ],
-  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "{count} eredmény megmaradt, amelynek hiányzik a referenciavideója: törölje a Mentett eredmények lapon.",
    "{count} eredmény megmaradt, amelyeknek hiányzik a referenciavideója: törölje őket a Mentett eredmények lapon."
   ]
