@@ -273,4 +273,21 @@ private:
     QWidget* page_;
 };
 
+// `text` as a tooltip that wraps: Qt shows a plain-text tooltip as one line,
+// however long (some ran the width of the screen), but wraps rich text. A
+// plain text longer than a short line becomes rich text, its line breaks
+// kept; a short one, and one already rich text, are left as they are.
+QString wrapped_tool_tip(const QString& text);
+
+// Every long tooltip of the app wrapped (wrapped_tool_tip), made once at the
+// start and installed on the application: a widget's as it is set, and an
+// item's (a table cell's, a list's or a dropdown's entry) as it is shown.
+class WrapLongToolTips : public QObject {
+public:
+    explicit WrapLongToolTips(QObject* parent);
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+};
+
 }  // namespace vml::app

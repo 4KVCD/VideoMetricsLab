@@ -33,6 +33,7 @@
 #include "main_window.h"
 #include "self_test.h"
 #include "theme.h"
+#include "widgets.h"
 #include "vml/app_log.h"
 #include "vml/gpu_choice.h"
 #include "vml/gpu_vmaf.h"
@@ -200,6 +201,7 @@ int main(int argc, char** argv) {
 
     QApplication app(argc, argv);
     QApplication::setApplicationName("VideoMetricsLab");
+    new app::WrapLongToolTips(&app);  // before any widget: every long tooltip wraps
 #ifndef _WIN32
     // Qt sets the C library's locale from the system's (setlocale(LC_ALL,
     // "")) on Linux and macOS, and with a decimal comma (German, French)
