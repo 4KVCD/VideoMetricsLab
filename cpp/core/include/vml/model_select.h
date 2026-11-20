@@ -62,6 +62,11 @@ std::string model_for_resolution(int width, int height);
 std::string model_option_for_file(std::string_view file);
 // The file a model= value names, or nothing for a value that names none.
 std::optional<std::string_view> model_file_of(std::string_view model);
+// A model= value as the window shows it: a bundled model's file (VMAF v1's,
+// "path=<file>") as the version it is, "version=vmaf_v1.0.16_3d0h", as
+// libvmaf's own models are named; any other value as it is. The path is
+// the install's, and says nothing the version doesn't.
+std::string model_shown(std::string_view model);
 
 // The FFmpeg model= value for the options' model choice, at the size the
 // two videos are compared at. Throws std::invalid_argument for a custom

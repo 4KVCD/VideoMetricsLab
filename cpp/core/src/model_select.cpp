@@ -132,6 +132,23 @@ std::optional<std::string_view> model_file_of(std::string_view model) {
     return model.substr(model_file_prefix.size());
 }
 
+std::string model_shown(std::string_view model) {
+    const std::optional<std::string_view> file = model_file_of(model);
+    if (!file) {
+        return std::string(model);
+    }
+    // Either separator: a path saved on Windows has backslashes, and one
+    // read on another system is still that path.
+    const std::string_view name = file->substr(file->find_last_of("/\\") + 1);
+    for (const BuiltinModel& builtin : builtin_models) {
+        const std::string_view bundled = builtin.file.substr(builtin.file.find_last_of('/') + 1);
+        if (name == bundled && name.ends_with(".json")) {
+            return "version=" + std::string(name.substr(0, name.size() - std::string_view(".json").size()));
+        }
+    }
+    return std::string(model);
+}
+
 std::string resolve_model(const VmafOptions& options, int width, int height) {
     if (options.model_choice == custom_model_choice) {
         if (options.custom_model_path.empty()) {
