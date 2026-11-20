@@ -1,10 +1,11 @@
-// The window's graph exports (graph_bundle.h): Export all graphs as ZIP, a
+// The window's graph exports (graph_bundle.h): Export > Graphs as ZIP, a
 // scored video's results with or without its graphs from its right-click
 // menu, and Settings' export of each video's results and graphs after its
 // run; and the weak segments report, of every video or after each run. The bitrate graphs need the files' bitrate, which the Bitrate tab reads
 // after each run: an export made before it is read waits for it, and says so.
 #include "main_window.h"
 
+#include <QMenu>
 #include <QTimer>
 
 #include <algorithm>
@@ -120,20 +121,229 @@ std::optional<nlohmann::ordered_json> MainWindow::row_document(const RowData& ro
     return std::nullopt;
 }
 
-void MainWindow::on_export_all_graphs() {
-    const std::vector<BundleVideo> videos = scored_videos();
-    if (videos.empty()) {
-        dialogs_.inform(app::tr("Nothing to export"),
-                        app::tr("No test video has been scored against the reference yet."));
+bool MainWindow::rows_selected() const {
+    return distorted_table_->selectionModel()->hasSelection();
+}
+
+std::optional<BundleVideo> MainWindow::exportable_video(const RowData& row_data) const {
+    // A finished run of the reference's, as scored_video, but whatever its
+    // ticked metrics: what it has is exported, as Save selected results did.
+    const std::shared_ptr<CompletedRun>& run = row_data.completed_run;
+    if (!source_info_ || !run || run->partial || row_data.cvvdp_display_of ||
+        !same_path(run->result.source, source_info_->path)) {
+        return std::nullopt;
+    }
+    return BundleVideo{std::shared_ptr<const ComparisonResult>(run, &run->result), run->label,
+                       row_data.media_path.value_or(row_data.path)};
+}
+
+std::vector<int> MainWindow::export_menu_rows() const {
+    std::set<int> selected;
+    for (const QModelIndex& index : distorted_table_->selectionModel()->selectedIndexes()) {
+        selected.insert(index.row());
+    }
+    std::vector<int> rows;
+    for (std::size_t row = 0; row < rows_.size(); ++row) {
+        const bool chosen = selected.empty() || selected.contains(static_cast<int>(row));
+        if (chosen && exportable_video(*rows_[row])) {
+            rows.push_back(static_cast<int>(row));
+        }
+    }
+    return rows;
+}
+
+void MainWindow::fill_videos_export_menu(QMenu& menu) {
+    // The shared export first, named as the right-click menu names it; then
+    // each kind on its own, as Saved Results' Export offers them, and the
+    // run file the app reads back (Load analysis results). Of the selected
+    // rows scored, else of every scored row.
+    menu.clear();
+    for (QMenu* kind : menu.findChildren<QMenu*>(Qt::FindDirectChildrenOnly)) {
+        delete kind;  // clear() leaves the menus addMenu made
+    }
+    const std::vector<int> rows = export_menu_rows();
+    const bool any = !rows.empty();
+    const std::vector<std::string> items = exported_items(settings_);
+    const ExportScope scope = !rows_selected()     ? ExportScope::all_videos
+                              : rows.size() == 1 ? ExportScope::this_video
+                                                 : ExportScope::selected_videos;
+    QAction* contents = menu.addAction(export_action_text(scope, items));
+    // As the right-click menu's: of videos whose ticked metrics are all scored.
+    const bool all_scored = std::all_of(rows.begin(), rows.end(), [this](int row) {
+        return scored_video(*rows_[static_cast<std::size_t>(row)]).has_value();
+    });
+    contents->setEnabled(any && all_scored && !export_contents(items).isEmpty());
+    connect(contents, &QAction::triggered, this, [this, rows] { export_rows(rows); });
+    menu.addSeparator();
+    const auto add_formats = [this, &menu, &rows, any](const QString& title, SavedResultsPanel::Export json,
+                                                       SavedResultsPanel::Export csv) {
+        QMenu* kind = menu.addMenu(title);
+        kind->setEnabled(any);
+        connect(kind->addAction(app::tr("As JSON...")), &QAction::triggered, this,
+                [this, json, rows] { export_rows_as(json, rows); });
+        connect(kind->addAction(app::tr("As CSV...")), &QAction::triggered, this,
+                [this, csv, rows] { export_rows_as(csv, rows); });
+    };
+    add_formats(app::tr("Results"), SavedResultsPanel::Export::results_json, SavedResultsPanel::Export::results_csv);
+    add_formats(app::tr("Per-frame scores"), SavedResultsPanel::Export::frames_json,
+                SavedResultsPanel::Export::frames_csv);
+    QAction* graphs = menu.addAction(app::tr("Graphs as ZIP..."));
+    graphs->setEnabled(any);
+    connect(graphs, &QAction::triggered, this,
+            [this, rows] { export_rows_as(SavedResultsPanel::Export::graphs, rows); });
+    QAction* segments = menu.addAction(app::tr("Export weak segments..."));
+    segments->setEnabled(any);
+    connect(segments, &QAction::triggered, this,
+            [this, rows] { export_rows_as(SavedResultsPanel::Export::segments, rows); });
+    menu.addSeparator();
+    QAction* run_files = menu.addAction(app::tr("Run file (.metrics.json)..."));
+    run_files->setEnabled(any);
+    connect(run_files, &QAction::triggered, this, [this, rows] {
+        std::vector<std::shared_ptr<CompletedRun>> runs;
+        for (const int row : rows) {
+            runs.push_back(rows_[static_cast<std::size_t>(row)]->completed_run);
+        }
+        save_run_files(runs);
+    });
+}
+
+void MainWindow::export_rows(const std::vector<int>& rows) {
+    if (rows.empty()) {
         return;
     }
-    const QString path =
-        dialogs_.save_file(app::tr("Export all graphs"),
-                           file_safe(text_of(source_info_->path.stem()) + QStringLiteral(" - graphs")) + ".zip",
-                           app::tr("Zip archive (*.zip)"));
-    if (!path.isEmpty()) {
-        queue_bundle({videos, source_info_->path, path_of(path), {}, true, false});
+    if (!rows_selected()) {
+        export_all_videos();
+        return;
     }
+    if (rows.size() == 1) {
+        export_this_video(rows.front());
+        return;
+    }
+    std::set<const ComparisonResult*> chosen;
+    std::vector<BundleVideo> videos;
+    for (const int row : rows) {
+        const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        chosen.insert(&row_data.completed_run->result);
+        videos.push_back(*scored_video(row_data));
+    }
+    std::vector<ExportedRun> runs;
+    for (ExportedRun& run : exported_runs()) {
+        if (chosen.contains(run.result.get())) {
+            runs.push_back(std::move(run));
+        }
+    }
+    save_export(export_plan(std::move(videos), source_info_->path,
+                            [this, &runs] { return export_document(source_info_, runs, current_machine()); },
+                            saved_weak_rules(), true, text_of(source_info_->path.stem())),
+                std::nullopt);
+}
+
+void MainWindow::export_rows_as(SavedResultsPanel::Export kind, const std::vector<int>& rows) {
+    if (rows.empty() || !source_info_) {
+        return;
+    }
+    std::set<const ComparisonResult*> chosen;
+    std::vector<BundleVideo> videos;
+    for (const int row : rows) {
+        const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        chosen.insert(&row_data.completed_run->result);
+        videos.push_back(*exportable_video(row_data));
+    }
+    const QString name = videos.size() == 1 ? videos.front().label : text_of(source_info_->path.stem());
+    switch (kind) {
+    case SavedResultsPanel::Export::contents:
+        export_rows(rows);
+        return;
+    case SavedResultsPanel::Export::results_json:
+    case SavedResultsPanel::Export::results_csv: {
+        // As Export results lists them (exported_runs), with what each run
+        // knows of how it was made.
+        std::vector<ExportedRun> runs;
+        for (ExportedRun& run : exported_runs()) {
+            if (chosen.contains(run.result.get())) {
+                runs.push_back(std::move(run));
+            }
+        }
+        save_results_document(export_document(source_info_, runs, current_machine()), name,
+                              kind == SavedResultsPanel::Export::results_csv);
+        return;
+    }
+    case SavedResultsPanel::Export::frames_json:
+    case SavedResultsPanel::Export::frames_csv: {
+        std::vector<std::pair<std::shared_ptr<const ComparisonResult>, QString>> results;
+        for (const BundleVideo& video : videos) {
+            results.emplace_back(video.result, video.label);
+        }
+        save_per_frame_files(results, kind == SavedResultsPanel::Export::frames_json);
+        return;
+    }
+    case SavedResultsPanel::Export::graphs: {
+        // Each video's graph of every metric, all of them together, and their
+        // bitrate with the reference's, as one .zip file.
+        const QString path = dialogs_.save_file(app::tr("Export graphs"),
+                                                file_safe(name + QStringLiteral(" - graphs")) + ".zip",
+                                                app::tr("Zip archive (*.zip)"));
+        if (!path.isEmpty()) {
+            queue_bundle({videos, source_info_->path, path_of(path), {}, true, false});
+        }
+        return;
+    }
+    case SavedResultsPanel::Export::segments: {
+        const SegmentRules rules = saved_weak_rules();
+        if (rules.conditions.empty()) {
+            dialogs_.inform(app::tr("No weak segment conditions"),
+                            app::tr("The profile picked has no conditions: set them in Settings > Weak segments, or "
+                                    "pick a preset."));
+            return;
+        }
+        std::vector<SegmentsReportVideo> report;
+        for (const BundleVideo& video : videos) {
+            report.push_back({video.label.toStdString(), platform::path_text(video.result->distorted),
+                              platform::path_text(video.result->source), video.result.get()});
+        }
+        save_segments_report(report, rules, source_info_->path);
+        return;
+    }
+    }
+}
+
+void MainWindow::save_results_document(const nlohmann::ordered_json& document, const QString& name, bool csv) {
+    const QString path = dialogs_.save_file(
+        app::tr("Export results"), file_safe(name + QStringLiteral(" - results")) + (csv ? ".csv" : ".json"),
+        csv ? app::tr("CSV file (*.csv)") : app::tr("JSON file (*.json)"));
+    if (path.isEmpty()) {
+        return;
+    }
+    std::string bytes = csv ? results_csv(document) : python_json_dumps(document) + "\n";
+    file_writes_->submit(app::tr("export {name}", {{"name", name_of(path_of(path))}}),
+                         [bytes = std::move(bytes), out = path_of(path)] { write_bytes(out, bytes); });
+    show_status(app::tr("Results exported to {path}", {{"path", path}}));
+}
+
+void MainWindow::save_per_frame_files(
+    const std::vector<std::pair<std::shared_ptr<const ComparisonResult>, QString>>& results, bool json) {
+    // A file per comparison, as the per-frame scores exports write it.
+    const QString folder = dialogs_.choose_folder(app::tr("Export per-frame scores to"),
+                                                  dialogs_.export_folder ? dialogs_.export_folder() : QString());
+    if (folder.isEmpty()) {
+        return;
+    }
+    std::set<std::filesystem::path> reserved;
+    std::vector<std::pair<std::shared_ptr<const ComparisonResult>, std::filesystem::path>> files;
+    for (const auto& [result, label] : results) {
+        files.emplace_back(result, unique_output_path(path_of(folder), output_stem(label.toStdString()),
+                                                      json ? ".json" : ".csv", reserved));
+    }
+    file_writes_->submit(app::tr("export {name}", {{"name", folder}}), [files = std::move(files), json] {
+        for (const auto& [result, out] : files) {
+            if (json) {
+                export_per_frame_json(*result, out);
+            } else {
+                export_csv(*result, out);
+            }
+        }
+    });
+    show_status(app::tr("Per-frame scores exported to {path}", {{"path", folder}}));
 }
 
 MainWindow::ExportPlan MainWindow::export_plan(std::vector<BundleVideo> videos,
@@ -462,48 +672,19 @@ void MainWindow::export_saved_results(SavedResultsPanel::Export kind, const std:
         for (const LoadedSavedResult& saved : results) {
             runs.push_back({saved.result, saved.label});
         }
-        const nlohmann::ordered_json document =
+        save_results_document(
             export_document(one_reference ? std::optional(results.front().result->source_info) : std::nullopt, runs,
-                            current_machine());
-        const bool csv = kind == SavedResultsPanel::Export::results_csv;
-        const QString path = dialogs_.save_file(
-            app::tr("Export results"), file_safe(name + QStringLiteral(" - results")) + (csv ? ".csv" : ".json"),
-            csv ? app::tr("CSV file (*.csv)") : app::tr("JSON file (*.json)"));
-        if (!path.isEmpty()) {
-            std::string bytes = csv ? results_csv(document) : python_json_dumps(document) + "\n";
-            file_writes_->submit(app::tr("export {name}", {{"name", name_of(path_of(path))}}),
-                                 [bytes = std::move(bytes), out = path_of(path)] { write_bytes(out, bytes); });
-            show_status(app::tr("Results exported to {path}", {{"path", path}}));
-        }
+                            current_machine()),
+            name, kind == SavedResultsPanel::Export::results_csv);
         return;
     }
     case SavedResultsPanel::Export::frames_json:
     case SavedResultsPanel::Export::frames_csv: {
-        // A file per comparison, as the per-frame scores exports write it, as
-        // CSV or JSON.
-        const bool json = kind == SavedResultsPanel::Export::frames_json;
-        const QString folder = dialogs_.choose_folder(app::tr("Export per-frame scores to"),
-                                                      dialogs_.export_folder ? dialogs_.export_folder() : QString());
-        if (folder.isEmpty()) {
-            return;
-        }
-        std::set<std::filesystem::path> reserved;
-        std::vector<std::pair<std::shared_ptr<const ComparisonResult>, std::filesystem::path>> files;
+        std::vector<std::pair<std::shared_ptr<const ComparisonResult>, QString>> files;
         for (const LoadedSavedResult& saved : results) {
-            files.emplace_back(saved.result,
-                               unique_output_path(path_of(folder), output_stem(saved.label.toStdString()),
-                                                  json ? ".json" : ".csv", reserved));
+            files.emplace_back(saved.result, saved.label);
         }
-        file_writes_->submit(app::tr("export {name}", {{"name", folder}}), [files = std::move(files), json] {
-            for (const auto& [result, out] : files) {
-                if (json) {
-                    export_per_frame_json(*result, out);
-                } else {
-                    export_csv(*result, out);
-                }
-            }
-        });
-        show_status(app::tr("Per-frame scores exported to {path}", {{"path", folder}}));
+        save_per_frame_files(files, kind == SavedResultsPanel::Export::frames_json);
         return;
     }
     case SavedResultsPanel::Export::graphs: {

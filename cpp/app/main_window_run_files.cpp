@@ -335,29 +335,8 @@ bool MainWindow::offer_to_switch_source(const ComparisonResult& result) {
     return true;
 }
 
-std::vector<std::shared_ptr<CompletedRun>> MainWindow::selected_runs() const {
-    // The results of the selected rows that have one, top to bottom.
-    std::set<int> rows;
-    for (const QModelIndex& index : distorted_table_->selectionModel()->selectedIndexes()) {
-        rows.insert(index.row());
-    }
-    std::vector<std::shared_ptr<CompletedRun>> runs;
-    for (const int row : rows) {
-        // A result so far, during its run, is not its scores yet (exported_runs).
-        const std::shared_ptr<CompletedRun>& run = rows_[static_cast<std::size_t>(row)]->completed_run;
-        if (run && !run->partial) {
-            runs.push_back(run);
-        }
-    }
-    return runs;
-}
-
-void MainWindow::on_save_selected() {
-    // Saves the selected rows' results to files: one where the user says,
-    // several into a folder, each named after its run.
-    const std::vector<std::shared_ptr<CompletedRun>> runs = selected_runs();
+void MainWindow::save_run_files(const std::vector<std::shared_ptr<CompletedRun>>& runs) {
     if (runs.empty()) {
-        dialogs_.inform(app::tr("Nothing selected"), app::tr("Select one or more completed rows to save."));
         return;
     }
     const QString suffix = QString::fromUtf8(result_suffix.data(), static_cast<int>(result_suffix.size()));
@@ -384,8 +363,6 @@ void MainWindow::on_save_selected() {
 
 void MainWindow::submit_save(const ComparisonResult& result, const std::filesystem::path& path, const QString& label) {
     // Saves a result off the window's thread: a long video's takes a while.
-    // Only saving waits for it, so the rest of the window stays usable.
-    save_button_->setEnabled(false);
     file_writes_->submit(app::tr("save {name}", {{"name", name_of(path)}}),
                          [result, path, label = label.toStdString()] { save_run(result, path, label); });
 }
