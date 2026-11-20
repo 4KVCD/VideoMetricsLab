@@ -410,7 +410,7 @@ TEST_F(GraphPanelTest, AFailedExportDoesNotSayItIsComplete) {
     EXPECT_TRUE(status(panel).startsWith("Could not")) << status(panel).toStdString();
 }
 
-// Export PNG draws in the colours Settings asks for (export_colours), the
+// Export graph as PNG draws in the colours Settings asks for (export_colours), the
 // space around the chart too; light when none are asked for.
 TEST_F(GraphPanelTest, TheExportIsInTheColoursAskedFor) {
     VideoColors colors;

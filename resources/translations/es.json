@@ -594,7 +594,6 @@
   "Frame types": "Tipos de fotograma",
   "Marks each frame of the Frame based graph with its type: I, P or B.": "Marca cada fotograma del gráfico por fotogramas con su tipo: I, P o B.",
   "Reset zoom": "Restablecer zoom",
-  "Export PNG…": "Exportar PNG…",
   "Video bitrate (kb/s)": "Tasa de bits del video (kb/s)",
   "Hover over the plot to inspect values. Scroll to zoom, drag to pan, and double-click to reset.": "Pasa el cursor sobre el gráfico para inspeccionar valores. Rueda para acercar, arrastra para desplazar y doble clic para restablecer.",
   "Frame view shows encoded video-frame size; second and GOP views show video-only bitrate.": "La vista por fotograma muestra el tamaño codificado de cada fotograma; las vistas por segundo y por GOP muestran la tasa de bits solo del video.",

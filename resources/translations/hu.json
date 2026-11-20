@@ -594,7 +594,6 @@
   "Frame types": "Képkockatípusok",
   "Marks each frame of the Frame based graph with its type: I, P or B.": "A képkockánkénti grafikonon minden képkockát a típusával jelöl: I, P vagy B.",
   "Reset zoom": "Nagyítás visszaállítása",
-  "Export PNG…": "PNG exportálása…",
   "Video bitrate (kb/s)": "Videó bitrátája (kb/s)",
   "Hover over the plot to inspect values. Scroll to zoom, drag to pan, and double-click to reset.": "Mutasson a grafikonra az értékek megtekintéséhez. Görgetés: nagyítás, húzás: mozgatás, dupla kattintás: visszaállítás.",
   "Frame view shows encoded video-frame size; second and GOP views show video-only bitrate.": "A képkocka-nézet a kódolt videóképkockák méretét mutatja; a másodperc- és GOP-nézet csak a videó bitrátáját.",

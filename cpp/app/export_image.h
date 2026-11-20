@@ -1,4 +1,4 @@
-// The image a graph's Export PNG saves (Metric Graphs, the Bitrate tab): the
+// The image a graph's Export graph as PNG saves (Metric Graphs, the Bitrate tab): the
 // bare chart is a set of unlabelled lines, which says nothing once the file
 // leaves the app, so a title, a table keyed by the lines' colours, and the
 // table's figures go around it.

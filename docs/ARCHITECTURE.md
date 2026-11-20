@@ -35,7 +35,7 @@ libvmaf, Vship and FFmpeg's libraries are loaded the same way, from
 | SSIMULACRA2, Butteraugli, CVVDP | `vship.cpp`, `vship_run.cpp` (on the GPU), `perceptual_cpu.cpp` (libjxl's tools), `perceptual.cpp`, `cvvdp.cpp` |
 | Metric registry | `metrics.cpp` |
 | Results and persistence | `results.cpp`, `metric_cache.cpp`, `run_file.cpp`, `result_json.cpp`, `export_csv.cpp`, `settings.cpp` |
-| Statistics and graphs | `stats.cpp`; `app/graph_panel.cpp`, `app/chart.cpp`, `app/export_image.cpp` (Export PNG) |
+| Statistics and graphs | `stats.cpp`; `app/graph_panel.cpp`, `app/chart.cpp`, `app/export_image.cpp` (Export graph as PNG) |
 | The window's runs | `app/run_worker.cpp`, `app/main_window_run.cpp`, `run_line.cpp` |
 | Still comparison | `frame_extract.cpp`, `app/frame_compare_panel.cpp` |
 | Native playback | `native_playback.cpp`, `soundtrack_clock.cpp`; `app/native_pool.cpp`, `native_decoder.cpp`, `native_device.cpp`, `native_presentation.cpp`, `native_soundtrack.cpp`, `native_dav1d.cpp` |

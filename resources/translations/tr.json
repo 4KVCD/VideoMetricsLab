@@ -594,7 +594,6 @@
   "Frame types": "Kare türleri",
   "Marks each frame of the Frame based graph with its type: I, P or B.": "Kare tabanlı grafikte her kareyi türüyle işaretler: I, P veya B.",
   "Reset zoom": "Yakınlaştırmayı sıfırla",
-  "Export PNG…": "PNG olarak dışa aktar…",
   "Video bitrate (kb/s)": "Video bit hızı (kb/sn)",
   "Hover over the plot to inspect values. Scroll to zoom, drag to pan, and double-click to reset.": "Değerleri incelemek için grafiğin üzerine gelin. Yakınlaştırmak için kaydırın, kaydırmak için sürükleyin, sıfırlamak için çift tıklayın.",
   "Frame view shows encoded video-frame size; second and GOP views show video-only bitrate.": "Kare görünümü kodlanmış video karesi boyutunu; saniye ve GOP görünümleri yalnızca videonun bit hızını gösterir.",

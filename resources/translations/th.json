@@ -594,7 +594,6 @@
   "Frame types": "ประเภทเฟรม",
   "Marks each frame of the Frame based graph with its type: I, P or B.": "ทำเครื่องหมายแต่ละเฟรมในกราฟแบบรายเฟรมตามประเภท: I, P หรือ B",
   "Reset zoom": "รีเซ็ตการซูม",
-  "Export PNG…": "ส่งออก PNG…",
   "Video bitrate (kb/s)": "บิตเรตวิดีโอ (kbps)",
   "Hover over the plot to inspect values. Scroll to zoom, drag to pan, and double-click to reset.": "วางเมาส์บนกราฟเพื่อดูค่า เลื่อนล้อเพื่อซูม ลากเพื่อเลื่อน ดับเบิลคลิกเพื่อรีเซ็ต",
   "Frame view shows encoded video-frame size; second and GOP views show video-only bitrate.": "มุมมองเฟรมแสดงขนาดเฟรมวิดีโอที่เข้ารหัส มุมมองวินาทีและ GOP แสดงบิตเรตวิดีโอเท่านั้น",

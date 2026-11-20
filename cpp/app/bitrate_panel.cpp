@@ -294,7 +294,7 @@ void BitratePanel::add_table(QVBoxLayout* root) {
     root->addWidget(table);
 }
 
-// The plot's view, its start, Reset zoom and Export PNG.
+// The plot's view, its start and Reset zoom.
 void BitratePanel::add_plot_controls(QVBoxLayout* root) {
     auto* plot_controls = new QHBoxLayout;
     plot_controls->addWidget(new QLabel(app::tr("Plot view:")));
@@ -346,10 +346,7 @@ void BitratePanel::add_plot_controls(QVBoxLayout* root) {
     show_frame_types_box();
     plot_controls->addStretch(1);
     reset_zoom_button = new QPushButton(app::tr("Reset zoom"));
-    export_button = new QPushButton(app::tr("Export PNG\xE2\x80\xA6"));
-    connect(export_button, &QPushButton::clicked, this, [this] { on_export_png(); });
     plot_controls->addWidget(reset_zoom_button);
-    plot_controls->addWidget(export_button);
     root->addLayout(plot_controls);
 }
 
@@ -372,10 +369,14 @@ void BitratePanel::add_chart(QVBoxLayout* root) {
     root->addWidget(hover_label);
 }
 
-// Go to frame and the frame range, as in Metric Graphs, and what the table's
-// figures are of.
+// The footer, as Metric Graphs' is: Export graph as PNG, then Go to frame
+// and the frame range, and what the table's figures are of.
 void BitratePanel::add_frame_controls(QVBoxLayout* root) {
     auto* row = new QHBoxLayout;
+    export_button = new QPushButton(app::tr("Export graph as PNG"));
+    connect(export_button, &QPushButton::clicked, this, [this] { on_export_png(); });
+    row->addWidget(export_button);
+    row->addSpacing(16);
     frame_controls = new FrameControls;
     connect(frame_controls, &FrameControls::frame_requested, this, [this](int frame) { on_frame_requested(frame); });
     connect(frame_controls, &FrameControls::range_changed, this, [this](bool finished) { on_range_changed(finished); });

@@ -594,7 +594,6 @@
   "Frame types": "Frametypen",
   "Marks each frame of the Frame based graph with its type: I, P or B.": "Markeert elk frame in de framegrafiek met zijn type: I, P of B.",
   "Reset zoom": "Zoom herstellen",
-  "Export PNG…": "PNG exporteren…",
   "Video bitrate (kb/s)": "Videobitrate (kbps)",
   "Hover over the plot to inspect values. Scroll to zoom, drag to pan, and double-click to reset.": "Wijs de grafiek aan om waarden te bekijken. Scroll om te zoomen, sleep om te verschuiven, dubbelklik om te herstellen.",
   "Frame view shows encoded video-frame size; second and GOP views show video-only bitrate.": "De framesweergave toont de grootte van de gecodeerde videoframes; de seconde- en GOP-weergave tonen alleen de videobitrate.",

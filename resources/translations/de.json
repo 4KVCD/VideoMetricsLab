@@ -594,7 +594,6 @@
   "Frame types": "Bildtypen",
   "Marks each frame of the Frame based graph with its type: I, P or B.": "Markiert jedes Bild im bildbasierten Diagramm mit seinem Typ: I, P oder B.",
   "Reset zoom": "Zoom zurücksetzen",
-  "Export PNG…": "PNG exportieren…",
   "Video bitrate (kb/s)": "Video-Bitrate (kb/s)",
   "Hover over the plot to inspect values. Scroll to zoom, drag to pan, and double-click to reset.": "Zeigen Sie auf das Diagramm, um Werte zu untersuchen. Mausrad zum Zoomen, Ziehen zum Verschieben, Doppelklick zum Zurücksetzen.",
   "Frame view shows encoded video-frame size; second and GOP views show video-only bitrate.": "Die Bildansicht zeigt die kodierte Größe der Videobilder; Sekunden- und GOP-Ansicht zeigen die reine Video-Bitrate.",

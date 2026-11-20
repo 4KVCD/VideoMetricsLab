@@ -594,7 +594,6 @@
   "Frame types": "Jenis bingkai",
   "Marks each frame of the Frame based graph with its type: I, P or B.": "Menandai setiap bingkai pada grafik per bingkai dengan jenisnya: I, P, atau B.",
   "Reset zoom": "Atur ulang zoom",
-  "Export PNG…": "Ekspor PNG…",
   "Video bitrate (kb/s)": "Bitrate video (kbps)",
   "Hover over the plot to inspect values. Scroll to zoom, drag to pan, and double-click to reset.": "Arahkan kursor ke grafik untuk memeriksa nilai. Gulir untuk memperbesar, seret untuk menggeser, klik ganda untuk mengatur ulang.",
   "Frame view shows encoded video-frame size; second and GOP views show video-only bitrate.": "Tampilan bingkai menunjukkan ukuran bingkai video yang dienkode; tampilan detik dan GOP menunjukkan bitrate video saja.",

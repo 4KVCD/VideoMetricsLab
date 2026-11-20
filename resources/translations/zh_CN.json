@@ -594,7 +594,6 @@
   "Frame types": "帧类型",
   "Marks each frame of the Frame based graph with its type: I, P or B.": "在按帧图表中用类型标记每一帧：I、P 或 B。",
   "Reset zoom": "重置缩放",
-  "Export PNG…": "导出 PNG…",
   "Video bitrate (kb/s)": "视频码率 (kb/s)",
   "Hover over the plot to inspect values. Scroll to zoom, drag to pan, and double-click to reset.": "悬停在图表上查看数值。滚动缩放，拖动平移，双击复位。",
   "Frame view shows encoded video-frame size; second and GOP views show video-only bitrate.": "帧视图显示编码后的视频帧大小；秒视图和 GOP 视图显示仅视频的码率。",

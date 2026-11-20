@@ -594,7 +594,6 @@
   "Frame types": "Типи кадрів",
   "Marks each frame of the Frame based graph with its type: I, P or B.": "Позначає кожен кадр на покадровому графіку його типом: I, P або B.",
   "Reset zoom": "Скинути масштаб",
-  "Export PNG…": "Експорт PNG…",
   "Video bitrate (kb/s)": "Бітрейт відео (кбіт/с)",
   "Hover over the plot to inspect values. Scroll to zoom, drag to pan, and double-click to reset.": "Наведіть на графік, щоб переглянути значення. Прокручуйте для масштабу, перетягуйте для зсуву, двічі клацніть для скидання.",
   "Frame view shows encoded video-frame size; second and GOP views show video-only bitrate.": "Вигляд за кадрами показує розмір закодованих відеокадрів; вигляди за секундами й за GOP — лише бітрейт відео.",

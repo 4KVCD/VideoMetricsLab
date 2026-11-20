@@ -207,7 +207,7 @@ QGroupBox* SettingsPanel::build_storage_box() {
     export_row->addWidget(browse_export);
     storage_form->addRow(app::tr("Export folder:"), export_row);
 
-    // The colours Metric Graphs' and the Bitrate tab's Export PNG draw in:
+    // The colours Metric Graphs' and the Bitrate tab's Export graph as PNG draw in:
     // light unless chosen otherwise, whatever the window shows.
     const QString colors_tip =
         app::tr("The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text "

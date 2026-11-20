@@ -594,7 +594,6 @@
   "Frame types": "影格類型",
   "Marks each frame of the Frame based graph with its type: I, P or B.": "在逐格圖表中以類型標示每個影格：I、P 或 B。",
   "Reset zoom": "重設縮放",
-  "Export PNG…": "匯出 PNG…",
   "Video bitrate (kb/s)": "影片位元速率 (kb/s)",
   "Hover over the plot to inspect values. Scroll to zoom, drag to pan, and double-click to reset.": "將游標停在圖上可查看數值。捲動可縮放，拖曳可平移，按兩下可重設。",
   "Frame view shows encoded video-frame size; second and GOP views show video-only bitrate.": "影格檢視顯示編碼後的影格大小；秒檢視和 GOP 檢視顯示僅影片的位元速率。",

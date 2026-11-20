@@ -8,6 +8,7 @@
 #include <QDeadlineTimer>
 #include <QImage>
 #include <QLabel>
+#include <QLayout>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QSpinBox>
@@ -119,6 +120,13 @@ TEST_F(BitratePanelTest, AFileReadFillsItsRowAndEachGraph) {
     EXPECT_TRUE(panel->analyze_button->isEnabled());
     EXPECT_EQ(panel->analyze_button->text().toStdString(), "Calculate bitrate");
     EXPECT_FALSE(panel->export_button->isEnabled());
+    // Export graph as PNG is in the footer under the graph, beside Go to
+    // frame, as on Metric Graphs.
+    EXPECT_EQ(panel->export_button->text().toStdString(), "Export graph as PNG");
+    panel->resize(1200, 800);
+    panel->layout()->activate();
+    EXPECT_GT(panel->export_button->geometry().top(), panel->chart->geometry().bottom());
+    EXPECT_LT(panel->export_button->geometry().right(), panel->frame_controls->geometry().left());
 
     analyzed(*panel, path, two_seconds(path));
     EXPECT_EQ(cell(*panel, 0, col_duration).toStdString(), "0:00:02.00");
