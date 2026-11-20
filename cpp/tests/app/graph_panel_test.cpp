@@ -13,6 +13,7 @@
 #include <QImage>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QDoubleSpinBox>
 #include <QPushButton>
@@ -66,6 +67,29 @@ protected:
         emit box.editingFinished();
     }
     static QString stats_hint(const GraphPanel& panel) { return panel.stats_hint_->text(); }
+    // The statistics' right-click menu for the line labelled `label`: its
+    // items' texts, in order, and those it offers disabled.
+    static QStringList stats_menu(GraphPanel& panel, const QString& label, QStringList* disabled = nullptr) {
+        int row = -1;
+        for (int each = 0; each < panel.stats_table_->rowCount(); ++each) {
+            if (panel.stats_table_->item(each, 0) != nullptr && panel.stats_table_->item(each, 0)->text() == label) {
+                row = each;
+            }
+        }
+        QMenu menu;
+        GraphPanel::StatsMenu items;
+        panel.fill_stats_menu(menu, row, items);
+        QStringList texts;
+        for (const QAction* action : menu.actions()) {
+            if (!action->isSeparator()) {
+                texts << action->text();
+                if (disabled != nullptr && !action->isEnabled()) {
+                    *disabled << action->text();
+                }
+            }
+        }
+        return texts;
+    }
     static QPushButton& worst_button(GraphPanel& panel) { return *panel.worst_button_; }
     static WorstFramesPanel& worst_panel(GraphPanel& panel) { return *panel.worst_panel_; }
     // Every cell's text, row by row.
@@ -332,6 +356,42 @@ TEST_F(GraphPanelTest, ExportsStartInTheExportFolder) {
     EXPECT_EQ(path_of(save_dialog_start("a.csv", "D:/exports")), path_of("D:/exports/a.csv"));
     const QString full = text_of(platform::home_directory() / "elsewhere" / "log.zip");
     EXPECT_EQ(save_dialog_start(full, "D:/exports"), full);
+}
+
+// The statistics' right-click menu offers the Videos table's exports: a
+// line's video's own, where the window can export it (a line of a saved run
+// loaded has no row: none), and all the videos', each named after what
+// Settings' Exports include; off where nothing is ticked, and all the
+// videos' while there is no run to export.
+TEST_F(GraphPanelTest, TheStatisticsMenuOffersTheVideosExports) {
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F, 80.0F})), "a", "row-a", true},
+                    {shared(vmaf_result("b.mkv", {85.0F, 75.0F})), "b", "loaded-b", true}});
+    // Before the window says what it can export: nothing to offer.
+    EXPECT_TRUE(stats_menu(panel, "a").isEmpty());
+    std::vector<std::string> items{"results_json", "graphs", "weak_segments"};
+    bool run = true;
+    panel.export_items = [&items] { return items; };
+    panel.video_exportable = [](const std::string& identity) { return identity == "row-a"; };
+    panel.videos_exportable = [&run] { return run; };
+    EXPECT_EQ(stats_menu(panel, "a"), (QStringList{"Export this video's results, graphs and weak segments...",
+                                                   "Export all videos' results, graphs and weak segments..."}));
+    EXPECT_EQ(stats_menu(panel, "b"), QStringList{"Export all videos' results, graphs and weak segments..."});
+    EXPECT_EQ(stats_menu(panel, "nowhere"), QStringList{"Export all videos' results, graphs and weak segments..."});
+    items = {"results_csv"};
+    EXPECT_EQ(stats_menu(panel, "a"),
+              (QStringList{"Export this video's results...", "Export all videos' results..."}));
+    run = false;
+    QStringList disabled;
+    stats_menu(panel, "a", &disabled);
+    EXPECT_EQ(disabled, QStringList{"Export all videos' results..."});
+    items.clear();
+    disabled.clear();
+    EXPECT_EQ(stats_menu(panel, "a", &disabled),
+              (QStringList{"Export: nothing is ticked in Settings > Storage > Exports include",
+                           "Export: nothing is ticked in Settings > Storage > Exports include"}));
+    EXPECT_EQ(disabled.size(), 2);
 }
 
 // An export that cannot be written says so, and not that it is complete.

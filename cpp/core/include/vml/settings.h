@@ -13,6 +13,12 @@
 
 namespace vml {
 
+// What an export can include (Settings::export_items), in the order Settings
+// shows them: results as JSON and as CSV, graphs (every metric's, and the
+// bitrate with the reference's) and weak segments (JSON and CSV). A new kind
+// of export is added here.
+const std::vector<std::string>& export_item_keys();
+
 // Above this many logical cores, a new install scores two videos at once.
 constexpr unsigned parallel_by_default_above_cores = 12;
 
@@ -26,14 +32,20 @@ struct Settings {
     std::string cache_dir;
     // The folder CSV and PNG exports go to; empty means "ask each time".
     std::string export_dir;
-    // After each video's run, its results and graphs saved as a .zip file
-    // (the window's graph exports): "" not, "beside" next to the test video,
-    // "folder" in export_dir (next to the test video while that is empty).
+    // What an export includes (Settings > Storage > Exports include), the
+    // right-click menus' and the one after each run alike: export_items' keys,
+    // in any order; and whether as a .zip file or loose files.
+    std::vector<std::string> export_items = {"results_json", "results_csv", "graphs", "weak_segments"};
+    bool export_zip = true;
+    // Whether each video is exported after its run, and where: "beside" next
+    // to the test video, "folder" in export_dir (next to the test video while
+    // that is empty).
+    bool after_run_export = false;
+    std::string after_run_place = "beside";
+    // Before export_items, read only to carry their choice over (never
+    // saved): after each run, results and graphs as a .zip ("" not,
+    // "beside", "folder"), and weak segments as JSON and CSV, likewise.
     std::string auto_export;
-    // After each video's run, its weak segments by the rules last set in
-    // Metric Graphs (weak_segment_* below) saved as JSON and CSV
-    // ("<video>.<metrics>.segments.json", .csv): "", "beside" or "folder",
-    // as auto_export. Nothing while no condition is set.
     std::string auto_export_segments;
 
     // What a newly added video starts with (each row's own settings are

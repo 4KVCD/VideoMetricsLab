@@ -512,7 +512,6 @@ private:
     void on_save_selected();
     void submit_save(const ComparisonResult& result, const std::filesystem::path& path, const QString& label);
     std::vector<ExportedRun> exported_runs() const;
-    void export_results(ResultsFormat format);
 
     // ------------------------------------- graph exports (main_window_exports.cpp)
     // Graphs to save as one .zip file (graph_bundle.h) once the bitrate they
@@ -526,11 +525,17 @@ private:
         std::vector<BundleFile> extra;
         bool together = true;
         bool automatic = false;
+        // Each file written into `destination`, a folder, rather than a .zip.
+        bool loose = false;
     };
     // The scored test videos of the reference the Videos tab compares with,
     // in its order; a row's, when it is one of them.
     std::vector<BundleVideo> scored_videos() const;
     std::optional<BundleVideo> scored_video(const RowData& row_data) const;
+    // The row whose scored video (scored_video) is Metric Graphs' line
+    // `identity`; none for a line of a saved run loaded, or of a row whose
+    // result is not one to export.
+    std::optional<int> row_of_graph(const std::string& identity) const;
     // Every scored test video's weak segments (scored_videos) by `rules`
     // (the saved ones, or the Weak segments dialog's), in one JSON or CSV
     // file the user names.
@@ -545,15 +550,38 @@ private:
     // The rules of the weak segment profile in use (Settings > Weak segments).
     SegmentRules saved_weak_rules() const;
     void on_export_all_graphs();
-    // One video's results as `format`, or with its graphs as a .zip file.
-    void export_video(int row, ResultsFormat format, bool with_graphs);
-    // Settings' export of a video's results and graphs after its run.
+    // What an export holds, by Settings' Exports include: for one video, its
+    // results (alone in the document) and its weak segments; for several,
+    // the run's results document and their weak segments report; and the
+    // graphs, of each (and all together, with several). Named after `name`.
+    struct ExportPlan {
+        std::vector<BundleVideo> videos;
+        std::filesystem::path reference;
+        std::vector<BundleFile> files;
+        bool graphs = false;
+        bool several = false;
+        QString name;
+    };
+    ExportPlan export_plan(std::vector<BundleVideo> videos, const std::filesystem::path& reference,
+                           const std::function<nlohmann::ordered_json()>& document, const SegmentRules& rules,
+                           bool several, const QString& name);
+    // Saves `plan` as Settings' Exports include say (a .zip file, or loose
+    // files): asked where, or into `folder` after a run.
+    void save_export(ExportPlan plan, const std::optional<std::filesystem::path>& folder);
+    // The right-click menus' exports: the video of `row`, and all the
+    // videos (the Videos tab's run, every video Export results lists).
+    void export_this_video(int row);
+    void export_all_videos();
+    // The Saved results tab's: the comparisons selected.
+    void export_saved_contents(const std::vector<LoadedSavedResult>& results);
+    // The saved bitrate of a selected comparison's file no longer there,
+    // for its graphs (the Saved results tab's exports).
+    void add_saved_bitrates(const std::vector<LoadedSavedResult>& results);
+    // Settings > Storage > After each run, for a video just scored: what
+    // Exports include, next to it or in the export folder.
     void export_automatically(const RowData& row_data);
-    // Settings' Weak segments after each run: the video's segments by the
-    // saved rules as <video>.<metrics>.segments.json and .csv.
-    void export_segments_automatically(const RowData& row_data);
-    // The results file of `row_data`'s video, as `format`: its name and bytes.
-    std::optional<BundleFile> results_file(const RowData& row_data, ResultsFormat format) const;
+    // The document Export results makes with `row_data`'s video alone.
+    std::optional<nlohmann::ordered_json> row_document(const RowData& row_data) const;
     // Saves `bundle` when its bitrate is read, starting to read what is not.
     void queue_bundle(PendingBundle bundle);
     void write_ready_bundles();

@@ -24,6 +24,7 @@
 #include <variant>
 
 #include "i18n.h"
+#include "results_export.h"
 #include "theme.h"
 #include "window_helpers.h"
 #include "vml/cvvdp.h"
@@ -112,6 +113,14 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
         update_buttons();
     });
     connect(table_, &QTableWidget::cellDoubleClicked, this, [this] { emit open_requested(selected_results()); });
+    table_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(table_, &QWidget::customContextMenuRequested, this, [this](const QPoint& position) {
+        QMenu menu(this);
+        const QAction* contents = fill_menu(menu);
+        if (contents != nullptr && menu.exec(table_->viewport()->mapToGlobal(position)) == contents) {
+            emit export_requested(Export::contents, selected_results());
+        }
+    });
     layout->addWidget(table_, 1);
 
     details_ = new QGroupBox(app::tr("Saved scores"));
@@ -374,6 +383,17 @@ void SavedResultsPanel::update_buttons() {
     delete_button_->setToolTip(run_active_ ? app::tr("Locked while metrics are calculated: the run saves its "
                                                      "scores there.")
                                            : QString());
+}
+
+QAction* SavedResultsPanel::fill_menu(QMenu& menu) const {
+    const std::size_t count = selected().size();
+    if (count == 0) {
+        return nullptr;
+    }
+    QAction* contents = menu.addAction(export_action_text(
+        count == 1 ? ExportScope::this_video : ExportScope::selected_videos, settings_.export_items));
+    contents->setEnabled(!export_contents(settings_.export_items).isEmpty());
+    return contents;
 }
 
 void SavedResultsPanel::delete_selected() {

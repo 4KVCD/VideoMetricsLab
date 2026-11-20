@@ -4,6 +4,7 @@
 // rules picked, and Delete (locked during a run).
 #include <QComboBox>
 #include <QLineEdit>
+#include <QMenu>
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QTableWidget>
@@ -76,6 +77,16 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
     EXPECT_EQ(read[0].label, "t");
     EXPECT_EQ(read[0].folder, saved);
     EXPECT_EQ(read[0].result->metric_results.frame("vmaf")->values, (std::vector<float>{95.0F, 60.0F, 95.0F}));
+
+    // The right-click menu: the selection's export, named after what Settings'
+    // Exports include.
+    {
+        QMenu menu;
+        const QAction* contents = panel.fill_menu(menu);
+        ASSERT_NE(contents, nullptr);
+        EXPECT_EQ(contents->text(), "Export this video's results, graphs and weak segments...");
+        EXPECT_TRUE(contents->isEnabled());
+    }
 
     // A double-click opens it in Metric Graphs.
     QSignalSpy opened(&panel, &SavedResultsPanel::open_requested);

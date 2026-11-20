@@ -1,7 +1,8 @@
 # The results file (JSON and CSV)
 
-The command line's `--json` and the window's **Export results as JSON** write
-the same document. **Export results as CSV** writes the same content with a
+The command line's `--json` and the window's exports with **Results (JSON)**
+ticked in Settings > Storage > Exports include write the same document.
+**Results (CSV)** writes the same content with a
 row for each video, each column named by the key's path in the JSON
 (`settings.scaling.compared_at`, `cvvdp_displays.1.score`). A list of plain
 values is one cell, its JSON.

@@ -242,23 +242,8 @@ QGroupBox* SettingsPanel::build_storage_box() {
     storage_form->addRow(app::tr("Exported graphs:"), export_colors_row);
     show_export_colors();
 
-    // The entries' data: Settings' auto_export values.
-    auto_export = new QComboBox;
-    auto_export->addItem(app::tr("Don't export automatically"), QString());
-    auto_export->addItem(app::tr("Export each video's results and graphs next to it"), QStringLiteral("beside"));
-    auto_export->addItem(app::tr("Export each video's results and graphs to the export folder"),
-                         QStringLiteral("folder"));
-    const int chosen_export = auto_export->findData(text_of(settings_.auto_export));
-    auto_export->setCurrentIndex(chosen_export >= 0 ? chosen_export : 0);
-    auto_export->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    auto_export->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    auto_export->setToolTip(app::tr(
-        "After each video is scored, saves a .zip file of its results (JSON) and graphs: its graph of every metric "
-        "and its bitrate with the reference's, named after the video. It's saved once the video's bitrate has been "
-        "read, which the Bitrate Viewer does after each run. To the export folder: next to the video while no "
-        "export folder is set. An existing file of the same name is replaced."));
-    connect(auto_export, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
-    storage_form->addRow(app::tr("After each run:"), auto_export);
+    storage_form->addRow(app::tr("Exports include:"), build_export_choices());
+    storage_form->addRow(app::tr("After each run:"), build_after_run_export());
 
 
     use_cache = new QCheckBox(app::tr("Reuse a saved result when a video is added again"));
@@ -337,6 +322,95 @@ QGroupBox* SettingsPanel::build_storage_box() {
     return storage_box;
 }
 
+QWidget* SettingsPanel::build_export_choices() {
+    // A box for each kind of export, so that another kind is one more box;
+    // then as a .zip file or loose files. The right-click menus' exports and
+    // the one after each run alike.
+    auto* exports = new QWidget;
+    auto* row = new QHBoxLayout(exports);
+    row->setContentsMargins(0, 0, 0, 0);
+    const std::map<std::string, std::pair<QString, QString>> described{
+        {"results_json",
+         {app::tr("Results (JSON)"),
+          app::tr("Scores and statistics, as Export results saves them: a video's alone (<video> - results.json), "
+                  "or all the videos' in one file.")}},
+        {"results_csv",
+         {app::tr("Results (CSV)"),
+          app::tr("Scores and statistics as CSV, as Export results saves them: a video's alone "
+                  "(<video> - results.csv), or all the videos' in one file.")}},
+        {"graphs",
+         {app::tr("Graphs"),
+          app::tr("Each video's graph of every metric, and its bitrate with the reference's, as PNG images "
+                  "(<video> - <metric>.png); with several videos, all of them together too. They're saved once "
+                  "the bitrate has been read, which the Bitrate Viewer does after each run.")}},
+        {"weak_segments",
+         {app::tr("Weak segments"),
+          app::tr("Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the "
+                  "rules picked there), as JSON and CSV: a video's (<video>.vmaf.segments.json), or all the "
+                  "videos' in one report. Nothing is saved while the rules have no condition.")}},
+    };
+    for (const std::string& key : export_item_keys()) {
+        const auto& [name, tip] = described.at(key);
+        auto* box = new QCheckBox(name);
+        box->setToolTip(Qt::convertFromPlainText(tip, Qt::WhiteSpaceNormal));
+        box->setChecked(std::find(settings_.export_items.begin(), settings_.export_items.end(), key) !=
+                        settings_.export_items.end());
+        connect(box, &QCheckBox::toggled, this, [this] { on_edited(); });
+        export_item_boxes[key] = box;
+        row->addWidget(box);
+    }
+    row->addSpacing(12);
+    export_form = new QComboBox;
+    export_form->addItem(app::tr("A .zip file"), true);
+    export_form->addItem(app::tr("Loose files"), false);
+    export_form->setCurrentIndex(settings_.export_zip ? 0 : 1);
+    export_form->setToolTip(Qt::convertFromPlainText(
+        app::tr("A .zip file: a video's in <video> - VideoMetricsLab.zip, all the videos' in one .zip named after "
+                "the reference. Loose files: each file on its own, side by side, in the folder chosen."),
+        Qt::WhiteSpaceNormal));
+    export_form->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    export_form->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    connect(export_form, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
+    row->addWidget(new QLabel(app::tr("As:")));
+    row->addWidget(export_form);
+    row->addStretch(1);
+    return exports;
+}
+
+QWidget* SettingsPanel::build_after_run_export() {
+    // Whether each video is exported (as Exports include say) once its run
+    // ends, and where.
+    auto* after_run = new QWidget;
+    auto* row = new QHBoxLayout(after_run);
+    row->setContentsMargins(0, 0, 0, 0);
+    after_run_box = new QCheckBox(app::tr("Export each video"));
+    after_run_box->setChecked(settings_.after_run_export);
+    after_run_box->setToolTip(Qt::convertFromPlainText(
+        app::tr("Once each video's run ends, exports what Exports include, as they say."), Qt::WhiteSpaceNormal));
+    after_run_place = new QComboBox;
+    after_run_place->addItem(app::tr("Next to each test video"), QStringLiteral("beside"));
+    after_run_place->addItem(app::tr("In the export folder"), QStringLiteral("folder"));
+    after_run_place->setCurrentIndex(settings_.after_run_place == "folder" ? 1 : 0);
+    after_run_place->setEnabled(settings_.after_run_export);
+    after_run_place->setToolTip(Qt::convertFromPlainText(
+        app::tr("In the export folder: next to the video while no export folder is set. Existing files of the "
+                "same names are replaced."),
+        Qt::WhiteSpaceNormal));
+    after_run_place->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    after_run_place->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    connect(after_run_box, &QCheckBox::toggled, this, [this](bool on) {
+        after_run_place->setEnabled(on);
+        on_edited();
+    });
+    connect(after_run_place, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
+    row->addWidget(after_run_box);
+    row->addSpacing(12);
+    row->addWidget(new QLabel(app::tr("Save to:")));
+    row->addWidget(after_run_place);
+    row->addStretch(1);
+    return after_run;
+}
+
 QGroupBox* SettingsPanel::build_weak_segments_box() {
     auto* box = new QGroupBox(app::tr("Weak segments"));
     auto* layout = new QVBoxLayout(box);
@@ -397,25 +471,10 @@ QGroupBox* SettingsPanel::build_weak_segments_box() {
     connect(weak_segments, &SegmentRulesEditor::changed, this, [this] { on_edited(); });
     layout->addWidget(weak_segments);
 
-    // The entries' data: Settings' auto_export_segments values.
-    auto_export_segments = new QComboBox;
-    auto_export_segments->addItem(app::tr("Don't export weak segments automatically"), QString());
-    auto_export_segments->addItem(app::tr("Export each video's weak segments next to it"), QStringLiteral("beside"));
-    auto_export_segments->addItem(app::tr("Export each video's weak segments to the export folder"),
-                                  QStringLiteral("folder"));
-    const int chosen_segments = auto_export_segments->findData(text_of(settings_.auto_export_segments));
-    auto_export_segments->setCurrentIndex(chosen_segments >= 0 ? chosen_segments : 0);
-    auto_export_segments->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    auto_export_segments->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    // As rich text, which Qt wraps (a plain tooltip is one line however long)
-    auto_export_segments->setToolTip(Qt::convertFromPlainText(app::tr(
-        "After each video is scored, saves its weak segments by the rules above as JSON and CSV, named after the "
-        "video and the metrics they cover (<video>.vmaf.segments.json). Nothing is saved while no condition is set. "
-        "To the export folder: next to the video while no export folder is set. Existing files of the same names "
-        "are replaced."),
-        Qt::WhiteSpaceNormal));
-    connect(auto_export_segments, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
-    weak_segments->add_option_row(app::tr("After each run:"), auto_export_segments);
+    // Exported with the rest: Settings > Storage > Exports include.
+    auto* after_run_note = new QLabel(app::tr("Exported when ticked in Settings > Storage > Exports include."));
+    theme::style(after_run_note, "color: {muted};");
+    weak_segments->add_option_row(app::tr("Exports:"), after_run_note);
     return box;
 }
 
@@ -959,10 +1018,17 @@ void SettingsPanel::read_controls() {
     settings_.ffmpeg_dir = ffmpeg_edit->text().toStdString();
     settings_.cache_dir = cache_edit->text().toStdString();
     settings_.export_dir = export_edit->text().toStdString();
-    settings_.auto_export = auto_export->currentData().toString().toStdString();
+    settings_.export_items.clear();
+    for (const std::string& key : export_item_keys()) {
+        if (export_item_boxes.at(key)->isChecked()) {
+            settings_.export_items.push_back(key);
+        }
+    }
+    settings_.export_zip = export_form->currentData().toBool();
+    settings_.after_run_export = after_run_box->isChecked();
+    settings_.after_run_place = after_run_place->currentData().toString().toStdString();
     // The editor shows the profile in use.
     store_segment_profile(settings_, segment_profile_in_use(settings_).name, weak_segments->rules());
-    settings_.auto_export_segments = auto_export_segments->currentData().toString().toStdString();
     settings_.export_graph_theme = export_graph_theme->currentData().toString().toStdString();
     settings_.export_graph_background = export_background_button->property("chosen").toString().toStdString();
     settings_.export_graph_text = export_text_button->property("chosen").toString().toStdString();

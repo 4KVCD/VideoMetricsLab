@@ -32,6 +32,10 @@ const std::unordered_map<std::string, Field>& fields() {
         {"export_dir", &Settings::export_dir},
         {"auto_export", &Settings::auto_export},
         {"auto_export_segments", &Settings::auto_export_segments},
+        {"export_items", &Settings::export_items},
+        {"export_zip", &Settings::export_zip},
+        {"after_run_export", &Settings::after_run_export},
+        {"after_run_place", &Settings::after_run_place},
         {"default_gpu_decode", &Settings::default_gpu_decode},
         {"default_compute_psnr", &Settings::default_compute_psnr},
         {"default_compute_ssim", &Settings::default_compute_ssim},
@@ -136,6 +140,38 @@ void log_unfit(const std::string& name, const Json& value, const std::string& ki
 
 }  // namespace
 
+const std::vector<std::string>& export_item_keys() {
+    static const std::vector<std::string> items{"results_json", "results_csv", "graphs", "weak_segments"};
+    return items;
+}
+
+namespace {
+
+// The exports after each run as a file from before export_items chose
+// them: results (JSON) and graphs in a .zip, weak segments as files of their
+// own, each next to the test video or in the export folder; both on, all in
+// the .zip, where the results and graphs went. Neither: the defaults.
+void carry_over_auto_export(Settings& settings) {
+    const auto chosen = [](const std::string& place) { return place == "beside" || place == "folder"; };
+    const bool results = chosen(settings.auto_export);
+    const bool segments = chosen(settings.auto_export_segments);
+    if (!results && !segments) {
+        return;
+    }
+    settings.export_items.clear();
+    if (results) {
+        settings.export_items = {"results_json", "graphs"};
+    }
+    if (segments) {
+        settings.export_items.push_back("weak_segments");
+    }
+    settings.after_run_export = true;
+    settings.after_run_place = results ? settings.auto_export : settings.auto_export_segments;
+    settings.export_zip = results;
+}
+
+}  // namespace
+
 int default_parallel_jobs(unsigned cores) { return cores > parallel_by_default_above_cores ? 2 : 1; }
 
 std::filesystem::path Settings::file() { return platform::home_directory() / ".videometricslab" / "settings.json"; }
@@ -201,6 +237,9 @@ Settings Settings::load_from(const std::filesystem::path& path) {
             }
         }
     }
+    if (!data.contains("export_items")) {
+        carry_over_auto_export(settings);
+    }
     return settings;
 }
 
@@ -253,8 +292,10 @@ std::string Settings::text() const {
     data["ffmpeg_dir"] = ffmpeg_dir;
     data["cache_dir"] = cache_dir;
     data["export_dir"] = export_dir;
-    data["auto_export"] = auto_export;
-    data["auto_export_segments"] = auto_export_segments;
+    data["export_items"] = export_items;
+    data["export_zip"] = export_zip;
+    data["after_run_export"] = after_run_export;
+    data["after_run_place"] = after_run_place;
     data["default_gpu_decode"] = default_gpu_decode;
     data["default_compute_psnr"] = default_compute_psnr;
     data["default_compute_ssim"] = default_compute_ssim;

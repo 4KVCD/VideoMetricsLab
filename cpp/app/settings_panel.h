@@ -117,8 +117,13 @@ public:
     // text colour, each button's in its "chosen" property ("#rrggbb", or
     // empty for the palette's own).
     QComboBox* export_graph_theme = nullptr;
-    QComboBox* auto_export = nullptr;
-    QComboBox* auto_export_segments = nullptr;
+    // Exports include: a box for each kind of export (by its key in
+    // export_item_keys), and whether as a .zip file (data true) or loose
+    // files. After each run: whether, and where (data "beside", "folder").
+    std::map<std::string, QCheckBox*> export_item_boxes;
+    QComboBox* export_form = nullptr;
+    QCheckBox* after_run_box = nullptr;
+    QComboBox* after_run_place = nullptr;
     QPushButton* export_background_button = nullptr;
     QPushButton* export_text_button = nullptr;
     QCheckBox* use_cache = nullptr;
@@ -192,6 +197,9 @@ private:
     QGroupBox* build_storage_box();
     QGroupBox* build_defaults_box();
     QGroupBox* build_weak_segments_box();
+    // Settings > Storage > Exports include, and After each run.
+    QWidget* build_export_choices();
+    QWidget* build_after_run_export();
     QGroupBox* build_gpu_box();
     QHBoxLayout* build_vvc_decoder_row();
     QGroupBox* build_compare_box();

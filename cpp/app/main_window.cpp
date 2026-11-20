@@ -584,8 +584,6 @@ void MainWindow::build_ui() {
         settings_.graph_metric = key.toStdString();  // the metric chosen, shown again next time
         save_settings();
     });
-    connect(graph_panel_, &GraphPanel::results_export_requested, this,
-            [this](ResultsFormat format) { export_results(format); });
     graph_panel_->set_worst_count(settings_.graph_worst_frames);
     graph_panel_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
     connect(graph_panel_, &GraphPanel::segments_report_requested, this,
@@ -640,6 +638,18 @@ void MainWindow::build_ui() {
                                            settings_.export_graph_text);
     };
     graph_panel_->export_colours = export_colours;
+    // Metric Graphs' statistics menu offers the Videos table's exports.
+    graph_panel_->export_items = [this] { return settings_.export_items; };
+    graph_panel_->video_exportable = [this](const std::string& identity) {
+        return row_of_graph(identity).has_value();
+    };
+    graph_panel_->videos_exportable = [this] { return !exported_runs().empty(); };
+    connect(graph_panel_, &GraphPanel::video_export_requested, this, [this](const std::string& identity) {
+        if (const std::optional<int> row = row_of_graph(identity)) {
+            export_this_video(*row);
+        }
+    });
+    connect(graph_panel_, &GraphPanel::all_videos_export_requested, this, [this] { export_all_videos(); });
     bitrate_panel_->export_colours = export_colours;
     tabs_->addTab(new ScrollingPage(bitrate_panel_), app::tr("Bitrate Viewer"));
     // Its encodes from the runs Metric Graphs lists, brought up to date first.
