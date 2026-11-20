@@ -737,7 +737,9 @@ the page, the zoom) is left as it is: the graphs are drawn apart from them.
 The Bitrate Viewer reads each video's bitrate after its run; if it is still
 reading, or a video's bitrate was never read (its scores came from saved
 results, say), the status line says the bitrate graphs are still being built,
-and the file is saved as soon as they are.
+and the file is saved as soon as they are. The files are read where they are
+now, even when their saved scores were made before they were moved, renamed
+or copied.
 
 ### Exporting from the right-click menus
 

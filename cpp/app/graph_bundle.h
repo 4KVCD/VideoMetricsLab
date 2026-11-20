@@ -57,6 +57,13 @@ QString file_safe(const QString& text);
 std::vector<BundleFile> metric_graph_files(const std::vector<BundleVideo>& videos, const BundleStyle& style,
                                            bool together);
 
+// The files whose bitrate an export draws, for the Bitrate tab to read: the
+// reference, then each video with a file of its own (not a resolution
+// test's). Each is its result's file as probed, at the export's `reference`
+// and the video's `path`: where the file is now, not where it was when its
+// saved scores were made (a file moved, renamed or copied since).
+std::vector<VideoInfo> bitrate_files(const std::filesystem::path& reference, const std::vector<BundleVideo>& videos);
+
 // The bitrate PNG files, from what `read` (the Bitrate tab) has read: with
 // more than one video, the reference with all of them ("All test videos -
 // Bitrate.png") and each with the reference ("<name> - Bitrate.png"); with
