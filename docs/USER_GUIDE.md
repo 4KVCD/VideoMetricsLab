@@ -711,7 +711,7 @@ GPU and the CPU), the newest is used unless another is picked there.
 
 **Export all graphs...** (beside **Open metric graphs**) saves the graphs
 of every test video scored against the reference as one `.zip` file of PNG
-images, drawn as Metric Graphs' and the Bitrate Viewer's **Export PNG** draw
+images, drawn as Metric Graphs' and the Bitrate Viewer's **Export graph as PNG** draw
 them:
 
 - each test video's graph of every metric it has: `<video> - <metric>.png`;

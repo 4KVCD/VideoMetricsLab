@@ -594,7 +594,6 @@
   "Frame types": "프레임 유형",
   "Marks each frame of the Frame based graph with its type: I, P or B.": "프레임 기준 그래프의 각 프레임을 유형(I, P, B)으로 표시합니다.",
   "Reset zoom": "확대/축소 초기화",
-  "Export PNG…": "PNG 내보내기…",
   "Video bitrate (kb/s)": "영상 비트레이트(kb/s)",
   "Hover over the plot to inspect values. Scroll to zoom, drag to pan, and double-click to reset.": "그래프에 마우스를 올려 값을 살펴보세요. 스크롤로 확대/축소, 드래그로 이동, 두 번 클릭으로 초기화합니다.",
   "Frame view shows encoded video-frame size; second and GOP views show video-only bitrate.": "프레임 보기는 인코딩된 프레임 크기를, 초 및 GOP 보기는 영상만의 비트레이트를 보여 줍니다.",

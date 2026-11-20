@@ -594,7 +594,6 @@
   "Frame types": "Loại khung hình",
   "Marks each frame of the Frame based graph with its type: I, P or B.": "Đánh dấu từng khung hình trên biểu đồ theo khung hình bằng loại của nó: I, P hoặc B.",
   "Reset zoom": "Đặt lại thu phóng",
-  "Export PNG…": "Xuất PNG…",
   "Video bitrate (kb/s)": "Bitrate video (kbps)",
   "Hover over the plot to inspect values. Scroll to zoom, drag to pan, and double-click to reset.": "Rê chuột trên biểu đồ để xem giá trị. Cuộn để phóng to, kéo để di chuyển, nhấp đúp để đặt lại.",
   "Frame view shows encoded video-frame size; second and GOP views show video-only bitrate.": "Chế độ khung hiển thị kích thước khung hình video đã mã hóa; chế độ giây và GOP chỉ hiển thị bitrate video.",

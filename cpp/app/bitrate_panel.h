@@ -139,7 +139,7 @@ public:
     std::vector<QThread*> live_workers() const;
     // Stops the analysis, keeping finished results.
     void cancel();
-    // What Export PNG saves: the graph with its title (the graph chosen, the
+    // What Export graph as PNG saves: the graph with its title (the graph chosen, the
     // frame range, the frame types' colours while marked) and a table of
     // the lines drawn, keyed by their colours, with the table's figures.
     QPixmap render_export_image();
@@ -159,7 +159,7 @@ public:
     // The saved results' folder, whose saved bitrate (bitrate_store.h) a
     // file's reading looks in first and is saved to; none set: not used.
     std::function<std::filesystem::path()> store_folder;
-    // The colours Export PNG draws in (Settings' Exported graphs), asked at
+    // The colours Export graph as PNG draws in (Settings' Exported graphs), asked at
     // each export; the light chart colours when not set.
     std::function<theme::ChartColours()> export_colours;
 

@@ -594,7 +594,6 @@
   "Frame types": "Tipos de quadro",
   "Marks each frame of the Frame based graph with its type: I, P or B.": "Marca cada quadro do gráfico por quadro com seu tipo: I, P ou B.",
   "Reset zoom": "Redefinir zoom",
-  "Export PNG…": "Exportar PNG…",
   "Video bitrate (kb/s)": "Taxa de bits do vídeo (kb/s)",
   "Hover over the plot to inspect values. Scroll to zoom, drag to pan, and double-click to reset.": "Passe o mouse sobre o gráfico para inspecionar valores. Role para ampliar, arraste para mover e clique duas vezes para redefinir.",
   "Frame view shows encoded video-frame size; second and GOP views show video-only bitrate.": "A visualização por quadro mostra o tamanho codificado dos quadros; as por segundo e por GOP mostram a taxa de bits só do vídeo.",

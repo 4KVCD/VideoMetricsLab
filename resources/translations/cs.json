@@ -594,7 +594,6 @@
   "Frame types": "Typy snímků",
   "Marks each frame of the Frame based graph with its type: I, P or B.": "Označí každý snímek v grafu po snímcích jeho typem: I, P nebo B.",
   "Reset zoom": "Obnovit přiblížení",
-  "Export PNG…": "Exportovat PNG…",
   "Video bitrate (kb/s)": "Bitrate videa (kb/s)",
   "Hover over the plot to inspect values. Scroll to zoom, drag to pan, and double-click to reset.": "Najetím na graf prozkoumáte hodnoty. Kolečkem přibližujte, tažením posouvejte, dvojklikem obnovte.",
   "Frame view shows encoded video-frame size; second and GOP views show video-only bitrate.": "Zobrazení po snímcích ukazuje velikost zakódovaných snímků videa; zobrazení po sekundách a po GOP ukazují jen bitrate videa.",

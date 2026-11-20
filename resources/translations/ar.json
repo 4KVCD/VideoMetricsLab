@@ -594,7 +594,6 @@
   "Frame types": "أنواع الإطارات",
   "Marks each frame of the Frame based graph with its type: I, P or B.": "يميّز كل إطار في الرسم البياني حسب الإطارات بنوعه: I أو P أو B.",
   "Reset zoom": "إعادة ضبط التكبير",
-  "Export PNG…": "تصدير PNG…",
   "Video bitrate (kb/s)": "معدل بت الفيديو (كيلوبت/ث)",
   "Hover over the plot to inspect values. Scroll to zoom, drag to pan, and double-click to reset.": "مرّر المؤشر فوق الرسم لفحص القيم. مرّر العجلة للتكبير، واسحب للتحريك، وانقر مرتين لإعادة الضبط.",
   "Frame view shows encoded video-frame size; second and GOP views show video-only bitrate.": "يعرض عرض الإطارات حجم إطارات الفيديو المرمَّزة؛ ويعرض عرضا الثانية وGOP معدل بت الفيديو وحده.",

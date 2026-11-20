@@ -594,7 +594,6 @@
   "Frame types": "フレームタイプ",
   "Marks each frame of the Frame based graph with its type: I, P or B.": "フレーム単位のグラフで各フレームをタイプ (I、P、B) で示します。",
   "Reset zoom": "ズームをリセット",
-  "Export PNG…": "PNG をエクスポート…",
   "Video bitrate (kb/s)": "動画ビットレート (kb/s)",
   "Hover over the plot to inspect values. Scroll to zoom, drag to pan, and double-click to reset.": "グラフにカーソルを合わせると値を調べられます。スクロールでズーム、ドラッグで移動、ダブルクリックでリセットします。",
   "Frame view shows encoded video-frame size; second and GOP views show video-only bitrate.": "フレーム表示はエンコード後のフレームサイズを、秒表示と GOP 表示は動画のみのビットレートを示します。",

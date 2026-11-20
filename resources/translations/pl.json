@@ -594,7 +594,6 @@
   "Frame types": "Typy klatek",
   "Marks each frame of the Frame based graph with its type: I, P or B.": "Oznacza każdą klatkę na wykresie klatek jej typem: I, P lub B.",
   "Reset zoom": "Resetuj powiększenie",
-  "Export PNG…": "Eksportuj PNG…",
   "Video bitrate (kb/s)": "Bitrate wideo (kb/s)",
   "Hover over the plot to inspect values. Scroll to zoom, drag to pan, and double-click to reset.": "Najedź na wykres, aby zbadać wartości. Kółko — powiększenie, przeciąganie — przesuwanie, dwuklik — reset.",
   "Frame view shows encoded video-frame size; second and GOP views show video-only bitrate.": "Widok klatek pokazuje zakodowany rozmiar klatek; widoki sekund i GOP pokazują bitrate samego wideo.",
