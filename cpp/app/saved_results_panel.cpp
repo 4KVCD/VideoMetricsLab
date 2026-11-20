@@ -120,9 +120,9 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     table_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(table_, &QWidget::customContextMenuRequested, this, [this](const QPoint& position) {
         QMenu menu(this);
-        const QAction* contents = fill_menu(menu);
-        if (contents != nullptr && menu.exec(table_->viewport()->mapToGlobal(position)) == contents) {
-            emit export_requested(Export::contents, selected_results());
+        fill_context_menu(menu);
+        if (!menu.isEmpty()) {
+            menu.exec(table_->viewport()->mapToGlobal(position));
         }
     });
     layout->addWidget(table_, 1);
@@ -474,6 +474,21 @@ QAction* SavedResultsPanel::fill_menu(QMenu& menu) const {
         count == 1 ? ExportScope::this_video : ExportScope::selected_videos, exported_items(settings_)));
     contents->setEnabled(!export_contents(exported_items(settings_)).isEmpty());
     return contents;
+}
+
+void SavedResultsPanel::fill_context_menu(QMenu& menu) {
+    // Open in Metric Graphs, as the button under the box and a double-click,
+    // so that it is beside the rows; then the export.
+    if (selected().empty()) {
+        return;
+    }
+    connect(menu.addAction(app::tr("Open in Metric Graphs")), &QAction::triggered, this,
+            [this] { emit open_requested(selected_results()); });
+    menu.addSeparator();
+    if (const QAction* contents = fill_menu(menu)) {
+        connect(contents, &QAction::triggered, this,
+                [this] { emit export_requested(Export::contents, selected_results()); });
+    }
 }
 
 void SavedResultsPanel::delete_selected() {
