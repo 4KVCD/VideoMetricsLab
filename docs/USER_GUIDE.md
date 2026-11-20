@@ -263,6 +263,11 @@ watched.
 A message that can't be sent stops nothing: the status bar and the log say
 why, with the service's answer. The keys are never written to the log.
 
+The command line sends the same message with `--notify` (see [Command
+line](#command-line)), as these settings say: to the services on, with the
+message built here, for the outcomes and run lengths ticked. On macOS and
+Linux it sends it with the system's `curl`.
+
 ### AV2 videos
 
 AV2, AOM's codec after AV1 (not yet final), is decoded by dav2d, VideoLAN's
@@ -477,6 +482,7 @@ $run.videos[0].metrics.vmaf.score
 | `--run-dir FOLDER` | Write each video's result to FOLDER as `<video>.metrics.json`, the file **Save analysis results** writes: Metric Graphs' **Add saved run** opens it on any PC, without its saved scores. |
 | `--log-file FILE` | Also write the app's log to FILE, as the window writes its own: the whole run, whatever `-v` says, added to the end when FILE is there. |
 | `--name TEMPLATE` | Name each test video's files (`--csv`, `--segments-dir`, `--run-dir`) after TEMPLATE in place of `<video>`. Its fields: `{test}` and `{reference}` (the files' names without extension), `{version}` (the app's: `2.6`), `{date}` and `{time}` (the run's start: `20261117`, `180912`) and with `--batch` `{sequence}` (the row's, else the reference's name); `{{` and `}}` are braces. In the names, characters other than letters, digits, `-`, `_` and `.` become `_`, as in `<video>`. The same fields, but `{sequence}`, are filled in in `--json`'s, `--scores-csv`'s, `--segments-report`'s and `--log-file`'s paths, `{test}` and `{reference}` only when one video is compared. A name already taken gets a number, which the JSON's `csv`, `run_file` and `segment_files` give. |
+| `--notify` | Send a notification as the run ends, as **Settings > Notifications** in the app say: to the services on there, with its message, for the outcomes and run lengths it is on for (see [Notifications](#notifications)). Whether it was sent, or why not, is said on the progress lines (a problem with `-q` too); the exit code is the run's either way. On macOS and Linux it needs `curl`, which sends it. |
 | `-q`, `--quiet` | No progress, only the results. |
 | `-v`, `--verbose` | The app's log as well. |
 

@@ -10,6 +10,7 @@ add_executable(vml_tests
     unit/bitrate_test.cpp
     unit/black_bars_rule_test.cpp
     unit/cancel_test.cpp
+    unit/cli_notify_test.cpp
     unit/cli_test.cpp
     unit/cvvdp_test.cpp
     unit/decisions_test.cpp

@@ -1,18 +1,19 @@
 # vml_platform: what differs between the systems (processes, pipes, loading
 # libraries, the PATH, the GPUs), behind headers that are the same on all of
 # them.
-add_library(vml_platform src/pipe.cpp src/process.cpp src/system.cpp)
+add_library(vml_platform src/http.cpp src/pipe.cpp src/process.cpp src/system.cpp)
 if(WIN32)
     target_sources(vml_platform PRIVATE
         src/console_windows.cpp src/library_windows.cpp src/pipe_windows.cpp src/process_windows.cpp
-        src/system_windows.cpp)
+        src/system_windows.cpp src/http_windows.cpp)
     # The GPUs' vendor IDs; the codecs D3D11VA decodes on the GPU; the wide
-    # command line; the displays' HDR state; DPAPI, for secrets.
-    target_link_libraries(vml_platform PRIVATE dxgi d3d11 dxguid shell32 user32 crypt32)
+    # command line; the displays' HDR state; DPAPI, for secrets; WinHTTP, for
+    # the command line's notifications.
+    target_link_libraries(vml_platform PRIVATE dxgi d3d11 dxguid shell32 user32 crypt32 winhttp)
 else()
     target_sources(vml_platform PRIVATE
         src/console_posix.cpp src/library_posix.cpp src/pipe_posix.cpp src/process_posix.cpp
-        src/system_posix.cpp)
+        src/system_posix.cpp src/http_posix.cpp)
     target_link_libraries(vml_platform PRIVATE ${CMAKE_DL_LIBS})  # dlopen, where it is not in libc
     if(APPLE)
         # keep_system_awake: a power assertion (IOKit).
