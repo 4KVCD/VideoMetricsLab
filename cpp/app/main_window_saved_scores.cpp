@@ -423,7 +423,7 @@ void MainWindow::show_table_menu(const QPoint& position) {
     // then all the videos'. Each of what Settings' Exports include.
     const int clicked = distorted_table_->rowAt(position.y());
     const bool scored = clicked >= 0 && scored_video(*rows_[static_cast<std::size_t>(clicked)]).has_value();
-    const std::vector<std::string>& items = settings_.export_items;
+    const std::vector<std::string> items = exported_items(settings_);
     const bool anything = !export_contents(items).isEmpty();
     QAction* this_video = nullptr;
     if (scored) {

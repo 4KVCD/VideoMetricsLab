@@ -640,7 +640,7 @@ its other streams and the container's bytes, marked ≈).
 ## Saved results and caches
 
 Save portable results as `.metrics.json` or export CSV. For the scores alone,
-tick **Results (JSON)** or **Results (CSV)** in **Settings > Storage > Exports
+tick **Results**, and **JSON** or **CSV**, in **Settings > Storage > Exports
 include**, then right-click the Videos table or the statistics table on Metric
 Graphs and choose **Export all videos' results...** (see [Exporting from the
 right-click menus](#exporting-from-the-right-click-menus)): either gives the same file,
@@ -720,16 +720,19 @@ and the file is saved as soon as they are.
 **Settings > Storage > Exports include** chooses what every export holds,
 by the right-click menus or after each run. Tick:
 
-- **Results (JSON)** and **Results (CSV)**: scores and statistics, as the
+- **Results**: scores and statistics, as the
   results file the command line's `--json` writes: a video's alone
   (`<video> - results.json`, `.csv`), or every video's in one file;
 - **Graphs**: each video's graph of every metric and its bitrate with the
   reference's (`<video> - <metric>.png`), with several videos all of them
   together too, as **Export all graphs...** draws them, once the bitrate is
   read;
-- **Weak segments**: by the profile in use, as JSON and CSV: a video's
-  (`<video>.<metrics>.segments.json`), or every video's in one report.
-  Nothing while the profile has no condition.
+- **Weak segments**: by the profile in use: a video's
+  (`<video>.<metrics>.segments.json`, `.csv`), or every video's in one
+  report. Nothing while the profile has no condition.
+
+**In** chooses the formats results and weak segments are written in:
+**JSON**, **CSV** or both. With neither, only graphs are exported.
 
 **As** saves them as **A .zip file** (`<video> - VideoMetricsLab.zip`, or
 named after the reference for every video), or as **Loose files** side by
@@ -741,8 +744,7 @@ of the Saved results tab offer an export of what is ticked, named after it:
 clicked (once its metrics are all scored), and **Export all videos'
 results, graphs and weak segments...** for every test video scored against
 the reference (**Export the selected videos'...** on Saved results). Untick
-what you never want, CSV say, and it's left out of every export and every
-menu. A line of a saved run loaded with **Load analysis results** has no
+what you never want, CSV say, and it's left out of every export. A line of a saved run loaded with **Load analysis results** has no
 export of its own (it has no row in the Videos table), but is in all the
 videos' results.
 

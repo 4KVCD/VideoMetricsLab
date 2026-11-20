@@ -7,6 +7,9 @@
 
 #include "results_export.h"
 #include "vml/cvvdp.h"
+#include "vml/segment_profiles.h"
+#include "vml/settings.h"
+#include "vml/weak_frames.h"
 
 namespace vml::app {
 namespace {
@@ -94,6 +97,49 @@ TEST(ResultsExport, RecordsTheRunsAsOneAndEachVideosFacts) {
     EXPECT_TRUE(going.at("run").at("finished_utc").is_null());
     EXPECT_TRUE(going.at("run").at("wall_seconds").is_null());
     EXPECT_EQ(going.at("machine").at("cpu"), "earlier");  // none finished: the machine given
+}
+
+// An export's files besides its graphs: results and weak segments in each
+// format ticked, and only those (CSV unticked, no weak segments CSV); with
+// no format, none; weak segments of several videos, one report.
+TEST(ResultsExport, FilesAreWrittenInTheFormatsTicked) {
+    auto result = std::make_shared<ComparisonResult>();
+    FrameMetricResult vmaf;
+    vmaf.key = "vmaf";
+    vmaf.frame = {0, 1, 2};
+    vmaf.time = {0.0, 1 / 24.0, 2 / 24.0};
+    vmaf.values = {95.0F, 60.0F, 95.0F};
+    result->metric_results.add(vmaf);
+    const std::vector<BundleVideo> one{{result, QStringLiteral("a"), "a.mkv"}};
+    const nlohmann::ordered_json document{{"videos", nlohmann::ordered_json::array()}};
+    Settings settings;
+    settings.weak_segment_conditions = {"vmaf<90"};
+    const SegmentRules rules = segment_profile_in_use(settings).rules;
+    ASSERT_FALSE(rules.conditions.empty());
+    const auto names = [&](const std::vector<BundleVideo>& videos, bool several) {
+        bool skipped = true;
+        std::vector<std::string> found;
+        for (const BundleFile& file : export_files(settings, videos, "r.mkv", [&document] { return document; }, rules,
+                                                   several, QStringLiteral("a"), skipped)) {
+            found.push_back(file.first);
+        }
+        EXPECT_FALSE(skipped);
+        return found;
+    };
+    using Names = std::vector<std::string>;
+    const std::string suffix = segments_file_suffix(rules);
+    settings.export_formats = {"json"};
+    EXPECT_EQ(names(one, false), (Names{"a - results.json", "a." + suffix + ".json"}));
+    settings.export_formats = {"csv"};
+    EXPECT_EQ(names(one, false), (Names{"a - results.csv", "a." + suffix + ".csv"}));
+    settings.export_formats = {"json", "csv"};
+    settings.export_items = {"weak_segments"};
+    EXPECT_EQ(names({one[0], {result, QStringLiteral("b"), "b.mkv"}}, true),
+              (Names{"a - weak segments." + suffix + ".json", "a - weak segments." + suffix + ".csv"}));
+    settings.export_items = export_item_keys();
+    settings.export_formats.clear();
+    EXPECT_EQ(names(one, false), Names{});
+    EXPECT_EQ(exported_items(settings), Names{"graphs"});
 }
 
 }  // namespace

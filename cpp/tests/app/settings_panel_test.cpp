@@ -137,21 +137,29 @@ TEST(SettingsPanel, NotificationsStoreKeysAsChosenAndPreviewTheMessage) {
 }
 
 // Settings > Storage > Exports include: a box for each kind of export, in
-// export_item_keys' order, showing the saved choice, and a .zip or loose
-// files; After each run: on or off, and where (only to choose while on).
+// export_item_keys' order, showing the saved choice; a box for each format
+// (JSON, CSV); and a .zip or loose files; After each run: on or off, and
+// where (only to choose while on).
 // Each edit is saved.
 TEST(SettingsPanel, ExportsAreChosenOneByOne) {
     Settings settings;
     settings.export_items = {"graphs"};
+    settings.export_formats = {"json"};
     FileWrites writes;
     const Dialogs dialogs = standard_dialogs(nullptr);
     SettingsPanel panel(settings, writes, [] { return ToolsStatus{}; }, dialogs);
     ASSERT_EQ(panel.export_item_boxes.size(), export_item_keys().size());
     EXPECT_TRUE(panel.export_item_boxes.at("graphs")->isChecked());
-    EXPECT_FALSE(panel.export_item_boxes.at("results_json")->isChecked());
-    panel.export_item_boxes.at("results_csv")->setChecked(true);
+    EXPECT_FALSE(panel.export_item_boxes.at("results")->isChecked());
+    panel.export_item_boxes.at("results")->setChecked(true);
     panel.export_item_boxes.at("weak_segments")->setChecked(true);
-    EXPECT_EQ(settings.export_items, (std::vector<std::string>{"results_csv", "graphs", "weak_segments"}));
+    EXPECT_EQ(settings.export_items, (std::vector<std::string>{"results", "graphs", "weak_segments"}));
+    ASSERT_EQ(panel.export_format_boxes.size(), export_format_keys().size());
+    EXPECT_TRUE(panel.export_format_boxes.at("json")->isChecked());
+    EXPECT_FALSE(panel.export_format_boxes.at("csv")->isChecked());
+    panel.export_format_boxes.at("csv")->setChecked(true);
+    panel.export_format_boxes.at("json")->setChecked(false);
+    EXPECT_EQ(settings.export_formats, std::vector<std::string>{"csv"});
     panel.export_form->setCurrentIndex(panel.export_form->findData(false));
     EXPECT_FALSE(settings.export_zip);
     EXPECT_FALSE(panel.after_run_place->isEnabled());
@@ -161,7 +169,7 @@ TEST(SettingsPanel, ExportsAreChosenOneByOne) {
     panel.after_run_place->setCurrentIndex(panel.after_run_place->findData(QStringLiteral("folder")));
     EXPECT_EQ(settings.after_run_place, "folder");
     panel.export_item_boxes.at("graphs")->setChecked(false);
-    EXPECT_EQ(settings.export_items, (std::vector<std::string>{"results_csv", "weak_segments"}));
+    EXPECT_EQ(settings.export_items, (std::vector<std::string>{"results", "weak_segments"}));
 }
 
 // Settings > Weak segments shows the profile in use and edits it; an edit is

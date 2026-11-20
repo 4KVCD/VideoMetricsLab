@@ -10,15 +10,20 @@
 
 #include <nlohmann/json.hpp>
 
+#include <filesystem>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "graph_bundle.h"
 #include "vml/results.h"
 #include "vml/run_record.h"
+#include "vml/settings.h"
 #include "vml/video.h"
+#include "vml/weak_frames.h"
 
 class QAction;
 class QMenu;
@@ -60,9 +65,8 @@ nlohmann::ordered_json export_document(const std::optional<VideoInfo>& reference
                                        const std::vector<ExportedRun>& runs, const MachineFacts& machine);
 
 // What an export includes (Settings > Storage > Exports include), as the
-// right-click menus say it: the kinds of `items` (export_item_keys), results
-// once for JSON and CSV, in a list: "results, graphs and weak segments".
-// Empty when nothing is ticked.
+// right-click menus say it: the kinds of `items` (exported_items), in a
+// list: "results, graphs and weak segments". Empty when nothing is ticked.
 QString export_contents(const std::vector<std::string>& items);
 
 // The right-click menus' exports, named after what they include: of the
@@ -70,5 +74,20 @@ QString export_contents(const std::vector<std::string>& items);
 // selected (Saved results). With nothing ticked, says where to tick it.
 enum class ExportScope { this_video, all_videos, selected_videos };
 QString export_action_text(ExportScope scope, const std::vector<std::string>& items);
+
+// CSV text as the command line writes it: CR LF on Windows.
+std::string text_lines(const std::string& text);
+
+// The files of an export besides its graphs, as Settings' Exports include
+// (exported_items) and its formats say, named after `name`: the results
+// (`document`, made only when they're included), and the weak segments by
+// `rules` of the one video, or (`several`) a report of all of `videos`. Weak
+// segments need a condition in `rules`: without one there are none, and
+// `segments_skipped` is set.
+std::vector<BundleFile> export_files(const Settings& settings, const std::vector<BundleVideo>& videos,
+                                     const std::filesystem::path& reference,
+                                     const std::function<nlohmann::ordered_json()>& document,
+                                     const SegmentRules& rules, bool several, const QString& name,
+                                     bool& segments_skipped);
 
 }  // namespace vml::app

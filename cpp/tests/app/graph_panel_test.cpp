@@ -370,7 +370,7 @@ TEST_F(GraphPanelTest, TheStatisticsMenuOffersTheVideosExports) {
                     {shared(vmaf_result("b.mkv", {85.0F, 75.0F})), "b", "loaded-b", true}});
     // Before the window says what it can export: nothing to offer.
     EXPECT_TRUE(stats_menu(panel, "a").isEmpty());
-    std::vector<std::string> items{"results_json", "graphs", "weak_segments"};
+    std::vector<std::string> items{"results", "graphs", "weak_segments"};
     bool run = true;
     panel.export_items = [&items] { return items; };
     panel.video_exportable = [](const std::string& identity) { return identity == "row-a"; };
@@ -379,7 +379,7 @@ TEST_F(GraphPanelTest, TheStatisticsMenuOffersTheVideosExports) {
                                                    "Export all videos' results, graphs and weak segments..."}));
     EXPECT_EQ(stats_menu(panel, "b"), QStringList{"Export all videos' results, graphs and weak segments..."});
     EXPECT_EQ(stats_menu(panel, "nowhere"), QStringList{"Export all videos' results, graphs and weak segments..."});
-    items = {"results_csv"};
+    items = {"results"};
     EXPECT_EQ(stats_menu(panel, "a"),
               (QStringList{"Export this video's results...", "Export all videos' results..."}));
     run = false;

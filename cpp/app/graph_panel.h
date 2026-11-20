@@ -289,7 +289,7 @@ public:
     // each export; the light chart colours when not set.
     std::function<theme::ChartColours()> export_colours;
     // The statistics' right-click exports, as the Videos table's: what they
-    // include (Settings' export_items), whether a line's video (its
+    // include (exported_items of the Settings), whether a line's video (its
     // identity) can be exported on its own, and whether the run can: the
     // window's, asked as the menu opens. Not set: no such export offered.
     std::function<std::vector<std::string>()> export_items;
