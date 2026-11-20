@@ -1,5 +1,6 @@
 {
  "strings": {
+  "General": "Allgemein",
   "Choose video color": "Videofarbe auswählen",
   "Click the color square to change this video's color in both graphs.": "Klicken Sie auf das Farbquadrat, um die Farbe dieses Videos in beiden Diagrammen zu ändern.",
   "Reset color": "Farbe zurücksetzen",

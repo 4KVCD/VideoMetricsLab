@@ -1,5 +1,6 @@
 {
  "strings": {
+  "General": "常规",
   "Choose video color": "选择视频颜色",
   "Click the color square to change this video's color in both graphs.": "点击色块可更改此视频在两个图表中的颜色。",
   "Reset color": "重置颜色",

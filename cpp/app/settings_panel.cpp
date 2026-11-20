@@ -28,6 +28,7 @@
 #include <QSizePolicy>
 #include <QStyle>
 #include <QStyleOptionComboBox>
+#include <QTabWidget>
 #include <QTextDocument>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -35,6 +36,7 @@
 
 #include <algorithm>
 #include <exception>
+#include <initializer_list>
 #include <iterator>
 #include <optional>
 #include <stdexcept>
@@ -105,11 +107,29 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
     theme::style(run_lock_note, "color: {muted};");
     run_lock_note->hide();
     layout->addWidget(run_lock_note);
-    for (QGroupBox* box : {build_ffmpeg_box(), build_storage_box(), build_weak_segments_box(), build_defaults_box(),
-                           build_gpu_box(), build_compare_box(), build_window_box()}) {
-        layout->addWidget(box);
-    }
-    layout->addStretch(1);
+    // Sub-tabs of related boxes rather than one long column. A page of one
+    // box is named after it (Storage, Weak segments), so "Settings > Storage
+    // > ..." still names a setting; its box drops the title the tab shows.
+    sections = new QTabWidget;
+    sections->setObjectName("settingsSections");
+    sections->setDocumentMode(true);
+    const auto add_section = [this](const QString& name, std::initializer_list<QGroupBox*> boxes) {
+        auto* page = new QWidget;
+        auto* page_layout = new QVBoxLayout(page);
+        for (QGroupBox* box : boxes) {
+            if (boxes.size() == 1) {
+                box->setTitle(QString());
+            }
+            page_layout->addWidget(box);
+        }
+        page_layout->addStretch(1);
+        sections->addTab(page, name);
+    };
+    add_section(app::tr("General"), {build_ffmpeg_box(), build_window_box(), build_compare_box()});
+    add_section(app::tr("Metrics"), {build_defaults_box(), build_gpu_box()});
+    add_section(app::tr("Weak segments"), {build_weak_segments_box()});
+    add_section(app::tr("Storage"), {build_storage_box()});
+    layout->addWidget(sections, 1);
     status = new QLabel;
     theme::style(status, "color: {muted};");
     layout->addWidget(status);

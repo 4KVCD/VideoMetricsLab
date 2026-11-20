@@ -1,5 +1,6 @@
 {
  "strings": {
+  "General": "ทั่วไป",
   "Choose video color": "เลือกสีวิดีโอ",
   "Click the color square to change this video's color in both graphs.": "คลิกช่องสีเพื่อเปลี่ยนสีของวิดีโอนี้ในกราฟทั้งสอง",
   "Reset color": "รีเซ็ตสี",
