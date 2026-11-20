@@ -219,7 +219,7 @@ int main(int argc, char** argv) {
     QApplication::setStyle(QStringLiteral("Fusion"));
     // Started from Finder (or `open`), the app's working folder is the disk's
     // root, and the file dialogs, which start in it or name a file relative
-    // to it (Save analysis results, Export graph as PNG), opened there, where
+    // to it (Export > Run file, Export graph as PNG), opened there, where
     // nothing can be saved. They start in the home folder instead, as a
     // Windows program started from its shortcut starts in its own.
     if (std::error_code error; std::filesystem::current_path(error) == "/") {

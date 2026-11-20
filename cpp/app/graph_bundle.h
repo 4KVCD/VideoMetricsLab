@@ -1,7 +1,8 @@
-// A set of videos' graphs exported at once (Export all graphs as ZIP, a
-// video's ZIP from its right-click menu, Settings' automatic export): each
-// test video's Metric Graphs page of every metric it has, all of them
-// together when there are several, and their bitrate with the reference's.
+// A set of videos' graphs exported at once (the Videos tab's Export >
+// Graphs as ZIP, a video's ZIP from its right-click menu, Settings'
+// automatic export): each test video's Metric Graphs page of every metric
+// it has, all of them together when there are several, and their bitrate
+// with the reference's.
 // They are drawn in panels of their own that are never shown, so what the
 // tabs show (the lines ticked, the page, the zoom) is left as it is.
 #pragma once
