@@ -37,7 +37,7 @@ namespace {
 
 // The file dialogs' filter for saved runs.
 QString run_file_filter() {
-    return app::tr("Analysis results (*{suffix})",
+    return app::tr("Run files (*{suffix})",
                    {{"suffix", QString::fromUtf8(result_suffix.data(), static_cast<int>(result_suffix.size()))}});
 }
 
@@ -127,7 +127,7 @@ void take_run_options(VmafOptions& options, const ComparisonResult& result) {
 
 void MainWindow::on_load_saved_run() {
     // Asks for a saved run and loads it into the table.
-    const QString chosen = dialogs_.open_file(app::tr("Load analysis results"), run_file_filter());
+    const QString chosen = dialogs_.open_file(app::tr("Import run file"), run_file_filter());
     if (!chosen.isEmpty()) {
         load_saved_run(path_of(chosen));
     }
@@ -341,7 +341,7 @@ void MainWindow::save_run_files(const std::vector<std::shared_ptr<CompletedRun>>
     }
     const QString suffix = QString::fromUtf8(result_suffix.data(), static_cast<int>(result_suffix.size()));
     if (runs.size() == 1) {
-        const QString chosen = dialogs_.save_file(app::tr("Save analysis results"), runs.front()->label + suffix,
+        const QString chosen = dialogs_.save_file(app::tr("Export run file"), runs.front()->label + suffix,
                                                   run_file_filter());
         if (!chosen.isEmpty()) {
             submit_save(runs.front()->result, path_of(chosen), runs.front()->label);

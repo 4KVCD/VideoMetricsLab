@@ -339,6 +339,30 @@ TEST_F(GraphPanelTest, ExportsTheDifferenceTheBandShows) {
 
 // Issue #19: an export's dialog starts in Settings' Export folder, read at
 // each export, or in Documents where it is blank; never the working folder.
+// A run file is imported under the name the Videos tab's button has, the
+// counterpart of Export > Run file.
+TEST_F(GraphPanelTest, RunFilesAreImported) {
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    QStringList texts;
+    for (const QPushButton* button : panel.findChildren<QPushButton*>()) {
+        texts << button->text();
+    }
+    EXPECT_TRUE(texts.contains("Import run file...")) << texts.join(", ").toStdString();
+    EXPECT_FALSE(texts.contains("Add analysis results"));
+    QString filter;
+    panel.dialogs.open_file = [&filter](const QString&, const QString& asked) {
+        filter = asked;
+        return QString();
+    };
+    for (QPushButton* button : panel.findChildren<QPushButton*>()) {
+        if (button->text() == "Import run file...") {
+            button->click();
+        }
+    }
+    EXPECT_EQ(filter.toStdString(), "Run files (*.metrics.json)");
+}
+
 TEST_F(GraphPanelTest, ExportsStartInTheExportFolder) {
     VideoColors colors;
     GraphPanel panel(&colors);
