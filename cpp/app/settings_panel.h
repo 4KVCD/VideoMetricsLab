@@ -30,8 +30,11 @@ class QGroupBox;
 class QHBoxLayout;
 class QLabel;
 class QLineEdit;
+class QPlainTextEdit;
 class QPushButton;
+class QSpinBox;
 class QTabWidget;
+class QTimer;
 template <typename T>
 class QFutureWatcher;
 
@@ -43,6 +46,7 @@ struct ClearedResults;
 namespace vml::app {
 
 class FileWrites;
+class Notifier;
 class SegmentRulesEditor;
 
 class SettingsPanel : public QWidget {
@@ -98,7 +102,7 @@ public:
 
     // The controls, for the window's tests.
     // The sub-tabs, each a page of related boxes: General, Metrics, Weak
-    // segments and Storage.
+    // segments, Storage and Notifications.
     QTabWidget* sections = nullptr;
     QLineEdit* ffmpeg_edit = nullptr;
     // What a running calculation uses, locked while it runs (set_run_active),
@@ -143,6 +147,30 @@ public:
     QCheckBox* remember_size = nullptr;
     QCheckBox* remember_videos = nullptr;
     QCheckBox* check_updates = nullptr;
+    // Notifications (settings_notifications.cpp): when, the services and
+    // their keys, how the keys are stored, and the message's templates with
+    // their preview.
+    QCheckBox* notify_finished = nullptr;
+    QCheckBox* notify_with_failures = nullptr;
+    QCheckBox* notify_cancelled = nullptr;
+    QSpinBox* notify_min_minutes = nullptr;
+    QCheckBox* pushover_enabled = nullptr;
+    QLineEdit* pushover_user = nullptr;
+    QLineEdit* pushover_token = nullptr;
+    QComboBox* pushover_priority = nullptr;
+    QPushButton* pushover_test = nullptr;
+    QCheckBox* discord_enabled = nullptr;
+    QLineEdit* discord_webhook = nullptr;
+    QPushButton* discord_test = nullptr;
+    QCheckBox* show_keys = nullptr;
+    QComboBox* secret_storage = nullptr;  // data: true encrypted
+    QLabel* secret_note = nullptr;
+    QLineEdit* notify_title = nullptr;
+    QPlainTextEdit* notify_message = nullptr;
+    QPlainTextEdit* notify_video_line = nullptr;
+    QPushButton* notify_presets = nullptr;
+    QPushButton* insert_field = nullptr;
+    QLabel* notify_preview = nullptr;
     QLabel* status = nullptr;
 
 signals:
@@ -168,6 +196,25 @@ private:
     QHBoxLayout* build_vvc_decoder_row();
     QGroupBox* build_compare_box();
     QGroupBox* build_window_box();
+    QWidget* build_notifications_page();
+    QGroupBox* build_notify_when_box();
+    QGroupBox* build_pushover_box();
+    QGroupBox* build_discord_box();
+    QGroupBox* build_keys_box();
+    QGroupBox* build_message_box();
+    // A secret's field: its stored value as it reads back, or empty with a
+    // note where it cannot be read back here.
+    void show_secret(QLineEdit* edit, const std::string& stored);
+    // The notification controls into the settings (read_controls).
+    void read_notification_controls();
+    // The preview of the message, from a sample run.
+    void show_notification_preview();
+    // The keys' note: what their storage means.
+    void show_secret_note();
+    // Puts `field` ("{name}") where the cursor is in the template last edited.
+    void insert_notification_field(const QString& field);
+    // Sends the sample message to `service` alone, and says how it went.
+    void send_notification_test(const QString& service);
 
     // The folder the saved results are in now.
     std::filesystem::path cache_folder() const;
@@ -206,6 +253,11 @@ private:
     // under way.
     std::shared_ptr<ClearedResults> cleared_;
     bool filling_profiles_ = false;  // fill_weak_profiles: not an edit
+    // Send test's sender; the templates' edits saved a moment after typing
+    // stops; the template a field is inserted into.
+    Notifier* test_notifier_ = nullptr;
+    QTimer* template_typing_ = nullptr;
+    QWidget* last_template_ = nullptr;
 };
 
 }  // namespace vml::app

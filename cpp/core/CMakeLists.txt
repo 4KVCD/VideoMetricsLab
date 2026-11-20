@@ -46,6 +46,7 @@ add_library(vml_core
     src/metric_cache.cpp
     src/metric_cache_load.cpp
     src/metrics.cpp
+    src/notifications.cpp
     src/model_select.cpp
     src/native_playback.cpp
     src/npz.cpp

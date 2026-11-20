@@ -107,7 +107,8 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
     theme::style(run_lock_note, "color: {muted};");
     run_lock_note->hide();
     layout->addWidget(run_lock_note);
-    // Sub-tabs of related boxes rather than one long column. A page of one
+    // Sub-tabs of related boxes rather than one long column (Notifications:
+    // settings_notifications.cpp). A page of one
     // box is named after it (Storage, Weak segments), so "Settings > Storage
     // > ..." still names a setting; its box drops the title the tab shows.
     sections = new QTabWidget;
@@ -129,6 +130,7 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
     add_section(app::tr("Metrics"), {build_defaults_box(), build_gpu_box()});
     add_section(app::tr("Weak segments"), {build_weak_segments_box()});
     add_section(app::tr("Storage"), {build_storage_box()});
+    sections->addTab(build_notifications_page(), app::tr("Notifications"));
     layout->addWidget(sections, 1);
     status = new QLabel;
     theme::style(status, "color: {muted};");
@@ -999,6 +1001,7 @@ void SettingsPanel::read_controls() {
         settings_.default_vship_build = vship_build_default->currentData().toString().toStdString();
     }
     settings_.film_grain_default = film_grain_default->currentData().toString().toStdString();
+    read_notification_controls();
 }
 
 void SettingsPanel::set_run_active(bool active) {

@@ -37,6 +37,7 @@ add_library(vml_app STATIC
     main_window_rows.cpp
     resample_target_dialog.cpp
     main_window_run.cpp
+    notifier.cpp
     main_window_run_files.cpp
     main_window_saved_scores.cpp
     main_window_source.cpp
@@ -53,6 +54,7 @@ add_library(vml_app STATIC
     self_test.cpp
     series_colors.cpp
     settings_panel.cpp
+    settings_notifications.cpp
     stream_records.cpp
     theme.cpp
     video_compare_view.cpp

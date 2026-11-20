@@ -3,8 +3,11 @@
 // the status line saying how much is done and for how long, a line for each
 // video in progress, and each video's scores in its row as they arrive.
 #include <QCheckBox>
+#include <QDateTime>
+#include <QFileInfo>
 #include <QFutureWatcher>
 #include <QLineEdit>
+#include <QLocale>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QTableWidgetItem>
@@ -23,6 +26,7 @@
 #include "graph_panel.h"
 #include "i18n.h"
 #include "main_window.h"
+#include "notifier.h"
 #include "options_panel.h"
 #include "run_worker.h"
 #include "settings_panel.h"
@@ -1257,6 +1261,77 @@ void MainWindow::on_all_finished() {
     if (defaults_changed_in_run_) {
         on_default_settings_changed();  // what Settings' defaults changed to during the run
     }
+    notify_run_end();
+}
+
+void MainWindow::notify_run_end() {
+    // The run as its message tells it: how it ended, how long it took, and
+    // each test video asked for (rows removed during the run left out), by
+    // the row's state, with its scores where it has them.
+    const RunOutcome outcome = run_was_cancelled_                               ? RunOutcome::cancelled
+                               : run_failed_count_ + run_partial_count_ > 0 ? RunOutcome::finished_with_failures
+                                                                               : RunOutcome::finished;
+    const double seconds = run_elapsed().value_or(0.0);
+    if (!notification_wanted(settings_, outcome, seconds)) {
+        return;
+    }
+    NotifiedRun run;
+    run.outcome = outcome;
+    run.outcome_text = (outcome == RunOutcome::cancelled                ? app::tr("Cancelled")
+                        : outcome == RunOutcome::finished_with_failures ? app::tr("Finished with failures")
+                                                                        : app::tr("Finished"))
+                           .toStdString();
+    run.seconds = seconds;
+    run.reference = QFileInfo(shown_source_path()).fileName().toStdString();
+    run.finished_at = QLocale().toString(QDateTime::currentDateTime(), QLocale::ShortFormat).toStdString();
+    run.app = "VideoMetricsLab " VML_VERSION;
+    for (const std::shared_ptr<RowData>& row_data : checked_rows_for_run_) {
+        if (!row_index_of(row_data.get())) {
+            continue;
+        }
+        const RowState state = row_state(*row_data);
+        NotifiedVideo video;
+        const CompletedRun* completed = row_data->completed_run.get();
+        video.name = completed != nullptr && !completed->label.isEmpty()
+                         ? completed->label.toStdString()
+                         : QString::fromStdU16String(row_data->path.filename().u16string()).toStdString();
+        QString result = row_state_shown(state);
+        if (state == RowState::failed && !row_data->status_detail.isEmpty()) {
+            result += ": " + row_data->status_detail.section('\n', 0, 0);
+        }
+        video.result = result.toStdString();
+        video.scored = completed != nullptr && state != RowState::failed && state != RowState::cancelled;
+        if (video.scored) {
+            video.frames = completed->result.compared_frame_count;
+            video.metrics = notified_metrics(completed->result);
+        }
+        run.videos.push_back(std::move(video));
+    }
+    const NotificationPlan plan =
+        plan_notification(settings_, run, QDateTime::currentDateTimeUtc().toString(Qt::ISODate).toStdString());
+    if (const QStringList problems = notification_problems(plan); !problems.isEmpty()) {
+        show_status(problems.join(' '));
+        const InEnglish english;  // the log is always in English
+        for (const QString& problem : notification_problems(plan)) {
+            logger.warning("Notification not sent: " + problem.toStdString());
+        }
+    }
+    if (plan.requests.empty()) {
+        return;
+    }
+    if (notifier_ == nullptr) {
+        notifier_ = new Notifier(this);
+        connect(notifier_, &Notifier::sent, this, [this](const QString& service, const QString& error) {
+            if (error.isEmpty()) {
+                logger.info("Notification sent to " + service.toStdString());
+                return;  // the run's own message stays in the status bar
+            }
+            show_status(app::tr("Couldn't send the notification to {service}: {error}",
+                                {{"service", service}, {"error", error}}));
+            logger.warning("Notification to " + service.toStdString() + " failed: " + error.toStdString());
+        });
+    }
+    notifier_->send(plan.requests);
 }
 
 void MainWindow::complete_run_record() {

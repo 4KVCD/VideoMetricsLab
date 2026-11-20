@@ -82,6 +82,20 @@ const std::unordered_map<std::string, Field>& fields() {
         {"export_graph_text", &Settings::export_graph_text},
         {"hidden_metrics", &Settings::hidden_metrics},
         {"cvvdp_default_preset", &Settings::cvvdp_default_preset},
+        {"notify_finished", &Settings::notify_finished},
+        {"notify_with_failures", &Settings::notify_with_failures},
+        {"notify_cancelled", &Settings::notify_cancelled},
+        {"notify_min_minutes", &Settings::notify_min_minutes},
+        {"notify_title", &Settings::notify_title},
+        {"notify_message", &Settings::notify_message},
+        {"notify_video_line", &Settings::notify_video_line},
+        {"notify_secrets_encrypted", &Settings::notify_secrets_encrypted},
+        {"pushover_enabled", &Settings::pushover_enabled},
+        {"pushover_user", &Settings::pushover_user},
+        {"pushover_token", &Settings::pushover_token},
+        {"pushover_priority", &Settings::pushover_priority},
+        {"discord_enabled", &Settings::discord_enabled},
+        {"discord_webhook", &Settings::discord_webhook},
     };
     return by_key;
 }
@@ -295,6 +309,20 @@ std::string Settings::text() const {
     Json presets = Json::parse(cvvdp_presets_json, nullptr, false);
     data["cvvdp_presets"] = presets.is_array() ? presets : Json::array();
     data["cvvdp_default_preset"] = cvvdp_default_preset;
+    data["notify_finished"] = notify_finished;
+    data["notify_with_failures"] = notify_with_failures;
+    data["notify_cancelled"] = notify_cancelled;
+    data["notify_min_minutes"] = notify_min_minutes;
+    data["notify_title"] = notify_title;
+    data["notify_message"] = notify_message;
+    data["notify_video_line"] = notify_video_line;
+    data["notify_secrets_encrypted"] = notify_secrets_encrypted;
+    data["pushover_enabled"] = pushover_enabled;
+    data["pushover_user"] = pushover_user;
+    data["pushover_token"] = pushover_token;
+    data["pushover_priority"] = pushover_priority;
+    data["discord_enabled"] = discord_enabled;
+    data["discord_webhook"] = discord_webhook;
     return python_json_dumps(data, 2);
 }
 

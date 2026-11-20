@@ -9,6 +9,8 @@
 #include <string_view>
 #include <vector>
 
+#include "vml/notifications.h"
+
 namespace vml {
 
 // Above this many logical cores, a new install scores two videos at once.
@@ -137,6 +139,29 @@ struct Settings {
     // the SDR or HDR display, as the reference is).
     std::string cvvdp_presets_json = "[]";
     std::string cvvdp_default_preset;
+    // Notifications when a run ends (Settings > Notifications,
+    // notifications.h): for which outcomes, for runs of at least so many
+    // minutes, and the message's templates (title, message, each test
+    // video's line).
+    bool notify_finished = true;
+    bool notify_with_failures = true;
+    bool notify_cancelled = true;
+    int notify_min_minutes = 0;
+    std::string notify_title = std::string(standard_notification_title);
+    std::string notify_message = std::string(standard_notification_message);
+    std::string notify_video_line = std::string(standard_notification_video_line);
+    // Whether the services' keys are stored encrypted for this PC's user
+    // (stored_secret), or as they are.
+    bool notify_secrets_encrypted = true;
+    // Pushover: its user key and application token (as stored_secret keeps
+    // them), and the messages' priority (-2 to 1).
+    bool pushover_enabled = false;
+    std::string pushover_user;
+    std::string pushover_token;
+    int pushover_priority = 0;
+    // Discord: a channel's webhook URL (as stored_secret keeps it).
+    bool discord_enabled = false;
+    std::string discord_webhook;
 
     // The saved settings: defaults for a missing or unreadable file, and
     // for each value of the wrong type (that setting alone); unknown keys

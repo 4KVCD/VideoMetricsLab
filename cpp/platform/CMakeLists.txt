@@ -7,8 +7,8 @@ if(WIN32)
         src/console_windows.cpp src/library_windows.cpp src/pipe_windows.cpp src/process_windows.cpp
         src/system_windows.cpp)
     # The GPUs' vendor IDs; the codecs D3D11VA decodes on the GPU; the wide
-    # command line; the displays' HDR state.
-    target_link_libraries(vml_platform PRIVATE dxgi d3d11 dxguid shell32 user32)
+    # command line; the displays' HDR state; DPAPI, for secrets.
+    target_link_libraries(vml_platform PRIVATE dxgi d3d11 dxguid shell32 user32 crypt32)
 else()
     target_sources(vml_platform PRIVATE
         src/console_posix.cpp src/library_posix.cpp src/pipe_posix.cpp src/process_posix.cpp
