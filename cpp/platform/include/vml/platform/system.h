@@ -18,6 +18,17 @@ namespace vml::platform {
 // Windows, HOME elsewhere.
 std::filesystem::path home_directory();
 
+// `secret` encrypted for the user signed in to this PC (Windows' DPAPI): only
+// that user, on this PC, can read it back (reveal_for_user), so a copy of
+// what holds it (a backup, a copied profile) does not carry the secret.
+// Nothing where the system has no such protection (macOS and Linux, for now)
+// or it fails.
+std::optional<std::string> protect_for_user(std::string_view secret);
+
+// What protect_for_user encrypted, or nothing where it cannot be read back
+// (another user's or another PC's, damaged, or no such protection here).
+std::optional<std::string> reveal_for_user(std::string_view protected_bytes);
+
 // This program's own file, to start it again (for work done in a process
 // of its own).
 std::filesystem::path executable_path();

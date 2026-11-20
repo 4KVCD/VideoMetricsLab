@@ -60,6 +60,10 @@ std::vector<std::string> environment_starting_with(std::string_view prefix) {
 
 std::filesystem::path home_directory() { return environment_variable("HOME").value_or("/"); }
 
+std::optional<std::string> protect_for_user(std::string_view) { return std::nullopt; }
+
+std::optional<std::string> reveal_for_user(std::string_view) { return std::nullopt; }
+
 std::string executable_name(std::string_view name) { return std::string(name); }
 
 std::string shared_library_name(std::string_view name) {

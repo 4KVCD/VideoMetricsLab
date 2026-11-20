@@ -82,6 +82,7 @@ class FrameComparePanel;
 struct FrameComparisonEntry;
 class FillColumnTable;
 class GraphPanel;
+class Notifier;
 class OptionsPanel;
 class QuietTabWidget;
 class RunWorker;
@@ -646,6 +647,9 @@ private:
                                  const QString& stderr_tail, const MetricFailures& failures);
     void on_job_failed(int index, const QString& message, const QString& stderr_tail);
     void on_all_finished();
+    // Sends the run's notification, where Settings > Notifications asks for
+    // one (on_all_finished), and says how it went in the status bar and log.
+    void notify_run_end();
     void on_run_thread_finished(RunWorker* worker);
 
     Settings settings_;
@@ -745,6 +749,7 @@ private:
     std::vector<int> running_jobs_;  // in the order they started
     std::set<int> finished_jobs_;
     int run_failed_count_ = 0;
+    Notifier* notifier_ = nullptr;  // made at the first run-end notification
     int run_partial_count_ = 0;  // videos with some metrics failed, the rest scored
     int run_skipped_ = 0;        // ticked videos left out, as they had every score
     bool run_was_cancelled_ = false;

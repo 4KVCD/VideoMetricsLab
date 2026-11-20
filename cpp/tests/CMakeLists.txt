@@ -31,6 +31,7 @@ add_executable(vml_tests
     unit/libvmaf_test.cpp
     unit/metric_cache_test.cpp
     unit/metrics_test.cpp
+    unit/notifications_test.cpp
     unit/number_format_test.cpp
     unit/picture_placement_test.cpp
     unit/range_seek_test.cpp

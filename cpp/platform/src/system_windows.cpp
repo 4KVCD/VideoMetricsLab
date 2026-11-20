@@ -5,6 +5,8 @@
 
 #include <d3d11.h>
 #include <dxgi.h>
+#include <wincrypt.h>
+#include <dpapi.h>  // after <wincrypt.h>, which it needs
 
 #include <algorithm>
 #include <array>
@@ -62,6 +64,44 @@ std::vector<std::string> environment_starting_with(std::string_view prefix) {
     FreeEnvironmentStringsW(block);
     std::sort(found.begin(), found.end());
     return found;
+}
+
+namespace {
+
+// Mixed into what DPAPI encrypts, so that another program the user runs
+// cannot read the app's secrets back by chance.
+constexpr std::string_view secret_entropy = "VideoMetricsLab secret";
+
+DATA_BLOB blob_of(std::string_view bytes) {
+    return DATA_BLOB{static_cast<DWORD>(bytes.size()), reinterpret_cast<BYTE*>(const_cast<char*>(bytes.data()))};
+}
+
+// The bytes DPAPI gave back, freed as DPAPI asks.
+std::optional<std::string> taken_blob(BOOL done, DATA_BLOB& out) {
+    if (!done) {
+        return std::nullopt;
+    }
+    std::string bytes(reinterpret_cast<const char*>(out.pbData), out.cbData);
+    SecureZeroMemory(out.pbData, out.cbData);
+    LocalFree(out.pbData);
+    return bytes;
+}
+
+}  // namespace
+
+std::optional<std::string> protect_for_user(std::string_view secret) {
+    DATA_BLOB in = blob_of(secret);
+    DATA_BLOB entropy = blob_of(secret_entropy);
+    DATA_BLOB out{};
+    return taken_blob(CryptProtectData(&in, nullptr, &entropy, nullptr, nullptr, CRYPTPROTECT_UI_FORBIDDEN, &out), out);
+}
+
+std::optional<std::string> reveal_for_user(std::string_view protected_bytes) {
+    DATA_BLOB in = blob_of(protected_bytes);
+    DATA_BLOB entropy = blob_of(secret_entropy);
+    DATA_BLOB out{};
+    return taken_blob(CryptUnprotectData(&in, nullptr, &entropy, nullptr, nullptr, CRYPTPROTECT_UI_FORBIDDEN, &out),
+                      out);
 }
 
 std::filesystem::path home_directory() {

@@ -87,9 +87,10 @@ other metrics are not calculated again). Repeat it for more displays.
 `cvvdp_displays` in the JSON, columns `cvvdp_displays.0.score`,
 `cvvdp_displays.1.score`... in the CSV.
 
-**Settings** has four sub-tabs: **General** (the ffmpeg folder, the window,
+**Settings** has five sub-tabs: **General** (the ffmpeg folder, the window,
 and how many test videos Video Compare decodes), **Metrics** (the defaults for
-newly added videos, and the GPU metrics), **Weak segments** and **Storage**.
+newly added videos, and the GPU metrics), **Weak segments**, **Storage** and
+**Notifications** (see [Notifications](#notifications)).
 
 **Settings > General > Window** chooses the theme (the system's, Light or Dark)
 and whether the app reopens the videos it had open when it was last closed (off
@@ -221,6 +222,46 @@ the same for one run.
 Every video in a results JSON says whether its frames are in sync with the
 reference's (`frame_sync`, with a plain-language note: see
 [RESULTS_JSON.md](RESULTS_JSON.md)).
+
+### Notifications
+
+**Settings > Notifications** sends a message when a run ends, to Pushover (a
+phone or desktop app) or a Discord channel, so a run of hours needn't be
+watched.
+
+- **When a run ends:** finished, finished with failures (a video or some of
+  its metrics failed) and cancelled, each on or off, and only for runs of at
+  least so many minutes (a quick check then sends nothing).
+- **Pushover:** your user key, and the token of an application you create on
+  pushover.net for this app; the messages' priority.
+- **Discord:** a channel's webhook URL (the channel's settings, Integrations >
+  Webhooks). The message's colour says how the run ended; a name in it
+  mentions no one.
+- **Send test** sends the message shown in the preview, there and then, and
+  says what the service answered.
+- **Message:** a title, a message, and a line for each test video, each made
+  of text and fields in braces, filled in when it is sent: `{outcome}`,
+  `{duration}`, `{reference}`, `{finished}`, `{app}`, `{video_count}`,
+  `{scored_count}`, `{failed_count}` and `{videos}` (each video's line) in the
+  title and message; in a video's line `{name}`, `{result}`, `{frames}`,
+  `{scores}` (each metric's mean), `{scores.min}` (each metric's minimum; also
+  `max`, `median`, `worst_10`, `worst_5`, `worst_1`, `worst_0_1`), and a
+  metric's own: `{vmaf}`, `{vmaf.min}`, `{ssimulacra2.worst_1}`. **Insert
+  field** lists them all, and the preview shows the message as it will look.
+  **Start from** sets all three to a preset: **Status only** (how the run
+  ended and how long it took: no file name or score leaves the PC),
+  **Standard** (the default: also the reference, and each test video's name
+  and mean scores) or **Detailed** (also minimums and the worst 1 %).
+- **Keys:** the Pushover keys and the webhook URL let anyone who has them send
+  messages as you. **Encrypted for this Windows user**, the default, stores
+  them so that only you, on this PC, can read them back (Windows' DPAPI): a
+  backup or a copy of your profile doesn't carry them, and on another PC
+  they're entered again. **As plain text in settings.json** stores them as
+  they are, which anyone who can read the file can use. (On macOS and Linux
+  they are stored as plain text for now.)
+
+A message that can't be sent stops nothing: the status bar and the log say
+why, with the service's answer. The keys are never written to the log.
 
 ### AV2 videos
 

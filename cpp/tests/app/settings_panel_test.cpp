@@ -5,6 +5,7 @@
 #include <QLabel>
 #include <QComboBox>
 #include <QLineEdit>
+#include <QMenu>
 #include <QPushButton>
 #include <QScrollBar>
 #include <QSpinBox>
@@ -27,6 +28,7 @@
 #include "vml/segment_presets.h"
 #include "vml/segment_profiles.h"
 #include "vml/ffmpeg_tools.h"
+#include "vml/notifications.h"
 #include "vml/settings.h"
 #include "widgets.h"
 
@@ -72,7 +74,8 @@ TEST(SettingsPanel, ARunLocksOnlyWhatItUsesAndSaysSo) {
     EXPECT_FALSE(note->isVisibleTo(&panel));
 }
 
-// Settings is in sub-tabs: General, Metrics, Weak segments and Storage, each
+// Settings is in sub-tabs: General, Metrics, Weak segments, Storage and
+// Notifications, each
 // with its own settings. The note on what a run locks is above them, not on
 // one of them, so it shows whichever is open.
 TEST(SettingsPanel, SubTabsHoldTheSettings) {
@@ -85,7 +88,7 @@ TEST(SettingsPanel, SubTabsHoldTheSettings) {
     for (int index = 0; index < panel.sections->count(); ++index) {
         names.push_back(panel.sections->tabText(index));
     }
-    EXPECT_EQ(names, (std::vector<QString>{"General", "Metrics", "Weak segments", "Storage"}));
+    EXPECT_EQ(names, (std::vector<QString>{"General", "Metrics", "Weak segments", "Storage", "Notifications"}));
     const auto section_of = [&panel](const QWidget* control) {
         for (int index = 0; index < panel.sections->count(); ++index) {
             if (panel.sections->widget(index)->isAncestorOf(control)) {
@@ -104,6 +107,33 @@ TEST(SettingsPanel, SubTabsHoldTheSettings) {
     EXPECT_EQ(section_of(panel.log_label), "Storage");
     EXPECT_EQ(section_of(panel.run_lock_note), QString());
     EXPECT_TRUE(panel.isAncestorOf(panel.run_lock_note));
+}
+
+// Settings > Notifications: a key typed is saved as the storage chosen says,
+// encrypted where the system can, and stored again when the choice changes;
+// a preset sets the three templates, and the preview follows them.
+TEST(SettingsPanel, NotificationsStoreKeysAsChosenAndPreviewTheMessage) {
+    Settings settings;
+    FileWrites writes;
+    const Dialogs dialogs = standard_dialogs(nullptr);
+    SettingsPanel panel(settings, writes, [] { return ToolsStatus{}; }, dialogs);
+    panel.pushover_user->setText("user-key");
+    emit panel.pushover_user->editingFinished();
+    EXPECT_EQ(secret_of(settings.pushover_user), "user-key");
+    EXPECT_EQ(secret_is_encrypted(settings.pushover_user), secrets_can_be_encrypted());
+    panel.secret_storage->setCurrentIndex(1);  // as plain text
+    EXPECT_FALSE(settings.notify_secrets_encrypted);
+    EXPECT_EQ(settings.pushover_user, "user-key");
+    EXPECT_TRUE(panel.notify_preview->text().contains("encode-crf18.mkv"));  // Standard names the videos
+
+    QMenu* presets = panel.notify_presets->menu();
+    ASSERT_NE(presets, nullptr);
+    presets->actions().front()->trigger();  // Status only
+    EXPECT_EQ(settings.notify_title, "{app}: {outcome}");
+    EXPECT_EQ(settings.notify_message, "{duration}");
+    EXPECT_EQ(settings.notify_video_line, "");
+    EXPECT_FALSE(panel.notify_preview->text().contains("encode-crf18.mkv"));
+    EXPECT_TRUE(panel.notify_preview->text().contains("2:14:09"));
 }
 
 // Settings > Weak segments shows the profile in use and edits it; an edit is
