@@ -7,10 +7,12 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QSignalBlocker>
+#include <QSpinBox>
 #include <QVBoxLayout>
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 #include <fstream>
 
 #include "frame_compare_panel.h"
@@ -22,10 +24,14 @@ namespace vml::app {
 
 namespace {
 
-// The loop's seconds before and after its frame: the spin boxes' limits.
-constexpr double loop_seconds_minimum = 0.1;
+// The loop's seconds before and after its frame: the spin boxes' limits,
+// to the millisecond. None before or after is the frame alone on that side
+// (loop_restart keeps the loop at least a frame long).
+constexpr double loop_seconds_minimum = 0.0;
 constexpr double loop_seconds_maximum = 30.0;
 constexpr double default_loop_seconds = 1.0;
+constexpr int loop_seconds_decimals = 3;
+constexpr double loop_seconds_step = 0.1;
 
 // A file that is not there yet: `file`, else "name (2).png" and so on.
 std::filesystem::path unused_path(const std::filesystem::path& file) {
@@ -146,24 +152,46 @@ void FrameComparePanel::add_inspect_row(QVBoxLayout* root) {
     loop_checkbox->setToolTip(app::tr("Plays the seconds around the frame you went to, again and again: Play starts "
                                       "them from the beginning."));
     connect(loop_checkbox, &QCheckBox::toggled, this, [this](bool on) { on_loop_toggled(on); });
+    // Each side in seconds, to the millisecond, and in frames of the pair
+    // shown: either one typed sets the other (refresh_loop_frames). The
+    // seconds are what is saved, and what the loop plays.
     const auto seconds_spin = [this] {
         auto* spin = new QDoubleSpinBox;
         spin->setRange(loop_seconds_minimum, loop_seconds_maximum);
-        spin->setSingleStep(0.5);
-        spin->setDecimals(1);
+        spin->setSingleStep(loop_seconds_step);
+        spin->setDecimals(loop_seconds_decimals);
         spin->setValue(default_loop_seconds);
         spin->setSuffix(QStringLiteral(" s"));
-        connect(spin, &QDoubleSpinBox::valueChanged, this,
-                [this] { emit loop_seconds_changed(loop_before_spin->value(), loop_after_spin->value()); });
+        spin->setKeyboardTracking(false);
+        connect(spin, &QDoubleSpinBox::valueChanged, this, [this] {
+            refresh_loop_frames();
+            emit loop_seconds_changed(loop_before_spin->value(), loop_after_spin->value());
+        });
+        return spin;
+    };
+    const auto frames_spin = [this](QDoubleSpinBox* seconds) {
+        auto* spin = new QSpinBox;
+        spin->setSuffix(app::tr(" frames"));
+        spin->setKeyboardTracking(false);
+        connect(spin, &QSpinBox::valueChanged, this, [this, seconds](int frames) {
+            const double fps = loop_fps();
+            if (fps > 0) {
+                seconds->setValue(static_cast<double>(frames) / fps);  // to its millisecond
+            }
+        });
         return spin;
     };
     loop_before_spin = seconds_spin();
     loop_after_spin = seconds_spin();
+    loop_before_frames_spin = frames_spin(loop_before_spin);
+    loop_after_frames_spin = frames_spin(loop_after_spin);
     row->addWidget(loop_checkbox);
     row->addWidget(new QLabel(app::tr("before:")));
     row->addWidget(loop_before_spin);
+    row->addWidget(loop_before_frames_spin);
     row->addWidget(new QLabel(app::tr("after:")));
     row->addWidget(loop_after_spin);
+    row->addWidget(loop_after_frames_spin);
     row->addSpacing(12);
 
     save_still_button = new QPushButton(app::tr("Save still"));
@@ -228,10 +256,41 @@ void FrameComparePanel::update_worst_row() {
 // ------------------------------------------------------------ the loop
 
 void FrameComparePanel::set_loop_seconds(double before, double after) {
-    const QSignalBlocker before_blocker(loop_before_spin);
-    const QSignalBlocker after_blocker(loop_after_spin);
-    loop_before_spin->setValue(before);
-    loop_after_spin->setValue(after);
+    {
+        const QSignalBlocker before_blocker(loop_before_spin);
+        const QSignalBlocker after_blocker(loop_after_spin);
+        loop_before_spin->setValue(before);
+        loop_after_spin->setValue(after);
+    }
+    refresh_loop_frames();
+}
+
+double FrameComparePanel::loop_fps() const {
+    const FrameComparisonEntry* entry = current_entry();
+    return entry != nullptr ? entry->comparison.fps : 0.0;
+}
+
+void FrameComparePanel::refresh_loop_frames() {
+    // The frame boxes show the seconds in the pair's frames, rounded as the
+    // loop rounds them (loop_start), and reach as far as the seconds do. A
+    // pair of no known frame rate leaves them empty, and they can't be used.
+    const double fps = loop_fps();
+    for (const auto& [seconds, frames] : {std::pair{loop_before_spin, loop_before_frames_spin},
+                                          std::pair{loop_after_spin, loop_after_frames_spin}}) {
+        const QSignalBlocker blocker(frames);
+        if (fps <= 0) {
+            frames->setRange(0, 0);
+            frames->setSpecialValueText(QString::fromUtf8("\xE2\x80\x94"));  // an em dash: no frames
+            frames->setValue(0);
+            frames->setEnabled(false);
+            continue;
+        }
+        frames->setSpecialValueText(QString());
+        frames->setRange(static_cast<int>(std::llround(loop_seconds_minimum * fps)),
+                         static_cast<int>(std::llround(loop_seconds_maximum * fps)));
+        frames->setValue(static_cast<int>(std::llround(seconds->value() * fps)));
+        frames->setEnabled(seconds->isEnabled());
+    }
 }
 
 void FrameComparePanel::on_loop_toggled(bool on) {

@@ -301,6 +301,9 @@ public:
     QCheckBox* loop_checkbox = nullptr;
     QDoubleSpinBox* loop_before_spin = nullptr;
     QDoubleSpinBox* loop_after_spin = nullptr;
+    // The loop's seconds in frames of the pair shown (refresh_loop_frames).
+    QSpinBox* loop_before_frames_spin = nullptr;
+    QSpinBox* loop_after_frames_spin = nullptr;
     QPushButton* save_still_button = nullptr;
     ElidedLabel* detail_label = nullptr;
     QLabel* guide_label = nullptr;
@@ -364,6 +367,11 @@ private:
     // Issue #24's tools (frame_compare_inspect.cpp).
     void step_worst(int direction);
     void update_worst_row();
+    // The pair shown's frame rate, 0 with none (the loop's frame boxes).
+    double loop_fps() const;
+    // The loop's frame boxes from its seconds, at the pair shown's frame
+    // rate; empty and unusable where it has none.
+    void refresh_loop_frames();
     void on_loop_toggled(bool on);
     void loop_jump_to(long long frame);
     void follow_loop(long long frame);

@@ -8,10 +8,12 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDeadlineTimer>
+#include <QDoubleSpinBox>
 #include <QGuiApplication>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QSignalSpy>
 #include <QSlider>
 #include <QSpinBox>
 #include <QStackedWidget>
@@ -257,6 +259,34 @@ TEST_F(FramePanelTest, TheWorstFramesListIsSteppedThroughOnItsVideo) {
     panel->save_still_button->click();
     EXPECT_EQ(failure.toStdString(), "No export folder: choose one in Settings.");
     EXPECT_TRUE(idle(*panel));
+}
+
+// The loop's seconds are to the millisecond, and beside each its frames at
+// the pair's frame rate: either sets the other, and the seconds are saved.
+TEST_F(FramePanelTest, TheLoopIsSetInSecondsOrFrames) {
+    const auto panel = make_panel();
+    panel->set_loop_seconds(1.0, 0.5);
+    EXPECT_FALSE(panel->loop_before_frames_spin->isEnabled());  // no pair: no frame rate
+    EXPECT_EQ(panel->loop_before_spin->decimals(), 3);
+    EXPECT_DOUBLE_EQ(panel->loop_before_spin->singleStep(), 0.1);
+
+    const test::Folder folder;
+    panel->set_runs({tagged(folder, "bt709", "bt709")});  // 24 fps
+    EXPECT_EQ(panel->loop_before_frames_spin->value(), 24);
+    EXPECT_EQ(panel->loop_after_frames_spin->value(), 12);
+    EXPECT_EQ(panel->loop_before_frames_spin->isEnabled(), panel->loop_before_spin->isEnabled());
+
+    QSignalSpy saved(panel.get(), &FrameComparePanel::loop_seconds_changed);
+    panel->loop_before_frames_spin->setValue(30);
+    EXPECT_DOUBLE_EQ(panel->loop_before_spin->value(), 1.25);
+    ASSERT_EQ(saved.count(), 1);
+    EXPECT_DOUBLE_EQ(saved.at(0).at(0).toDouble(), 1.25);
+    EXPECT_DOUBLE_EQ(saved.at(0).at(1).toDouble(), 0.5);
+    panel->loop_after_frames_spin->setValue(1);
+    EXPECT_DOUBLE_EQ(panel->loop_after_spin->value(), 0.042);  // 1/24 s, to the millisecond
+    EXPECT_EQ(loop_start(48, panel->loop_after_spin->value(), 24.0), 47);  // still the one frame
+    panel->loop_after_spin->setValue(0.125);
+    EXPECT_EQ(panel->loop_after_frames_spin->value(), 3);
 }
 
 // Holding S shows the source, letting go the test video again.
