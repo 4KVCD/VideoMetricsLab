@@ -2,10 +2,14 @@
 // the entry of the video they were scored for, not as videos of their own.
 #include <gtest/gtest.h>
 
+#include <filesystem>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "results_export.h"
+#include "vml/bd_rate_report.h"
+#include "vml/python_json.h"
 #include "vml/cvvdp.h"
 #include "vml/segment_profiles.h"
 #include "vml/settings.h"
@@ -47,6 +51,48 @@ TEST(ResultsExport, FurtherDisplaysAreListedWithTheirVideo) {
     // Without CVVDP, no list.
     const ExportedRun plain{std::make_shared<ComparisonResult>(), QStringLiteral("plain")};
     EXPECT_FALSE(export_document(std::nullopt, {plain}, {}).at("videos").at(0).contains("cvvdp_displays"));
+}
+
+// PR 124's review: BD-rate's import of an exported document takes the
+// encodes rate_encode takes, also from runs without facts (loaded from run
+// files or Saved Results): not a resolution test (at the reference's
+// bitrate), scores of a range, or another row's take on the same file.
+TEST(ResultsExport, BdRatesImportTakesWhatRateEncodeTakes) {
+    const auto scored = [](const std::string& test, long long rate) {
+        auto result = std::make_shared<ComparisonResult>();
+        result->source = "Y:/clips/park_joy_1080p.y4m";
+        result->distorted = test;
+        result->distorted_info.bit_rate = rate;
+        result->metric_results.add(FrameMetricResult{"vmaf", {0, 1}, {0.0, 0.04}, {90.0F, 92.0F}, {}});
+        return result;
+    };
+    const auto encode = scored("Y:/encodes/park_q27.mkv", 4000000);
+    auto resolution_test = scored("Y:/clips/park_joy_1080p [720p].y4m", 80000000);  // the reference's rate
+    resolution_test->resample_target = ResampleTarget{1280, "720p"};
+    auto ranged = scored("Y:/encodes/park_q30.mkv", 3000000);
+    FrameMetricResult part{"psnr", {0, 1}, {0.0, 0.04}, {40.0F, 41.0F}, {}};
+    part.provenance.parameters["range_frames"] = "[0,1000]";
+    ranged->metric_results.add(part);
+    const auto twin = scored("Y:/encodes/park_q27 [without film grain].mkv", 4000000);
+    const std::vector<ExportedRun> runs{
+        {encode, QStringLiteral("q27")},
+        {resolution_test, QStringLiteral("720p")},
+        {ranged, QStringLiteral("q30")},
+        {twin, QStringLiteral("q27 without"), {}, {}, {}, {}, {}, std::filesystem::path("Y:/encodes/park_q27.mkv")}};
+    const nlohmann::ordered_json document = export_document(std::nullopt, runs, {});
+    const nlohmann::ordered_json& videos = document.at("videos");
+    for (const nlohmann::ordered_json& video : videos) {
+        EXPECT_TRUE(video.at("settings").is_null());  // no facts: as loaded
+    }
+    EXPECT_EQ(videos.at(0).at("whole_file"), true);
+    EXPECT_TRUE(videos.at(0).at("resolution_test").is_null());
+    EXPECT_TRUE(videos.at(0).at("variant_of").is_null());
+    EXPECT_EQ(videos.at(1).at("resolution_test").at("label"), "720p");
+    EXPECT_EQ(videos.at(2).at("whole_file"), false);
+    EXPECT_EQ(videos.at(3).at("variant_of"), "Y:/encodes/park_q27.mkv");
+    const RateTable table = read_rate_file(python_json_dumps(document), "results.json");
+    ASSERT_EQ(table.encodes.size(), 1U);
+    EXPECT_EQ(table.encodes[0], *rate_encode(*encode));
 }
 
 // Issue #14: the document says which of the window's runs its videos came

@@ -407,6 +407,15 @@ std::vector<ExportedRun> MainWindow::exported_runs() const {
     const auto facts_of = [this](const RowData& row_data, const CompletedRun& run) {
         return run.from_saved_scores ? saved_facts(row_data, run.result) : run.facts;
     };
+    // A row standing in for another row's file, scored another way (its
+    // path made up: add_companion_row), is that file's variant; a resolution
+    // test, a stand-in too, says what it is itself (resolution_test).
+    const auto variant_of = [](const RowData& row_data) -> std::optional<std::filesystem::path> {
+        if (row_data.options.resample_test || !row_data.media_path) {
+            return std::nullopt;
+        }
+        return *row_data.media_path;
+    };
     std::vector<ExportedRun> runs;
     std::set<std::string> listed;  // the rows' lines on the graph
     std::map<std::filesystem::path, std::size_t> run_of_row;  // a row's path: its run's place in `runs`
@@ -427,7 +436,7 @@ std::vector<ExportedRun> MainWindow::exported_runs() const {
         run_of_row[row_data->path] = runs.size();
         runs.push_back({std::shared_ptr<const ComparisonResult>(run, &run->result), run->label,
                         row_data->metric_failures, display_of(run->result, row_data->cvvdp_preset), {},
-                        facts_of(*row_data, *run), run->record});
+                        facts_of(*row_data, *run), run->record, variant_of(*row_data)});
     }
     // Another display's CVVDP is listed with the video it was scored for: in
     // its row's entry, or as an entry of its own where that row has no
@@ -440,7 +449,7 @@ std::vector<ExportedRun> MainWindow::exported_runs() const {
             runs[parent->second].other_displays.push_back({display, std::move(result), facts_of(*row_data, *run)});
         } else {
             runs.push_back({std::move(result), run->label, row_data->metric_failures, display, {},
-                            facts_of(*row_data, *run), run->record});
+                            facts_of(*row_data, *run), run->record, *row_data->cvvdp_display_of});
         }
     }
     for (const GraphPanel::Run& graphed : graph_panel_->runs()) {

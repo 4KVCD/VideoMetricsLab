@@ -617,8 +617,11 @@ A JSON file is either results as `compare --json` (a `--batch`'s too) and
 Export results write them, an encode for each video, or a run file
 (`.metrics.json`), the encode of its video. Each encode's sequence is its
 reference's file name without its extension, its rate the test video's
-bitrate, and its scores the video's. A video scored over a range, failed or
-cancelled, or of no known bitrate is left out.
+bitrate, and its scores the video's. A video scored over a range, a
+resolution test, failed or cancelled, or of no known bitrate is left out, as
+is a row that scores another row's file another way (a film grain twin, a
+"Test both" companion, CVVDP on a further display): that file's own entry is
+its encode.
 
 Sequences are paired by name; one in a single file is left out with a
 warning. A cell is n/a, with a warning on stderr, where there is no

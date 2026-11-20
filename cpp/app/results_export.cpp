@@ -53,6 +53,9 @@ Json run_entry(const ExportedRun& run) {
         }
     }
     entry["metrics"] = scored;
+    // Another row's file scored another way: not a point of its own on a
+    // BD-rate curve (read_rate_file), the file's own entry being that.
+    entry["variant_of"] = run.variant_of ? Json(platform::path_text(*run.variant_of)) : Json(nullptr);
     if (!run.cvvdp_display.empty()) {
         entry["cvvdp_display"] = run.cvvdp_display;
     }

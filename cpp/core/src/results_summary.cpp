@@ -181,6 +181,18 @@ Json cvvdp_display_entry(const std::string& name, const ComparisonResult* result
                 {"cvvdp", summary ? *summary : Json(nullptr)}};
 }
 
+bool scores_of_a_range(const ComparisonResult& result) {
+    for (const std::string& key : result.metric_results.keys()) {
+        const FrameMetricResult* frames = result.metric_results.frame(key);
+        const MetricProvenance& provenance =
+            frames != nullptr ? frames->provenance : result.metric_results.sequence(key)->provenance;
+        if (provenance.parameters.contains("range_frames")) {
+            return true;
+        }
+    }
+    return false;
+}
+
 Json summary_crop_json(const std::optional<CropBox>& box) {
     if (!box) {
         return nullptr;

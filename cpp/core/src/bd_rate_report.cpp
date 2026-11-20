@@ -12,6 +12,7 @@
 #include "vml/metrics.h"
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
+#include "vml/python_json.h"
 #include "vml/python_text.h"
 #include "vml/run_file.h"
 #include "vml/results_summary.h"
@@ -278,13 +279,33 @@ std::optional<RateTable::Encode> document_encode(const nlohmann::json& video) {
     if (status != "ok" && status != "partial") {
         return std::nullopt;  // failed or cancelled: no scores to go by
     }
-    // Scores of a range are not of the bitrate, which is the whole file's
-    // (rate_of_scores). A saved run loaded into the window records no
-    // settings: taken as the whole file, as its result is.
+    // As rate_encode takes a run's: neither a resolution test (its test
+    // video is the reference, at the reference's bitrate) nor scores of a
+    // range (the bitrate is the whole file's: rate_of_scores), which every
+    // entry the app writes says (whole_file, resolution_test, or for one
+    // without them, written before, its settings, where known). Nor another
+    // row's take on the same file (variant_of: a film grain twin, a "Test
+    // both" companion, a further CVVDP display), whose own entry is the
+    // file's point: the same bitrate twice would make the curve wrong.
+    const auto marked = [&video](const char* key) {
+        const auto found = video.find(key);
+        return found != video.end() && !found->is_null();
+    };
+    if (const auto whole = video.find("whole_file"); whole != video.end() && *whole == false) {
+        return std::nullopt;
+    }
+    if (marked("resolution_test") || marked("variant_of")) {
+        return std::nullopt;
+    }
     if (const auto settings = video.find("settings"); settings != video.end() && settings->is_object()) {
         // {"whole": true, ...} for the whole file; a part's has "whole": false.
         if (const auto range = settings->find("range");
             range != settings->end() && range->is_object() && !range->value("whole", true)) {
+            return std::nullopt;
+        }
+        if (const auto scaling = settings->find("scaling");
+            scaling != settings->end() && scaling->is_object() &&
+            scaling->contains("resolution_test") && !scaling->at("resolution_test").is_null()) {
             return std::nullopt;
         }
     }
@@ -346,7 +367,9 @@ RateTable read_rate_file(std::string_view text, const std::string& name) {
     }
     std::vector<RateTable::Encode> encodes;
     try {
-        const nlohmann::json document = nlohmann::json::parse(rest);
+        // Parsed once, a long video's run file being megabytes of per-frame
+        // scores; made readable as run files are (run_from_text).
+        const nlohmann::json document = nlohmann::json::parse(python_json_readable(std::string(rest)));
         std::vector<const nlohmann::json*> documents;
         if (const auto batch = document.find("batch"); batch != document.end() && batch->is_array()) {
             for (const nlohmann::json& each : *batch) {
@@ -369,7 +392,7 @@ RateTable read_rate_file(std::string_view text, const std::string& name) {
             }
         } else {
             // A run file: its one video.
-            const std::pair<ComparisonResult, std::string> run = run_from_text(std::string(rest));
+            const std::pair<ComparisonResult, std::string> run = run_from_json(document);
             if (std::optional<RateTable::Encode> encode = rate_encode(run.first)) {
                 encodes.push_back(std::move(*encode));
             }
@@ -413,16 +436,8 @@ std::string rate_table_csv(const RateTable& table) {
 }
 
 long long rate_of_scores(const ComparisonResult& result) {
-    if (result.resample_target) {
+    if (result.resample_target || scores_of_a_range(result)) {
         return 0;
-    }
-    for (const std::string& key : result.metric_results.keys()) {
-        const FrameMetricResult* frames = result.metric_results.frame(key);
-        const MetricProvenance& provenance =
-            frames != nullptr ? frames->provenance : result.metric_results.sequence(key)->provenance;
-        if (provenance.parameters.contains("range_frames")) {
-            return 0;
-        }
     }
     return result.distorted_info.bit_rate;
 }

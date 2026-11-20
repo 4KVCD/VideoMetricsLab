@@ -55,6 +55,10 @@ nlohmann::ordered_json cvvdp_display_entry(const std::string& name, const Compar
 // A crop as the summary's JSON has it (x, y, width, height), or null for none.
 nlohmann::ordered_json summary_crop_json(const std::optional<CropBox>& box);
 
+// Whether `result`'s scores are of only a part of the videos (a range):
+// their provenance says which frames (range_frames).
+bool scores_of_a_range(const ComparisonResult& result);
+
 // A video's media information, added to its entry: its size, frame rate,
 // codec, pixel format and duration, then what the file is (its size in
 // bytes, container, bitrate and whether it is the video's or the whole
