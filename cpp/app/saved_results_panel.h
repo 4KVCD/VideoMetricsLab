@@ -21,7 +21,7 @@
 
 class QAction;
 class QComboBox;
-class QFormLayout;
+class QGridLayout;
 class QGroupBox;
 class QLabel;
 class QLineEdit;
@@ -105,7 +105,7 @@ private:
     QLineEdit* filter_ = nullptr;
     QTableWidget* table_ = nullptr;
     QGroupBox* details_ = nullptr;
-    QFormLayout* details_form_ = nullptr;
+    QGridLayout* details_grid_ = nullptr;
     std::map<std::string, QComboBox*> score_combos_;
     QComboBox* rules_combo_ = nullptr;
     QPushButton* open_button_ = nullptr;

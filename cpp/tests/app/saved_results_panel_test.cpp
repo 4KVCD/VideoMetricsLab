@@ -3,11 +3,15 @@
 // selection read back for Metric Graphs and the exports, the weak segment
 // rules picked, and Delete (locked during a run).
 #include <QComboBox>
+#include <QCoreApplication>
+#include <QLayout>
 #include <QLineEdit>
 #include <QMenu>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QSignalSpy>
 #include <QTableWidget>
+#include <QTest>
 
 #include <gtest/gtest.h>
 
@@ -21,6 +25,7 @@
 #include "test_videos.h"
 #include "vml/analysis_request.h"
 #include "vml/metric_cache.h"
+#include "vml/metrics.h"
 #include "vml/segment_presets.h"
 
 namespace vml::app {
@@ -70,7 +75,15 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
     panel.filter()->setText("T.MP4");  // the full path, any case
     EXPECT_FALSE(table.isRowHidden(0));
 
+    // Its scores, shown when it's selected, leave the table's height as it
+    // was: the row clicked stays under the pointer.
+    panel.resize(900, 700);
+    panel.show();
+    panel.layout()->activate();
+    const int height = table.height();
     table.selectRow(0);
+    panel.layout()->activate();
+    EXPECT_EQ(table.height(), height);
     EXPECT_EQ(panel.score_choice("vmaf"), nullptr);  // one score: nothing to pick
     const std::vector<LoadedSavedResult> read = panel.selected_results();
     ASSERT_EQ(read.size(), 1U);
@@ -117,6 +130,67 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
     panel.delete_selected();
     EXPECT_EQ(deleted.count(), 1);
     EXPECT_FALSE(std::filesystem::exists(saved));
+}
+
+TEST(SavedResultsPanel, ClickingARowKeepsTheListWhereItWas) {
+    // A long list scrolled to its end: clicking one of its last rows shows
+    // its scores without the table shrinking under the pointer and
+    // scrolling away from the row clicked.
+    std::vector<SavedComparison> list(40);
+    for (std::size_t i = 0; i < list.size(); ++i) {
+        list[i].folder = std::filesystem::path("saved") / std::to_string(i);
+        list[i].label = "t" + std::to_string(i);
+        for (const MetricDefinition& metric : metrics()) {
+            for (int copy = 0; copy < 2; ++copy) {  // two of each: a list to pick from
+                list[i].scores.push_back({list[i].folder / (std::string(metric.key) + std::to_string(copy)),
+                                          std::string(metric.key), {}, 0});
+            }
+        }
+    }
+    Settings settings;
+    const Dialogs dialogs = standard_dialogs(nullptr);
+    SavedResultsPanel panel(settings, dialogs);
+    panel.show_list(list);
+    panel.resize(900, 700);
+    panel.show();
+    panel.layout()->activate();
+    QTableWidget& table = *panel.table();
+    QScrollBar& bar = *table.verticalScrollBar();
+    bar.setValue(bar.maximum());
+    const int height = table.height();
+    const int scrolled = bar.value();
+    const int last = table.rowAt(table.viewport()->height() - 2);
+    ASSERT_GE(last, 0);
+    QTest::mouseClick(table.viewport(), Qt::LeftButton, {}, table.visualItemRect(table.item(last, 0)).center());
+    panel.layout()->activate();
+    QCoreApplication::processEvents();
+    EXPECT_NE(panel.score_choice("vmaf"), nullptr);
+    EXPECT_EQ(table.height(), height);
+    EXPECT_EQ(bar.value(), scrolled);
+    EXPECT_EQ(table.rowAt(table.visualItemRect(table.item(last, 0)).center().y()), last);
+}
+
+TEST(SavedResultsPanel, AFewScoresSitAtTheTopOfTheBox) {
+    // The box is as tall as every metric needs: a comparison of one metric
+    // has its row at the top, not spread down the spare height.
+    SavedComparison one;
+    one.folder = std::filesystem::path("saved") / "one";
+    one.label = "one";
+    for (int copy = 0; copy < 2; ++copy) {
+        one.scores.push_back({one.folder / ("vmaf" + std::to_string(copy)), "vmaf", {}, 0});
+    }
+    Settings settings;
+    const Dialogs dialogs = standard_dialogs(nullptr);
+    SavedResultsPanel panel(settings, dialogs);
+    panel.show_list({one});
+    panel.resize(900, 700);
+    panel.show();
+    panel.table()->selectRow(0);
+    panel.layout()->activate();
+    QCoreApplication::processEvents();
+    QComboBox* combo = panel.score_choice("vmaf");
+    ASSERT_NE(combo, nullptr);
+    EXPECT_LE(combo->geometry().top(), 2);
 }
 
 }  // namespace
