@@ -89,6 +89,9 @@ public:
     // with one, "the selected videos'" with several); none with none. The
     // action added, or nullptr.
     QAction* fill_menu(QMenu& menu) const;
+    // The table's right-click menu, made as it opens: Open in Metric Graphs,
+    // then fill_menu's export; nothing with nothing selected.
+    void fill_context_menu(QMenu& menu);
 
 signals:
     void open_requested(const std::vector<vml::app::LoadedSavedResult>& results);

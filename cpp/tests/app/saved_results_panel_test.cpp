@@ -114,10 +114,26 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
         EXPECT_TRUE(contents->isEnabled());
     }
 
-    // A double-click opens it in Metric Graphs.
+    // A double-click opens it in Metric Graphs, as does the right-click
+    // menu's first entry, above the export.
     QSignalSpy opened(&panel, &SavedResultsPanel::open_requested);
     emit table.cellDoubleClicked(0, 0);
     EXPECT_EQ(opened.count(), 1);
+    {
+        QMenu menu;
+        panel.fill_context_menu(menu);
+        QStringList texts;
+        for (const QAction* action : menu.actions()) {
+            if (!action->isSeparator()) {
+                texts << action->text();
+            }
+        }
+        EXPECT_EQ(texts, (QStringList{"Open in Metric Graphs",
+                                      "Export this video's results, graphs and weak segments..."}));
+        menu.actions().first()->trigger();
+        EXPECT_EQ(opened.count(), 2);
+        ASSERT_EQ(opened.at(1).at(0).value<std::vector<LoadedSavedResult>>().size(), 1U);
+    }
 
     // The Export button's menu: the right-click menu's export, then each
     // kind on its own; under Weak segments, the rules, the one picked ticked.

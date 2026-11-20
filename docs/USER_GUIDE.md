@@ -670,13 +670,14 @@ test video, reference, when it was saved, its metrics and its size; **Filter**
 narrows it by file name. Select one or more to use them without adding the
 videos again:
 
-- **Open in Metric Graphs** (or double-click) adds them as lines of their own,
-  named "*video* (saved)".
+- **Open in Metric Graphs** (or double-click, or the first entry of the
+  right-click menu) adds them as lines of their own, named "*video*
+  (saved)".
 - **Export** opens a menu. Its first entry, **Export this video's...** (one
   selected) or **Export the selected videos'...** (several), exports what
   the other tabs' menus export (see [Exporting from the right-click
   menus](#exporting-from-the-right-click-menus)); right-click them for the
-  same entry. Below it, each kind on its own:
+  same entry, under Open in Metric Graphs. Below it, each kind on its own:
   - **Results**, **As JSON...** or **As CSV...**, as Export results saves
     them;
   - **Per-frame scores**, **As JSON...** or **As CSV...**: a file per
