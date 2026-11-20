@@ -2155,14 +2155,41 @@ std::optional<std::pair<int, int>> GraphPanel::shown_difference_pair() const {
     return page == pages_.end() ? std::nullopt : page->second->difference_pair();
 }
 
+void GraphPanel::fill_stats_menu(QMenu& menu, int row, StatsMenu& items) const {
+    // The statistics' right-click menu, as the Videos table's: the clicked
+    // line's video's export, where the window can export it on its own (not
+    // a line of a saved run loaded), and all the videos', each of what
+    // Settings' Exports include and named after it.
+    if (const QTableWidgetItem* item = stats_table_->item(row, 0)) {
+        const auto entry = entries_.find(item->data(Qt::UserRole).toInt());
+        if (entry != entries_.end()) {
+            items.identity = entry->second.identity;
+        }
+    }
+    const std::vector<std::string> chosen = export_items ? export_items() : std::vector<std::string>{};
+    const bool anything = !export_contents(chosen).isEmpty();
+    if (!items.identity.empty() && video_exportable && video_exportable(items.identity)) {
+        items.this_video = menu.addAction(export_action_text(ExportScope::this_video, chosen));
+        items.this_video->setEnabled(anything);
+    }
+    if (videos_exportable) {
+        items.all_videos = menu.addAction(export_action_text(ExportScope::all_videos, chosen));
+        items.all_videos->setEnabled(anything && videos_exportable());
+    }
+}
+
 void GraphPanel::show_stats_menu(const QPoint& position) {
-    // The statistics' right-click menu: Export results, the window's, which
-    // has every metric's statistics, not only those of the metric on show.
     QMenu menu(this);
-    const ExportActions exports = add_export_actions(menu, !entries_.empty());
-    if (const std::optional<ResultsFormat> format =
-            chosen_format(exports, menu.exec(stats_table_->viewport()->mapToGlobal(position)))) {
-        emit results_export_requested(*format);
+    StatsMenu items;
+    fill_stats_menu(menu, stats_table_->rowAt(position.y()), items);
+    if (menu.isEmpty()) {
+        return;
+    }
+    const QAction* chosen = menu.exec(stats_table_->viewport()->mapToGlobal(position));
+    if (chosen != nullptr && chosen == items.this_video) {
+        emit video_export_requested(items.identity);
+    } else if (chosen != nullptr && chosen == items.all_videos) {
+        emit all_videos_export_requested();
     }
 }
 

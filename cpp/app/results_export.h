@@ -59,18 +59,16 @@ struct ExportedRun {
 nlohmann::ordered_json export_document(const std::optional<VideoInfo>& reference,
                                        const std::vector<ExportedRun>& runs, const MachineFacts& machine);
 
-// The menus' two entries, CSV and JSON, added to `menu`.
-struct ExportActions {
-    QAction* csv = nullptr;
-    QAction* json = nullptr;
-};
-ExportActions add_export_actions(QMenu& menu, bool enabled);
-// The format of the entry `chosen`, or nothing for another entry.
-std::optional<ResultsFormat> chosen_format(const ExportActions& actions, const QAction* chosen);
+// What an export includes (Settings > Storage > Exports include), as the
+// right-click menus say it: the kinds of `items` (export_item_keys), results
+// once for JSON and CSV, in a list: "results, graphs and weak segments".
+// Empty when nothing is ticked.
+QString export_contents(const std::vector<std::string>& items);
 
-// Asks where to save `document`, suggesting `name` with the format's
-// extension, and saves it there; says why when it cannot.
-void save_results(const Dialogs& dialogs, const nlohmann::ordered_json& document, const QString& name,
-                  ResultsFormat format);
+// The right-click menus' exports, named after what they include: of the
+// video clicked, of all the videos (the Videos tab's run), or of the ones
+// selected (Saved results). With nothing ticked, says where to tick it.
+enum class ExportScope { this_video, all_videos, selected_videos };
+QString export_action_text(ExportScope scope, const std::vector<std::string>& items);
 
 }  // namespace vml::app

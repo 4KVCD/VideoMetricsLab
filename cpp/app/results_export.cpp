@@ -134,39 +134,39 @@ Json export_document(const std::optional<VideoInfo>& reference, const std::vecto
     return document;
 }
 
-ExportActions add_export_actions(QMenu& menu, bool enabled) {
-    ExportActions actions{menu.addAction(app::tr("Export results as CSV...")),
-                          menu.addAction(app::tr("Export results as JSON..."))};
-    actions.csv->setEnabled(enabled);
-    actions.json->setEnabled(enabled);
-    return actions;
+QString export_contents(const std::vector<std::string>& items) {
+    const auto has = [&items](std::string_view key) { return std::find(items.begin(), items.end(), key) != items.end(); };
+    QStringList kinds;
+    if (has("results_json") || has("results_csv")) {
+        kinds << app::tr("results");
+    }
+    if (has("graphs")) {
+        kinds << app::tr("graphs");
+    }
+    if (has("weak_segments")) {
+        kinds << app::tr("weak segments");
+    }
+    if (kinds.size() <= 1) {
+        return kinds.value(0);
+    }
+    const QString last = kinds.takeLast();
+    return app::tr("{items} and {last}", {{"items", kinds.join(app::tr(", "))}, {"last", last}});
 }
 
-std::optional<ResultsFormat> chosen_format(const ExportActions& actions, const QAction* chosen) {
-    if (chosen != nullptr && chosen == actions.csv) {
-        return ResultsFormat::csv;
+QString export_action_text(ExportScope scope, const std::vector<std::string>& items) {
+    const QString contents = export_contents(items);
+    if (contents.isEmpty()) {
+        return app::tr("Export: nothing is ticked in Settings > Storage > Exports include");
     }
-    if (chosen != nullptr && chosen == actions.json) {
-        return ResultsFormat::json;
+    switch (scope) {
+    case ExportScope::this_video:
+        return app::tr("Export this video's {contents}...", {{"contents", contents}});
+    case ExportScope::all_videos:
+        return app::tr("Export all videos' {contents}...", {{"contents", contents}});
+    case ExportScope::selected_videos:
+        return app::tr("Export the selected videos' {contents}...", {{"contents", contents}});
     }
-    return std::nullopt;
-}
-
-void save_results(const Dialogs& dialogs, const Json& document, const QString& name, ResultsFormat format) {
-    const bool csv = format == ResultsFormat::csv;
-    const QString path = dialogs.save_file(app::tr("Export results"), name + (csv ? ".csv" : ".json"),
-                                           csv ? app::tr("CSV file (*.csv)") : app::tr("JSON file (*.json)"));
-    if (path.isEmpty()) {
-        return;
-    }
-    // The CSV ends its lines with CR LF itself; the JSON is written as the
-    // command line writes it, a text file (CR LF on Windows).
-    std::ofstream file(path_of(path), csv ? std::ios::binary : std::ios::out);
-    file << (csv ? results_csv(document) : python_json_dumps(document) + "\n");
-    file.close();
-    if (!file) {
-        dialogs.alert(app::tr("Export failed"), app::tr("Could not write {path}", {{"path", path}}));
-    }
+    return contents;
 }
 
 }  // namespace vml::app

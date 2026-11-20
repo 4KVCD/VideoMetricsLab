@@ -19,11 +19,13 @@
 #include "vml/settings.h"
 #include "vml/weak_frames.h"
 
+class QAction;
 class QComboBox;
 class QFormLayout;
 class QGroupBox;
 class QLabel;
 class QLineEdit;
+class QMenu;
 class QPushButton;
 class QTableWidget;
 template <typename T>
@@ -42,7 +44,8 @@ class SavedResultsPanel : public QWidget {
     Q_OBJECT
 
 public:
-    enum class Export { results_json, results_csv, frames_csv, graphs, segments };
+    // `contents`: what Settings' Exports include (the right-click menu's).
+    enum class Export { contents, results_json, results_csv, frames_csv, graphs, segments };
 
     // `settings` are the window's (the saved results' folder, the weak
     // segment profiles); `dialogs` the window's, which outlive the panel.
@@ -71,6 +74,11 @@ public:
     QComboBox* score_choice(const std::string& key) const;
     QComboBox* rules_choice() const { return rules_combo_; }
     void delete_selected();
+    // The table's right-click menu: the selected comparisons' export, of
+    // what Settings' Exports include and named after it ("this video's"
+    // with one, "the selected videos'" with several); none with none. The
+    // action added, or nullptr.
+    QAction* fill_menu(QMenu& menu) const;
 
 signals:
     void open_requested(const std::vector<vml::app::LoadedSavedResult>& results);

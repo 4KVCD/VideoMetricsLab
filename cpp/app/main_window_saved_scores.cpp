@@ -407,8 +407,8 @@ void MainWindow::on_other_displays_found(int generation, const OtherDisplaysFoun
 void MainWindow::show_table_menu(const QPoint& position) {
     // The table's right-click menu: Recalculate for the selected rows, but
     // not during a run (it forgets saved scores and puts rows back to
-    // calculate, which would fight the run using them); and Export results,
-    // at any time.
+    // calculate, which would fight the run using them); and the exports, at
+    // any time.
     std::set<int> selected;
     for (const QModelIndex& index : distorted_table_->selectionModel()->selectedIndexes()) {
         selected.insert(index.row());
@@ -419,35 +419,26 @@ void MainWindow::show_table_menu(const QPoint& position) {
         recalculate = menu.addAction(app::tr("Recalculate selected metrics (ignore cached/previous results)"));
         menu.addSeparator();
     }
-    // The video clicked, once all its metrics are scored: its own exports.
+    // The video clicked, once all its metrics are scored: its own export;
+    // then all the videos'. Each of what Settings' Exports include.
     const int clicked = distorted_table_->rowAt(position.y());
     const bool scored = clicked >= 0 && scored_video(*rows_[static_cast<std::size_t>(clicked)]).has_value();
-    std::map<const QAction*, std::pair<ResultsFormat, bool>> video_exports;
+    const std::vector<std::string>& items = settings_.export_items;
+    const bool anything = !export_contents(items).isEmpty();
+    QAction* this_video = nullptr;
     if (scored) {
-        video_exports[menu.addAction(app::tr("Export this video's results as CSV..."))] = {ResultsFormat::csv, false};
-        video_exports[menu.addAction(app::tr("Export this video's graphs and results (CSV) as ZIP..."))] = {
-            ResultsFormat::csv, true};
-        video_exports[menu.addAction(app::tr("Export this video's results as JSON..."))] = {ResultsFormat::json, false};
-        video_exports[menu.addAction(app::tr("Export this video's graphs and results (JSON) as ZIP..."))] = {
-            ResultsFormat::json, true};
-        menu.addSeparator();
+        this_video = menu.addAction(export_action_text(ExportScope::this_video, items));
+        this_video->setEnabled(anything);
     }
-    const ExportActions exports = add_export_actions(menu, !exported_runs().empty());
-    QAction* all_graphs = menu.addAction(app::tr("Export all graphs as ZIP..."));
-    all_graphs->setEnabled(!scored_videos().empty());
-    QAction* segments_report = menu.addAction(app::tr("Export weak segments report..."));
-    segments_report->setEnabled(!scored_videos().empty());
+    QAction* all_videos = menu.addAction(export_action_text(ExportScope::all_videos, items));
+    all_videos->setEnabled(anything && !exported_runs().empty());
     const QAction* chosen = menu.exec(distorted_table_->viewport()->mapToGlobal(position));
     if (chosen != nullptr && chosen == recalculate) {
         recompute_rows(std::vector<int>(selected.begin(), selected.end()));
-    } else if (const auto video_export = video_exports.find(chosen); chosen != nullptr && video_export != video_exports.end()) {
-        export_video(clicked, video_export->second.first, video_export->second.second);
-    } else if (chosen != nullptr && chosen == all_graphs) {
-        on_export_all_graphs();
-    } else if (chosen != nullptr && chosen == segments_report) {
-        export_segments_report(saved_weak_rules());
-    } else if (const std::optional<ResultsFormat> format = chosen_format(exports, chosen)) {
-        export_results(*format);
+    } else if (chosen != nullptr && chosen == this_video) {
+        export_this_video(clicked);
+    } else if (chosen != nullptr && chosen == all_videos) {
+        export_all_videos();
     }
 }
 

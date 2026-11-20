@@ -473,7 +473,7 @@ $run.videos[0].metrics.vmaf.score
 | `--segments-all`, `--segments-any` | A frame is weak only where every `--segments` condition holds; or where any one does, also when the profile or preset says every one must (any is the default otherwise). One or the other. |
 | `--segment-min-frames N`, `--segment-merge-frames N` | Leave out segments shorter than N frames (default 1); join segments at most N frames apart (default 0). |
 | `--segments-dir FOLDER` | Write each video's segments to FOLDER as `<video>.<metrics>.segments.json` and `.csv`, `<metrics>` the conditions' metrics joined by `+` (`<video>.vmaf+ssimulacra2.segments.json`), as the app names them. |
-| `--segments-report FILE` | Write every test video's segments (with `--batch`, every reference's) to FILE as one report, as the app's **Export weak segments report...**: JSON, or CSV when FILE ends in `.csv`. The fields of `--json`'s path are filled in in its path. |
+| `--segments-report FILE` | Write every test video's segments (with `--batch`, every reference's) to FILE as one report, as the app's exports of all the videos with **Weak segments** ticked: JSON, or CSV when FILE ends in `.csv`. The fields of `--json`'s path are filled in in its path. |
 | `--run-dir FOLDER` | Write each video's result to FOLDER as `<video>.metrics.json`, the file **Save analysis results** writes: Metric Graphs' **Add saved run** opens it on any PC, without its saved scores. |
 | `--log-file FILE` | Also write the app's log to FILE, as the window writes its own: the whole run, whatever `-v` says, added to the end when FILE is there. |
 | `--name TEMPLATE` | Name each test video's files (`--csv`, `--segments-dir`, `--run-dir`) after TEMPLATE in place of `<video>`. Its fields: `{test}` and `{reference}` (the files' names without extension), `{version}` (the app's: `2.6`), `{date}` and `{time}` (the run's start: `20261117`, `180912`) and with `--batch` `{sequence}` (the row's, else the reference's name); `{{` and `}}` are braces. In the names, characters other than letters, digits, `-`, `_` and `.` become `_`, as in `<video>`. The same fields, but `{sequence}`, are filled in in `--json`'s, `--scores-csv`'s, `--segments-report`'s and `--log-file`'s paths, `{test}` and `{reference}` only when one video is compared. A name already taken gets a number, which the JSON's `csv`, `run_file` and `segment_files` give. |
@@ -640,8 +640,10 @@ its other streams and the container's bytes, marked ≈).
 ## Saved results and caches
 
 Save portable results as `.metrics.json` or export CSV. For the scores alone,
-right-click the Videos table or the statistics table on Metric Graphs and
-choose **Export results as CSV** or **as JSON**: either gives the same file,
+tick **Results (JSON)** or **Results (CSV)** in **Settings > Storage > Exports
+include**, then right-click the Videos table or the statistics table on Metric
+Graphs and choose **Export all videos' results...** (see [Exporting from the
+right-click menus](#exporting-from-the-right-click-menus)): either gives the same file,
 every video's score and statistics for each metric (those of every metric,
 not only the one Metric Graphs shows), in the shape the command line's
 `--json` writes. Both also record how the scores were made: the run, the
@@ -671,6 +673,10 @@ videos again:
   picked beside it: the profile in use, any profile or a preset. Weak segments
   are not saved with the scores; they are found from them as they are
   exported.
+- Right-click them for **Export this video's...** (one selected) or **Export
+  the selected videos'...** (several), as the other tabs' menus export (see
+  [Exporting from the right-click menus](#exporting-from-the-right-click-menus)),
+  with the weak segments by the rules picked beside **Export weak segments...**.
 - **Delete...** removes their saved scores, after asking: the videos are
   scored again the next time they are compared. It is locked while metrics
   are calculated.
@@ -689,8 +695,7 @@ GPU and the CPU), the newest is used unless another is picked there.
 
 ### Exporting graphs
 
-**Export all graphs...** (beside **Open metric graphs**, or in the Videos
-table's right-click menu as **Export all graphs as ZIP...**) saves the graphs
+**Export all graphs...** (beside **Open metric graphs**) saves the graphs
 of every test video scored against the reference as one `.zip` file of PNG
 images, drawn as Metric Graphs' and the Bitrate Viewer's **Export PNG** draw
 them:
@@ -710,15 +715,43 @@ reading, or a video's bitrate was never read (its scores came from saved
 results, say), the status line says the bitrate graphs are still being built,
 and the file is saved as soon as they are.
 
-Right-click a test video whose metrics are all scored for its own exports:
-**Export this video's results as CSV...** or **as JSON...** (the file
-**Export results** saves, with that video alone), or the same results with
-the video's graphs as a `.zip` file.
+### Exporting from the right-click menus
 
-**Settings > Storage > After each run** saves each video's results (JSON)
-and graphs as `<video> - VideoMetricsLab.zip` once its run ends and its
-bitrate is read: next to the test video, or in the export folder (next to the
-video while none is set). A file of the same name is replaced.
+**Settings > Storage > Exports include** chooses what every export holds,
+by the right-click menus or after each run. Tick:
+
+- **Results (JSON)** and **Results (CSV)**: scores and statistics, as the
+  results file the command line's `--json` writes: a video's alone
+  (`<video> - results.json`, `.csv`), or every video's in one file;
+- **Graphs**: each video's graph of every metric and its bitrate with the
+  reference's (`<video> - <metric>.png`), with several videos all of them
+  together too, as **Export all graphs...** draws them, once the bitrate is
+  read;
+- **Weak segments**: by the profile in use, as JSON and CSV: a video's
+  (`<video>.<metrics>.segments.json`), or every video's in one report.
+  Nothing while the profile has no condition.
+
+**As** saves them as **A .zip file** (`<video> - VideoMetricsLab.zip`, or
+named after the reference for every video), or as **Loose files** side by
+side in a folder you choose.
+
+The right-click menus of the Videos table, of Metric Graphs' statistics and
+of the Saved results tab offer an export of what is ticked, named after it:
+**Export this video's results, graphs and weak segments...** for the video
+clicked (once its metrics are all scored), and **Export all videos'
+results, graphs and weak segments...** for every test video scored against
+the reference (**Export the selected videos'...** on Saved results). Untick
+what you never want, CSV say, and it's left out of every export and every
+menu. A line of a saved run loaded with **Load analysis results** has no
+export of its own (it has no row in the Videos table), but is in all the
+videos' results.
+
+**Settings > Storage > After each run > Export each video** exports each
+video as Exports include say once its run ends: **Save to** puts it next to
+the test video, or in the export folder (next to the video while none is
+set). Files of the same names are replaced. Settings from before these
+choices carry over: results and graphs in a .zip, and weak segments as loose
+files where they were exported alone.
 
 ### Weak segment profiles
 
@@ -758,21 +791,23 @@ The weak segments exports follow the profile in use (or, from the Weak
 segments dialog, the dialog's rules), and are named after the metrics their
 conditions cover.
 
-- **Export weak segments report...** in the Videos table's right-click menu
-  saves every test video scored against the reference, by the profile in use,
-  in one file, JSON or CSV as its name says. **Export all videos...** in the
-  Weak segments dialog does the same by the dialog's conditions, saved or
-  not (over the whole videos, without a highlighted range).
+- With **Weak segments** ticked in **Settings > Storage > Exports
+  include**, **Export all videos'...** in the right-click menus saves every
+  test video scored against the reference, by the profile in use, in one
+  report, as JSON and CSV. **Export all videos...** in the Weak segments
+  dialog saves it by the dialog's conditions, saved or not (over the whole
+  videos, without a highlighted range), in one file, JSON or CSV as its name
+  says.
   The JSON gives the conditions and options, then each video's `name`,
   `path`, `reference`, `segment_count`, `weak_frames` (the segments' frames
   added up) and `segments`; the CSV is a row per segment, led by its video
   and reference. With strict conditions it can be far smaller than the
   results file; with loose ones, on a film, far larger.
-- **Settings > Weak segments > After each run** saves each video's
-  segments as `<video>.<metrics>.segments.json` and `.csv` once its run ends:
-  next to the test video, or in the export folder (next to the video while
-  none is set). Files of the same names are replaced. Nothing is saved while
-  no condition is set.
+- **Settings > Storage > After each run** saves each video's segments as
+  `<video>.<metrics>.segments.json` and `.csv` once its run ends, with the
+  rest that Exports include (see [Exporting from the right-click
+  menus](#exporting-from-the-right-click-menus)). Nothing is saved while no
+  condition is set.
 
 The command line does the same with `--segments saved`, `--segments-dir`
 and `--segments-report` (see [Command line](#command-line)).

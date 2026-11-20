@@ -288,13 +288,21 @@ public:
     // The colours Export PNG draws in (Settings' Exported graphs), asked at
     // each export; the light chart colours when not set.
     std::function<theme::ChartColours()> export_colours;
+    // The statistics' right-click exports, as the Videos table's: what they
+    // include (Settings' export_items), whether a line's video (its
+    // identity) can be exported on its own, and whether the run can: the
+    // window's, asked as the menu opens. Not set: no such export offered.
+    std::function<std::vector<std::string>()> export_items;
+    std::function<bool(const std::string& identity)> video_exportable;
+    std::function<bool()> videos_exportable;
 
 signals:
     // The metric the user chose to look at.
     void metric_changed(const QString& key);
-    // Export results, chosen from the table's right-click menu: the window's
-    // export, the same from either table (results_export.h).
-    void results_export_requested(ResultsFormat format);
+    // The statistics' right-click menu, as the Videos table's: a line's
+    // video's export, or all the videos', of what Settings' Exports include.
+    void video_export_requested(const std::string& identity);
+    void all_videos_export_requested();
     // A frame of a line's video to see in Video Compare (Worst frames, Weak
     // segments): the line's identity, Video Compare's pair; from Worst
     // frames, its list too, to step through there (else no stops).
@@ -348,6 +356,14 @@ private:
     // The page in view's difference pair (MetricPage::difference_pair).
     std::optional<std::pair<int, int>> shown_difference_pair() const;
     void show_stats_menu(const QPoint& position);
+    // The statistics' right-click menu's items, for the table's `row` (a
+    // line's video, or none): show_stats_menu's, and the tests'.
+    struct StatsMenu {
+        std::string identity;  // the row's line's, if any
+        QAction* this_video = nullptr;
+        QAction* all_videos = nullptr;
+    };
+    void fill_stats_menu(QMenu& menu, int row, StatsMenu& items) const;
     // Worst frames brought up to date for the page shown, the lines shown
     // and the range, while it is open.
     void refresh_worst_frames();

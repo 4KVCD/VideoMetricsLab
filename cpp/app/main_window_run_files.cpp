@@ -451,10 +451,4 @@ std::vector<ExportedRun> MainWindow::exported_runs() const {
     return runs;
 }
 
-void MainWindow::export_results(ResultsFormat format) {
-    // Named after the reference, whose test videos the Videos tab scores.
-    const QString name = source_info_ ? text_of(source_info_->path.stem()) + "_results" : QStringLiteral("results");
-    save_results(dialogs_, export_document(source_info_, exported_runs(), current_machine()), name, format);
-}
-
 }  // namespace vml::app
