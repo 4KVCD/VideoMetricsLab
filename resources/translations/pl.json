@@ -366,6 +366,7 @@
   "Pending": "Oczekuje",
   "Black bars will be detected when this row is run.": "Czarne pasy zostaną wykryte przy obliczaniu tego wiersza.",
   "Test video": "Wideo testowe",
+  "Test videos": "Filmy testowe",
   "Reference": "Referencja",
   "Black-bar detection was disabled for this run; no crop was applied.": "Wykrywanie czarnych pasów było wyłączone dla tego przebiegu; nie zastosowano kadrowania.",
   "Yes": "Tak",

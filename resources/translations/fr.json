@@ -366,6 +366,7 @@
   "Pending": "En attente",
   "Black bars will be detected when this row is run.": "Les bandes noires seront détectées à l'exécution de cette ligne.",
   "Test video": "Vidéo de test",
+  "Test videos": "Vidéos de test",
   "Reference": "Référence",
   "Black-bar detection was disabled for this run; no crop was applied.": "La détection des bandes noires était désactivée pour cette exécution ; aucun recadrage appliqué.",
   "Yes": "Oui",

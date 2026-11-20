@@ -366,6 +366,7 @@
   "Pending": "Chờ",
   "Black bars will be detected when this row is run.": "Viền đen được phát hiện khi hàng này chạy.",
   "Test video": "Video thử",
+  "Test videos": "Video thử nghiệm",
   "Reference": "Tham chiếu",
   "Black-bar detection was disabled for this run; no crop was applied.": "Phát hiện viền đen đã tắt ở lần chạy này; không cắt.",
   "Yes": "Có",

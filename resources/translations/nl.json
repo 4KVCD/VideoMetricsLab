@@ -366,6 +366,7 @@
   "Pending": "In afwachting",
   "Black bars will be detected when this row is run.": "Zwarte balken worden gedetecteerd wanneer deze rij wordt verwerkt.",
   "Test video": "Testvideo",
+  "Test videos": "Testvideo's",
   "Reference": "Referentie",
   "Black-bar detection was disabled for this run; no crop was applied.": "Detectie van zwarte balken stond uit voor deze run; niet bijgesneden.",
   "Yes": "Ja",

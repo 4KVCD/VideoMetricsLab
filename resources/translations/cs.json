@@ -366,6 +366,7 @@
   "Pending": "Čeká",
   "Black bars will be detected when this row is run.": "Černé pruhy se zjistí při zpracování tohoto řádku.",
   "Test video": "Testovací video",
+  "Test videos": "Testovací videa",
   "Reference": "Reference",
   "Black-bar detection was disabled for this run; no crop was applied.": "Detekce černých pruhů byla pro tento běh vypnutá; bez ořezu.",
   "Yes": "Ano",

@@ -241,6 +241,23 @@ TEST_F(Appearance, EveryRoleInTheWindowIsOneModernStyles) {
         }
     }
     EXPECT_GT(given, 0);  // the window's roles were found at all
+
+    // The Videos tab's: the test videos a card, its buttons a footer, the
+    // removing ones quiet.
+    const auto* card = window_->findChild<QWidget*>("testsCard");
+    ASSERT_NE(card, nullptr);
+    EXPECT_EQ(card->property("vmlRole").toString(), "card");
+    const auto* footer = window_->findChild<QWidget*>("testsFooter");
+    ASSERT_NE(footer, nullptr);
+    EXPECT_EQ(footer->property("vmlRole").toString(), "footer");
+    int removing = 0;
+    for (const QPushButton* button : footer->findChildren<QPushButton*>()) {
+        if (button->text() == "Remove all" || button->text() == "Remove selected") {
+            ++removing;
+            EXPECT_EQ(button->property("vmlRole").toString(), "quiet");
+        }
+    }
+    EXPECT_EQ(removing, 2);
 }
 
 TEST_F(Appearance, ModernLight) {

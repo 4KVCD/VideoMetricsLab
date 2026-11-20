@@ -366,6 +366,7 @@
   "Pending": "Bekliyor",
   "Black bars will be detected when this row is run.": "Siyah bantlar bu satır çalıştırıldığında algılanacak.",
   "Test video": "Test videosu",
+  "Test videos": "Test videoları",
   "Reference": "Referans",
   "Black-bar detection was disabled for this run; no crop was applied.": "Bu çalıştırmada siyah bant algılama kapalıydı; kırpma uygulanmadı.",
   "Yes": "Evet",

@@ -366,6 +366,7 @@
   "Pending": "Pendente",
   "Black bars will be detected when this row is run.": "As barras pretas serão detectadas quando esta linha for executada.",
   "Test video": "Vídeo de teste",
+  "Test videos": "Vídeos de teste",
   "Reference": "Referência",
   "Black-bar detection was disabled for this run; no crop was applied.": "A detecção de barras pretas estava desligada nesta execução; nenhum recorte aplicado.",
   "Yes": "Sim",

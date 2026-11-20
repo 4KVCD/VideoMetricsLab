@@ -364,6 +364,7 @@
   "Pending": "대기 중",
   "Black bars will be detected when this row is run.": "이 행을 실행할 때 검은 띠를 감지합니다.",
   "Test video": "테스트 영상",
+  "Test videos": "테스트 동영상",
   "Reference": "참조 영상",
   "Black-bar detection was disabled for this run; no crop was applied.": "이 실행에서는 검은 띠 감지가 꺼져 있었습니다. 자르기를 적용하지 않았습니다.",
   "Yes": "예",

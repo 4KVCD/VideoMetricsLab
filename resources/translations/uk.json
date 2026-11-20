@@ -366,6 +366,7 @@
   "Pending": "Очікує",
   "Black bars will be detected when this row is run.": "Чорні смуги визначаються під час обробки цього рядка.",
   "Test video": "Тестове відео",
+  "Test videos": "Тестові відео",
   "Reference": "Еталон",
   "Black-bar detection was disabled for this run; no crop was applied.": "Виявлення чорних смуг було вимкнене для цього запуску; обрізання не застосовано.",
   "Yes": "Так",

@@ -366,6 +366,7 @@
   "Pending": "قيد الانتظار",
   "Black bars will be detected when this row is run.": "ستُكتشف الأشرطة السوداء عند تشغيل هذا الصف.",
   "Test video": "فيديو الاختبار",
+  "Test videos": "فيديوهات الاختبار",
   "Reference": "المرجع",
   "Black-bar detection was disabled for this run; no crop was applied.": "كان اكتشاف الأشرطة السوداء معطَّلًا في هذا التشغيل؛ لم يُطبَّق اقتصاص.",
   "Yes": "نعم",

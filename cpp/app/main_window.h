@@ -58,6 +58,7 @@
 
 class QCheckBox;
 class QGroupBox;
+class QBoxLayout;
 class QHBoxLayout;
 class QLabel;
 class QLineEdit;
@@ -262,10 +263,10 @@ private:
     void build_ui();
     QWidget* build_files_panel();
     // build_files_panel's parts.
-    void add_reference_row(QVBoxLayout* layout);
+    void add_reference_row(QBoxLayout* layout);
     QHBoxLayout* build_table_heading();
     void build_test_table();
-    std::vector<QWidget*> add_file_buttons(QVBoxLayout* layout);
+    std::vector<QWidget*> add_file_buttons(QBoxLayout* buttons);
     QWidget* build_run_panel();
     void theme_changed();
     void apply_theme_colours();

@@ -366,6 +366,7 @@
   "Pending": "รอดำเนินการ",
   "Black bars will be detected when this row is run.": "จะตรวจหาแถบดำเมื่อแถวนี้ทำงาน",
   "Test video": "วิดีโอทดสอบ",
+  "Test videos": "วิดีโอทดสอบ",
   "Reference": "วิดีโออ้างอิง",
   "Black-bar detection was disabled for this run; no crop was applied.": "การรันนี้ปิดการตรวจหาแถบดำ ไม่มีการครอป",
   "Yes": "ใช่",

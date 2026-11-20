@@ -364,6 +364,7 @@
   "Pending": "保留中",
   "Black bars will be detected when this row is run.": "この行を実行するときに黒帯を検出します。",
   "Test video": "テスト動画",
+  "Test videos": "テスト動画",
   "Reference": "参照動画",
   "Black-bar detection was disabled for this run; no crop was applied.": "この実行では黒帯の検出が無効でした。クロップは適用されていません。",
   "Yes": "はい",

@@ -366,6 +366,7 @@
   "Pending": "Ожидается",
   "Black bars will be detected when this row is run.": "Чёрные полосы будут определены при расчёте этой строки.",
   "Test video": "Тестовое видео",
+  "Test videos": "Тестовые видео",
   "Reference": "Эталон",
   "Black-bar detection was disabled for this run; no crop was applied.": "Определение чёрных полос для этого расчёта было отключено; обрезка не применялась.",
   "Yes": "Да",

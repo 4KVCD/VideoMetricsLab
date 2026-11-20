@@ -364,6 +364,7 @@
   "Pending": "待定",
   "Black bars will be detected when this row is run.": "运行此行时会检测黑边。",
   "Test video": "测试视频",
+  "Test videos": "测试视频",
   "Reference": "参考视频",
   "Black-bar detection was disabled for this run; no crop was applied.": "此次运行禁用了黑边检测；未进行裁切。",
   "Yes": "是",

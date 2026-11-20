@@ -366,6 +366,7 @@
   "Pending": "Tertunda",
   "Black bars will be detected when this row is run.": "Bilah hitam dideteksi saat baris ini diproses.",
   "Test video": "Video uji",
+  "Test videos": "Video uji",
   "Reference": "Referensi",
   "Black-bar detection was disabled for this run; no crop was applied.": "Deteksi bilah hitam nonaktif untuk proses ini; tidak ada pemotongan.",
   "Yes": "Ya",

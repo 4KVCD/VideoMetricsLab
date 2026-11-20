@@ -366,6 +366,7 @@
   "Pending": "Függőben",
   "Black bars will be detected when this row is run.": "A fekete sávok felismerése a sor futtatásakor történik.",
   "Test video": "Tesztvideó",
+  "Test videos": "Tesztvideók",
   "Reference": "Referencia",
   "Black-bar detection was disabled for this run; no crop was applied.": "A fekete sávok felismerése ki volt kapcsolva ebben a futtatásban; nincs vágás.",
   "Yes": "Igen",
