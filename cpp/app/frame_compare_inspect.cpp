@@ -133,9 +133,12 @@ void StillSaveWorker::run() {
 
 // ------------------------------------------------------------ the row
 
-// Previous / Next worst with where the list is, the loop, and Save still.
+// Previous / Next worst with where the list is, the loop, and Save still:
+// centred, as the controls above and the frame's line below are.
 void FrameComparePanel::add_inspect_row(QVBoxLayout* root) {
     auto* row = new QHBoxLayout;
+    inspect_row_ = row;
+    row->addStretch(1);
     previous_worst_button = new QPushButton(app::tr("Previous worst"));
     connect(previous_worst_button, &QPushButton::clicked, this, [this] { step_worst(-1); });
     worst_label = new QLabel;
@@ -146,7 +149,8 @@ void FrameComparePanel::add_inspect_row(QVBoxLayout* root) {
         widget->hide();
         row->addWidget(widget);
     }
-    row->addStretch(1);
+    worst_spacer_ = new QSpacerItem(0, 0, QSizePolicy::Fixed, QSizePolicy::Minimum);
+    row->addSpacerItem(worst_spacer_);  // 24 px while the worst frames are shown (update_worst_row)
 
     loop_checkbox = new QCheckBox(app::tr("Loop"));
     loop_checkbox->setToolTip(app::tr("Plays the seconds around the frame you went to, again and again: Play starts "
@@ -200,6 +204,7 @@ void FrameComparePanel::add_inspect_row(QVBoxLayout* root) {
                                           "mapped to SDR. They are decoded as Video Compare's still frames are."));
     connect(save_still_button, &QPushButton::clicked, this, [this] { save_still(); });
     row->addWidget(save_still_button);
+    row->addStretch(1);
     root->addLayout(row);
 }
 
@@ -240,6 +245,10 @@ void FrameComparePanel::update_worst_row() {
     for (QWidget* widget : std::initializer_list<QWidget*>{previous_worst_button, worst_label, next_worst_button}) {
         widget->setVisible(shown);
     }
+    // Room between them and the loop only while they show: else the centred
+    // row would sit off its centre by it.
+    worst_spacer_->changeSize(shown ? 24 : 0, 0, QSizePolicy::Fixed, QSizePolicy::Minimum);
+    inspect_row_->invalidate();
     if (!shown) {
         return;
     }
