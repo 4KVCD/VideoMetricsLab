@@ -108,6 +108,21 @@ newly added videos, and the GPU metrics), **Weak segments**, **Storage** and
 and whether the app reopens the videos it had open when it was last closed (off
 by default).
 
+**Interface** chooses how the window looks; nothing else changes with it:
+
+- **VML Classic** (the default): the window as it has always been, in the
+  system's own controls.
+- **VML Modern**: boxes as cards, each tab's main action (**Calculate
+  metrics**, **Open in Metric Graphs**, **Play**, **Calculate bitrate**) in the
+  accent colour, actions that delete in red, and ticked boxes and the selection
+  in the accent. It follows the theme, light or dark.
+
+VML Modern shows at once; VML Classic, chosen while VML Modern is shown, when
+the app is next started. **Accent**, usable with VML Modern, is the system's
+(**Same as Windows**), one of six, or **Custom...**, a colour picked in a
+dialog; text on it is dark or light, whichever reads. VML Classic keeps the
+system's accent.
+
 While metrics are calculated, Settings stays open, but the ffmpeg folder, the
 saved results' folder and **Clear saved results** are locked until the run
 ends, as a note at the top of the tab says, above the sub-tabs: the run uses

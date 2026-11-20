@@ -99,11 +99,11 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
     connect(&file_writes_, &FileWrites::became_idle, this, [this] { on_file_writes_idle(); });
     auto* layout = new QVBoxLayout(this);
     // Shown while metrics are calculated (set_run_active).
-    run_lock_note = new QLabel(QStringLiteral("\U0001F512 ") +
-                               app::tr("Metrics are being calculated: the ffmpeg folder, the saved results' folder and "
-                                       "Clear saved results are locked until the run ends, because the run uses them. "
-                                       "Everything else can be changed now."));
+    // A padlock before it in Classic; in VML Modern a tinted strip (the
+    // notice role), its text alone (set_run_active).
+    run_lock_note = new QLabel;
     run_lock_note->setObjectName("runLockNote");
+    theme::set_role(run_lock_note, "notice");
     run_lock_note->setWordWrap(true);
     theme::style(run_lock_note, "color: {muted};");
     run_lock_note->hide();
@@ -116,6 +116,8 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
     sections->setObjectName("settingsSections");
     sections->setDocumentMode(true);
     keep_focus_on_tab_click(sections);  // a section clicked focuses none of its boxes
+    theme::set_role(sections, "segmented");  // VML Modern: a row of pills
+    theme::set_role(sections->tabBar(), "segmented");
     const auto add_section = [this](const QString& name, std::initializer_list<QGroupBox*> boxes) {
         auto* page = new QWidget;
         auto* page_layout = new QVBoxLayout(page);
@@ -190,6 +192,7 @@ QGroupBox* SettingsPanel::build_storage_box() {
 
     cache_summary = new QLabel;
     auto* clear_cache = new QPushButton(app::tr("Clear saved results"));
+    theme::set_role(clear_cache, "danger");
     connect(clear_cache, &QPushButton::clicked, this, [this] { clear_saved_results(); });
     auto* summary_row = new QHBoxLayout;
     summary_row->addWidget(cache_summary, 1);
@@ -612,7 +615,7 @@ QGroupBox* SettingsPanel::build_defaults_box() {
     auto* defaults_layout = new QVBoxLayout(defaults_box);
     auto* hint = new QLabel(app::tr("These are only a starting point -- each video's own settings are "
                                     "edited in the Videos tab."));
-    theme::style(hint, "color: {muted}; font-style: italic;");
+    theme::style(hint, "color: {muted}; font-style: {hint_style};");
     defaults_layout->addWidget(hint);
     default_gpu = new QCheckBox(app::tr("Use GPU decoding"));
     default_gpu->setChecked(settings_.default_gpu_decode);
@@ -868,6 +871,79 @@ QGroupBox* SettingsPanel::build_window_box() {
     theme_row->addWidget(theme);
     theme_row->addStretch(1);
     window_layout->addLayout(theme_row);
+    // The interface and the accent, at once (theme::apply_appearance).
+    interface_choice = new QComboBox;
+    interface_choice->addItem(app::tr("VML Classic"), "classic");
+    interface_choice->addItem(app::tr("VML Modern"), "modern");
+    interface_choice->setCurrentIndex(theme::interface_of(settings_.interface_style) == theme::Interface::modern ? 1 : 0);
+    interface_choice->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    interface_choice->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    interface_choice->setToolTip(app::tr("VML Classic: the window as it has always been, in the system's own "
+                                         "controls. VML Modern: boxes as cards, a tab's main action in the accent "
+                                         "color, and scores that read first. VML Modern shows at once, VML "
+                                         "Classic when the app is next started; nothing else changes with them."));
+    connect(interface_choice, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
+    auto* interface_row = new QHBoxLayout;
+    interface_row->addWidget(new QLabel(app::tr("Interface:")));
+    interface_row->addWidget(interface_choice);
+    interface_row->addStretch(1);
+    window_layout->addLayout(interface_row);
+    accent_choice = new QComboBox;
+    const auto swatch = [](const QColor& colour) {
+        QPixmap pixmap(14, 14);
+        pixmap.fill(colour);
+        QPainter painter(&pixmap);
+        painter.setPen(QColor(128, 128, 128));
+        painter.drawRect(0, 0, 13, 13);
+        painter.end();
+        return QIcon(pixmap);
+    };
+#ifdef __APPLE__
+    accent_choice->addItem(app::tr("Same as macOS"), "");
+#else
+    accent_choice->addItem(app::tr("Same as Windows"), "");
+#endif
+    const std::pair<const char*, const char*> presets[] = {
+        {N_("Lilac"), "#c38fe8"}, {N_("Blue"), "#4f8fe8"},  {N_("Teal"), "#2fa9b2"},
+        {N_("Green"), "#3fa66b"}, {N_("Amber"), "#d98a2b"}, {N_("Rose"), "#e0607e"},
+    };
+    for (const auto& [name, hex] : presets) {
+        accent_choice->addItem(swatch(QColor(hex)), app::tr(name), QString::fromLatin1(hex));
+    }
+    accent_choice->addItem(app::tr("Custom..."), "");
+    const QString chosen_accent = text_of(settings_.accent_colour).toLower();
+    int accent_index = chosen_accent.isEmpty() ? 0 : accent_choice->findData(chosen_accent);
+    if (accent_index < 0 && theme::accent_of(settings_.accent_colour)) {
+        // A colour of one's own: the Custom item holds it.
+        accent_index = accent_choice->count() - 1;
+        accent_choice->setItemData(accent_index, chosen_accent);
+        accent_choice->setItemText(accent_index, app::tr("Custom ({color})", {{"color", chosen_accent.toUpper()}}));
+        accent_choice->setItemIcon(accent_index, swatch(QColor(chosen_accent)));
+    }
+    accent_choice->setCurrentIndex(std::max(0, accent_index));
+    accent_choice->setProperty("previous", accent_choice->currentIndex());
+    accent_choice->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    accent_choice->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    accent_choice->setToolTip(app::tr("VML Modern's color for each tab's main button, ticked boxes and the "
+                                      "selection; text on it is dark or light, whichever reads. VML Classic keeps "
+                                      "the system's."));
+    // Modern's alone (theme::apply_palette): usable while it is chosen.
+    accent_choice->setEnabled(interface_choice->currentData().toString() == "modern");
+    connect(interface_choice, &QComboBox::currentIndexChanged, accent_choice,
+            [this] { accent_choice->setEnabled(interface_choice->currentData().toString() == "modern"); });
+    connect(accent_choice, &QComboBox::activated, this, [this](int index) {
+        if (index == accent_choice->count() - 1) {
+            choose_custom_accent();
+            return;
+        }
+        accent_choice->setProperty("previous", index);
+        on_edited();
+    });
+    auto* accent_row = new QHBoxLayout;
+    accent_row->addWidget(new QLabel(app::tr("Accent:")));
+    accent_row->addWidget(accent_choice);
+    accent_row->addStretch(1);
+    window_layout->addLayout(accent_row);
     remember_size = new QCheckBox(app::tr("Reopen where and at the size the window was last closed"));
     remember_size->setChecked(settings_.remember_window_size);
     connect(remember_size, &QCheckBox::toggled, this, [this] { on_edited(); });
@@ -1035,10 +1111,14 @@ void SettingsPanel::on_edited() {
     if (settings_.ffmpeg_dir != before.ffmpeg_dir) {
         emit ffmpeg_folder_changed();  // after the save: the tools are looked for in the folder saved
     }
+    const bool classic_later = settings_.interface_style != before.interface_style &&
+                               theme::interface_of(settings_.interface_style) == theme::Interface::classic &&
+                               theme::current_interface() == theme::Interface::modern;
     status->setText(error                                     ? tr_message(text_of(*error))
                     : settings_.language != before.language ? app::tr("Settings saved. The new language shows when "
                                                                        "the app is next started.")
-                                                             : app::tr("Settings saved."));
+                    : classic_later ? app::tr("Settings saved. VML Classic shows when the app is next started.")
+                                    : app::tr("Settings saved."));
     if (settings_.ffmpeg_dir != before.ffmpeg_dir || settings_.cache_dir != before.cache_dir) {
         refresh_status();
     }
@@ -1087,6 +1167,8 @@ void SettingsPanel::read_controls() {
     settings_.check_for_updates = check_updates->isChecked();
     settings_.language = language->currentData().toString().toStdString();
     settings_.theme = theme->currentData().toString().toStdString();
+    settings_.interface_style = interface_choice->currentData().toString().toStdString();
+    settings_.accent_colour = accent_choice->currentData().toString().toStdString();
     settings_.gpu_metrics_together = gpu_together->isChecked();
     if (gpu_choice != nullptr) {
         settings_.gpu = gpu_choice->currentData().toString().toStdString();
@@ -1118,12 +1200,26 @@ void SettingsPanel::set_run_active(bool active) {
             widget->setToolTip(widget->property("unlockedToolTip").toString());
         }
     }
+    if (active) {
+        const QString text = app::tr("Metrics are being calculated: the ffmpeg folder, the saved results' folder and "
+                                     "Clear saved results are locked until the run ends, because the run uses them. "
+                                     "Everything else can be changed now.");
+        run_lock_note->setText(theme::current_interface() == theme::Interface::modern
+                                   ? text
+                                   : QStringLiteral("\U0001F512 ") + text);
+    }
     run_lock_note->setVisible(active);
 }
 
 void SettingsPanel::apply_global_changes(const Settings& before) {
     if (settings_.theme != before.theme) {
         theme::apply_theme(text_of(settings_.theme));  // the window's changeEvent follows
+    }
+    // VML Modern at once, its accent too; VML Classic, chosen while Modern
+    // is shown, at the next start (theme::apply_appearance; the status says so).
+    if ((settings_.interface_style != before.interface_style || settings_.accent_colour != before.accent_colour) &&
+        theme::interface_of(settings_.interface_style) == theme::Interface::modern) {
+        theme::apply_appearance(theme::Interface::modern, theme::accent_of(settings_.accent_colour));
     }
 }
 
@@ -1170,6 +1266,39 @@ void SettingsPanel::choose_export_color(QPushButton* button, const QString& titl
         return;
     }
     button->setProperty("chosen", reset ? QString() : dialog.currentColor().name());
+    on_edited();
+}
+
+void SettingsPanel::choose_custom_accent() {
+    // Starts at the accent in use: the chosen one, else the palette's.
+    const int custom = accent_choice->count() - 1;
+    const std::optional<QColor> current = theme::accent_of(settings_.accent_colour);
+    QColorDialog dialog(current.value_or(QApplication::palette().color(QPalette::Accent)), this);
+    dialog.setWindowTitle(app::tr("Accent color"));
+    dialog.setOption(QColorDialog::DontUseNativeDialog, true);
+    if (dialog.exec() != QDialog::Accepted) {
+        const QSignalBlocker blocker(accent_choice);
+        accent_choice->setCurrentIndex(accent_choice->property("previous").toInt());
+        return;
+    }
+    const QString hex = dialog.currentColor().name().toLower();
+    const int preset = accent_choice->findData(hex);
+    const QSignalBlocker blocker(accent_choice);
+    if (preset >= 0 && preset != custom) {
+        accent_choice->setCurrentIndex(preset);  // a preset's own colour: that preset
+    } else {
+        QPixmap pixmap(14, 14);
+        pixmap.fill(QColor(hex));
+        QPainter painter(&pixmap);
+        painter.setPen(QColor(128, 128, 128));
+        painter.drawRect(0, 0, 13, 13);
+        painter.end();
+        accent_choice->setItemData(custom, hex);
+        accent_choice->setItemText(custom, app::tr("Custom ({color})", {{"color", hex.toUpper()}}));
+        accent_choice->setItemIcon(custom, QIcon(pixmap));
+        accent_choice->setCurrentIndex(custom);
+    }
+    accent_choice->setProperty("previous", accent_choice->currentIndex());
     on_edited();
 }
 

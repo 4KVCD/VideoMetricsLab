@@ -247,6 +247,8 @@ int main(int argc, char** argv) {
     apply_language(QString::fromStdString(settings.language));
     // Before the window is built, which reads it to colour itself.
     app::theme::apply_theme(QString::fromStdString(settings.theme));
+    app::theme::apply_appearance(app::theme::interface_of(settings.interface_style),
+                                 app::theme::accent_of(settings.accent_colour));
     app_log::write(app_log::Level::info, "vml.main",
                    "Theme: " + (settings.theme.empty() ? "as " + system_name : settings.theme));
     // The first probes load Vship and start the GPU's driver, which takes

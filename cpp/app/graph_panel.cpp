@@ -370,7 +370,7 @@ MetricPage::MetricPage(const MetricDefinition& metric, QWidget* parent)
                                         "header before running to see it here.",
                                         {{"label", qt_text(metric.label)}}));
     no_data_label_->setAlignment(Qt::AlignCenter);
-    theme::style(no_data_label_, "color: {faint}; font-style: italic; padding: 12px;");
+    theme::style(no_data_label_, "color: {faint}; font-style: {hint_style}; padding: 12px;");
     no_data_label_->setVisible(false);
     layout->addWidget(no_data_label_);
 
@@ -1229,11 +1229,14 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     tabs_ = new QuietTabWidget;
     // The metric tabs' own look: the native one can make the selected tab
     // hard to tell from the others.
-    tabs_->tabBar()->setStyleSheet(QStringLiteral(
-        "QTabBar::tab { padding: 7px 16px; margin-right: 3px; background: palette(button); "
-        "color: palette(button-text); border: 1px solid palette(mid); border-bottom: 3px solid transparent; }"
-        "QTabBar::tab:selected { background: palette(highlight); color: palette(highlighted-text); "
-        "border-bottom: 3px solid palette(highlighted-text); font-weight: bold; }"));
+    // In VML Modern, a row of pills (the segmented role) instead.
+    theme::style_classic(tabs_->tabBar(), QStringLiteral(
+        "QTabBar::tab {{ padding: 7px 16px; margin-right: 3px; background: palette(button); "
+        "color: palette(button-text); border: 1px solid palette(mid); border-bottom: 3px solid transparent; }}"
+        "QTabBar::tab:selected {{ background: palette(highlight); color: palette(highlighted-text); "
+        "border-bottom: 3px solid palette(highlighted-text); font-weight: bold; }}"));
+    theme::set_role(tabs_->tabBar(), "segmented");
+    theme::set_role(tabs_, "segmented");
     const std::span<const MetricDefinition> all = metrics();
     tabs_->addTab(build_page(all.front()), qt_text(all.front().label));
     for (std::size_t i = 1; i < all.size(); ++i) {

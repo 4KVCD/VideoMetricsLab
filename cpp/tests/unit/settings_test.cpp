@@ -63,6 +63,8 @@ const std::map<std::string, std::function<Json(const Settings&)>>& settings_by_k
         {"skipped_update_version", [](const Settings& s) { return Json(s.skipped_update_version); }},
         {"language", [](const Settings& s) { return Json(s.language); }},
         {"theme", [](const Settings& s) { return Json(s.theme); }},
+        {"interface", [](const Settings& s) { return Json(s.interface_style); }},
+        {"accent_colour", [](const Settings& s) { return Json(s.accent_colour); }},
         {"remember_window_size", [](const Settings& s) { return Json(s.remember_window_size); }},
         {"window_width", [](const Settings& s) { return Json(s.window_width); }},
         {"window_height", [](const Settings& s) { return Json(s.window_height); }},

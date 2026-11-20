@@ -67,6 +67,8 @@ TEST(SettingsPanel, ARunLocksOnlyWhatItUsesAndSaysSo) {
     EXPECT_TRUE(clear->toolTip().contains("Locked while metrics are calculated"));
     EXPECT_TRUE(export_folder->isEnabled());
     EXPECT_TRUE(note->isVisibleTo(&panel));
+    EXPECT_TRUE(note->text().startsWith(QStringLiteral("\U0001F512 Metrics are being calculated")));  // Classic's padlock
+    EXPECT_EQ(note->property("vmlRole").toString(), "notice");
 
     panel.set_run_active(false);
     EXPECT_TRUE(ffmpeg->isEnabled());

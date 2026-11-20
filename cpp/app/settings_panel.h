@@ -153,6 +153,11 @@ public:
     QComboBox* decoded_videos = nullptr;
     QComboBox* language = nullptr;
     QComboBox* theme = nullptr;
+    // Settings > Window > Interface and Accent (theme::apply_appearance).
+    // Accent's items hold "#rrggbb", "" for the system's; its last item,
+    // Custom..., the colour chosen in its dialog, if any.
+    QComboBox* interface_choice = nullptr;
+    QComboBox* accent_choice = nullptr;
     QCheckBox* remember_size = nullptr;
     QCheckBox* remember_videos = nullptr;
     QCheckBox* check_updates = nullptr;
@@ -278,6 +283,9 @@ private:
     // Lets the user choose a colour for `button` (or go back to the
     // palette's, with Reset color), and saves it.
     void choose_export_color(QPushButton* button, const QString& title);
+    // Accent's Custom... chosen: a colour picked in a dialog, or the choice
+    // before it back if the dialog is closed.
+    void choose_custom_accent();
     // Fills the profile list from Settings, the one in use picked, and
     // shows its rules; no edit.
     void fill_weak_profiles();

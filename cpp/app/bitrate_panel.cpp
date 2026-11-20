@@ -33,6 +33,7 @@
 #include "frame_types.h"
 #include "i18n.h"
 #include "series_colors.h"
+#include "theme.h"
 #include "vml/analysis_request.h"
 #include "vml/ffprobe.h"
 #include "vml/file_fingerprint.h"
@@ -259,6 +260,7 @@ void BitratePanel::add_file_controls(QVBoxLayout* root) {
     remove_button = new QPushButton(app::tr("Remove selected"));
     connect(remove_button, &QPushButton::clicked, this, [this] { on_remove_selected(); });
     analyze_button = new QPushButton(app::tr("Calculate bitrate"));
+    theme::set_role(analyze_button, "primary");  // the tab's own action (VML Modern)
     analyze_button->setToolTip(app::tr(calculate_tooltip));
     connect(analyze_button, &QPushButton::clicked, this, [this] { on_calculate_or_stop(); });
     file_controls->addWidget(add_button);

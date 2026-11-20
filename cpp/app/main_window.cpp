@@ -924,6 +924,7 @@ QWidget* MainWindow::build_run_panel() {
 
     auto* run_row = new QHBoxLayout;
     run_button_ = new QPushButton(app::tr("Calculate metrics"));
+    theme::set_role(run_button_, "primary");  // the tab's own action (VML Modern)
     connect(run_button_, &QPushButton::clicked, this, [this] { on_run_clicked(); });
     pause_button_ = new QPushButton(app::tr("Pause"));
     pause_button_->setEnabled(false);

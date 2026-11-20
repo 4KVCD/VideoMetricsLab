@@ -228,6 +228,7 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
 
     auto* buttons = new QHBoxLayout;
     open_button_ = new QPushButton(app::tr("Open in Metric Graphs"));
+    theme::set_role(open_button_, "primary");  // the tab's own action (VML Modern)
     connect(open_button_, &QPushButton::clicked, this, [this] { emit open_requested(selected_results()); });
     buttons->addWidget(open_button_);
     // One Export button: its menu is made as it opens (fill_export_menu).
@@ -239,6 +240,7 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     buttons->addWidget(export_button_);
     buttons->addStretch(1);
     delete_button_ = new QPushButton(app::tr("Delete..."));
+    theme::set_role(delete_button_, "danger");
     connect(delete_button_, &QPushButton::clicked, this, [this] { delete_selected(); });
     buttons->addWidget(delete_button_);
     layout->addLayout(buttons);

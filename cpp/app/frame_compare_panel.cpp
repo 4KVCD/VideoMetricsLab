@@ -521,6 +521,7 @@ void FrameComparePanel::add_view(QVBoxLayout* root) {
 void FrameComparePanel::add_seek_rows(QVBoxLayout* root) {
     auto* seek = new QHBoxLayout;
     play_button = new PlayPauseButton;
+    theme::set_role(play_button, "primary");  // the tab's own action (VML Modern)
     connect(play_button, &QPushButton::clicked, this, [this] { on_play_clicked(); });
     audio_checkbox = new QCheckBox(app::tr("Audio"));
     audio_checkbox->setToolTip(app::tr(
@@ -851,6 +852,13 @@ void FrameComparePanel::cancel() {
 void FrameComparePanel::showEvent(QShowEvent* event) {
     // Watches the window's keys and moves, and shows the current pair.
     QWidget::showEvent(event);
+    if (zoom_combo->minimumWidth() == 0) {
+        // Zoom's text box's own margins on top of its widest item: the box's
+        // size leaves them out, and its text box then scrolled the item
+        // along, cutting off the "F" of "Fit to window" (VML Modern). Its
+        // size as drawn now, the style sheet applied.
+        zoom_combo->setMinimumWidth(zoom_combo->sizeHint().width() + 6);
+    }
     on_screen_ = true;
     release_timer_->stop();
     if (!window_filters_installed_) {
