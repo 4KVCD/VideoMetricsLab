@@ -1,7 +1,10 @@
 {
  "strings": {
+  "Export the difference": "Esporta la differenza",
+  "Export the difference as CSV...": "Esporta la differenza come CSV...",
+  "Exporting the difference to {path}...": "Esportazione della differenza in {path}...",
+  "Graphs as ZIP...": "Grafici come ZIP...",
   "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "Il punteggio di ogni fotogramma per ogni metrica, nei formati spuntati: un file per video (<video> - frames.json). Quelli di un video lungo sono grandi.",
-  "Export per-frame scores": "Esporta punteggi per fotogramma",
   "Export per-frame scores to": "Esporta i punteggi per fotogramma in",
   "Per-frame scores": "Punteggi per fotogramma",
   "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "Risultati, punteggi per fotogramma e segmenti deboli come file CSV, per i fogli di calcolo. Senza JSON né CSV spuntati, vengono esportati solo i grafici.",
@@ -494,9 +497,6 @@
   "Export complete: {path}": "Esportazione completata: {path}",
   "Export graph": "Esporta grafico",
   "PNG image (*.png)": "Immagine PNG (*.png)",
-  "No data": "Nessun dato",
-  "There are no series to export.": "Non ci sono serie da esportare.",
-  "Choose export folder": "Scegli la cartella di esportazione",
   "{identical} frames identical to the reference are included in the XPSNR sequence average: zero distortion, with their frames included in the count.": "{identical} fotogrammi identici al riferimento sono inclusi nella media di sequenza XPSNR: distorsione nulla, e i loro fotogrammi rientrano nel conteggio.",
   "Remove {label} from the graph": "Rimuovi {label} dal grafico",
   "Use seconds, M:SS, or H:MM:SS.sss": "Usa secondi, M:SS o H:MM:SS.sss",
@@ -1139,7 +1139,6 @@
   "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "Il grafico di ogni video per ogni metrica e, con più video di uno stesso riferimento, ogni metrica con tutti insieme; i grafici del bitrate dove i video sono ancora presenti.",
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Ogni confronto di cui l'app ha salvato i punteggi. Aprili in Grafici metriche, o esportane risultati, punteggi per fotogramma, grafici e segmenti deboli, senza aggiungere di nuovo i video.",
   "Export graphs": "Esporta grafici",
-  "Export graphs as ZIP...": "Esporta grafici come ZIP...",
   "Export weak segments...": "Esporta segmenti deboli...",
   "Filter by file name": "Filtra per nome file",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "I grafici si esportano per i video di prova di un solo riferimento: seleziona confronti che lo condividono.",
@@ -1253,10 +1252,6 @@
   "Removed {count} saved result.": [
    "Rimosso {count} risultato salvato.",
    "Rimossi {count} risultati salvati."
-  ],
-  "Exporting {count} CSV file to {directory}...": [
-   "Esportazione di {count} file CSV in {directory}...",
-   "Esportazione di {count} file CSV in {directory}..."
   ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "{count} video spuntato ha già i risultati del bitrate.\n\nRicalcolarlo? Scegli No per mantenerne i risultati e calcolare solo i file senza risultati.",

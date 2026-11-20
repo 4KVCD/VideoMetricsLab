@@ -143,7 +143,7 @@ protected:
     // What a page's chart draws for a line.
     static const ChartSeries& drawn(MetricPage& page, int series_id) { return page.chart_->series_.at(series_id); }
     static void export_png(GraphPanel& panel) { panel.on_export_png(); }
-    static void export_csvs(GraphPanel& panel) { panel.on_export_csv(); }
+    static void export_difference(GraphPanel& panel) { panel.on_export_difference(); }
     static QString status(const GraphPanel& panel) { return panel.status_label_->text(); }
     // What the exported image's table says: its headings, and each line's
     // label, colour and cells.
@@ -291,47 +291,50 @@ TEST_F(GraphPanelTest, DrawsTheDifferenceOfTwoShownLines) {
     EXPECT_FALSE(band_values(xpsnr));
 }
 
-// Export CSV with Difference on writes, beside each line's file, the
-// difference the band shows, <first>_minus_<second>.csv: of three runs
-// shown, the two with the page's metric.
+// Metric Graphs' Export CSV is gone (the right-click menus export each
+// line's scores): with Difference on, the statistics' menu offers the
+// difference the band shows, <first>_minus_<second>.csv after the two test
+// videos rather than their lines' " (saved)" labels, of three runs shown the
+// two with the page's metric; with it off, not.
 TEST_F(GraphPanelTest, ExportsTheDifferenceTheBandShows) {
     ComparisonResult c;  // PSNR only: not on VMAF's page
     add_frames(c, "psnr", {0, 1, 2}, {40.0F, 40.0F, 40.0F});
     VideoColors colors;
     GraphPanel panel(&colors);
-    panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F, 80.0F, 70.0F})), "a", {}, true},
-                    {shared(vmaf_result("b.mkv", {85.0F, 82.0F, 60.0F})), "b", {}, true},
+    panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F, 80.0F, 70.0F})), "a (saved)", {}, true},
+                    {shared(vmaf_result("b.mkv", {85.0F, 82.0F, 60.0F})), "b (saved)", {}, true},
                     {shared(c), "c", {}, true}});
     page(panel, "vmaf");
+    EXPECT_TRUE(stats_menu(panel, "a (saved)").isEmpty());
     difference_box(panel).setChecked(true);
+    EXPECT_EQ(stats_menu(panel, "a (saved)"), QStringList{"Export the difference as CSV..."});
     const test::Folder folder;
-    const QString out = QString::fromStdString(platform::path_text(folder / ""));
-    panel.dialogs.choose_folder = [&out](const QString&, const QString&) { return out; };
-    export_csvs(panel);
-    ASSERT_TRUE(panel.wait_until_file_writes_idle(std::chrono::seconds(10)));
-    const auto lines_of = [&folder](const std::string& name) {
-        std::ifstream file(folder / name, std::ios::binary);
-        std::vector<std::string> lines;
-        for (std::string line; std::getline(file, line);) {
-            lines.push_back(line);
-        }
-        return lines;
+    QString suggested;
+    panel.dialogs.save_file = [&](const QString&, const QString& name, const QString&) {
+        suggested = name;
+        return QString::fromStdString(platform::path_text(folder / name.toStdString()));
     };
-    EXPECT_TRUE(std::filesystem::exists(folder / "c.csv"));
-    const std::vector<std::string> difference = lines_of("a_minus_b.csv");
+    export_difference(panel);
+    ASSERT_TRUE(panel.wait_until_file_writes_idle(std::chrono::seconds(10)));
+    EXPECT_EQ(suggested, "a_minus_b.csv");
+    std::ifstream file(folder / "a_minus_b.csv", std::ios::binary);
+    std::vector<std::string> difference;
+    for (std::string line; std::getline(file, line);) {
+        difference.push_back(line);
+    }
     ASSERT_EQ(difference.size(), 4U);
-    EXPECT_EQ(difference[0], lines_of("a.csv")[0]);
+    EXPECT_TRUE(difference[0].starts_with("frame,time_s,vmaf,")) << difference[0];
     // frame, time_s, then VMAF's column; the other metrics' are blank
     EXPECT_TRUE(difference[1].starts_with("0,0.000000,5.0,,")) << difference[1];
     EXPECT_TRUE(difference[2].starts_with("1,0.033333,-2.0,,")) << difference[2];
     EXPECT_TRUE(difference[3].starts_with("2,0.066667,10.0,,")) << difference[3];
 
-    // Off: the lines' files only.
+    // Off: nothing to export.
     difference_box(panel).setChecked(false);
-    export_csvs(panel);
-    ASSERT_TRUE(panel.wait_until_file_writes_idle(std::chrono::seconds(10)));
-    EXPECT_TRUE(std::filesystem::exists(folder / "a_2.csv"));
-    EXPECT_FALSE(std::filesystem::exists(folder / "a_minus_b_2.csv"));
+    EXPECT_TRUE(stats_menu(panel, "a (saved)").isEmpty());
+    suggested.clear();
+    export_difference(panel);
+    EXPECT_TRUE(suggested.isEmpty());
 }
 
 // Issue #19: an export's dialog starts in Settings' Export folder, read at
@@ -339,19 +342,11 @@ TEST_F(GraphPanelTest, ExportsTheDifferenceTheBandShows) {
 TEST_F(GraphPanelTest, ExportsStartInTheExportFolder) {
     VideoColors colors;
     GraphPanel panel(&colors);
-    panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F, 80.0F})), "a", {}, true}});
     std::string export_dir = "D:/exports";
     panel.dialogs = standard_dialogs(&panel, [&export_dir] { return export_dir; });
-    QString started;
-    panel.dialogs.choose_folder = [&started](const QString&, const QString& start) {
-        started = start;
-        return QString();  // Cancel
-    };
-    export_csvs(panel);
-    EXPECT_EQ(path_of(started), path_of("D:/exports"));
+    EXPECT_EQ(path_of(panel.dialogs.export_folder()), path_of("D:/exports"));
     export_dir.clear();
-    export_csvs(panel);
-    EXPECT_EQ(path_of(started), platform::home_directory() / "Documents");
+    EXPECT_EQ(path_of(panel.dialogs.export_folder()), platform::home_directory() / "Documents");
     // A save dialog: a bare name in the folder, a full path as it is.
     EXPECT_EQ(path_of(save_dialog_start("a.csv", "D:/exports")), path_of("D:/exports/a.csv"));
     const QString full = text_of(platform::home_directory() / "elsewhere" / "log.zip");
@@ -401,14 +396,15 @@ TEST_F(GraphPanelTest, TheStatisticsMenuOffersTheVideosExports) {
 TEST_F(GraphPanelTest, AFailedExportDoesNotSayItIsComplete) {
     VideoColors colors;
     GraphPanel panel(&colors);
-    panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F})), "a", {}, true}});
+    panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F})), "a", {}, true},
+                    {shared(vmaf_result("b.mkv", {80.0F})), "b", {}, true}});
     page(panel, "vmaf");
+    difference_box(panel).setChecked(true);
     const test::Folder folder;
-    const std::filesystem::path not_a_folder = folder / "a file";
-    std::ofstream(not_a_folder) << "x";
-    const QString out = QString::fromStdString(platform::path_text(not_a_folder));
-    panel.dialogs.choose_folder = [&out](const QString&, const QString&) { return out; };
-    export_csvs(panel);
+    std::ofstream(folder / "a file") << "x";
+    const QString out = QString::fromStdString(platform::path_text(folder / "a file" / "a_minus_b.csv"));
+    panel.dialogs.save_file = [&out](const QString&, const QString&, const QString&) { return out; };
+    export_difference(panel);
     ASSERT_TRUE(panel.wait_until_file_writes_idle(std::chrono::seconds(10)));
     QCoreApplication::sendPostedEvents();  // what the writer's thread said
     EXPECT_TRUE(status(panel).startsWith("Could not")) << status(panel).toStdString();

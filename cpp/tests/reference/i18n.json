@@ -1999,13 +1999,6 @@
    "values": {}
   },
   {
-   "singular": "Exporting {count} CSV file to {directory}...",
-   "plural": "Exporting {count} CSV files to {directory}...",
-   "values": {
-    "directory": "<directory>"
-   }
-  },
-  {
    "singular": "Reading {count} video...",
    "plural": "Reading {count} videos...",
    "values": {}
@@ -2666,18 +2659,6 @@
      "Einstellungen für 22 ausgewählte Videos bearbeiten – jede Änderung unten gilt für alle.",
      "Einstellungen für 101 ausgewählte Videos bearbeiten – jede Änderung unten gilt für alle.",
      "Einstellungen für 1001 ausgewählte Videos bearbeiten – jede Änderung unten gilt für alle."
-    ],
-    [
-     "0 CSV-Dateien werden nach <directory> exportiert...",
-     "1 CSV-Datei wird nach <directory> exportiert...",
-     "2 CSV-Dateien werden nach <directory> exportiert...",
-     "3 CSV-Dateien werden nach <directory> exportiert...",
-     "5 CSV-Dateien werden nach <directory> exportiert...",
-     "11 CSV-Dateien werden nach <directory> exportiert...",
-     "21 CSV-Dateien werden nach <directory> exportiert...",
-     "22 CSV-Dateien werden nach <directory> exportiert...",
-     "101 CSV-Dateien werden nach <directory> exportiert...",
-     "1001 CSV-Dateien werden nach <directory> exportiert..."
     ],
     [
      "0 Videos werden gelesen...",
@@ -3428,18 +3409,6 @@
      "Настройки 1001 выбранного видео — любое изменение ниже применяется ко всем."
     ],
     [
-     "Экспорт 0 CSV-файлов в <directory>...",
-     "Экспорт 1 CSV-файла в <directory>...",
-     "Экспорт 2 CSV-файлов в <directory>...",
-     "Экспорт 3 CSV-файлов в <directory>...",
-     "Экспорт 5 CSV-файлов в <directory>...",
-     "Экспорт 11 CSV-файлов в <directory>...",
-     "Экспорт 21 CSV-файла в <directory>...",
-     "Экспорт 22 CSV-файлов в <directory>...",
-     "Экспорт 101 CSV-файла в <directory>...",
-     "Экспорт 1001 CSV-файла в <directory>..."
-    ],
-    [
      "Чтение 0 видео...",
      "Чтение 1 видео...",
      "Чтение 2 видео...",
@@ -4186,18 +4155,6 @@
      "تعديل إعدادات 22 فيديو محددًا — أي تغيير أدناه ينطبق على الجميع.",
      "تعديل إعدادات 101 فيديو محدد — أي تغيير أدناه ينطبق على الجميع.",
      "تعديل إعدادات 1001 فيديو محدد — أي تغيير أدناه ينطبق على الجميع."
-    ],
-    [
-     "جارٍ تصدير 0 ملف CSV إلى <directory>...",
-     "جارٍ تصدير 1 ملف CSV إلى <directory>...",
-     "جارٍ تصدير 2 ملف CSV إلى <directory>...",
-     "جارٍ تصدير 3 ملفات CSV إلى <directory>...",
-     "جارٍ تصدير 5 ملفات CSV إلى <directory>...",
-     "جارٍ تصدير 11 ملفًا CSV إلى <directory>...",
-     "جارٍ تصدير 21 ملفًا CSV إلى <directory>...",
-     "جارٍ تصدير 22 ملفًا CSV إلى <directory>...",
-     "جارٍ تصدير 101 ملف CSV إلى <directory>...",
-     "جارٍ تصدير 1001 ملف CSV إلى <directory>..."
     ],
     [
      "جارٍ قراءة 0 فيديو...",
@@ -4948,18 +4905,6 @@
      "選択した 1001 本の動画の設定を編集中です。下の変更はすべての動画に適用されます。"
     ],
     [
-     "0 個の CSV ファイルを <directory> にエクスポート中...",
-     "1 個の CSV ファイルを <directory> にエクスポート中...",
-     "2 個の CSV ファイルを <directory> にエクスポート中...",
-     "3 個の CSV ファイルを <directory> にエクスポート中...",
-     "5 個の CSV ファイルを <directory> にエクスポート中...",
-     "11 個の CSV ファイルを <directory> にエクスポート中...",
-     "21 個の CSV ファイルを <directory> にエクスポート中...",
-     "22 個の CSV ファイルを <directory> にエクスポート中...",
-     "101 個の CSV ファイルを <directory> にエクスポート中...",
-     "1001 個の CSV ファイルを <directory> にエクスポート中..."
-    ],
-    [
      "0 本の動画を読み込み中...",
      "1 本の動画を読み込み中...",
      "2 本の動画を読み込み中...",
@@ -5708,18 +5653,6 @@
      "正在编辑 1001 个所选视频的设置——下方的任何修改都会应用到所有这些视频。"
     ],
     [
-     "正在将 0 个 CSV 文件导出到 <directory>...",
-     "正在将 1 个 CSV 文件导出到 <directory>...",
-     "正在将 2 个 CSV 文件导出到 <directory>...",
-     "正在将 3 个 CSV 文件导出到 <directory>...",
-     "正在将 5 个 CSV 文件导出到 <directory>...",
-     "正在将 11 个 CSV 文件导出到 <directory>...",
-     "正在将 21 个 CSV 文件导出到 <directory>...",
-     "正在将 22 个 CSV 文件导出到 <directory>...",
-     "正在将 101 个 CSV 文件导出到 <directory>...",
-     "正在将 1001 个 CSV 文件导出到 <directory>..."
-    ],
-    [
      "正在读取 0 个视频...",
      "正在读取 1 个视频...",
      "正在读取 2 个视频...",
@@ -6466,18 +6399,6 @@
      "แก้ไขการตั้งค่าของวิดีโอที่เลือก 22 รายการ — ทุกการเปลี่ยนแปลงด้านล่างใช้กับทั้งหมด",
      "แก้ไขการตั้งค่าของวิดีโอที่เลือก 101 รายการ — ทุกการเปลี่ยนแปลงด้านล่างใช้กับทั้งหมด",
      "แก้ไขการตั้งค่าของวิดีโอที่เลือก 1001 รายการ — ทุกการเปลี่ยนแปลงด้านล่างใช้กับทั้งหมด"
-    ],
-    [
-     "กำลังส่งออกไฟล์ CSV 0 ไฟล์ไปที่ <directory>...",
-     "กำลังส่งออกไฟล์ CSV 1 ไฟล์ไปที่ <directory>...",
-     "กำลังส่งออกไฟล์ CSV 2 ไฟล์ไปที่ <directory>...",
-     "กำลังส่งออกไฟล์ CSV 3 ไฟล์ไปที่ <directory>...",
-     "กำลังส่งออกไฟล์ CSV 5 ไฟล์ไปที่ <directory>...",
-     "กำลังส่งออกไฟล์ CSV 11 ไฟล์ไปที่ <directory>...",
-     "กำลังส่งออกไฟล์ CSV 21 ไฟล์ไปที่ <directory>...",
-     "กำลังส่งออกไฟล์ CSV 22 ไฟล์ไปที่ <directory>...",
-     "กำลังส่งออกไฟล์ CSV 101 ไฟล์ไปที่ <directory>...",
-     "กำลังส่งออกไฟล์ CSV 1001 ไฟล์ไปที่ <directory>..."
     ],
     [
      "กำลังอ่านวิดีโอ 0 รายการ...",

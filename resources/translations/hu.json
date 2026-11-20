@@ -1,7 +1,10 @@
 {
  "strings": {
+  "Export the difference": "Különbség exportálása",
+  "Export the difference as CSV...": "Különbség exportálása CSV-ként...",
+  "Exporting the difference to {path}...": "A különbség exportálása ide: {path}...",
+  "Graphs as ZIP...": "Grafikonok ZIP-ként...",
   "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "Minden képkocka pontszáma minden metrikánál, a bejelölt formátumokban: videónként egy fájl (<video> - frames.json). Egy hosszú videóé nagy.",
-  "Export per-frame scores": "Képkockánkénti pontszámok exportálása",
   "Export per-frame scores to": "Képkockánkénti pontszámok exportálási helye",
   "Per-frame scores": "Képkockánkénti pontszámok",
   "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "Eredmények, képkockánkénti pontszámok és gyenge szakaszok CSV-fájlokként, táblázatkezelőkhöz. Ha sem a JSON, sem a CSV nincs bejelölve, csak a grafikonok exportálódnak.",
@@ -494,9 +497,6 @@
   "Export complete: {path}": "Exportálás kész: {path}",
   "Export graph": "Grafikon exportálása",
   "PNG image (*.png)": "PNG-kép (*.png)",
-  "No data": "Nincs adat",
-  "There are no series to export.": "Nincs exportálható sorozat.",
-  "Choose export folder": "Exportálási mappa kiválasztása",
   "{identical} frames identical to the reference are included in the XPSNR sequence average: zero distortion, with their frames included in the count.": "{identical} referenciával azonos képkocka szerepel az XPSNR sorozatátlagában: nulla torzítás, a képkockák beleszámítanak.",
   "Remove {label} from the graph": "Eltávolítás a grafikonról: {label}",
   "Use seconds, M:SS, or H:MM:SS.sss": "Használjon másodpercet, M:SS vagy H:MM:SS.sss formát",
@@ -1139,7 +1139,6 @@
   "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "Minden videó grafikonja minden metrikára, és ha egy referenciának több videója van, minden metrika mindegyikkel együtt; a bitráta-grafikonok, ahol a videók még megvannak.",
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Minden összehasonlítás, amelynek pontszámait az alkalmazás elmentette. Nyissa meg őket a Metrikagrafikonokban, vagy exportálja eredményeiket, képkockánkénti pontszámaikat, grafikonjaikat és gyenge szakaszaikat a videók újbóli hozzáadása nélkül.",
   "Export graphs": "Grafikonok exportálása",
-  "Export graphs as ZIP...": "Grafikonok exportálása ZIP-ként...",
   "Export weak segments...": "Gyenge szakaszok exportálása...",
   "Filter by file name": "Szűrés fájlnév szerint",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "A grafikonok egy referencia tesztvideóihoz exportálhatók: jelöljön ki olyan összehasonlításokat, amelyeknek ez közös.",
@@ -1253,10 +1252,6 @@
   "Removed {count} saved result.": [
    "{count} mentett eredmény eltávolítva.",
    "{count} mentett eredmény eltávolítva."
-  ],
-  "Exporting {count} CSV file to {directory}...": [
-   "{count} CSV-fájl exportálása ide: {directory}...",
-   "{count} CSV-fájl exportálása ide: {directory}..."
   ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "A kijelölt videónak ({count}) már van bitrátaeredménye.\n\nÚjraszámolja? Válassza a Nem lehetőséget az eredmények megtartásához, és csak az eredmény nélküli fájlok számításához.",

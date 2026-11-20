@@ -1,7 +1,10 @@
 {
  "strings": {
+  "Export the difference": "Farkı dışa aktar",
+  "Export the difference as CSV...": "Farkı CSV olarak dışa aktar...",
+  "Exporting the difference to {path}...": "Fark şuraya aktarılıyor: {path}...",
+  "Graphs as ZIP...": "Grafikler ZIP olarak...",
   "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "Her metrik için her karenin puanı, işaretli biçimlerde: her video için bir dosya (<video> - frames.json). Uzun bir videonunkiler büyüktür.",
-  "Export per-frame scores": "Kare başına puanları dışa aktar",
   "Export per-frame scores to": "Kare başına puanların aktarılacağı konum",
   "Per-frame scores": "Kare başına puanlar",
   "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "Sonuçlar, kare başına puanlar ve zayıf bölümler, elektronik tablolar için CSV dosyaları olarak. Ne JSON ne CSV işaretliyse yalnızca grafikler dışa aktarılır.",
@@ -494,9 +497,6 @@
   "Export complete: {path}": "Dışa aktarma tamamlandı: {path}",
   "Export graph": "Grafiği dışa aktar",
   "PNG image (*.png)": "PNG görüntüsü (*.png)",
-  "No data": "Veri yok",
-  "There are no series to export.": "Dışa aktarılacak seri yok.",
-  "Choose export folder": "Dışa aktarma klasörünü seçin",
   "{identical} frames identical to the reference are included in the XPSNR sequence average: zero distortion, with their frames included in the count.": "Referansla aynı olan {identical} kare XPSNR dizi ortalamasına dahildir: sıfır bozulma; kareleri de sayıma girer.",
   "Remove {label} from the graph": "Grafikten kaldır: {label}",
   "Use seconds, M:SS, or H:MM:SS.sss": "Saniye, M:SS veya H:MM:SS.sss kullanın",
@@ -1139,7 +1139,6 @@
   "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "Her videonun her metrik için grafiği ve aynı referansın birden çok videosu varsa her metrik için hepsini içeren grafik; videoların hâlâ bulunduğu yerlerde bit hızı grafikleri.",
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Uygulamanın puanlarını kaydettiği her karşılaştırma. Videoları yeniden eklemeden bunları Metrik grafiklerinde açın veya sonuçlarını, kare başına puanlarını, grafiklerini ve zayıf bölümlerini dışa aktarın.",
   "Export graphs": "Grafikleri dışa aktar",
-  "Export graphs as ZIP...": "Grafikleri ZIP olarak dışa aktar...",
   "Export weak segments...": "Zayıf bölümleri dışa aktar...",
   "Filter by file name": "Dosya adına göre filtrele",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "Grafikler tek bir referansın test videoları için dışa aktarılır: bu referansı paylaşan karşılaştırmaları seçin.",
@@ -1253,10 +1252,6 @@
   "Removed {count} saved result.": [
    "{count} kayıtlı sonuç kaldırıldı.",
    "{count} kayıtlı sonuç kaldırıldı."
-  ],
-  "Exporting {count} CSV file to {directory}...": [
-   "{count} CSV dosyası dışa aktarılıyor, konum: {directory}...",
-   "{count} CSV dosyası dışa aktarılıyor, konum: {directory}..."
   ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "İşaretli {count} videonun zaten bit hızı sonuçları var.\n\nYeniden hesaplansın mı? Sonuçlarını koruyup yalnızca sonucu olmayan dosyaları hesaplamak için Hayır'ı seçin.",

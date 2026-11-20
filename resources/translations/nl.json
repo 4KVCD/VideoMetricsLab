@@ -1,7 +1,10 @@
 {
  "strings": {
+  "Export the difference": "Verschil exporteren",
+  "Export the difference as CSV...": "Verschil exporteren als CSV...",
+  "Exporting the difference to {path}...": "Verschil wordt geëxporteerd naar {path}...",
+  "Graphs as ZIP...": "Grafieken als ZIP...",
   "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "De score van elk frame voor elke metriek, in de aangevinkte formaten: een bestand per video (<video> - frames.json). Die van een lange video zijn groot.",
-  "Export per-frame scores": "Scores per frame exporteren",
   "Export per-frame scores to": "Scores per frame exporteren naar",
   "Per-frame scores": "Scores per frame",
   "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "Resultaten, scores per frame en zwakke segmenten als CSV-bestanden, voor spreadsheets. Met JSON noch CSV aangevinkt worden alleen grafieken geëxporteerd.",
@@ -494,9 +497,6 @@
   "Export complete: {path}": "Export voltooid: {path}",
   "Export graph": "Grafiek exporteren",
   "PNG image (*.png)": "PNG-afbeelding (*.png)",
-  "No data": "Geen gegevens",
-  "There are no series to export.": "Geen reeksen om te exporteren.",
-  "Choose export folder": "Exportmap kiezen",
   "{identical} frames identical to the reference are included in the XPSNR sequence average: zero distortion, with their frames included in the count.": "{identical} frames die identiek zijn aan de referentie tellen mee in het XPSNR-sequentiegemiddelde: nul vervorming, met hun frames meegeteld.",
   "Remove {label} from the graph": "{label} uit de grafiek verwijderen",
   "Use seconds, M:SS, or H:MM:SS.sss": "Gebruik seconden, M:SS of H:MM:SS.sss",
@@ -1139,7 +1139,6 @@
   "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "De grafiek van elke video voor elke metriek en, bij meerdere video's van één referentie, elke metriek met ze allemaal; de bitrategrafieken waar de video's nog aanwezig zijn.",
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Elke vergelijking waarvan de app scores heeft opgeslagen. Open ze in Metriekgrafieken, of exporteer hun resultaten, scores per frame, grafieken en zwakke segmenten, zonder de video's opnieuw toe te voegen.",
   "Export graphs": "Grafieken exporteren",
-  "Export graphs as ZIP...": "Grafieken exporteren als ZIP...",
   "Export weak segments...": "Zwakke segmenten exporteren...",
   "Filter by file name": "Filteren op bestandsnaam",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "Grafieken worden geëxporteerd voor testvideo's van één referentie: selecteer vergelijkingen die deze delen.",
@@ -1253,10 +1252,6 @@
   "Removed {count} saved result.": [
    "{count} opgeslagen resultaat verwijderd.",
    "{count} opgeslagen resultaten verwijderd."
-  ],
-  "Exporting {count} CSV file to {directory}...": [
-   "{count} CSV-bestand exporteren naar {directory}...",
-   "{count} CSV-bestanden exporteren naar {directory}..."
   ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "De {count} geselecteerde video heeft al bitrateresultaten.\n\nOpnieuw berekenen? Kies Nee om de resultaten te houden en alleen bestanden zonder resultaten te berekenen.",

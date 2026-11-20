@@ -1352,9 +1352,6 @@ QWidget* GraphPanel::build_action_bar() {
     auto* png_button = new QPushButton(app::tr("Export graph as PNG"));
     connect(png_button, &QPushButton::clicked, this, [this] { on_export_png(); });
     layout->addWidget(png_button);
-    export_csv_button_ = new QPushButton(app::tr("Export CSV"));
-    connect(export_csv_button_, &QPushButton::clicked, this, [this] { on_export_csv(); });
-    layout->addWidget(export_csv_button_);
     layout->addSpacing(16);
     layout->addWidget(frame_controls_);  // made in the constructor
     layout->addSpacing(16);
@@ -2109,45 +2106,38 @@ void GraphPanel::on_export_png() {
     }
 }
 
-void GraphPanel::on_export_csv() {
-    // Each line's scores as CSV, off the window's thread: a feature-length
-    // run's is bigger than its saved run, one per line. Only this button
-    // waits for them.
-    if (entries_.empty()) {
-        dialogs.inform(app::tr("No data"), app::tr("There are no series to export."));
+void GraphPanel::on_export_difference() {
+    // The difference the band shows, of the page in view: the two lines'
+    // every metric, first minus second, as CSV, off the window's thread (a
+    // feature-length run's is big).
+    const std::optional<std::pair<int, int>> pair = difference_on_ ? shown_difference_pair() : std::nullopt;
+    if (!pair) {
         return;
     }
-    const QString folder = dialogs.choose_folder(app::tr("Choose export folder"), dialogs.export_folder());
-    if (folder.isEmpty()) {
+    const SeriesEntry& first = entries_.at(pair->first);
+    const SeriesEntry& second = entries_.at(pair->second);
+    // Named after the two test videos, as the command line's --difference
+    // names it: a line's label carries " (saved)" and the like. Two runs of
+    // one video, or one with no file, keep the lines' labels.
+    const std::string first_name = platform::path_text(first.result->distorted.stem());
+    const std::string second_name = platform::path_text(second.result->distorted.stem());
+    const bool by_video = !first_name.empty() && !second_name.empty() && first_name != second_name;
+    const QString suggested = QString::fromStdString(
+        safe_filename_stem(by_video ? difference_label(first_name, second_name)
+                                    : difference_label(first.label.toStdString(), second.label.toStdString())) +
+        ".csv");
+    const QString path =
+        dialogs.save_file(app::tr("Export the difference"), suggested, app::tr("CSV file (*.csv)"));
+    if (path.isEmpty()) {
         return;
     }
-    export_csv_button_->setEnabled(false);
-    std::set<std::filesystem::path> reserved;
-    for (const auto& [id, entry] : entries_) {
-        const std::filesystem::path out =
-            unique_output_path(path_of(folder), entry.label.toStdString(), ".csv", reserved);
-        file_writes_->submit(app::tr("export {name}", {{"name", name_of(out)}}),
-                             [result = entry.result, out] { export_csv(*result, out); });
-    }
-    long long files = static_cast<long long>(entries_.size());
-    if (const std::optional<std::pair<int, int>> pair = difference_on_ ? shown_difference_pair() : std::nullopt) {
-        // The difference the band shows, of the page in view: the two runs'
-        // every metric, first minus second.
-        const SeriesEntry& first = entries_.at(pair->first);
-        const SeriesEntry& second = entries_.at(pair->second);
-        const std::filesystem::path out = unique_output_path(
-            path_of(folder), difference_label(first.label.toStdString(), second.label.toStdString()), ".csv",
-            reserved);
-        file_writes_->submit(app::tr("export {name}", {{"name", name_of(out)}}),
-                             [first = first.result, second = second.result, out] {
-                                 export_difference_csv(*first, *second, out);
-                             });
-        ++files;
-    }
-    export_destination_ = folder;
+    file_writes_->submit(app::tr("export {name}", {{"name", name_of(path_of(path))}}),
+                         [first = first.result, second = second.result, out = path_of(path)] {
+                             export_difference_csv(*first, *second, out);
+                         });
+    export_destination_ = path;
     status_label_->show();
-    status_label_->setText(ntr("Exporting {count} CSV file to {directory}...",
-                               "Exporting {count} CSV files to {directory}...", files, {{"directory", folder}}));
+    status_label_->setText(app::tr("Exporting the difference to {path}...", {{"path", path}}));
 }
 
 std::optional<std::pair<int, int>> GraphPanel::shown_difference_pair() const {
@@ -2176,6 +2166,13 @@ void GraphPanel::fill_stats_menu(QMenu& menu, int row, StatsMenu& items) const {
         items.all_videos = menu.addAction(export_action_text(ExportScope::all_videos, chosen));
         items.all_videos->setEnabled(anything && videos_exportable());
     }
+    if (difference_on_ && shown_difference_pair()) {
+        // What the band shows, which no export of Settings' includes.
+        if (!menu.isEmpty()) {
+            menu.addSeparator();
+        }
+        items.difference = menu.addAction(app::tr("Export the difference as CSV..."));
+    }
 }
 
 void GraphPanel::show_stats_menu(const QPoint& position) {
@@ -2190,6 +2187,8 @@ void GraphPanel::show_stats_menu(const QPoint& position) {
         emit video_export_requested(items.identity);
     } else if (chosen != nullptr && chosen == items.all_videos) {
         emit all_videos_export_requested();
+    } else if (chosen != nullptr && chosen == items.difference) {
+        on_export_difference();
     }
 }
 
@@ -2202,11 +2201,10 @@ std::vector<GraphPanel::Run> GraphPanel::runs() const {
 }
 
 void GraphPanel::on_file_writes_idle() {
-    // The export is done: said, and the button usable again.
+    // The export is done: said.
     if (!file_writes_->idle()) {
         return;
     }
-    export_csv_button_->setEnabled(true);
     if (export_destination_) {
         status_label_->setText(app::tr("Export complete: {path}", {{"path", *export_destination_}}));
         status_label_->show();

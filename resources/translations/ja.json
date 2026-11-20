@@ -1,7 +1,10 @@
 {
  "strings": {
+  "Export the difference": "差分をエクスポート",
+  "Export the difference as CSV...": "差分を CSV でエクスポート...",
+  "Exporting the difference to {path}...": "差分を {path} にエクスポートしています...",
+  "Graphs as ZIP...": "グラフを ZIP で...",
   "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "各指標の全フレームのスコアをチェックした形式で：動画ごとに 1 ファイル（<video> - frames.json）。長い動画では大きくなります。",
-  "Export per-frame scores": "フレームごとのスコアをエクスポート",
   "Export per-frame scores to": "フレームごとのスコアのエクスポート先",
   "Per-frame scores": "フレームごとのスコア",
   "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "結果、フレームごとのスコア、弱い区間を CSV ファイルで（表計算ソフト用）。JSON も CSV もチェックされていないときは、グラフだけがエクスポートされます。",
@@ -494,9 +497,6 @@
   "Export complete: {path}": "エクスポート完了：{path}",
   "Export graph": "グラフをエクスポート",
   "PNG image (*.png)": "PNG 画像 (*.png)",
-  "No data": "データがありません",
-  "There are no series to export.": "エクスポートする系列がありません。",
-  "Choose export folder": "エクスポート先フォルダーを選択",
   "{identical} frames identical to the reference are included in the XPSNR sequence average: zero distortion, with their frames included in the count.": "参照動画と同一の {identical} フレームは XPSNR のシーケンス平均に含まれます：歪み 0 として扱われ、フレーム数にも数えられます。",
   "Remove {label} from the graph": "{label} をグラフから削除",
   "Use seconds, M:SS, or H:MM:SS.sss": "秒、M:SS、または H:MM:SS.sss で入力してください",
@@ -1139,7 +1139,6 @@
   "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "各動画の指標ごとのグラフと、同じ参照動画の動画が複数あれば指標ごとに全動画をまとめたグラフ。動画がまだ残っている場合はビットレートのグラフも。",
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "アプリがスコアを保存しているすべての比較。動画を再び追加しなくても、指標グラフで開いたり、結果、フレームごとのスコア、グラフ、弱い区間をエクスポートしたりできます。",
   "Export graphs": "グラフをエクスポート",
-  "Export graphs as ZIP...": "グラフを ZIP でエクスポート...",
   "Export weak segments...": "弱い区間をエクスポート...",
   "Filter by file name": "ファイル名で絞り込み",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "グラフは同じ参照動画のテスト動画についてエクスポートされます。参照動画が共通の比較を選択してください。",
@@ -1234,9 +1233,6 @@
   ],
   "Removed {count} saved result.": [
    "保存済みの結果を {count} 件削除しました。"
-  ],
-  "Exporting {count} CSV file to {directory}...": [
-   "{count} 個の CSV ファイルを {directory} にエクスポート中..."
   ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "チェックを入れた {count} 本の動画には、すでにビットレートの結果があります。\n\nそれらを再計算しますか？ 結果を残して結果のないファイルだけを計算するには［いいえ］を選んでください。"

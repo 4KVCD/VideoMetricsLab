@@ -37,12 +37,16 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
 4. Choose **Calculate metrics**. Optional two-job parallelism can help on large
    CPUs, but increases resource use and is not always faster.
 5. Inspect per-frame curves in **Metric Graphs**. Click a metric's mean column
-   to show its detailed statistics. Export a graph PNG or CSV as needed.
+   to show its detailed statistics. **Export graph as PNG** saves the graph
+   shown; right-click the statistics to export the videos' results, per-frame
+   scores and more (see [Exporting from the right-click
+   menus](#exporting-from-the-right-click-menus)).
    With two videos shown, **Difference** draws the first minus the second,
    frame by frame, in a band under the graph with its own scale. With it on,
-   **Export CSV** also writes that difference, every metric's, as
-   `<first>_minus_<second>.csv` (the videos' labels), in the per-video files'
-   columns: a cell is blank where either video lacks the frame or the metric.
+   the statistics' right-click menu offers **Export the difference as
+   CSV...**: every metric's difference, as `<first>_minus_<second>.csv` (the
+   videos' labels), in the per-frame scores' columns: a cell is blank where
+   either video lacks the frame or the metric.
    To look at one part of the videos (a scene you re-encoded, say), enter its
    first and last frames in **Highlight range from frame** and **to frame**,
    its first and last times in **Highlight range from time** and **to time**
@@ -464,7 +468,7 @@ $run.videos[0].metrics.vmaf.score
 | `--recalculate` | Ignore saved scores. |
 | `--test-remuxes on\|off` | On: read each test video calculated once more after the run, so that a remux of it keeps its saved scores, and read a video whose stream begins as a saved one's to tell whether it is that video (see [Saved results and caches](#saved-results-and-caches)). Off: neither. Left out: as **Settings > Storage > Recognize test videos remuxed after scoring** (off unless changed). |
 | `--difference` | With exactly two test videos: the first minus the second as well, frame by frame (CVVDP second by second), paired as **Difference** in Metric Graphs pairs them. The tables end with a difference table (Score: the two scores subtracted; Mean, Min, Max: of the frames' differences; Paired: the frames, or seconds, both have), the JSON gets a `difference` section, and with `--csv` it is written as `<first>_minus_<second>.csv` (the files' names). |
-| `--csv FOLDER` | Write each video's per-frame scores as `<video>.csv`, as **Export CSV** does. |
+| `--csv FOLDER` | Write each video's per-frame scores as `<video>.csv`, as the window's per-frame scores export writes them. |
 | `--json FILE` | Also write the results as JSON. `--json -` prints the JSON instead of the tables, for a script to read. |
 | `--batch CSV` | Compare the videos a CSV file lists, in place of REFERENCE and TEST, all in one run (the start-up and the GPU checks once, not once per reference). A row per test video, with the columns `reference` and `test` (a file or a pattern) and, if wanted, `sequence` and any others, which `--scores-csv` keeps; paths are relative to the CSV file's folder. The tables come per reference, and `--json` writes `{"batch": [...]}`, each reference's results as without `--batch`. A reference that cannot be read is said and the others are still compared (exit code 1). Not with `--difference`. |
 | `--scores-csv FILE` | Write each test video's bitrate (`kbps`) and scores to FILE, a row per video, with its `sequence` (the `--batch` row's, else the reference's file name), `test`, `reference` and the `--batch` row's other columns: the file `bdrate --anchor` and `--test` read. A video whose bitrate is not known, or with only a part compared (`--range`, `--duration`), is left out, said. |
@@ -662,22 +666,25 @@ videos again:
 
 - **Open in Metric Graphs** (or double-click) adds them as lines of their own,
   named "*video* (saved)".
-- **Export results** saves them **As JSON** or **As CSV**, as Export results
-  does; **Export per-frame scores** writes a file per comparison to a folder,
-  **As JSON** or **As CSV** (the JSON is the CSV's table: see [Per-frame
-  scores as JSON](RESULTS_JSON.md#per-frame-scores-as-json)).
-- **Export graphs as ZIP...** saves the graphs Export all graphs saves, for
-  comparisons of one reference. The bitrate graphs of a video no longer on
-  disk come from its saved bitrate, where the Bitrate Viewer or the
-  command line read it before it went.
-- **Export weak segments...** saves the weak segments report by the rules
-  picked beside it: the profile in use, any profile or a preset. Weak segments
-  are not saved with the scores; they are found from them as they are
-  exported.
-- Right-click them for **Export this video's...** (one selected) or **Export
-  the selected videos'...** (several), as the other tabs' menus export (see
-  [Exporting from the right-click menus](#exporting-from-the-right-click-menus)),
-  with the weak segments by the rules picked beside **Export weak segments...**.
+- **Export** opens a menu. Its first entry, **Export this video's...** (one
+  selected) or **Export the selected videos'...** (several), exports what
+  the other tabs' menus export (see [Exporting from the right-click
+  menus](#exporting-from-the-right-click-menus)); right-click them for the
+  same entry. Below it, each kind on its own:
+  - **Results**, **As JSON...** or **As CSV...**, as Export results saves
+    them;
+  - **Per-frame scores**, **As JSON...** or **As CSV...**: a file per
+    comparison to a folder (the JSON is the CSV's table: see [Per-frame
+    scores as JSON](RESULTS_JSON.md#per-frame-scores-as-json));
+  - **Graphs as ZIP...**: the graphs Export all graphs saves, for
+    comparisons of one reference. The bitrate graphs of a video no longer on
+    disk come from its saved bitrate, where the Bitrate Viewer or the
+    command line read it before it went;
+  - **Weak segments**: **Export weak segments...** saves the weak segments
+    report by the rules ticked below it: the profile in use, any profile or
+    a preset. The first entry's weak segments use the same rules. Weak
+    segments are not saved with the scores; they are found from them as they
+    are exported.
 - **Delete...** removes their saved scores, after asking: the videos are
   scored again the next time they are compared. It is locked while metrics
   are calculated.

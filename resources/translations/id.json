@@ -1,7 +1,10 @@
 {
  "strings": {
+  "Export the difference": "Ekspor selisih",
+  "Export the difference as CSV...": "Ekspor selisih sebagai CSV...",
+  "Exporting the difference to {path}...": "Mengekspor selisih ke {path}...",
+  "Graphs as ZIP...": "Grafik sebagai ZIP...",
   "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "Skor setiap frame untuk tiap metrik, dalam format yang dicentang: satu file per video (<video> - frames.json). Milik video panjang berukuran besar.",
-  "Export per-frame scores": "Ekspor skor per frame",
   "Export per-frame scores to": "Ekspor skor per frame ke",
   "Per-frame scores": "Skor per frame",
   "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "Hasil, skor per frame, dan segmen lemah sebagai file CSV, untuk spreadsheet. Jika JSON maupun CSV tidak dicentang, hanya grafik yang diekspor.",
@@ -494,9 +497,6 @@
   "Export complete: {path}": "Ekspor selesai: {path}",
   "Export graph": "Ekspor grafik",
   "PNG image (*.png)": "Gambar PNG (*.png)",
-  "No data": "Tidak ada data",
-  "There are no series to export.": "Tidak ada seri untuk diekspor.",
-  "Choose export folder": "Pilih folder ekspor",
   "{identical} frames identical to the reference are included in the XPSNR sequence average: zero distortion, with their frames included in the count.": "{identical} bingkai yang identik dengan referensi disertakan dalam rata-rata sekuens XPSNR: distorsi nol, dengan bingkainya dihitung.",
   "Remove {label} from the graph": "Hapus {label} dari grafik",
   "Use seconds, M:SS, or H:MM:SS.sss": "Gunakan detik, M:SS, atau H:MM:SS.sss",
@@ -1139,7 +1139,6 @@
   "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "Grafik setiap video untuk setiap metrik, dan bila ada beberapa video dari satu referensi, setiap metrik dengan semuanya; grafik bitrate bila videonya masih ada.",
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Setiap perbandingan yang skornya disimpan aplikasi. Buka di Grafik metrik, atau ekspor hasil, skor per frame, grafik, dan segmen lemahnya, tanpa menambahkan videonya lagi.",
   "Export graphs": "Ekspor grafik",
-  "Export graphs as ZIP...": "Ekspor grafik sebagai ZIP...",
   "Export weak segments...": "Ekspor segmen lemah...",
   "Filter by file name": "Filter menurut nama file",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "Grafik diekspor untuk video uji dari satu referensi: pilih perbandingan yang memakai referensi yang sama.",
@@ -1234,9 +1233,6 @@
   ],
   "Removed {count} saved result.": [
    "{count} hasil tersimpan dihapus."
-  ],
-  "Exporting {count} CSV file to {directory}...": [
-   "Mengekspor {count} file CSV ke {directory}..."
   ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "{count} video yang dipilih sudah memiliki hasil bitrate.\n\nHitung ulang? Pilih Tidak untuk mempertahankan hasilnya dan hanya menghitung file yang belum punya hasil."

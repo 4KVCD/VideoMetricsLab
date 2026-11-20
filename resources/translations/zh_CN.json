@@ -1,7 +1,10 @@
 {
  "strings": {
+  "Export the difference": "导出差值",
+  "Export the difference as CSV...": "将差值导出为 CSV...",
+  "Exporting the difference to {path}...": "正在将差值导出到 {path}...",
+  "Graphs as ZIP...": "图表导出为 ZIP...",
   "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "每个指标每一帧的分数，以勾选的格式：每个视频一个文件（<video> - frames.json）。长视频的文件很大。",
-  "Export per-frame scores": "导出逐帧分数",
   "Export per-frame scores to": "将逐帧分数导出到",
   "Per-frame scores": "逐帧分数",
   "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "结果、逐帧分数和弱片段保存为 CSV 文件，供电子表格使用。JSON 和 CSV 都未勾选时，只导出图表。",
@@ -494,9 +497,6 @@
   "Export complete: {path}": "导出完成：{path}",
   "Export graph": "导出图表",
   "PNG image (*.png)": "PNG 图像 (*.png)",
-  "No data": "没有数据",
-  "There are no series to export.": "没有可导出的系列。",
-  "Choose export folder": "选择导出文件夹",
   "{identical} frames identical to the reference are included in the XPSNR sequence average: zero distortion, with their frames included in the count.": "与参考视频相同的 {identical} 帧计入 XPSNR 序列平均值：零失真，并计入帧数。",
   "Remove {label} from the graph": "从图表中移除 {label}",
   "Use seconds, M:SS, or H:MM:SS.sss": "请使用秒数、M:SS 或 H:MM:SS.sss",
@@ -1139,7 +1139,6 @@
   "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "每个视频各指标的图表，同一参考视频有多个视频时还有包含所有视频的各指标图表；视频仍在时还有码率图表。",
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "应用已保存分数的所有对比。无需重新添加视频，即可在指标图表中打开，或导出其结果、逐帧分数、图表和弱片段。",
   "Export graphs": "导出图表",
-  "Export graphs as ZIP...": "将图表导出为 ZIP...",
   "Export weak segments...": "导出弱片段...",
   "Filter by file name": "按文件名筛选",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "图表按同一参考视频的测试视频导出：请选择参考视频相同的对比。",
@@ -1234,9 +1233,6 @@
   ],
   "Removed {count} saved result.": [
    "已移除 {count} 个已保存的结果。"
-  ],
-  "Exporting {count} CSV file to {directory}...": [
-   "正在将 {count} 个 CSV 文件导出到 {directory}..."
   ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "所勾选的 {count} 个视频已有码率结果。\n\n要重新计算这些文件吗？选择“否”保留其结果，只计算没有结果的文件。"

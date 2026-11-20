@@ -2,8 +2,8 @@
 // right-click menus alike: the same file, of every run the window shows, with
 // each metric's score and the statistics Metric Graphs shows, in the shape
 // the command line's --json writes (results_summary.h): as JSON, or as CSV
-// with a row for each video. The scores, not the frames (Metric Graphs'
-// Export CSV has those).
+// with a row for each video. The scores, not the frames (the per-frame
+// scores export has those).
 #pragma once
 
 #include <QString>

@@ -479,8 +479,8 @@ void MainWindow::export_saved_results(SavedResultsPanel::Export kind, const std:
     }
     case SavedResultsPanel::Export::frames_json:
     case SavedResultsPanel::Export::frames_csv: {
-        // A file per comparison, as Metric Graphs' Export CSV writes it, or
-        // the same table as JSON.
+        // A file per comparison, as the per-frame scores exports write it, as
+        // CSV or JSON.
         const bool json = kind == SavedResultsPanel::Export::frames_json;
         const QString folder = dialogs_.choose_folder(app::tr("Export per-frame scores to"),
                                                       dialogs_.export_folder ? dialogs_.export_folder() : QString());

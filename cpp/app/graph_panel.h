@@ -352,7 +352,9 @@ private:
     std::pair<std::vector<QString>, std::vector<std::tuple<QString, QColor, std::vector<QString>>>> export_table();
     void on_add_saved_run();
     void on_export_png();
-    void on_export_csv();
+    // Export the difference as CSV, from the statistics' menu while the
+    // band shows one.
+    void on_export_difference();
     // The page in view's difference pair (MetricPage::difference_pair).
     std::optional<std::pair<int, int>> shown_difference_pair() const;
     void show_stats_menu(const QPoint& position);
@@ -362,6 +364,7 @@ private:
         std::string identity;  // the row's line's, if any
         QAction* this_video = nullptr;
         QAction* all_videos = nullptr;
+        QAction* difference = nullptr;  // while the band shows a difference
     };
     void fill_stats_menu(QMenu& menu, int row, StatsMenu& items) const;
     // Worst frames brought up to date for the page shown, the lines shown
@@ -389,7 +392,6 @@ private:
     QTableWidget* stats_table_ = nullptr;
     QTabWidget* tabs_ = nullptr;
     std::map<std::string, MetricPage*> pages_;
-    QPushButton* export_csv_button_ = nullptr;
     // Go to frame and the frame range (issue #17), shared with the Bitrate tab.
     FrameControls* frame_controls_ = nullptr;
     // The Difference box: on for every page (not saved), drawn where a page

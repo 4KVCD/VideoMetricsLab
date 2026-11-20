@@ -1,7 +1,10 @@
 {
  "strings": {
+  "Export the difference": "تصدير الفرق",
+  "Export the difference as CSV...": "تصدير الفرق بصيغة CSV...",
+  "Exporting the difference to {path}...": "جارٍ تصدير الفرق إلى {path}...",
+  "Graphs as ZIP...": "الرسوم البيانية كملف ZIP...",
   "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "درجة كل إطار لكل مقياس، بالصيغ المحددة: ملف لكل فيديو (<video> - frames.json). درجات الفيديو الطويل كبيرة.",
-  "Export per-frame scores": "تصدير الدرجات لكل إطار",
   "Export per-frame scores to": "تصدير الدرجات لكل إطار إلى",
   "Per-frame scores": "الدرجات لكل إطار",
   "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "النتائج والدرجات لكل إطار والمقاطع الضعيفة كملفات CSV، لجداول البيانات. إن لم تُحدَّد JSON ولا CSV، تُصدَّر الرسوم البيانية وحدها.",
@@ -494,9 +497,6 @@
   "Export complete: {path}": "اكتمل التصدير: {path}",
   "Export graph": "تصدير الرسم",
   "PNG image (*.png)": "صورة PNG (*.png)",
-  "No data": "لا بيانات",
-  "There are no series to export.": "لا سلاسل لتصديرها.",
-  "Choose export folder": "اختيار مجلد التصدير",
   "{identical} frames identical to the reference are included in the XPSNR sequence average: zero distortion, with their frames included in the count.": "‏{identical} إطارًا مطابقًا للمرجع مضمّنة في متوسط تسلسل XPSNR: تشويه صفري، وتُحتسب إطاراتها في العدد.",
   "Remove {label} from the graph": "إزالة {label} من الرسم",
   "Use seconds, M:SS, or H:MM:SS.sss": "استخدم الثواني، أو M:SS، أو H:MM:SS.sss",
@@ -1139,7 +1139,6 @@
   "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "رسم كل فيديو لكل مقياس، ومع عدة فيديوهات لمرجع واحد رسم لكل مقياس يجمعها كلها؛ ورسوم معدل البت حيث لا تزال الفيديوهات موجودة.",
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "كل مقارنة حفظ التطبيق درجاتها. افتحها في رسوم المقاييس، أو صدّر نتائجها ودرجاتها لكل إطار ورسومها ومقاطعها الضعيفة، دون إضافة الفيديوهات مرة أخرى.",
   "Export graphs": "تصدير الرسوم البيانية",
-  "Export graphs as ZIP...": "تصدير الرسوم البيانية كملف ZIP...",
   "Export weak segments...": "تصدير المقاطع الضعيفة...",
   "Filter by file name": "تصفية حسب اسم الملف",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "تُصدَّر الرسوم لفيديوهات الاختبار لمرجع واحد: حدّد مقارنات تشترك فيه.",
@@ -1329,14 +1328,6 @@
    "أُزيلت {count} نتائج محفوظة.",
    "أُزيلت {count} نتيجة محفوظة.",
    "أُزيلت {count} نتيجة محفوظة."
-  ],
-  "Exporting {count} CSV file to {directory}...": [
-   "جارٍ تصدير {count} ملف CSV إلى {directory}...",
-   "جارٍ تصدير {count} ملف CSV إلى {directory}...",
-   "جارٍ تصدير {count} ملف CSV إلى {directory}...",
-   "جارٍ تصدير {count} ملفات CSV إلى {directory}...",
-   "جارٍ تصدير {count} ملفًا CSV إلى {directory}...",
-   "جارٍ تصدير {count} ملف CSV إلى {directory}..."
   ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "لدى الفيديو المحدد ({count}) نتائج معدل بت بالفعل.\n\nهل تعيد حسابه؟ اختر «لا» للإبقاء على نتائجه وحساب الملفات التي بلا نتائج فقط.",

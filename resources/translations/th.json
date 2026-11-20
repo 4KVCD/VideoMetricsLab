@@ -1,7 +1,10 @@
 {
  "strings": {
+  "Export the difference": "ส่งออกผลต่าง",
+  "Export the difference as CSV...": "ส่งออกผลต่างเป็น CSV...",
+  "Exporting the difference to {path}...": "กำลังส่งออกผลต่างไปที่ {path}...",
+  "Graphs as ZIP...": "กราฟเป็น ZIP...",
   "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "คะแนนของทุกเฟรมในแต่ละเมตริก ในรูปแบบที่เลือก: ไฟล์ละหนึ่งวิดีโอ (<video> - frames.json) ของวิดีโอยาวจะมีขนาดใหญ่",
-  "Export per-frame scores": "ส่งออกคะแนนรายเฟรม",
   "Export per-frame scores to": "ส่งออกคะแนนรายเฟรมไปที่",
   "Per-frame scores": "คะแนนรายเฟรม",
   "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "ผลลัพธ์ คะแนนรายเฟรม และช่วงที่อ่อนเป็นไฟล์ CSV สำหรับสเปรดชีต หากไม่ได้เลือกทั้ง JSON และ CSV จะส่งออกเฉพาะกราฟ",
@@ -494,9 +497,6 @@
   "Export complete: {path}": "ส่งออกเสร็จ: {path}",
   "Export graph": "ส่งออกกราฟ",
   "PNG image (*.png)": "ภาพ PNG (*.png)",
-  "No data": "ไม่มีข้อมูล",
-  "There are no series to export.": "ไม่มีชุดข้อมูลให้ส่งออก",
-  "Choose export folder": "เลือกโฟลเดอร์ส่งออก",
   "{identical} frames identical to the reference are included in the XPSNR sequence average: zero distortion, with their frames included in the count.": "รวม {identical} เฟรมที่เหมือนวิดีโออ้างอิงทุกประการไว้ในค่าเฉลี่ยลำดับของ XPSNR: ความผิดเพี้ยนเป็นศูนย์ และนับเฟรมเหล่านั้น",
   "Remove {label} from the graph": "นำ {label} ออกจากกราฟ",
   "Use seconds, M:SS, or H:MM:SS.sss": "ใช้วินาที, M:SS หรือ H:MM:SS.sss",
@@ -1139,7 +1139,6 @@
   "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "กราฟของวิดีโอแต่ละรายการสำหรับทุกเมตริก และเมื่อมีหลายวิดีโอของวิดีโออ้างอิงเดียวกัน กราฟของแต่ละเมตริกที่รวมทุกวิดีโอ รวมถึงกราฟบิตเรตในกรณีที่ยังมีไฟล์วิดีโออยู่",
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "การเปรียบเทียบทั้งหมดที่แอปบันทึกคะแนนไว้ เปิดในกราฟเมตริก หรือส่งออกผลลัพธ์ คะแนนรายเฟรม กราฟ และช่วงที่อ่อน โดยไม่ต้องเพิ่มวิดีโออีกครั้ง",
   "Export graphs": "ส่งออกกราฟ",
-  "Export graphs as ZIP...": "ส่งออกกราฟเป็น ZIP...",
   "Export weak segments...": "ส่งออกช่วงที่อ่อน...",
   "Filter by file name": "กรองตามชื่อไฟล์",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "กราฟจะส่งออกสำหรับวิดีโอทดสอบของวิดีโออ้างอิงเดียวกัน: เลือกการเปรียบเทียบที่ใช้วิดีโออ้างอิงร่วมกัน",
@@ -1234,9 +1233,6 @@
   ],
   "Removed {count} saved result.": [
    "นำผลลัพธ์ที่บันทึก {count} รายการออกแล้ว"
-  ],
-  "Exporting {count} CSV file to {directory}...": [
-   "กำลังส่งออกไฟล์ CSV {count} ไฟล์ไปที่ {directory}..."
   ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "วิดีโอที่เลือก {count} รายการมีผลบิตเรตแล้ว\n\nคำนวณใหม่หรือไม่ เลือก ไม่ เพื่อคงผลลัพธ์ และคำนวณเฉพาะไฟล์ที่ยังไม่มีผลลัพธ์"
