@@ -379,6 +379,9 @@ TEST_F(GraphPanelTest, TheStatisticsMenuOffersTheVideosExports) {
                                                    "Export all videos' results, graphs and weak segments..."}));
     EXPECT_EQ(stats_menu(panel, "b"), QStringList{"Export all videos' results, graphs and weak segments..."});
     EXPECT_EQ(stats_menu(panel, "nowhere"), QStringList{"Export all videos' results, graphs and weak segments..."});
+    items = {"results", "frames"};
+    EXPECT_EQ(stats_menu(panel, "a"), (QStringList{"Export this video's results and per-frame scores...",
+                                                   "Export all videos' results and per-frame scores..."}));
     items = {"results"};
     EXPECT_EQ(stats_menu(panel, "a"),
               (QStringList{"Export this video's results...", "Export all videos' results..."}));

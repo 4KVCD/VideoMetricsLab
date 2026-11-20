@@ -80,7 +80,8 @@ std::string text_lines(const std::string& text);
 
 // The files of an export besides its graphs, as Settings' Exports include
 // (exported_items) and its formats say, named after `name`: the results
-// (`document`, made only when they're included), and the weak segments by
+// (`document`, made only when they're included), each video's per-frame
+// scores ("<video> - frames", named as its graphs are), and the weak segments by
 // `rules` of the one video, or (`several`) a report of all of `videos`. Weak
 // segments need a condition in `rules`: without one there are none, and
 // `segments_skipped` is set.

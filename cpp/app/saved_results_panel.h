@@ -1,6 +1,6 @@
 // The Saved results tab: the comparisons saved in the results cache
 // (saved_results.h), listed, opened in Metric Graphs, exported (results,
-// per-frame CSV, graphs, weak segments) and deleted. Where a metric has
+// per-frame scores, graphs, weak segments) and deleted. Where a metric has
 // several saved scores, the newest is used unless another is picked.
 #pragma once
 
@@ -45,7 +45,7 @@ class SavedResultsPanel : public QWidget {
 
 public:
     // `contents`: what Settings' Exports include (the right-click menu's).
-    enum class Export { contents, results_json, results_csv, frames_csv, graphs, segments };
+    enum class Export { contents, results_json, results_csv, frames_json, frames_csv, graphs, segments };
 
     // `settings` are the window's (the saved results' folder, the weak
     // segment profiles); `dialogs` the window's, which outlive the panel.

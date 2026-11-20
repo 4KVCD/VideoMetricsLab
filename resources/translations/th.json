@@ -1,9 +1,15 @@
 {
  "strings": {
+  "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "คะแนนของทุกเฟรมในแต่ละเมตริก ในรูปแบบที่เลือก: ไฟล์ละหนึ่งวิดีโอ (<video> - frames.json) ของวิดีโอยาวจะมีขนาดใหญ่",
+  "Export per-frame scores": "ส่งออกคะแนนรายเฟรม",
+  "Export per-frame scores to": "ส่งออกคะแนนรายเฟรมไปที่",
+  "Per-frame scores": "คะแนนรายเฟรม",
+  "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "ผลลัพธ์ คะแนนรายเฟรม และช่วงที่อ่อนเป็นไฟล์ CSV สำหรับสเปรดชีต หากไม่ได้เลือกทั้ง JSON และ CSV จะส่งออกเฉพาะกราฟ",
+  "Results, per-frame scores and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are exported.": "ผลลัพธ์ คะแนนรายเฟรม และช่วงที่อ่อนเป็นไฟล์ JSON หากไม่ได้เลือกทั้ง JSON และ CSV จะส่งออกเฉพาะกราฟ",
+  "per-frame scores": "คะแนนรายเฟรม",
+  "Per-frame scores exported to {path}": "ส่งออกคะแนนรายเฟรมไปที่ {path} แล้ว",
   "In:": "ในรูปแบบ:",
   "Results": "ผลลัพธ์",
-  "Results and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are exported.": "ผลลัพธ์และช่วงที่อ่อนเป็นไฟล์ JSON หากไม่ได้เลือกทั้ง JSON และ CSV จะส่งออกเฉพาะกราฟ",
-  "Results and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "ผลลัพธ์และช่วงที่อ่อนเป็นไฟล์ CSV สำหรับสเปรดชีต หากไม่ได้เลือกทั้ง JSON และ CSV จะส่งออกเฉพาะกราฟ",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "คะแนนและสถิติ ตามที่ ส่งออกผลลัพธ์ บันทึก ในรูปแบบที่เลือก: ของวิดีโอเดียว (<video> - results.json) หรือของวิดีโอทั้งหมดในไฟล์เดียว",
   "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "ช่วงที่อ่อนตามโปรไฟล์ที่ใช้อยู่ (การตั้งค่า > ช่วงที่อ่อน ส่วนในแท็บ ผลลัพธ์ที่บันทึก ใช้กฎที่เลือกไว้ที่นั่น) ในรูปแบบที่เลือก: ของวิดีโอเดียว (<video>.vmaf.segments.json) หรือของวิดีโอทั้งหมดในรายงานเดียว จะไม่บันทึกอะไรตราบใดที่กฎไม่มีเงื่อนไข",
   " min": " นาที",
@@ -1134,8 +1140,6 @@
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "การเปรียบเทียบทั้งหมดที่แอปบันทึกคะแนนไว้ เปิดในกราฟเมตริก หรือส่งออกผลลัพธ์ คะแนนรายเฟรม กราฟ และช่วงที่อ่อน โดยไม่ต้องเพิ่มวิดีโออีกครั้ง",
   "Export graphs": "ส่งออกกราฟ",
   "Export graphs as ZIP...": "ส่งออกกราฟเป็น ZIP...",
-  "Export per-frame CSV files to": "ส่งออกไฟล์ CSV รายเฟรมไปที่",
-  "Export per-frame CSV...": "ส่งออก CSV รายเฟรม...",
   "Export weak segments...": "ส่งออกช่วงที่อ่อน...",
   "Filter by file name": "กรองตามชื่อไฟล์",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "กราฟจะส่งออกสำหรับวิดีโอทดสอบของวิดีโออ้างอิงเดียวกัน: เลือกการเปรียบเทียบที่ใช้วิดีโออ้างอิงร่วมกัน",
@@ -1263,9 +1267,6 @@
   ],
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "ลบคะแนนที่บันทึกไว้ของการเปรียบเทียบ {count} รายการไม่ได้: อาจมีไฟล์ของรายการเหล่านั้นเปิดอยู่"
-  ],
-  "{count} per-frame CSV file exported to {path}": [
-   "ส่งออกไฟล์ CSV รายเฟรม {count} ไฟล์ไปที่ {path} แล้ว"
   ],
   "{count} saved comparison in {directory}": [
    "การเปรียบเทียบที่บันทึก {count} รายการใน {directory}"

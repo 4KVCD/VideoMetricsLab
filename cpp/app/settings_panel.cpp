@@ -335,6 +335,10 @@ QWidget* SettingsPanel::build_export_choices() {
          {app::tr("Results"),
           app::tr("Scores and statistics, as Export results saves them, in the formats ticked: a video's alone "
                   "(<video> - results.json), or all the videos' in one file.")}},
+        {"frames",
+         {app::tr("Per-frame scores"),
+          app::tr("Every frame's score of each metric, in the formats ticked: a file for each video "
+                  "(<video> - frames.json). A long video's are big.")}},
         {"graphs",
          {app::tr("Graphs"),
           app::tr("Each video's graph of every metric, and its bitrate with the reference's, as PNG images "
@@ -361,12 +365,12 @@ QWidget* SettingsPanel::build_export_choices() {
     const std::map<std::string, std::pair<QString, QString>> formats{
         {"json",
          {QStringLiteral("JSON"),
-          app::tr("Results and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are "
-                  "exported.")}},
+          app::tr("Results, per-frame scores and weak segments as JSON files. With neither JSON nor CSV "
+                  "ticked, only graphs are exported.")}},
         {"csv",
          {QStringLiteral("CSV"),
-          app::tr("Results and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, "
-                  "only graphs are exported.")}},
+          app::tr("Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON "
+                  "nor CSV ticked, only graphs are exported.")}},
     };
     for (const std::string& key : export_format_keys()) {
         const auto& [name, tip] = formats.at(key);

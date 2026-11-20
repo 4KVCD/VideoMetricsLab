@@ -1,9 +1,15 @@
 {
  "strings": {
+  "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "各指標の全フレームのスコアをチェックした形式で：動画ごとに 1 ファイル（<video> - frames.json）。長い動画では大きくなります。",
+  "Export per-frame scores": "フレームごとのスコアをエクスポート",
+  "Export per-frame scores to": "フレームごとのスコアのエクスポート先",
+  "Per-frame scores": "フレームごとのスコア",
+  "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "結果、フレームごとのスコア、弱い区間を CSV ファイルで（表計算ソフト用）。JSON も CSV もチェックされていないときは、グラフだけがエクスポートされます。",
+  "Results, per-frame scores and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are exported.": "結果、フレームごとのスコア、弱い区間を JSON ファイルで。JSON も CSV もチェックされていないときは、グラフだけがエクスポートされます。",
+  "per-frame scores": "フレームごとのスコア",
+  "Per-frame scores exported to {path}": "フレームごとのスコアを {path} にエクスポートしました",
   "In:": "形式：",
   "Results": "結果",
-  "Results and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are exported.": "結果と弱い区間を JSON ファイルで。JSON も CSV もチェックされていないときは、グラフだけがエクスポートされます。",
-  "Results and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "結果と弱い区間を CSV ファイルで（表計算ソフト用）。JSON も CSV もチェックされていないときは、グラフだけがエクスポートされます。",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "スコアと統計（結果をエクスポート が保存する形式）をチェックした形式で：1 本の動画分のみ（<video> - results.json）、またはすべての動画分を 1 つのファイルに。",
   "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "使用中のプロファイル（設定 > 弱い区間。保存済みの結果 タブではそこで選んだルール）による弱い区間をチェックした形式で：1 本の動画分（<video>.vmaf.segments.json）、またはすべての動画分を 1 つのレポートに。ルールに条件がない間は何も保存されません。",
   " min": " 分",
@@ -1134,8 +1140,6 @@
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "アプリがスコアを保存しているすべての比較。動画を再び追加しなくても、指標グラフで開いたり、結果、フレームごとのスコア、グラフ、弱い区間をエクスポートしたりできます。",
   "Export graphs": "グラフをエクスポート",
   "Export graphs as ZIP...": "グラフを ZIP でエクスポート...",
-  "Export per-frame CSV files to": "フレームごとの CSV ファイルのエクスポート先",
-  "Export per-frame CSV...": "フレームごとの CSV をエクスポート...",
   "Export weak segments...": "弱い区間をエクスポート...",
   "Filter by file name": "ファイル名で絞り込み",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "グラフは同じ参照動画のテスト動画についてエクスポートされます。参照動画が共通の比較を選択してください。",
@@ -1263,9 +1267,6 @@
   ],
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "{count} 件の比較の保存済みスコアを削除できませんでした。そのファイルが開かれている可能性があります。"
-  ],
-  "{count} per-frame CSV file exported to {path}": [
-   "フレームごとの CSV ファイル {count} 個を {path} にエクスポートしました"
   ],
   "{count} saved comparison in {directory}": [
    "保存済みの比較 {count} 件（{directory}）"

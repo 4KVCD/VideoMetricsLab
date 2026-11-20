@@ -1,9 +1,15 @@
 {
  "strings": {
+  "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "각 지표의 모든 프레임 점수를 선택한 형식으로: 동영상마다 파일 하나(<video> - frames.json). 긴 동영상은 파일이 큽니다.",
+  "Export per-frame scores": "프레임별 점수 내보내기",
+  "Export per-frame scores to": "프레임별 점수를 내보낼 위치",
+  "Per-frame scores": "프레임별 점수",
+  "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "결과, 프레임별 점수, 약한 구간을 스프레드시트용 CSV 파일로. JSON과 CSV 모두 선택하지 않으면 그래프만 내보냅니다.",
+  "Results, per-frame scores and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are exported.": "결과, 프레임별 점수, 약한 구간을 JSON 파일로. JSON과 CSV 모두 선택하지 않으면 그래프만 내보냅니다.",
+  "per-frame scores": "프레임별 점수",
+  "Per-frame scores exported to {path}": "프레임별 점수를 {path}에 내보냈습니다",
   "In:": "형식:",
   "Results": "결과",
-  "Results and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are exported.": "결과와 약한 구간을 JSON 파일로. JSON과 CSV 모두 선택하지 않으면 그래프만 내보냅니다.",
-  "Results and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "결과와 약한 구간을 스프레드시트용 CSV 파일로. JSON과 CSV 모두 선택하지 않으면 그래프만 내보냅니다.",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "결과 내보내기가 저장하는 방식의 점수와 통계를 선택한 형식으로: 동영상 하나만(<video> - results.json), 또는 모든 동영상을 파일 하나에.",
   "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "사용 중인 프로필(설정 > 약한 구간; 저장된 결과 탭에서는 그곳에서 고른 규칙)에 따른 약한 구간을 선택한 형식으로: 동영상 하나(<video>.vmaf.segments.json), 또는 모든 동영상을 보고서 하나에. 규칙에 조건이 없는 동안은 아무것도 저장되지 않습니다.",
   " min": " 분",
@@ -1134,8 +1140,6 @@
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "앱이 점수를 저장한 모든 비교입니다. 영상을 다시 추가하지 않고도 지표 그래프에서 열거나 결과, 프레임별 점수, 그래프, 약한 구간을 내보낼 수 있습니다.",
   "Export graphs": "그래프 내보내기",
   "Export graphs as ZIP...": "그래프를 ZIP으로 내보내기...",
-  "Export per-frame CSV files to": "프레임별 CSV 파일을 내보낼 위치",
-  "Export per-frame CSV...": "프레임별 CSV 내보내기...",
   "Export weak segments...": "약한 구간 내보내기...",
   "Filter by file name": "파일 이름으로 필터",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "그래프는 같은 참조 영상의 테스트 영상에 대해 내보냅니다. 참조 영상이 같은 비교를 선택하세요.",
@@ -1263,9 +1267,6 @@
   ],
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "비교 {count}개의 저장된 점수를 삭제하지 못했습니다. 해당 파일이 열려 있을 수 있습니다."
-  ],
-  "{count} per-frame CSV file exported to {path}": [
-   "프레임별 CSV 파일 {count}개를 {path}에 내보냈습니다"
   ],
   "{count} saved comparison in {directory}": [
    "저장된 비교 {count}개, {directory}"

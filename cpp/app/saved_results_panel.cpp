@@ -170,9 +170,13 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
             [this] { emit export_requested(Export::results_csv, selected_results()); });
     results_button_->setMenu(results_menu);
     buttons->addWidget(results_button_);
-    frames_button_ = new QPushButton(app::tr("Export per-frame CSV..."));
-    connect(frames_button_, &QPushButton::clicked, this,
+    frames_button_ = new QPushButton(app::tr("Export per-frame scores"));
+    auto* frames_menu = new QMenu(frames_button_);
+    connect(frames_menu->addAction(app::tr("As JSON...")), &QAction::triggered, this,
+            [this] { emit export_requested(Export::frames_json, selected_results()); });
+    connect(frames_menu->addAction(app::tr("As CSV...")), &QAction::triggered, this,
             [this] { emit export_requested(Export::frames_csv, selected_results()); });
+    frames_button_->setMenu(frames_menu);
     buttons->addWidget(frames_button_);
     graphs_button_ = new QPushButton(app::tr("Export graphs as ZIP..."));
     graphs_button_->setToolTip(app::tr("Each video's graph of every metric, and with several of one reference "

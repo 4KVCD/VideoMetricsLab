@@ -1,9 +1,15 @@
 {
  "strings": {
+  "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "Il punteggio di ogni fotogramma per ogni metrica, nei formati spuntati: un file per video (<video> - frames.json). Quelli di un video lungo sono grandi.",
+  "Export per-frame scores": "Esporta punteggi per fotogramma",
+  "Export per-frame scores to": "Esporta i punteggi per fotogramma in",
+  "Per-frame scores": "Punteggi per fotogramma",
+  "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "Risultati, punteggi per fotogramma e segmenti deboli come file CSV, per i fogli di calcolo. Senza JSON né CSV spuntati, vengono esportati solo i grafici.",
+  "Results, per-frame scores and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are exported.": "Risultati, punteggi per fotogramma e segmenti deboli come file JSON. Senza JSON né CSV spuntati, vengono esportati solo i grafici.",
+  "per-frame scores": "punteggi per fotogramma",
+  "Per-frame scores exported to {path}": "Punteggi per fotogramma esportati in {path}",
   "In:": "In:",
   "Results": "Risultati",
-  "Results and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are exported.": "Risultati e segmenti deboli come file JSON. Senza JSON né CSV spuntati, vengono esportati solo i grafici.",
-  "Results and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "Risultati e segmenti deboli come file CSV, per i fogli di calcolo. Senza JSON né CSV spuntati, vengono esportati solo i grafici.",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "Punteggi e statistiche, come li salva Esporta risultati, nei formati spuntati: quelli di un video da solo (<video> - results.json), o di tutti i video in un unico file.",
   "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "Segmenti deboli secondo il profilo in uso (Impostazioni > Segmenti deboli; nella scheda Risultati salvati, le regole scelte lì), nei formati spuntati: quelli di un video (<video>.vmaf.segments.json), o di tutti i video in un unico rapporto. Non viene salvato nulla finché le regole non hanno condizioni.",
   " min": " min",
@@ -1134,8 +1140,6 @@
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Ogni confronto di cui l'app ha salvato i punteggi. Aprili in Grafici metriche, o esportane risultati, punteggi per fotogramma, grafici e segmenti deboli, senza aggiungere di nuovo i video.",
   "Export graphs": "Esporta grafici",
   "Export graphs as ZIP...": "Esporta grafici come ZIP...",
-  "Export per-frame CSV files to": "Esporta i file CSV per fotogramma in",
-  "Export per-frame CSV...": "Esporta CSV per fotogramma...",
   "Export weak segments...": "Esporta segmenti deboli...",
   "Filter by file name": "Filtra per nome file",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "I grafici si esportano per i video di prova di un solo riferimento: seleziona confronti che lo condividono.",
@@ -1293,10 +1297,6 @@
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "Non è stato possibile eliminare i punteggi salvati di {count} confronto: uno dei suoi file potrebbe essere aperto.",
    "Non è stato possibile eliminare i punteggi salvati di {count} confronti: uno dei loro file potrebbe essere aperto."
-  ],
-  "{count} per-frame CSV file exported to {path}": [
-   "{count} file CSV per fotogramma esportato in {path}",
-   "{count} file CSV per fotogramma esportati in {path}"
   ],
   "{count} saved comparison in {directory}": [
    "{count} confronto salvato in {directory}",

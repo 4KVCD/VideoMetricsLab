@@ -1,6 +1,6 @@
 // A result's per-frame scores as CSV, as the window's Export CSV writes
-// them. A port of export_csv and its file-name helpers in
-// vmaf_app/core/run_io.py.
+// them (a port of export_csv and its file-name helpers in
+// vmaf_app/core/run_io.py), or as JSON.
 #pragma once
 
 #include <filesystem>
@@ -19,6 +19,17 @@ namespace vml {
 // leaves its cell blank. Throws std::runtime_error when the file cannot be
 // written.
 void export_csv(const ComparisonResult& result, const std::filesystem::path& path);
+// export_csv's file as text.
+std::string per_frame_csv(const ComparisonResult& result);
+
+// The same table as JSON, for scripts that read JSON: "reference" and
+// "test" (the videos' paths), "fps", "columns" (the CSV's header) and
+// "rows", each one of the CSV's rows as a list, a blank cell null. Numbers
+// as Python's json writes them (an endless PSNR Infinity), each row on a
+// line of its own. export_per_frame_json writes it to `path`, throwing as
+// export_csv does.
+std::string per_frame_json(const ComparisonResult& result);
+void export_per_frame_json(const ComparisonResult& result, const std::filesystem::path& path);
 
 // Writes `first` minus `second` as CSV, paired as vml/difference.h pairs
 // them: export_csv's rows, times and header for `first`, each cell the

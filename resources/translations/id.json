@@ -1,9 +1,15 @@
 {
  "strings": {
+  "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "Skor setiap frame untuk tiap metrik, dalam format yang dicentang: satu file per video (<video> - frames.json). Milik video panjang berukuran besar.",
+  "Export per-frame scores": "Ekspor skor per frame",
+  "Export per-frame scores to": "Ekspor skor per frame ke",
+  "Per-frame scores": "Skor per frame",
+  "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "Hasil, skor per frame, dan segmen lemah sebagai file CSV, untuk spreadsheet. Jika JSON maupun CSV tidak dicentang, hanya grafik yang diekspor.",
+  "Results, per-frame scores and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are exported.": "Hasil, skor per frame, dan segmen lemah sebagai file JSON. Jika JSON maupun CSV tidak dicentang, hanya grafik yang diekspor.",
+  "per-frame scores": "skor per frame",
+  "Per-frame scores exported to {path}": "Skor per frame diekspor ke {path}",
   "In:": "Dalam:",
   "Results": "Hasil",
-  "Results and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are exported.": "Hasil dan segmen lemah sebagai file JSON. Jika JSON maupun CSV tidak dicentang, hanya grafik yang diekspor.",
-  "Results and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "Hasil dan segmen lemah sebagai file CSV, untuk spreadsheet. Jika JSON maupun CSV tidak dicentang, hanya grafik yang diekspor.",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "Skor dan statistik, seperti yang disimpan Ekspor hasil, dalam format yang dicentang: milik satu video saja (<video> - results.json), atau milik semua video dalam satu file.",
   "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "Segmen lemah menurut profil yang digunakan (Pengaturan > Segmen lemah; di tab Hasil tersimpan, aturan yang dipilih di sana), dalam format yang dicentang: milik satu video (<video>.vmaf.segments.json), atau milik semua video dalam satu laporan. Tidak ada yang disimpan selama aturan tidak memiliki kondisi.",
   " min": " mnt",
@@ -1134,8 +1140,6 @@
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Setiap perbandingan yang skornya disimpan aplikasi. Buka di Grafik metrik, atau ekspor hasil, skor per frame, grafik, dan segmen lemahnya, tanpa menambahkan videonya lagi.",
   "Export graphs": "Ekspor grafik",
   "Export graphs as ZIP...": "Ekspor grafik sebagai ZIP...",
-  "Export per-frame CSV files to": "Ekspor file CSV per frame ke",
-  "Export per-frame CSV...": "Ekspor CSV per frame...",
   "Export weak segments...": "Ekspor segmen lemah...",
   "Filter by file name": "Filter menurut nama file",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "Grafik diekspor untuk video uji dari satu referensi: pilih perbandingan yang memakai referensi yang sama.",
@@ -1263,9 +1267,6 @@
   ],
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "Skor tersimpan dari {count} perbandingan tidak dapat dihapus: salah satu filenya mungkin sedang terbuka."
-  ],
-  "{count} per-frame CSV file exported to {path}": [
-   "{count} file CSV per frame diekspor ke {path}"
   ],
   "{count} saved comparison in {directory}": [
    "{count} perbandingan tersimpan di {directory}"

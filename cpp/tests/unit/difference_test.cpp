@@ -37,6 +37,47 @@ TEST(ExportCsv, ACvvdpScoreWithoutSecondsIsWritten) {
     EXPECT_NE(text.str().find(",8.5"), std::string::npos) << text.str();
 }
 
+// Per-frame scores as JSON: the CSV's table, its header as "columns" and
+// each row a list on a line of its own, a blank cell null, an endless PSNR
+// Infinity as Python writes it.
+TEST(ExportCsv, JsonHoldsTheCsvsTable) {
+    ComparisonResult result;
+    result.source = "r.mkv";
+    result.distorted = "t.mkv";
+    result.fps = 24.0;
+    FrameMetricResult vmaf;
+    vmaf.key = "vmaf";
+    vmaf.frame = {0, 1};
+    vmaf.time = {0.0, 1 / 24.0};
+    vmaf.values = {95.5F, 80.25F};
+    result.metric_results.add(vmaf);
+    FrameMetricResult psnr;
+    psnr.key = "psnr";
+    psnr.frame = {0};
+    psnr.time = {0.0};
+    psnr.values = {std::numeric_limits<float>::infinity()};
+    result.metric_results.add(psnr);
+    const std::string csv = per_frame_csv(result);
+    EXPECT_TRUE(csv.starts_with("frame,time_s,vmaf,vmaf_neg,psnr,ssim,xpsnr,vmaf_v1,ssimulacra2,butteraugli\r\n"))
+        << csv;
+    EXPECT_EQ(per_frame_json(result),
+              "{\n"
+              "  \"reference\": \"r.mkv\",\n"
+              "  \"test\": \"t.mkv\",\n"
+              "  \"fps\": 24.0,\n"
+              "  \"columns\": [\n"
+              "    \"frame\",\n    \"time_s\",\n    \"vmaf\",\n    \"vmaf_neg\",\n    \"psnr\",\n"
+              "    \"ssim\",\n    \"xpsnr\",\n    \"vmaf_v1\",\n    \"ssimulacra2\",\n    \"butteraugli\"\n"
+              "  ],\n"
+              "  \"rows\": [\n"
+              "    [0, 0.0, 95.5, null, Infinity, null, null, null, null, null],\n"
+              "    [1, 0.041667, 80.25, null, null, null, null, null, null, null]\n"
+              "  ]\n"
+              "}\n");
+    EXPECT_EQ(per_frame_json(ComparisonResult{}).substr(per_frame_json(ComparisonResult{}).find("\"rows\"")),
+              "\"rows\": []\n}\n");
+}
+
 // Two labels that name one file on this system, still to be written, get two
 // files; and a write that fails leaves the file that was there, and no other.
 TEST(ExportCsv, FilesAreKeptApartAndReplacedWhole) {

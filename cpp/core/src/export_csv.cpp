@@ -16,6 +16,7 @@
 #include "vml/model_select.h"
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
+#include "vml/python_json.h"
 #include "vml/temp_files.h"
 #include "vml/python_text.h"
 
@@ -143,30 +144,73 @@ CsvTable csv_table(const MetricResultSet& metrics) {
     return table;
 }
 
-void write_csv_table(const CsvTable& table, const std::filesystem::path& path) {
-    // Python's csv.writer: comma-separated, rows ended with CR LF; none of
-    // these cells needs quotes.
-    write_file_whole(path, [&table](std::ostream& file) {
-        std::string header = "frame,time_s";
+// Python's csv.writer: comma-separated, rows ended with CR LF; none of
+// these cells needs quotes.
+std::string csv_text(const CsvTable& table) {
+    std::string text = "frame,time_s";
+    for (const std::string& name : table.names) {
+        text += "," + name;
+    }
+    text += "\r\n";
+    for (std::size_t row = 0; row < table.frames.size(); ++row) {
+        text += std::to_string(table.frames[row]) + "," + format_fixed(table.times[row], 6);
         for (const std::string& name : table.names) {
-            header += "," + name;
+            const double value = table.values.at(name)[row];
+            text += "," + (std::isnan(value) ? std::string() : python_repr(value));
         }
-        file << header << "\r\n";
-        for (std::size_t row = 0; row < table.frames.size(); ++row) {
-            std::string line = std::to_string(table.frames[row]) + "," + format_fixed(table.times[row], 6);
-            for (const std::string& name : table.names) {
-                const double value = table.values.at(name)[row];
-                line += "," + (std::isnan(value) ? std::string() : python_repr(value));
-            }
-            file << line << "\r\n";
-        }
-    });
+        text += "\r\n";
+    }
+    return text;
+}
+
+void write_csv_table(const CsvTable& table, const std::filesystem::path& path) {
+    write_file_whole(path, [text = csv_text(table)](std::ostream& file) { file << text; });
 }
 
 }  // namespace
 
 void export_csv(const ComparisonResult& result, const std::filesystem::path& path) {
     write_csv_table(csv_table(portable_metric_results(result)), path);
+}
+
+std::string per_frame_csv(const ComparisonResult& result) {
+    return csv_text(csv_table(portable_metric_results(result)));
+}
+
+std::string per_frame_json(const ComparisonResult& result) {
+    // export_csv's table as JSON: the videos the scores are of, the CSV's
+    // header as "columns", and each of its rows a list in "rows", one a
+    // line, a blank cell null. Numbers as Python writes them (an endless
+    // PSNR Infinity), the time rounded as the CSV writes it.
+    const CsvTable table = csv_table(portable_metric_results(result));
+    using Json = nlohmann::ordered_json;
+    Json columns = Json::array({"frame", "time_s"});
+    for (const std::string& name : table.names) {
+        columns.push_back(name);
+    }
+    const Json head{{"reference", platform::path_text(result.source)},
+                    {"test", platform::path_text(result.distorted)},
+                    {"fps", result.fps},
+                    {"columns", columns}};
+    std::string text = python_json_dumps(head);
+    text.resize(text.size() - 2);  // the closing "\n}"
+    text += ",\n  \"rows\": [";
+    for (std::size_t row = 0; row < table.frames.size(); ++row) {
+        text += row == 0 ? "\n    [" : ",\n    [";
+        text += std::to_string(table.frames[row]);
+        text += ", " + python_json_dumps(std::round(table.times[row] * 1e6) / 1e6);
+        for (const std::string& name : table.names) {
+            const double value = table.values.at(name)[row];
+            text += ", " + (std::isnan(value) ? std::string("null") : python_json_dumps(value));
+        }
+        text += "]";
+    }
+    text += table.frames.empty() ? "]\n}\n" : "\n  ]\n}\n";
+    return text;
+}
+
+void export_per_frame_json(const ComparisonResult& result, const std::filesystem::path& path) {
+    write_file_whole(path, [text = per_frame_json(result)](std::ostream& file) { file << text; });
 }
 
 void export_difference_csv(const ComparisonResult& first, const ComparisonResult& second,

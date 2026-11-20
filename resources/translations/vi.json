@@ -1,9 +1,15 @@
 {
  "strings": {
+  "Every frame's score of each metric, in the formats ticked: a file for each video (<video> - frames.json). A long video's are big.": "Điểm của từng khung hình theo mỗi chỉ số, theo các định dạng đã chọn: mỗi video một tệp (<video> - frames.json). Của video dài thì lớn.",
+  "Export per-frame scores": "Xuất điểm từng khung hình",
+  "Export per-frame scores to": "Xuất điểm từng khung hình vào",
+  "Per-frame scores": "Điểm từng khung hình",
+  "Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "Kết quả, điểm từng khung hình và các đoạn yếu dạng tệp CSV, cho bảng tính. Khi không chọn JSON lẫn CSV, chỉ biểu đồ được xuất.",
+  "Results, per-frame scores and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are exported.": "Kết quả, điểm từng khung hình và các đoạn yếu dạng tệp JSON. Khi không chọn JSON lẫn CSV, chỉ biểu đồ được xuất.",
+  "per-frame scores": "điểm từng khung hình",
+  "Per-frame scores exported to {path}": "Đã xuất điểm từng khung hình vào {path}",
   "In:": "Định dạng:",
   "Results": "Kết quả",
-  "Results and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are exported.": "Kết quả và các đoạn yếu dạng tệp JSON. Khi không chọn JSON lẫn CSV, chỉ biểu đồ được xuất.",
-  "Results and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, only graphs are exported.": "Kết quả và các đoạn yếu dạng tệp CSV, cho bảng tính. Khi không chọn JSON lẫn CSV, chỉ biểu đồ được xuất.",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "Điểm và thống kê, như Xuất kết quả lưu, theo các định dạng đã chọn: của một video riêng (<video> - results.json), hoặc của mọi video trong một tệp.",
   "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "Các đoạn yếu theo hồ sơ đang dùng (Cài đặt > Đoạn yếu; ở thẻ Kết quả đã lưu là quy tắc đã chọn ở đó), theo các định dạng đã chọn: của một video (<video>.vmaf.segments.json), hoặc của mọi video trong một báo cáo. Không lưu gì khi quy tắc chưa có điều kiện.",
   " min": " phút",
@@ -1134,8 +1140,6 @@
   "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Mọi so sánh mà ứng dụng đã lưu điểm. Mở chúng trong Biểu đồ chỉ số, hoặc xuất kết quả, điểm từng khung hình, biểu đồ và đoạn yếu của chúng mà không cần thêm lại video.",
   "Export graphs": "Xuất biểu đồ",
   "Export graphs as ZIP...": "Xuất biểu đồ dưới dạng ZIP...",
-  "Export per-frame CSV files to": "Xuất tệp CSV từng khung hình vào",
-  "Export per-frame CSV...": "Xuất CSV từng khung hình...",
   "Export weak segments...": "Xuất đoạn yếu...",
   "Filter by file name": "Lọc theo tên tệp",
   "Graphs are exported for test videos of one reference: select comparisons that share it.": "Biểu đồ được xuất cho các video thử của một tham chiếu: hãy chọn các so sánh có chung tham chiếu.",
@@ -1263,9 +1267,6 @@
   ],
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "Không thể xóa điểm đã lưu của {count} so sánh: có thể một tệp của chúng đang mở."
-  ],
-  "{count} per-frame CSV file exported to {path}": [
-   "Đã xuất {count} tệp CSV từng khung hình vào {path}"
   ],
   "{count} saved comparison in {directory}": [
    "{count} so sánh đã lưu trong {directory}"

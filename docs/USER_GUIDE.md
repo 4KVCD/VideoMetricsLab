@@ -669,8 +669,9 @@ videos again:
 - **Open in Metric Graphs** (or double-click) adds them as lines of their own,
   named "*video* (saved)".
 - **Export results** saves them **As JSON** or **As CSV**, as Export results
-  does; **Export per-frame CSV...** writes a file per comparison to a folder,
-  as Metric Graphs' Export CSV does.
+  does; **Export per-frame scores** writes a file per comparison to a folder,
+  **As JSON** or **As CSV** (the JSON is the CSV's table: see [Per-frame
+  scores as JSON](RESULTS_JSON.md#per-frame-scores-as-json)).
 - **Export graphs as ZIP...** saves the graphs Export all graphs saves, for
   comparisons of one reference. The bitrate graphs of a video no longer on
   disk come from its saved bitrate, where the Bitrate Viewer or the
@@ -729,6 +730,9 @@ by the right-click menus or after each run. Tick:
 - **Results**: scores and statistics, as the
   results file the command line's `--json` writes: a video's alone
   (`<video> - results.json`, `.csv`), or every video's in one file;
+- **Per-frame scores**: every frame's score of each metric, a file for each
+  video (`<video> - frames.json`, `.csv`). Not ticked until you tick it: a
+  long video's are big;
 - **Graphs**: each video's graph of every metric and its bitrate with the
   reference's (`<video> - <metric>.png`), with several videos all of them
   together too, as **Export all graphs...** draws them, once the bitrate is
@@ -737,7 +741,8 @@ by the right-click menus or after each run. Tick:
   (`<video>.<metrics>.segments.json`, `.csv`), or every video's in one
   report. Nothing while the profile has no condition.
 
-**In** chooses the formats results and weak segments are written in:
+**In** chooses the formats results, per-frame scores and weak segments are
+written in:
 **JSON**, **CSV** or both. With neither, only graphs are exported.
 
 **As** saves them as **A .zip file** (`<video> - VideoMetricsLab.zip`, or

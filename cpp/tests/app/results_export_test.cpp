@@ -101,7 +101,8 @@ TEST(ResultsExport, RecordsTheRunsAsOneAndEachVideosFacts) {
 
 // An export's files besides its graphs: results and weak segments in each
 // format ticked, and only those (CSV unticked, no weak segments CSV); with
-// no format, none; weak segments of several videos, one report.
+// no format, none; weak segments of several videos, one report; per-frame
+// scores, a file for each video.
 TEST(ResultsExport, FilesAreWrittenInTheFormatsTicked) {
     auto result = std::make_shared<ComparisonResult>();
     FrameMetricResult vmaf;
@@ -136,6 +137,10 @@ TEST(ResultsExport, FilesAreWrittenInTheFormatsTicked) {
     settings.export_items = {"weak_segments"};
     EXPECT_EQ(names({one[0], {result, QStringLiteral("b"), "b.mkv"}}, true),
               (Names{"a - weak segments." + suffix + ".json", "a - weak segments." + suffix + ".csv"}));
+    // Per-frame scores: a file for each video, named as its graphs are.
+    settings.export_items = {"frames"};
+    EXPECT_EQ(names({one[0], {result, QStringLiteral("b"), "b.mkv"}}, true),
+              (Names{"a - frames.json", "a - frames.csv", "b - frames.json", "b - frames.csv"}));
     settings.export_items = export_item_keys();
     settings.export_formats.clear();
     EXPECT_EQ(names(one, false), Names{});
