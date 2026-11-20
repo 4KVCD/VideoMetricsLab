@@ -254,6 +254,11 @@ private:
     // The frame the first drawn line shows at `time`, as the readout counts
     // it; nothing with no line drawn.
     std::optional<int> frame_at(double time) const;
+    // The time boxes' timeline (FrameControls::Timeline): a frame's time on
+    // the graph, the first drawn line's that has it; and the first line's
+    // frame at a time, the first at it or after or the last at it or before.
+    std::optional<double> time_of_frame(int frame) const;
+    std::optional<int> frame_at_time(double seconds, bool at_or_after) const;
     void on_range_dragged(double start, double now, bool finished);
     // The range changed (FrameControls::range_changed): shaded at once; its
     // figures in the table once `finished`.

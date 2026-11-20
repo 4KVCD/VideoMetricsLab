@@ -9,6 +9,7 @@
 #include <QImage>
 #include <QLabel>
 #include <QLayout>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QSpinBox>
@@ -226,6 +227,28 @@ TEST_F(BitratePanelTest, AFrameRangesFiguresAndGoToFrame) {
     panel->frame_controls->frame_spin->setValue(3);
     EXPECT_EQ(panel->hover_label->text().toStdString(),
               "Time: 0:00:01.500   Frame 3\nfirst.mkv: 20.00 kb/s\nshort.mkv  frame      3   not in this run");
+
+    // The same in times, to the millisecond, as on Metric Graphs: the first
+    // line's frames' times.
+    FrameControls& controls = *panel->frame_controls;
+    EXPECT_FALSE(controls.time_edit->isHidden());
+    EXPECT_FALSE(controls.range_start_time->isHidden());
+    EXPECT_EQ(controls.time_edit->text().toStdString(), "0:00:01.500");
+    const auto type_time = [](QLineEdit& box, const QString& text) {
+        box.setText(text);
+        box.setModified(true);
+        emit box.returnPressed();
+        emit box.editingFinished();
+    };
+    type_time(*controls.time_edit, "0:00:00.999");  // frame 1 is still shown
+    EXPECT_EQ(controls.frame_spin->value(), 1);
+    EXPECT_TRUE(panel->hover_label->text().startsWith("Time: 0:00:00.500   Frame 1"));
+    type_time(*controls.range_start_time, "0.5");
+    type_time(*controls.range_end_time, "0:00:01.500");
+    EXPECT_EQ(controls.selected_frames(), (std::optional<std::pair<int, int>>{{1, 3}}));
+    EXPECT_EQ(panel->range_label->text().toStdString(), "Statistics of frames 1 to 3.");
+    controls.range_start_spin->setValue(2);
+    EXPECT_EQ(controls.range_start_time->text().toStdString(), "0:00:01.000");
 }
 
 // A frame's type shows under the pointer in the frame graph; its colours only
