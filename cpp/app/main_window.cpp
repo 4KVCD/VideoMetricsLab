@@ -645,6 +645,26 @@ void MainWindow::build_ui() {
         }
     });
     connect(graph_panel_, &GraphPanel::all_videos_export_requested, this, [this] { export_all_videos(); });
+    graph_panel_->row_identities = [this] {
+        std::vector<std::string> identities;
+        for (const std::shared_ptr<RowData>& row_data : rows_) {
+            if (row_data->completed_run) {
+                identities.push_back(row_data->completed_run->graph_identity);
+            }
+        }
+        return identities;
+    };
+    // Every row's line back, those removed with the cross too, as Open
+    // metric graphs brought them back before the Videos tab lost it.
+    connect(graph_panel_, &GraphPanel::restore_removed_requested, this, [this] {
+        std::vector<std::shared_ptr<CompletedRun>> runs;
+        for (const std::shared_ptr<RowData>& row_data : rows_) {
+            if (row_data->completed_run) {
+                runs.push_back(row_data->completed_run);
+            }
+        }
+        open_or_update_graph(runs, false);
+    });
     bitrate_panel_->export_colours = export_colours;
     tabs_->addTab(new ScrollingPage(bitrate_panel_), app::tr("Bitrate Viewer"));
     // Its encodes from the runs Metric Graphs lists, brought up to date first.

@@ -173,16 +173,20 @@ void MainWindow::fill_videos_export_menu(QMenu& menu) {
         return scored_video(*rows_[static_cast<std::size_t>(row)]).has_value();
     });
     contents->setEnabled(any && all_scored && !export_contents(items).isEmpty());
-    connect(contents, &QAction::triggered, this, [this, rows] { export_rows(rows); });
+    // Each entry takes the rows as they are when it is clicked
+    // (export_menu_rows), not as the menu opened: the menu's own event loop
+    // delivers a run's results while it is open, and a row's run that turned
+    // partial is not exported.
+    connect(contents, &QAction::triggered, this, [this] { export_rows(); });
     menu.addSeparator();
-    const auto add_formats = [this, &menu, &rows, any](const QString& title, SavedResultsPanel::Export json,
+    const auto add_formats = [this, &menu, any](const QString& title, SavedResultsPanel::Export json,
                                                        SavedResultsPanel::Export csv) {
         QMenu* kind = menu.addMenu(title);
         kind->setEnabled(any);
         connect(kind->addAction(app::tr("As JSON...")), &QAction::triggered, this,
-                [this, json, rows] { export_rows_as(json, rows); });
+                [this, json] { export_rows_as(json); });
         connect(kind->addAction(app::tr("As CSV...")), &QAction::triggered, this,
-                [this, csv, rows] { export_rows_as(csv, rows); });
+                [this, csv] { export_rows_as(csv); });
     };
     add_formats(app::tr("Results"), SavedResultsPanel::Export::results_json, SavedResultsPanel::Export::results_csv);
     add_formats(app::tr("Per-frame scores"), SavedResultsPanel::Export::frames_json,
@@ -190,25 +194,28 @@ void MainWindow::fill_videos_export_menu(QMenu& menu) {
     QAction* graphs = menu.addAction(app::tr("Graphs as ZIP..."));
     graphs->setEnabled(any);
     connect(graphs, &QAction::triggered, this,
-            [this, rows] { export_rows_as(SavedResultsPanel::Export::graphs, rows); });
+            [this] { export_rows_as(SavedResultsPanel::Export::graphs); });
     QAction* segments = menu.addAction(app::tr("Export weak segments..."));
     segments->setEnabled(any);
     connect(segments, &QAction::triggered, this,
-            [this, rows] { export_rows_as(SavedResultsPanel::Export::segments, rows); });
+            [this] { export_rows_as(SavedResultsPanel::Export::segments); });
     menu.addSeparator();
     QAction* run_files = menu.addAction(app::tr("Run file (.metrics.json)..."));
     run_files->setEnabled(any);
-    connect(run_files, &QAction::triggered, this, [this, rows] {
+    connect(run_files, &QAction::triggered, this, [this] {
         std::vector<std::shared_ptr<CompletedRun>> runs;
-        for (const int row : rows) {
+        for (const int row : export_menu_rows()) {  // finished runs only (exportable_video)
             runs.push_back(rows_[static_cast<std::size_t>(row)]->completed_run);
         }
         save_run_files(runs);
     });
 }
 
-void MainWindow::export_rows(const std::vector<int>& rows) {
-    if (rows.empty()) {
+void MainWindow::export_rows() {
+    // Of videos whose ticked metrics are all scored, as the menu offered it.
+    std::vector<int> rows = export_menu_rows();
+    std::erase_if(rows, [this](int row) { return !scored_video(*rows_[static_cast<std::size_t>(row)]); });
+    if (rows.empty() || !source_info_) {
         return;
     }
     if (!rows_selected()) {
@@ -238,7 +245,8 @@ void MainWindow::export_rows(const std::vector<int>& rows) {
                 std::nullopt);
 }
 
-void MainWindow::export_rows_as(SavedResultsPanel::Export kind, const std::vector<int>& rows) {
+void MainWindow::export_rows_as(SavedResultsPanel::Export kind) {
+    const std::vector<int> rows = export_menu_rows();
     if (rows.empty() || !source_info_) {
         return;
     }
@@ -252,7 +260,7 @@ void MainWindow::export_rows_as(SavedResultsPanel::Export kind, const std::vecto
     const QString name = videos.size() == 1 ? videos.front().label : text_of(source_info_->path.stem());
     switch (kind) {
     case SavedResultsPanel::Export::contents:
-        export_rows(rows);
+        export_rows();
         return;
     case SavedResultsPanel::Export::results_json:
     case SavedResultsPanel::Export::results_csv: {

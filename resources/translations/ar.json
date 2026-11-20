@@ -464,6 +464,8 @@
   "Calculate metrics or load analysis results to view graphs.": "احسب المقاييس أو حمّل نتائج تحليل لعرض الرسوم.",
   "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "لم يُحسب {label}. حدّده في عمود {label} في «الفيديو»، أو حمّل نتائج تتضمنه.",
   "Add analysis results": "إضافة نتائج تحليل",
+  "Show removed videos": "إظهار الفيديوهات المُزالة",
+  "Brings back the Videos tab's videos removed from the graph.": "يعيد فيديوهات تبويب الفيديو التي أُزيلت من الرسم البياني.",
   "Export graph as PNG": "تصدير الرسم كـ PNG",
   "Export CSV": "تصدير CSV",
   "Export results": "تصدير النتائج",

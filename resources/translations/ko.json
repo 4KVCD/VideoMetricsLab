@@ -464,6 +464,8 @@
   "Calculate metrics or load analysis results to view graphs.": "그래프를 보려면 지표를 계산하거나 분석 결과를 불러오세요.",
   "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "{label}은(는) 계산되지 않았습니다. [영상]의 {label} 열을 체크하거나 이를 포함한 결과를 불러오세요.",
   "Add analysis results": "분석 결과 추가",
+  "Show removed videos": "제거한 동영상 표시",
+  "Brings back the Videos tab's videos removed from the graph.": "그래프에서 제거한 영상 탭의 동영상을 다시 표시합니다.",
   "Export graph as PNG": "그래프를 PNG로 내보내기",
   "Export CSV": "CSV 내보내기",
   "Export results": "결과 내보내기",

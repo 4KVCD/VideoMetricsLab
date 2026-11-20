@@ -464,6 +464,8 @@
   "Calculate metrics or load analysis results to view graphs.": "Bereken metrieken of laad analyseresultaten om de grafieken te zien.",
   "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "{label} is niet berekend. Vink het aan in de kolom {label} op Video's, of laad resultaten die het bevatten.",
   "Add analysis results": "Analyseresultaten toevoegen",
+  "Show removed videos": "Verwijderde video's tonen",
+  "Brings back the Videos tab's videos removed from the graph.": "Haalt de video's van het tabblad Video's terug die uit de grafiek zijn verwijderd.",
   "Export graph as PNG": "Grafiek exporteren als PNG",
   "Export CSV": "CSV exporteren",
   "Export results": "Resultaten exporteren",

@@ -464,6 +464,8 @@
   "Calculate metrics or load analysis results to view graphs.": "Számoljon metrikákat, vagy töltsön be elemzési eredményeket a grafikonok megtekintéséhez.",
   "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "Nincs kiszámolva: {label}. Jelölje be a(z) {label} oszlopban a Videók lapon, vagy töltsön be olyan eredményeket, amelyek tartalmazzák.",
   "Add analysis results": "Elemzési eredmények hozzáadása",
+  "Show removed videos": "Eltávolított videók megjelenítése",
+  "Brings back the Videos tab's videos removed from the graph.": "Visszahozza a Videók lap grafikonról eltávolított videóit.",
   "Export graph as PNG": "Grafikon exportálása PNG-be",
   "Export CSV": "CSV exportálása",
   "Export results": "Eredmények exportálása",

@@ -464,6 +464,8 @@
   "Calculate metrics or load analysis results to view graphs.": "Grafikleri görmek için metrikleri hesaplayın veya analiz sonuçlarını yükleyin.",
   "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "{label} hesaplanmadı. Videolar sekmesinde {label} sütununu işaretleyin veya onu içeren sonuçları yükleyin.",
   "Add analysis results": "Analiz sonuçları ekle",
+  "Show removed videos": "Kaldırılan videoları göster",
+  "Brings back the Videos tab's videos removed from the graph.": "Grafikten kaldırılan Videolar sekmesindeki videoları geri getirir.",
   "Export graph as PNG": "Grafiği PNG olarak dışa aktar",
   "Export CSV": "CSV olarak dışa aktar",
   "Export results": "Sonuçları dışa aktar",

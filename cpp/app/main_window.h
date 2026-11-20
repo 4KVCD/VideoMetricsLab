@@ -567,11 +567,12 @@ private:
     std::vector<int> export_menu_rows() const;
     // Whether rows are selected in the Videos table.
     bool rows_selected() const;
-    // The menu's shared export of `rows`: this video's, the selected ones',
-    // or all the videos' (export_all_videos) with none selected.
-    void export_rows(const std::vector<int>& rows);
-    // The menu's export of one kind, of `rows`.
-    void export_rows_as(SavedResultsPanel::Export kind, const std::vector<int>& rows);
+    // The menu's shared export of its rows (export_menu_rows) as they are
+    // now, those with every ticked metric scored: this video's, the selected
+    // ones', or all the videos' (export_all_videos) with none selected.
+    void export_rows();
+    // The menu's export of one kind, of its rows as they are now.
+    void export_rows_as(SavedResultsPanel::Export kind);
     // What an export holds, by Settings' Exports include: for one video, its
     // results (alone in the document) and its weak segments; for several,
     // the run's results document and their weak segments report; and the

@@ -464,6 +464,8 @@
   "Calculate metrics or load analysis results to view graphs.": "Hitung metrik atau muat hasil analisis untuk melihat grafik.",
   "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "{label} belum dihitung. Centang di kolom {label} pada Video, atau muat hasil yang memuatnya.",
   "Add analysis results": "Tambah hasil analisis",
+  "Show removed videos": "Tampilkan video yang dihapus",
+  "Brings back the Videos tab's videos removed from the graph.": "Mengembalikan video tab Video yang dihapus dari grafik.",
   "Export graph as PNG": "Ekspor grafik sebagai PNG",
   "Export CSV": "Ekspor CSV",
   "Export results": "Ekspor hasil",

@@ -464,6 +464,8 @@
   "Calculate metrics or load analysis results to view graphs.": "Spočítejte metriky nebo načtěte výsledky analýzy, abyste viděli grafy.",
   "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "{label} nebyla spočítána. Zaškrtněte ji ve sloupci {label} na kartě Videa, nebo načtěte výsledky, které ji obsahují.",
   "Add analysis results": "Přidat výsledky analýzy",
+  "Show removed videos": "Zobrazit odebraná videa",
+  "Brings back the Videos tab's videos removed from the graph.": "Vrátí do grafu videa z karty Videa, která z něj byla odebrána.",
   "Export graph as PNG": "Exportovat graf jako PNG",
   "Export CSV": "Exportovat CSV",
   "Export results": "Exportovat výsledky",

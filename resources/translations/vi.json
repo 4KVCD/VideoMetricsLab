@@ -464,6 +464,8 @@
   "Calculate metrics or load analysis results to view graphs.": "Tính chỉ số hoặc tải kết quả phân tích để xem biểu đồ.",
   "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "Chưa tính {label}. Đánh dấu nó trong cột {label} ở thẻ Video, hoặc tải kết quả có chứa nó.",
   "Add analysis results": "Thêm kết quả phân tích",
+  "Show removed videos": "Hiện video đã gỡ",
+  "Brings back the Videos tab's videos removed from the graph.": "Đưa các video của thẻ Video đã gỡ khỏi biểu đồ trở lại.",
   "Export graph as PNG": "Xuất biểu đồ ra PNG",
   "Export CSV": "Xuất CSV",
   "Export results": "Xuất kết quả",

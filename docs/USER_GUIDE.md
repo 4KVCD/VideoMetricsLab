@@ -736,7 +736,9 @@ selected:
   you say; several into a folder, each named after its video.
 
 Metric Graphs has its own tab: the Videos tab no longer has a button to open
-it.
+it. A video removed from the graph with its ✕ stays away when you come back
+to the tab; **Show removed videos** there brings back those of the Videos
+tab.
 
 ### Exporting graphs
 

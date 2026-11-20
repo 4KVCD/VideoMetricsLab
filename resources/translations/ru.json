@@ -464,6 +464,8 @@
   "Calculate metrics or load analysis results to view graphs.": "Вычислите метрики или загрузите результаты анализа, чтобы увидеть графики.",
   "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "{label} не вычислялась. Отметьте её в столбце {label} на вкладке «Видео» или загрузите результаты, где она есть.",
   "Add analysis results": "Добавить результаты анализа",
+  "Show removed videos": "Показать удалённые видео",
+  "Brings back the Videos tab's videos removed from the graph.": "Возвращает на график удалённые с него видео вкладки «Видео».",
   "Export graph as PNG": "Экспорт графика в PNG",
   "Export CSV": "Экспорт CSV",
   "Export results": "Экспорт результатов",

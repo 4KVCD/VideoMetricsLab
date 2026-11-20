@@ -464,6 +464,8 @@
   "Calculate metrics or load analysis results to view graphs.": "计算指标或加载分析结果以查看图表。",
   "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "未计算 {label}。请在“视频”中勾选 {label} 列，或加载包含它的结果。",
   "Add analysis results": "添加分析结果",
+  "Show removed videos": "显示已移除的视频",
+  "Brings back the Videos tab's videos removed from the graph.": "恢复从图表中移除的“视频”标签页中的视频。",
   "Export graph as PNG": "将图表导出为 PNG",
   "Export CSV": "导出 CSV",
   "Export results": "导出结果",

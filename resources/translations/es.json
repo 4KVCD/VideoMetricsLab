@@ -464,6 +464,8 @@
   "Calculate metrics or load analysis results to view graphs.": "Calcula métricas o carga resultados de análisis para ver los gráficos.",
   "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "{label} no se calculó. Márcala en la columna {label} de Videos, o carga resultados que la incluyan.",
   "Add analysis results": "Agregar resultados de análisis",
+  "Show removed videos": "Mostrar vídeos quitados",
+  "Brings back the Videos tab's videos removed from the graph.": "Vuelve a mostrar los vídeos de la pestaña Videos quitados del gráfico.",
   "Export graph as PNG": "Exportar gráfico como PNG",
   "Export CSV": "Exportar CSV",
   "Export results": "Exportar resultados",

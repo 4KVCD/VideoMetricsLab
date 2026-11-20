@@ -464,6 +464,8 @@
   "Calculate metrics or load analysis results to view graphs.": "グラフを表示するには、指標を計算するか解析結果を読み込んでください。",
   "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "{label} は計算されていません。［動画］の {label} 列にチェックを入れるか、それを含む結果を読み込んでください。",
   "Add analysis results": "解析結果を追加",
+  "Show removed videos": "削除した動画を表示",
+  "Brings back the Videos tab's videos removed from the graph.": "グラフから削除した「動画」タブの動画を元に戻します。",
   "Export graph as PNG": "グラフを PNG でエクスポート",
   "Export CSV": "CSV をエクスポート",
   "Export results": "結果をエクスポート",

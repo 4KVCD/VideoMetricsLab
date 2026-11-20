@@ -464,6 +464,8 @@
   "Calculate metrics or load analysis results to view graphs.": "คำนวณเมตริกหรือโหลดผลการวิเคราะห์เพื่อดูกราฟ",
   "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "ยังไม่ได้คำนวณ {label} ทำเครื่องหมายในคอลัมน์ {label} ในแท็บวิดีโอ หรือโหลดผลลัพธ์ที่มีเมตริกนี้",
   "Add analysis results": "เพิ่มผลการวิเคราะห์",
+  "Show removed videos": "แสดงวิดีโอที่นำออก",
+  "Brings back the Videos tab's videos removed from the graph.": "นำวิดีโอของแท็บวิดีโอที่นำออกจากกราฟกลับมา",
   "Export graph as PNG": "ส่งออกกราฟเป็น PNG",
   "Export CSV": "ส่งออก CSV",
   "Export results": "ส่งออกผลลัพธ์",
