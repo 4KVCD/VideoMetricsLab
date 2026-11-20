@@ -417,19 +417,56 @@ SegmentRules SavedResultsPanel::segment_rules() const {
     return segment_profile_in_use(settings_).rules;
 }
 
-void SavedResultsPanel::set_run_active(bool active) {
+namespace {
+
+// A path as locked_by_run compares them: made absolute and normal by its
+// text alone, with the system's separators, in one case on Windows (as
+// same_path compares). No disk is asked: a selection of many comparisons,
+// some on a share, is checked at each click.
+QString run_key(const std::filesystem::path& path) {
+    QString text = text_of(path.lexically_normal().make_preferred());
+#ifdef _WIN32
+    text = text.toCaseFolded();
+#endif
+    return text;
+}
+
+// A pair as locked_by_run compares them: its reference's key, then its
+// test video's.
+QString pair_key(const std::filesystem::path& reference, const std::filesystem::path& test) {
+    return run_key(reference) + QLatin1Char('\n') + run_key(test);
+}
+
+}  // namespace
+
+void SavedResultsPanel::set_run_active(
+    bool active, const std::vector<std::pair<std::filesystem::path, std::filesystem::path>>& pairs) {
     run_active_ = active;
+    run_pairs_.clear();
+    if (active) {
+        for (const auto& [reference, test] : pairs) {
+            run_pairs_.insert(pair_key(reference, test));
+        }
+    }
     update_buttons();
 }
 
+bool SavedResultsPanel::locked_by_run(const SavedComparison& saved) const {
+    return run_active_ && run_pairs_.contains(pair_key(saved.source, saved.distorted));
+}
+
 void SavedResultsPanel::update_buttons() {
-    const std::size_t count = selected().size();
-    open_button_->setEnabled(count > 0);
-    export_button_->setEnabled(count > 0);
-    delete_button_->setEnabled(count > 0 && !run_active_);
-    delete_button_->setToolTip(run_active_ ? app::tr("Locked while metrics are calculated: the run saves its "
-                                                     "scores there.")
-                                           : QString());
+    const std::vector<const SavedComparison*> chosen = selected();
+    open_button_->setEnabled(!chosen.empty());
+    export_button_->setEnabled(!chosen.empty());
+    // Locked where any selected comparison is of the run's videos; the
+    // others can be deleted while it runs.
+    const bool locked = std::any_of(chosen.begin(), chosen.end(),
+                                    [this](const SavedComparison* saved) { return locked_by_run(*saved); });
+    delete_button_->setEnabled(!chosen.empty() && !locked);
+    delete_button_->setToolTip(locked ? app::tr("Locked while metrics are calculated: the run saves its "
+                                                "scores there.")
+                                      : QString());
 }
 
 void SavedResultsPanel::fill_export_menu(QMenu& menu) {
@@ -517,7 +554,9 @@ void SavedResultsPanel::fill_context_menu(QMenu& menu) {
 
 void SavedResultsPanel::delete_selected() {
     const std::vector<const SavedComparison*> chosen = selected();
-    if (chosen.empty() || run_active_) {
+    if (chosen.empty() || std::any_of(chosen.begin(), chosen.end(), [this](const SavedComparison* saved) {
+            return locked_by_run(*saved);
+        })) {
         return;
     }
     QString question =

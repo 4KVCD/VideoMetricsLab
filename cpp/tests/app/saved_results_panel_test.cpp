@@ -177,7 +177,9 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
     panel.fill_export_menu(menu);  // made again as it opens: the same entries, no menu left behind
     EXPECT_EQ(menu.findChildren<QMenu*>(Qt::FindDirectChildrenOnly).size(), 3);
 
-    // Delete: locked during a run; else, asked and done.
+    // Delete: locked during a run of its pair, as the run reads and saves its
+    // scores; open during a run of other pairs, of its reference or its test
+    // video with another too; else, asked and done.
     QPushButton* remove = nullptr;
     for (QPushButton* button : panel.findChildren<QPushButton*>()) {
         if (button->text() == "Delete...") {
@@ -185,16 +187,27 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
         }
     }
     ASSERT_NE(remove, nullptr);
-    panel.set_run_active(true);
+    panel.set_run_active(true, {{folder / "s.mp4", folder / "other.mp4"}, {folder / "s.mp4", folder / "t.mp4"}});
     EXPECT_FALSE(remove->isEnabled());
+    EXPECT_FALSE(remove->toolTip().isEmpty());
     panel.delete_selected();
     EXPECT_TRUE(std::filesystem::exists(saved));
-    panel.set_run_active(false);
+    panel.set_run_active(true, {{folder / "s.mp4", folder / "sub" / ".." / "t.mp4"}});  // the same file
+    EXPECT_FALSE(remove->isEnabled());
+#ifdef _WIN32
+    panel.set_run_active(true, {{folder / "S.MP4", folder / "T.MP4"}});  // any case
+    EXPECT_FALSE(remove->isEnabled());
+#endif
+    // Its reference with another test video, its test video against another
+    // reference: other folders, deletable.
+    panel.set_run_active(true, {{folder / "s.mp4", folder / "other.mp4"}, {folder / "other.mp4", folder / "t.mp4"}});
     EXPECT_TRUE(remove->isEnabled());
+    EXPECT_TRUE(remove->toolTip().isEmpty());
     QSignalSpy deleted(&panel, &SavedResultsPanel::deleted);
-    panel.delete_selected();
+    panel.delete_selected();  // during a run, of other videos
     EXPECT_EQ(deleted.count(), 1);
     EXPECT_FALSE(std::filesystem::exists(saved));
+    panel.set_run_active(false);
 }
 
 TEST(SavedResultsPanel, ClickingARowKeepsTheListWhereItWas) {

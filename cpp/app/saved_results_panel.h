@@ -4,6 +4,7 @@
 // several saved scores, the newest is used unless another is picked.
 #pragma once
 
+#include <QSet>
 #include <QString>
 #include <QWidget>
 
@@ -57,8 +58,16 @@ public:
     void refresh();
     // Called with the list read (by refresh, or by the tests directly).
     void show_list(std::vector<SavedComparison> list);
-    // While metrics are calculated, Delete is locked: the run writes there.
-    void set_run_active(bool active);
+    // While metrics are calculated, Delete is locked for the comparisons of
+    // the run's pairs (`pairs`, each its reference and a test video): the
+    // run reads and saves their scores. Others can still be deleted, those of
+    // the same reference with another test video too: each comparison is a
+    // folder of its own. Inactive: none is locked.
+    void set_run_active(bool active,
+                        const std::vector<std::pair<std::filesystem::path, std::filesystem::path>>& pairs = {});
+    // Whether Delete is locked for `saved`: a run is on, and its reference
+    // and test video are one of the run's pairs.
+    bool locked_by_run(const SavedComparison& saved) const;
     // The selected comparisons, read with the scores picked.
     std::vector<LoadedSavedResult> selected_results() const;
     // The weak segment rules offered under Export > Weak segments, by their
@@ -114,6 +123,8 @@ private:
     std::map<std::filesystem::path, std::map<std::string, std::filesystem::path>> picked_;
     QFutureWatcher<std::vector<SavedComparison>>* reading_ = nullptr;
     bool run_active_ = false;
+    // The run's pairs, each as locked_by_run compares them (run_key).
+    QSet<QString> run_pairs_;
     QLabel* folder_label_ = nullptr;
     QLineEdit* filter_ = nullptr;
     QTableWidget* table_ = nullptr;

@@ -584,7 +584,19 @@ bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<R
 void MainWindow::set_run_ui_active(bool active) {
     // Freezes every input that can change the meaning of a live job.
     run_active_ = active;
-    saved_results_panel_->set_run_active(active);  // its Delete: the run saves there
+    // Saved Results' Delete, locked for the run's pairs' comparisons: the
+    // run reads and saves their scores. The reference with each test video
+    // run, and with the file it decodes where that is another.
+    std::vector<std::pair<std::filesystem::path, std::filesystem::path>> run_pairs;
+    if (active && source_info_) {
+        for (const std::shared_ptr<RowData>& row : job_rows_) {
+            run_pairs.emplace_back(source_info_->path, row->path);
+            if (row->media_path) {
+                run_pairs.emplace_back(source_info_->path, *row->media_path);
+            }
+        }
+    }
+    saved_results_panel_->set_run_active(active, run_pairs);
     // A run has the disks to itself: a test stream being recorded is read
     // again after it, and a remux check under way gives way (its rows are
     // calculated).
