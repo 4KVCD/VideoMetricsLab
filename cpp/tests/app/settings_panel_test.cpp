@@ -1,12 +1,14 @@
 // The Settings tab while metrics are calculated: it stays open, with only
 // what a running calculation uses locked, and a note saying so.
 #include <QApplication>
+#include <QCheckBox>
 #include <QLabel>
 #include <QComboBox>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QScrollBar>
 #include <QSpinBox>
+#include <QTabWidget>
 #include <QVBoxLayout>
 #include <QTest>
 #include <QtTest/qtestwheel.h>
@@ -68,6 +70,40 @@ TEST(SettingsPanel, ARunLocksOnlyWhatItUsesAndSaysSo) {
     EXPECT_TRUE(clear->isEnabled());
     EXPECT_EQ(clear->toolTip(), "its own tip");
     EXPECT_FALSE(note->isVisibleTo(&panel));
+}
+
+// Settings is in sub-tabs: General, Metrics, Weak segments and Storage, each
+// with its own settings. The note on what a run locks is above them, not on
+// one of them, so it shows whichever is open.
+TEST(SettingsPanel, SubTabsHoldTheSettings) {
+    Settings settings;
+    FileWrites writes;
+    const Dialogs dialogs = standard_dialogs(nullptr);
+    SettingsPanel panel(settings, writes, [] { return ToolsStatus{}; }, dialogs);
+    ASSERT_NE(panel.sections, nullptr);
+    std::vector<QString> names;
+    for (int index = 0; index < panel.sections->count(); ++index) {
+        names.push_back(panel.sections->tabText(index));
+    }
+    EXPECT_EQ(names, (std::vector<QString>{"General", "Metrics", "Weak segments", "Storage"}));
+    const auto section_of = [&panel](const QWidget* control) {
+        for (int index = 0; index < panel.sections->count(); ++index) {
+            if (panel.sections->widget(index)->isAncestorOf(control)) {
+                return panel.sections->tabText(index);
+            }
+        }
+        return QString();
+    };
+    EXPECT_EQ(section_of(panel.ffmpeg_edit), "General");
+    EXPECT_EQ(section_of(panel.theme), "General");
+    EXPECT_EQ(section_of(panel.decoded_videos), "General");
+    EXPECT_EQ(section_of(panel.default_gpu), "Metrics");
+    EXPECT_EQ(section_of(panel.gpu_together), "Metrics");
+    EXPECT_EQ(section_of(panel.weak_profile), "Weak segments");
+    EXPECT_EQ(section_of(panel.cache_edit), "Storage");
+    EXPECT_EQ(section_of(panel.log_label), "Storage");
+    EXPECT_EQ(section_of(panel.run_lock_note), QString());
+    EXPECT_TRUE(panel.isAncestorOf(panel.run_lock_note));
 }
 
 // Settings > Weak segments shows the profile in use and edits it; an edit is

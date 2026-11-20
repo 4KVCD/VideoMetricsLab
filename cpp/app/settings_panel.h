@@ -31,6 +31,7 @@ class QHBoxLayout;
 class QLabel;
 class QLineEdit;
 class QPushButton;
+class QTabWidget;
 template <typename T>
 class QFutureWatcher;
 
@@ -96,6 +97,9 @@ public:
     void delete_weak_profile();
 
     // The controls, for the window's tests.
+    // The sub-tabs, each a page of related boxes: General, Metrics, Weak
+    // segments and Storage.
+    QTabWidget* sections = nullptr;
     QLineEdit* ffmpeg_edit = nullptr;
     // What a running calculation uses, locked while it runs (set_run_active),
     // and the note that says so.

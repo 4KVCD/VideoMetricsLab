@@ -1,5 +1,6 @@
 {
  "strings": {
+  "General": "Общие",
   "Choose video color": "Выбрать цвет видео",
   "Click the color square to change this video's color in both graphs.": "Нажмите на цветной квадрат, чтобы изменить цвет этого видео на обоих графиках.",
   "Reset color": "Сбросить цвет",

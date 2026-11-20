@@ -1,5 +1,6 @@
 {
  "strings": {
+  "General": "Általános",
   "Choose video color": "Videó színének kiválasztása",
   "Click the color square to change this video's color in both graphs.": "Kattintson a színes négyzetre a videó színének módosításához mindkét grafikonon.",
   "Reset color": "Szín visszaállítása",

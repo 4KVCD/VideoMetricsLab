@@ -1,5 +1,6 @@
 {
  "strings": {
+  "General": "Genel",
   "Choose video color": "Video rengini seç",
   "Click the color square to change this video's color in both graphs.": "Bu videonun rengini her iki grafikte değiştirmek için renk karesine tıklayın.",
   "Reset color": "Rengi sıfırla",

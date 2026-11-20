@@ -84,14 +84,19 @@ other metrics are not calculated again). Repeat it for more displays.
 `cvvdp_displays` in the JSON, columns `cvvdp_displays.0.score`,
 `cvvdp_displays.1.score`... in the CSV.
 
-**Settings > Window** chooses the theme (the system's, Light or Dark) and
-whether the app reopens the videos it had open when it was last closed (off by
-default).
+**Settings** has four sub-tabs: **General** (the ffmpeg folder, the window,
+and how many test videos Video Compare decodes), **Metrics** (the defaults for
+newly added videos, and the GPU metrics), **Weak segments** and **Storage**.
+
+**Settings > General > Window** chooses the theme (the system's, Light or Dark)
+and whether the app reopens the videos it had open when it was last closed (off
+by default).
 
 While metrics are calculated, Settings stays open, but the ffmpeg folder, the
 saved results' folder and **Clear saved results** are locked until the run
-ends, as a note at the top of the tab says: the run uses them. Everything else
-can be changed; the GPU metrics' choices apply from the next run.
+ends, as a note at the top of the tab says, above the sub-tabs: the run uses
+them. Everything else can be changed; the GPU metrics' choices apply from the
+next run.
 
 **Settings > Storage > Exported graphs** chooses the colours of the PNGs that
 Metric Graphs and the Bitrate Viewer export: Light (the default), Dark, or the
@@ -114,8 +119,8 @@ unchecked.
 Each video's Performance > Vship compute chooses the Vship: GPU, the app's own,
 the fastest and most accurate; or stock Vship (upstream's release): Vship Vulkan,
 or for a GPU whose Vulkan driver has problems Vship HIP (AMD, Windows) or Vship
-CUDA (NVIDIA, Windows). Settings > GPU metrics sets the one newly added videos
-start with, and the command line's default. Stock Vship's three share their saved
+CUDA (NVIDIA, Windows). Settings > Metrics > GPU metrics sets the one newly
+added videos start with, and the command line's default. Stock Vship's three share their saved
 scores. GPU's differ slightly and are saved apart: switching a video between
 GPU and stock Vship shows the other's saved scores, or calculates them on the
 next run. HIP needs an AMD GPU and CUDA an NVIDIA one: on any other GPU, or on
@@ -128,16 +133,16 @@ are stock Vship's, kept and reused as its own. A video set to stock Vship
 never uses the app's own Vship: where stock Vship fails, SSIMULACRA2 and
 Butteraugli are calculated on the CPU, and CVVDP is not.
 
-On a PC with more than one GPU (Windows), Settings > GPU metrics > GPU chooses
-the one that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP; with
+On a PC with more than one GPU (Windows), Settings > Metrics > GPU metrics >
+GPU chooses the one that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP; with
 GPU decoding automatic, its maker's decoder is tried first. Automatic, the
 default, uses a discrete GPU first. A metric the chosen GPU cannot calculate
 is calculated on the CPU, not on another GPU, so a GPU kept free (one that is
 encoding, say) stays free. The choice takes effect when the app is next
 started; the command line's `--gpu` chooses for one run.
 
-Settings > GPU metrics > VVC decoder chooses how a VVC video is decoded for
-every metric (Windows). CPU, the default, decodes it with VVdeC; GPU, which is
+Settings > Metrics > GPU metrics > VVC decoder chooses how a VVC video is
+decoded for every metric (Windows). CPU, the default, decodes it with VVdeC; GPU, which is
 experimental, decodes it on the GPU, which frees the CPU but can be slower than
 a fast CPU. The
 scores are the same, film grain too: the GPU adds H.274's grain as VVdeC
@@ -403,12 +408,12 @@ $run.videos[0].metrics.vmaf.score
 | `--subsample N` | Score every N-th frame. CVVDP needs every frame. |
 | `--cpu` | Calculate on the CPU every metric that can be (CVVDP is GPU only): VMAF as with `--vmaf-on cpu`, unless `--vmaf-on` says otherwise, and SSIMULACRA2 and Butteraugli with libjxl rather than on the GPU. |
 | `--vmaf-on` `gpu\|cpu` | Where VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated. Left out: as the app's Options panel was last set. |
-| `--vship` `vship-fast\|vship\|vship-hip\|vship-cuda` | The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU: `vship-fast`, the app's own (the window's GPU), or stock Vship: `vship` (the window's Vship Vulkan), or if Vulkan has problems `vship-hip` (AMD) or `vship-cuda` (NVIDIA). Stock Vship's three share their scores, which differ slightly from `vship-fast`'s and are saved apart. Left out: as Settings > GPU metrics sets it. |
-| `--vship-pass one\|each` | SSIMULACRA2, Butteraugli and CVVDP in one pass per video, which decodes it once (faster only on a very powerful GPU, and needs much GPU memory), or a pass for each. The scores are the same. Left out: as Settings > GPU metrics sets it. |
+| `--vship` `vship-fast\|vship\|vship-hip\|vship-cuda` | The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU: `vship-fast`, the app's own (the window's GPU), or stock Vship: `vship` (the window's Vship Vulkan), or if Vulkan has problems `vship-hip` (AMD) or `vship-cuda` (NVIDIA). Stock Vship's three share their scores, which differ slightly from `vship-fast`'s and are saved apart. Left out: as Settings > Metrics > GPU metrics sets it. |
+| `--vship-pass one\|each` | SSIMULACRA2, Butteraugli and CVVDP in one pass per video, which decodes it once (faster only on a very powerful GPU, and needs much GPU memory), or a pass for each. The scores are the same. Left out: as Settings > Metrics > GPU metrics sets it. |
 | `--no-gpu-decode` | Decode the videos on the CPU, VVC too. |
 | `--gpu-decode auto\|nvidia\|intel\|amd` | Decode the videos on the GPU, as the Options panel's **GPU decode**: `auto`, the first GPU whose decoder takes each video (NVIDIA, Intel, then AMD), or that maker's, which the PC must have. A Mac uses its own. Left out: on or off as the app's Options panel was last set, the maker automatic. |
-| `--gpu NAME` | The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP, on a PC with more than one: its name as Windows gives it, or a part of it (`radeon`, `"rtx 5090"`); its maker's decoder is tried first. `auto`: a discrete GPU first. A name no GPU has is refused, with the GPUs there are. Left out: as Settings > GPU metrics sets it. |
-| `--vvc-decoder gpu\|cpu` | Decode a VVC video on the GPU (vvdec-vulkan, experimental) or on the CPU (VVdeC). The scores are the same. Left out: as Settings > GPU metrics sets it (the CPU unless changed). |
+| `--gpu NAME` | The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP, on a PC with more than one: its name as Windows gives it, or a part of it (`radeon`, `"rtx 5090"`); its maker's decoder is tried first. `auto`: a discrete GPU first. A name no GPU has is refused, with the GPUs there are. Left out: as Settings > Metrics > GPU metrics sets it. |
+| `--vvc-decoder gpu\|cpu` | Decode a VVC video on the GPU (vvdec-vulkan, experimental) or on the CPU (VVdeC). The scores are the same. Left out: as Settings > Metrics > GPU metrics sets it (the CPU unless changed). |
 | `--threads N` | libvmaf threads. Left out: automatic. |
 | `--parallel 1\|2` | Videos calculated at once on the CPU. |
 | `--frame-counts check\|skip` | When a video may be out of sync with the reference, the frame counts stored in the files are always checked. check: also read a file that doesn't store one from start to finish to count its frames, which can add minutes per video; skip: don't. Default: Settings > Storage. |
