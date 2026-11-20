@@ -47,8 +47,9 @@ const char* const add_videos_tooltip =
     N_("Add videos scored in this session. Each one's sequence is its reference's file name, and its bitrate is "
        "the video's own.");
 const char* const import_tooltip =
-    N_("Add encodes from a CSV file with a row per encode: columns sequence, kbps, and a column per metric key "
-       "(vmaf, psnr, ssim...), as the command line's bdrate reads.");
+    N_("Add encodes from a CSV file with a row per encode (columns sequence, kbps, and a column per metric key: "
+       "vmaf, psnr, ssim...), or from a JSON file: results as Export results or the command line's --json write "
+       "them, or a run file (.metrics.json). The command line's bdrate reads the same files.");
 
 // The metric keys, in the registry's order: the results' columns.
 std::vector<std::string> all_metric_keys() {
@@ -201,7 +202,7 @@ QGroupBox* BdRatePanel::build_side(Side& side, const QString& title) {
     auto* buttons = new QHBoxLayout;
     side.add_videos_button = new QPushButton(app::tr("Add videos\xE2\x80\xA6"));
     side.add_videos_button->setToolTip(app::tr(add_videos_tooltip));
-    side.import_button = new QPushButton(app::tr("Import CSV\xE2\x80\xA6"));
+    side.import_button = new QPushButton(app::tr("Import CSV/JSON\xE2\x80\xA6"));
     side.import_button->setToolTip(app::tr(import_tooltip));
     side.clear_button = new QPushButton(app::tr("Clear"));
     connect(side.add_videos_button, &QPushButton::clicked, this, [this, &side] { on_add_videos(side); });
@@ -392,13 +393,14 @@ bool BdRatePanel::update_videos_of(Side& side, const std::vector<GraphPanel::Run
 }
 
 void BdRatePanel::on_import(Side& side) {
-    const QString path = dialogs.open_file(app::tr("Import encodes"), app::tr("CSV file (*.csv)"));
+    const QString path =
+        dialogs.open_file(app::tr("Import encodes"), app::tr("CSV or JSON file (*.csv *.json)"));
     if (!path.isEmpty()) {
-        import_csv(side, path);
+        import_file(side, path);
     }
 }
 
-void BdRatePanel::import_csv(Side& side, const QString& path) {
+void BdRatePanel::import_file(Side& side, const QString& path) {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
         dialogs.alert(app::tr("Import failed"), app::tr("Could not read {path}", {{"path", path}}));
@@ -407,13 +409,13 @@ void BdRatePanel::import_csv(Side& side, const QString& path) {
     const QByteArray bytes = file.readAll();
     RateTable table;
     try {
-        table = read_rate_table(std::string_view(bytes.constData(), static_cast<std::size_t>(bytes.size())),
-                                QFileInfo(path).fileName().toStdString());
+        table = read_rate_file(std::string_view(bytes.constData(), static_cast<std::size_t>(bytes.size())),
+                               QFileInfo(path).fileName().toStdString());
     } catch (const std::exception& error) {
         dialogs.alert(app::tr("Import failed"), qt_text(error.what()));
         return;
     }
-    const QString key = QStringLiteral("csv:") + QFileInfo(path).absoluteFilePath();
+    const QString key = QStringLiteral("file:") + QFileInfo(path).absoluteFilePath();
     std::erase_if(side.sources, [&key](const auto& source) { return source.first == key; });
     side.sources.emplace_back(key, std::move(table));
     if (side.name_edit->text().trimmed().isEmpty()) {
@@ -508,8 +510,8 @@ void BdRatePanel::recalculate() {
     const RateTable anchor_table = merged(anchor);
     const RateTable test_table = merged(test);
     if (anchor_table.encodes.empty() || test_table.encodes.empty()) {
-        heading_label->setText(app::tr("Add the anchor's encodes and the test's: scored videos, or CSV files in the "
-                                       "command line's bdrate format."));
+        heading_label->setText(app::tr("Add the anchor's encodes and the test's: scored videos, or CSV or JSON "
+                                       "files the command line's bdrate reads."));
     } else {
         BdRateOptions options;
         options.metrics = all_metric_keys();

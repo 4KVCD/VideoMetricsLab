@@ -3,14 +3,20 @@
 // function itself (scipy 1.17.1).
 #include "vml/bd_rate.h"
 #include "vml/bd_rate_report.h"
+#include "vml/platform/system.h"
+#include "vml/run_file.h"
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <map>
 #include <optional>
 #include <string>
+#include <stdexcept>
 #include <utility>
 #include <vector>
+
+#include <nlohmann/json.hpp>
 
 namespace vml {
 namespace {
@@ -115,6 +121,64 @@ TEST(BdRate, TakesAnEncodeFromAScoredVideo) {
     EXPECT_FALSE(rate_encode(resized));
     result.distorted_info.bit_rate = 0;
     EXPECT_FALSE(rate_encode(result));
+}
+
+// A JSON file's encodes: a results document's videos (the command line's
+// --json, a --batch's, Export results'), or a run file's one video; a CSV
+// file as read_rate_table reads it.
+TEST(BdRate, ReadsEncodesFromJson) {
+    const nlohmann::json video = {
+        {"path", "Y:/encodes/park_q27.mkv"}, {"reference", "Y:/clips/park_joy_1080p.y4m"}, {"status", "ok"},
+        {"bit_rate", 4250500}, {"metrics", {{"vmaf", {{"score", 91.5}}}, {"psnr", {{"score", "inf"}}}}}};
+    nlohmann::json failed = video;
+    failed["status"] = "failed";
+    nlohmann::json ranged = video;
+    ranged["settings"] = {{"range", {{"whole", false}, {"start", 0}, {"end", 10}, {"unit", "seconds"}}}};
+    nlohmann::json whole = video;
+    whole["settings"] = {{"range", {{"whole", true}, {"start", 0}, {"end", 0}, {"unit", "seconds"}}}};
+    nlohmann::json no_rate = video;
+    no_rate.erase("bit_rate");
+    const nlohmann::json document = {{"format", 2}, {"videos", {video, failed, ranged, whole, no_rate}}};
+    const RateTable table = read_rate_file(" \n" + document.dump(), "results.json");
+    ASSERT_EQ(table.encodes.size(), 2U);  // the first, and the whole file's
+    EXPECT_EQ(table.encodes[0].sequence, "park_joy_1080p");
+    EXPECT_EQ(table.encodes[0].reference, "Y:/clips/park_joy_1080p.y4m");
+    EXPECT_DOUBLE_EQ(table.encodes[0].kbps, 4250.5);
+    EXPECT_DOUBLE_EQ(*table.encodes[0].scores.at("vmaf"), 91.5);
+    EXPECT_TRUE(std::isinf(*table.encodes[0].scores.at("psnr")));
+    EXPECT_EQ(table.metric_keys, (std::vector<std::string>{"vmaf", "psnr"}));
+    EXPECT_EQ(table.columns, (std::vector<std::string>{"sequence", "kbps", "vmaf", "psnr"}));
+
+    // --batch: each reference's document, one that could not be read too.
+    const nlohmann::json batch = {
+        {"batch", {document, {{"reference", "Y:/clips/gone.y4m"}, {"error", "not found"}}, document}}};
+    EXPECT_EQ(read_rate_file("\xEF\xBB\xBF" + batch.dump(), "batch.json").encodes.size(), 4U);
+
+    // A run file: its video, as rate_encode takes it.
+    ComparisonResult result;
+    result.source = "Y:/clips/baseball_1920x1080_60.y4m";
+    result.distorted = "Y:/encodes/baseball_q27.mkv";
+    result.distorted_info.bit_rate = 6551340;
+    result.metric_results.add(FrameMetricResult{"vmaf", {0, 1}, {0.0, 0.04}, {87.0F, 89.0F}, {}});
+    const RateTable run = read_rate_file(run_file_text(result, "baseball_q27"), "baseball_q27.metrics.json");
+    ASSERT_EQ(run.encodes.size(), 1U);
+    const RateTable::Encode expected = *rate_encode(result);
+    EXPECT_EQ(run.encodes[0].sequence, expected.sequence);
+    // The same path: a run file saves it with the system's separators.
+    EXPECT_EQ(platform::path_from_text(run.encodes[0].reference).make_preferred(),
+              platform::path_from_text(expected.reference).make_preferred());
+    EXPECT_DOUBLE_EQ(run.encodes[0].kbps, expected.kbps);
+    EXPECT_DOUBLE_EQ(*run.encodes[0].scores.at("vmaf"), *expected.scores.at("vmaf"));
+
+    // CSV as ever; and a file with nothing to go by says so, by its name.
+    EXPECT_EQ(read_rate_file("sequence,kbps,vmaf\nclip,100,90\n", "a.csv").encodes.size(), 1U);
+    try {
+        read_rate_file(nlohmann::json{{"videos", {failed}}}.dump(), "empty.json");
+        ADD_FAILURE() << "no encodes, no error";
+    } catch (const std::runtime_error& error) {
+        EXPECT_TRUE(std::string(error.what()).starts_with("empty.json: ")) << error.what();
+    }
+    EXPECT_THROW(read_rate_file("{not json", "broken.json"), std::runtime_error);
 }
 
 // numpy's nanmean and nanmedian.

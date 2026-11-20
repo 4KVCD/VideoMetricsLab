@@ -37,7 +37,7 @@ Json row_json(const BdRateRow& row, const BdRateReport& report) {
 std::optional<RateTable> read_table_file(const std::string& text_path) {
     const std::filesystem::path path = python_path(text_path);
     try {
-        return read_rate_table(read_whole_file(path), platform::path_text(path));
+        return read_rate_file(read_whole_file(path), platform::path_text(path));
     } catch (const std::exception& error) {
         print_error(error.what());
         return std::nullopt;

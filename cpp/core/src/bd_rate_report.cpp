@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <nlohmann/json.hpp>
 #include <set>
 #include <stdexcept>
 
@@ -11,6 +13,7 @@
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
+#include "vml/run_file.h"
 #include "vml/results_summary.h"
 #include "vml/translatable.h"
 
@@ -261,6 +264,125 @@ RateTable read_rate_table(std::string_view text, const std::string& name) {
     } catch (const std::runtime_error& error) {
         throw std::runtime_error(name + ": " + error.what());
     }
+}
+
+namespace {
+
+// A results document's video as an encode: none where it has no score of
+// the whole file to go with a bitrate.
+std::optional<RateTable::Encode> document_encode(const nlohmann::json& video) {
+    if (!video.is_object()) {
+        return std::nullopt;
+    }
+    const std::string status = video.value("status", std::string("ok"));
+    if (status != "ok" && status != "partial") {
+        return std::nullopt;  // failed or cancelled: no scores to go by
+    }
+    // Scores of a range are not of the bitrate, which is the whole file's
+    // (rate_of_scores). A saved run loaded into the window records no
+    // settings: taken as the whole file, as its result is.
+    if (const auto settings = video.find("settings"); settings != video.end() && settings->is_object()) {
+        // {"whole": true, ...} for the whole file; a part's has "whole": false.
+        if (const auto range = settings->find("range");
+            range != settings->end() && range->is_object() && !range->value("whole", true)) {
+            return std::nullopt;
+        }
+    }
+    const auto rate = video.find("bit_rate");
+    const auto reference = video.find("reference");
+    if (rate == video.end() || !rate->is_number() || rate->get<double>() <= 0 || reference == video.end() ||
+        !reference->is_string()) {
+        return std::nullopt;
+    }
+    RateTable::Encode encode;
+    encode.reference = reference->get<std::string>();
+    encode.sequence = platform::path_text(platform::path_from_text(encode.reference).stem());
+    encode.kbps = rate->get<double>() / 1000;
+    if (const auto scores = video.find("metrics"); scores != video.end() && scores->is_object()) {
+        for (const MetricDefinition& metric : metrics()) {
+            const auto found = scores->find(std::string(metric.key));
+            if (found == scores->end() || !found->is_object()) {
+                continue;
+            }
+            const auto score = found->find("score");
+            if (score != found->end() && score->is_number()) {
+                encode.scores[std::string(metric.key)] = score->get<double>();
+            } else if (score != found->end() && score->is_string() && score->get<std::string>() == "inf") {
+                encode.scores[std::string(metric.key)] = std::numeric_limits<double>::infinity();
+            } else {
+                encode.scores[std::string(metric.key)] = std::nullopt;
+            }
+        }
+    }
+    return encode;
+}
+
+// The table of encodes read from a JSON file: its columns sequence, kbps
+// and each metric any encode has.
+RateTable table_of_encodes(std::vector<RateTable::Encode> encodes) {
+    RateTable table;
+    table.columns = {"sequence", "kbps"};
+    for (const MetricDefinition& metric : metrics()) {
+        const std::string key(metric.key);
+        if (std::ranges::any_of(encodes, [&key](const RateTable::Encode& encode) { return encode.scores.contains(key); })) {
+            table.metric_keys.push_back(key);
+            table.columns.push_back(key);
+        }
+    }
+    table.encodes = std::move(encodes);
+    return table;
+}
+
+}  // namespace
+
+RateTable read_rate_file(std::string_view text, const std::string& name) {
+    std::string_view rest = text;
+    if (rest.starts_with("\xEF\xBB\xBF")) {
+        rest.remove_prefix(3);
+    }
+    const std::size_t first = rest.find_first_not_of(" \t\r\n");
+    if (first == std::string_view::npos || rest[first] != '{') {
+        return read_rate_table(text, name);
+    }
+    std::vector<RateTable::Encode> encodes;
+    try {
+        const nlohmann::json document = nlohmann::json::parse(rest);
+        std::vector<const nlohmann::json*> documents;
+        if (const auto batch = document.find("batch"); batch != document.end() && batch->is_array()) {
+            for (const nlohmann::json& each : *batch) {
+                documents.push_back(&each);  // a reference that could not be read has no videos
+            }
+        } else if (document.contains("videos")) {
+            documents.push_back(&document);
+        }
+        if (!documents.empty()) {
+            for (const nlohmann::json* each : documents) {
+                const auto videos = each->find("videos");
+                if (videos == each->end() || !videos->is_array()) {
+                    continue;
+                }
+                for (const nlohmann::json& video : *videos) {
+                    if (std::optional<RateTable::Encode> encode = document_encode(video)) {
+                        encodes.push_back(std::move(*encode));
+                    }
+                }
+            }
+        } else {
+            // A run file: its one video.
+            const std::pair<ComparisonResult, std::string> run = run_from_text(std::string(rest));
+            if (std::optional<RateTable::Encode> encode = rate_encode(run.first)) {
+                encodes.push_back(std::move(*encode));
+            }
+        }
+    } catch (const nlohmann::json::exception& error) {
+        throw std::runtime_error(name + ": not JSON this app reads: " + error.what());
+    } catch (const RunFileError& error) {
+        throw std::runtime_error(name + ": " + error.what());
+    }
+    if (encodes.empty()) {
+        throw std::runtime_error(name + ": no video with scores of the whole file and its bitrate");
+    }
+    return table_of_encodes(std::move(encodes));
 }
 
 std::string rate_table_csv(const RateTable& table) {
