@@ -638,6 +638,8 @@ private:
     void refresh_metric_cells();
     void on_vship_checked();
     void set_run_ui_active(bool active);
+    // Called from the writes' thread: locks run `run`'s saved-scores folders.
+    void add_run_folders(int run, std::vector<std::filesystem::path> folders);
     int parallel_jobs() const;
     void on_parallel_jobs_changed(bool on);
     void on_cancel_clicked();
@@ -697,6 +699,7 @@ private:
     QStringList reference_drop_;  // the files a drag over the reference box carries
     QString reading_text_;        // the status line's "Reading..." while it shows
     bool run_active_ = false;
+    int run_number_ = 0;  // counts runs: a run's saved-scores folders, told later, are its own (set_run_ui_active)
     bool defaults_changed_in_run_ = false;  // Settings' defaults changed during a run: applied as it ends
     bool closing_ = false;
     bool asking_frame_rates_ = false;           // a frame rate question is open

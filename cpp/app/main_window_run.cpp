@@ -18,6 +18,7 @@
 #include <chrono>
 #include <cmath>
 #include <set>
+#include <tuple>
 #include <utility>
 #include <variant>
 
@@ -597,6 +598,31 @@ void MainWindow::set_run_ui_active(bool active) {
         }
     }
     saved_results_panel_->set_run_active(active, run_pairs);
+    if (active && source_info_) {
+        // And the folders the run reads and saves them in, found as its saves
+        // will find them (recipe_directory): a file moved, renamed or copied
+        // since it was scored is found by its content, in a folder whose
+        // context.json names its old paths. Off the window's thread, as they
+        // may read the videos, and on the writes' own, before the run's saves.
+        // Every comparison is locked until they are known; if they cannot be
+        // found, until the run ends.
+        std::vector<std::tuple<std::filesystem::path, std::filesystem::path, ComparisonRecipe>> wanted;
+        for (const std::shared_ptr<RowData>& row : job_rows_) {
+            wanted.emplace_back(source_info_->path, row->identity_path(), analysis_request_of(*row).recipe);
+        }
+        file_writes_->submit(QStringLiteral("find the run's saved scores"),
+                             [this, run = ++run_number_, base = cache_folder(), wanted = std::move(wanted)] {
+                                 std::vector<std::filesystem::path> folders;
+                                 try {
+                                     for (const auto& [source, distorted, recipe] : wanted) {
+                                         folders.push_back(recipe_directory(base, source, distorted, recipe));
+                                     }
+                                 } catch (const std::exception&) {
+                                     return;
+                                 }
+                                 add_run_folders(run, std::move(folders));
+                             });
+    }
     // A run has the disks to itself: a test stream being recorded is read
     // again after it, and a remux check under way gives way (its rows are
     // calculated).
@@ -1133,9 +1159,12 @@ void MainWindow::save_job_result(std::size_t job, const RowData& row_data, const
     file_writes_->submit(QStringLiteral("cache %1").arg(label),
                          [base = cache_folder(), identity = row_data.identity_path(), result = std::move(saved),
                           label = label.toStdString(), request, records = stream_records_,
-                          recognise = settings_.recognise_test_remuxes] {
-                             store_result(base, result.source, identity, request.recipe, result, label,
-                                          request.metrics);
+                          recognise = settings_.recognise_test_remuxes, this, run = run_number_] {
+                             // Its folder locked on Saved Results for the rest of the run,
+                             // as its settings at the end may have found another than
+                             // those at the start (set_run_ui_active).
+                             add_run_folders(run, {store_result(base, result.source, identity, request.recipe,
+                                                                result, label, request.metrics)});
                              // Its test stream, for a remux of it to keep these scores (with
                              // Settings' "Recognize test videos remuxed"): read apart from the
                              // writes, which it would hold up, and after the run.
@@ -1143,6 +1172,20 @@ void MainWindow::save_job_result(std::size_t job, const RowData& row_data, const
                                  records->add(base, identity);
                              }
                          });
+}
+
+// Locks `folders` on Saved Results while run `run` is on: told from the
+// writes' thread, so queued to the window's, and dropped once another run
+// has started or none is on.
+void MainWindow::add_run_folders(int run, std::vector<std::filesystem::path> folders) {
+    QMetaObject::invokeMethod(
+        this,
+        [this, run, folders = std::move(folders)] {
+            if (run == run_number_ && run_active_) {
+                saved_results_panel_->add_run_folders(folders);
+            }
+        },
+        Qt::QueuedConnection);
 }
 
 // The row's new run: `result` (`final`, or so far), labelled `label`, in

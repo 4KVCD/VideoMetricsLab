@@ -419,10 +419,10 @@ SegmentRules SavedResultsPanel::segment_rules() const {
 
 namespace {
 
-// A path as locked_by_run compares them: made absolute and normal by its
-// text alone, with the system's separators, in one case on Windows (as
-// same_path compares). No disk is asked: a selection of many comparisons,
-// some on a share, is checked at each click.
+// A path as locked_by_run compares them: made normal by its text alone,
+// with the system's separators, in one case on Windows (as same_path
+// compares). No disk is asked: a selection of many comparisons, some on a
+// share, is checked at each click.
 QString run_key(const std::filesystem::path& path) {
     QString text = text_of(path.lexically_normal().make_preferred());
 #ifdef _WIN32
@@ -443,6 +443,8 @@ void SavedResultsPanel::set_run_active(
     bool active, const std::vector<std::pair<std::filesystem::path, std::filesystem::path>>& pairs) {
     run_active_ = active;
     run_pairs_.clear();
+    run_folders_.clear();
+    run_folders_known_ = false;
     if (active) {
         for (const auto& [reference, test] : pairs) {
             run_pairs_.insert(pair_key(reference, test));
@@ -451,16 +453,28 @@ void SavedResultsPanel::set_run_active(
     update_buttons();
 }
 
+void SavedResultsPanel::add_run_folders(const std::vector<std::filesystem::path>& folders) {
+    if (!run_active_) {
+        return;  // a run's, told after it ended
+    }
+    for (const std::filesystem::path& folder : folders) {
+        run_folders_.insert(run_key(folder));
+    }
+    run_folders_known_ = true;
+    update_buttons();
+}
+
 bool SavedResultsPanel::locked_by_run(const SavedComparison& saved) const {
-    return run_active_ && run_pairs_.contains(pair_key(saved.source, saved.distorted));
+    return run_active_ && (!run_folders_known_ || run_pairs_.contains(pair_key(saved.source, saved.distorted)) ||
+                           run_folders_.contains(run_key(saved.folder)));
 }
 
 void SavedResultsPanel::update_buttons() {
     const std::vector<const SavedComparison*> chosen = selected();
     open_button_->setEnabled(!chosen.empty());
     export_button_->setEnabled(!chosen.empty());
-    // Locked where any selected comparison is of the run's videos; the
-    // others can be deleted while it runs.
+    // Locked where any selected comparison is one the run uses; the others
+    // can be deleted while it runs.
     const bool locked = std::any_of(chosen.begin(), chosen.end(),
                                     [this](const SavedComparison* saved) { return locked_by_run(*saved); });
     delete_button_->setEnabled(!chosen.empty() && !locked);

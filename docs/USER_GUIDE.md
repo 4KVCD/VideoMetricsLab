@@ -702,8 +702,9 @@ videos again:
 - **Delete...** removes their saved scores, after asking: the videos are
   scored again the next time they are compared. While metrics are
   calculated, it is locked for the comparisons the run is calculating (its
-  reference with each of its test videos), whose scores the run reads and
-  saves; others can still be deleted, those of the same reference too.
+  reference with each of its test videos, also where one was saved under a
+  file's old name or folder), whose scores the run reads and saves; others
+  can still be deleted, those of the same reference too.
 
 A comparison whose reference video is no longer where its scores were saved
 from (deleted, moved, unreachable, or another file there now) shows its

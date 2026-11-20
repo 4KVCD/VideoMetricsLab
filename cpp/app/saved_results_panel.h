@@ -62,11 +62,19 @@ public:
     // the run's pairs (`pairs`, each its reference and a test video): the
     // run reads and saves their scores. Others can still be deleted, those of
     // the same reference with another test video too: each comparison is a
-    // folder of its own. Inactive: none is locked.
+    // folder of its own. Until the run's folders are known
+    // (add_run_folders), every comparison is locked. Inactive: none is.
     void set_run_active(bool active,
                         const std::vector<std::pair<std::filesystem::path, std::filesystem::path>>& pairs = {});
-    // Whether Delete is locked for `saved`: a run is on, and its reference
-    // and test video are one of the run's pairs.
+    // Folders the run reads and saves scores in (metric_cache.h's
+    // recipe_directory), locked too: a file moved, renamed or copied since it
+    // was scored has its scores in a folder whose context.json names its old
+    // paths until the run saves there. Added to those known; the first call
+    // unlocks the comparisons of neither. Ignored when no run is on.
+    void add_run_folders(const std::vector<std::filesystem::path>& folders);
+    // Whether Delete is locked for `saved`: a run is on, and its folders are
+    // not known yet, or its reference and test video are one of the run's
+    // pairs, or its folder one of the run's.
     bool locked_by_run(const SavedComparison& saved) const;
     // The selected comparisons, read with the scores picked.
     std::vector<LoadedSavedResult> selected_results() const;
@@ -123,8 +131,11 @@ private:
     std::map<std::filesystem::path, std::map<std::string, std::filesystem::path>> picked_;
     QFutureWatcher<std::vector<SavedComparison>>* reading_ = nullptr;
     bool run_active_ = false;
-    // The run's pairs, each as locked_by_run compares them (run_key).
+    // The run's pairs and folders, each as locked_by_run compares them
+    // (run_key), and whether its folders are known yet.
     QSet<QString> run_pairs_;
+    QSet<QString> run_folders_;
+    bool run_folders_known_ = false;
     QLabel* folder_label_ = nullptr;
     QLineEdit* filter_ = nullptr;
     QTableWidget* table_ = nullptr;
