@@ -184,7 +184,7 @@ For the reference and each test video:
 
 ## Per-frame scores as JSON
 
-**Export per-frame scores** on the Saved results tab, and exports with
+**Export per-frame scores** on the Saved Results tab, and exports with
 **Per-frame scores** and **JSON** ticked in Settings > Storage > Exports
 include, write each video's per-frame scores as JSON: the same table as
 their CSV, for scripts that read JSON.

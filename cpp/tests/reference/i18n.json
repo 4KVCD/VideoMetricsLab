@@ -851,7 +851,7 @@
    }
   },
   {
-   "text": "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.",
+   "text": "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.",
    "values": {
     "directory": "<directory>"
    }

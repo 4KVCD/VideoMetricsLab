@@ -346,7 +346,7 @@ QWidget* SettingsPanel::build_export_choices() {
                   "the bitrate has been read, which the Bitrate Viewer does after each run.")}},
         {"weak_segments",
          {app::tr("Weak segments"),
-          app::tr("Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the "
+          app::tr("Weak segments by the profile in use (Settings > Weak segments; on the Saved Results tab, the "
                   "rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all "
                   "the videos' in one report. Nothing is saved while the rules have no condition.")}},
     };
@@ -946,7 +946,7 @@ void SettingsPanel::clear_saved_results() {
     if (!dialogs_.ask(app::tr("Clear saved results"),
                       app::tr("Delete saved results from {directory}?\n\nVideos already scored will have to be "
                               "recomputed. Those whose reference video is no longer where it was are kept: their "
-                              "scores could not be calculated again. Delete them in the Saved results tab.",
+                              "scores could not be calculated again. Delete them in the Saved Results tab.",
                               {{"directory", text_of(directory)}}))) {
         return;
     }
@@ -998,8 +998,8 @@ void SettingsPanel::on_file_writes_idle() {
     cleared_.reset();
     QString said = ntr("Removed {count} saved result.", "Removed {count} saved results.", cleared.removed);
     if (cleared.kept > 0) {
-        said += " " + ntr("Kept {count} whose reference video is gone: delete it in the Saved results tab.",
-                          "Kept {count} whose reference videos are gone: delete them in the Saved results tab.",
+        said += " " + ntr("Kept {count} whose reference video is gone: delete it in the Saved Results tab.",
+                          "Kept {count} whose reference videos are gone: delete them in the Saved Results tab.",
                           cleared.kept);
     }
     status->setText(said);

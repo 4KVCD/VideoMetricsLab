@@ -1,4 +1,4 @@
-// The Saved results tab (saved_results_panel.h): the comparisons of the
+// The Saved Results tab (saved_results_panel.h): the comparisons of the
 // results cache listed and filtered, a comparison's saved scores shown, the
 // selection read back for Metric Graphs and the exports, the weak segment
 // rules picked, and Delete (locked during a run).

@@ -14,7 +14,7 @@
   "In:": "형식:",
   "Results": "결과",
   "Scores and statistics, as Export results saves them, in the formats ticked: a video's alone (<video> - results.json), or all the videos' in one file.": "결과 내보내기가 저장하는 방식의 점수와 통계를 선택한 형식으로: 동영상 하나만(<video> - results.json), 또는 모든 동영상을 파일 하나에.",
-  "Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "사용 중인 프로필(설정 > 약한 구간; 저장된 결과 탭에서는 그곳에서 고른 규칙)에 따른 약한 구간을 선택한 형식으로: 동영상 하나(<video>.vmaf.segments.json), 또는 모든 동영상을 보고서 하나에. 규칙에 조건이 없는 동안은 아무것도 저장되지 않습니다.",
+  "Weak segments by the profile in use (Settings > Weak segments; on the Saved Results tab, the rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. Nothing is saved while the rules have no condition.": "사용 중인 프로필(설정 > 약한 구간; 저장된 결과 탭에서는 그곳에서 고른 규칙)에 따른 약한 구간을 선택한 형식으로: 동영상 하나(<video>.vmaf.segments.json), 또는 모든 동영상을 보고서 하나에. 규칙에 조건이 없는 동안은 아무것도 저장되지 않습니다.",
   " min": " 분",
   "Application token:": "애플리케이션 토큰:",
   "As plain text in settings.json": "settings.json에 일반 텍스트로",
@@ -1154,7 +1154,7 @@
   "Refresh": "새로 고침",
   "Results exported to {path}": "결과를 {path}에 내보냈습니다",
   "Saved": "저장 시각",
-  "Saved results": "저장된 결과",
+  "Saved Results": "저장된 결과",
   "Saved scores": "저장된 점수",
   "Saved scores of {name}": "{name}의 저장된 점수",
   "Select a comparison to see its saved scores.": "비교를 선택하면 저장된 점수를 볼 수 있습니다.",
@@ -1168,7 +1168,7 @@
   "{name} (saved)": "{name}(저장됨)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "{directory}의 저장된 결과를 삭제할까요?\n\n이미 채점한 영상은 다시 계산해야 합니다. 참조 영상이 원래 위치에 없는 결과는 유지됩니다. 그 점수는 다시 계산할 수 없기 때문입니다. 이 결과는 저장된 결과 탭에서 삭제하세요.",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "{directory}의 저장된 결과를 삭제할까요?\n\n이미 채점한 영상은 다시 계산해야 합니다. 참조 영상이 원래 위치에 없는 결과는 유지됩니다. 그 점수는 다시 계산할 수 없기 때문입니다. 이 결과는 저장된 결과 탭에서 삭제하세요.",
   "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "일부는 다시 채점할 수 없습니다. 참조 영상이 원래 위치에 없습니다(\"찾을 수 없음\"으로 표시).",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\n그 위치에 없습니다. 참조 영상이 없으면 이 점수는 다시 계산할 수 없습니다.",
   "Recognize test videos remuxed after scoring (reads each one again)": "채점 후 다시 먹싱한 테스트 영상 인식(각 영상을 다시 읽음)",
@@ -1267,7 +1267,7 @@
   "{count} saved comparison in {directory}": [
    "저장된 비교 {count}개, {directory}"
   ],
-  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "참조 영상이 없는 결과 {count}개를 유지했습니다. 저장된 결과 탭에서 삭제하세요."
   ]
  }
