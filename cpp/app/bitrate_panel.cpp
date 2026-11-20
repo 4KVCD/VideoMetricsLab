@@ -378,6 +378,11 @@ void BitratePanel::add_frame_controls(QVBoxLayout* root) {
     row->addWidget(export_button);
     row->addSpacing(16);
     frame_controls = new FrameControls;
+    // Go to time and the range in times, as on Metric Graphs: the time of
+    // the first line's frames, as the readout's time is (on_frame_requested).
+    frame_controls->set_timeline(FrameControls::Timeline{
+        [this](int frame) { return time_of_frame(frame); },
+        [this](double seconds, bool at_or_after) { return frame_at_time(seconds, at_or_after); }});
     connect(frame_controls, &FrameControls::frame_requested, this, [this](int frame) { on_frame_requested(frame); });
     connect(frame_controls, &FrameControls::range_changed, this, [this](bool finished) { on_range_changed(finished); });
     row->addWidget(frame_controls);
@@ -1161,6 +1166,35 @@ void BitratePanel::on_frame_requested(int frame) {
     chart->bring_into_view(*time);  // a zoomed graph moves to the frame
     chart->set_cursor_time(*time);
     write_readout(*time, points, frame);
+}
+
+std::optional<double> BitratePanel::time_of_frame(int frame) const {
+    for (const DrawnPlot& drawn : current_plots_) {
+        if (frame >= 0 && frame < drawn.data->frame_count()) {
+            return drawn.data->times[static_cast<std::size_t>(frame)] - drawn.start;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<int> BitratePanel::frame_at_time(double seconds, bool at_or_after) const {
+    // A time typed to the millisecond is a frame's within half of one, as
+    // the boxes show it (FrameControls::Timeline).
+    constexpr double half_a_millisecond = 0.0005;
+    for (const DrawnPlot& drawn : current_plots_) {
+        const std::vector<double>& times = drawn.data->times;  // in presentation order
+        if (times.empty()) {
+            continue;
+        }
+        const double at = seconds + drawn.start;
+        if (at_or_after) {
+            const auto found = std::lower_bound(times.begin(), times.end(), at - half_a_millisecond);
+            return found == times.end() ? std::nullopt : std::optional(static_cast<int>(found - times.begin()));
+        }
+        const auto found = std::upper_bound(times.begin(), times.end(), at + half_a_millisecond);
+        return found == times.begin() ? std::nullopt : std::optional(static_cast<int>(found - times.begin()) - 1);
+    }
+    return std::nullopt;
 }
 
 std::optional<int> BitratePanel::frame_at(double time) const {

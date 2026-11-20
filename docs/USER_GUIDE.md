@@ -351,6 +351,10 @@ With two videos shown, **Difference** draws the first minus the second in a
 band under the graph with its own scale: frame by frame in the frame view, and
 at each moment in the second and GOP views (where two encodes' GOPs differ,
 each moment's GOP bitrate is subtracted).
+Under the graph, **Export graph as PNG**, **Go to frame** and **Go to time**,
+and the range from frame or from time, work as on Metric Graphs: the table
+then gives the range's figures. A time is the first video shown's, from its
+start when **Adjust stream start time to zero** is ticked.
 The command line's `bitrate` command (below) reads the same numbers.
 Each file's reading is saved with the saved results and is not read again:
 the file adds at once the next time, renamed, moved or copied too (it is
