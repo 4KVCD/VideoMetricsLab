@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <chrono>
 #include <set>
+#include <type_traits>
 #include <utility>
 #include <variant>
 
@@ -54,6 +55,24 @@ QString size_text(std::uintmax_t bytes) {
     // A comparison's scores are often under a megabyte.
     return bytes < 1048576 ? app::tr("{size:.0f} KB", {{"size", std::max(1.0, static_cast<double>(bytes) / 1024.0)}})
                            : app::tr("{size:.1f} MB", {{"size", static_cast<double>(bytes) / 1048576.0}});
+}
+
+// A saved score's one number for the whole video, at its metric's
+// precision: a frame metric's average by its own way of averaging, CVVDP's
+// score; "—" for none.
+QString score_text(const std::string& key, const std::variant<FrameMetricResult, SequenceMetricResult>& score) {
+    const std::optional<double> value =
+        std::visit([](const auto& metric) -> std::optional<double> {
+            if constexpr (std::is_same_v<std::decay_t<decltype(metric)>, SequenceMetricResult>) {
+                return metric.score;
+            } else {
+                return metric.aggregate();
+            }
+        }, score);
+    if (const MetricDefinition* metric = find_metric(key); metric != nullptr) {
+        return qt_text(metric->format_value(value));
+    }
+    return value ? QString::number(*value) : QStringLiteral("—");
 }
 
 QString metric_label(const std::string& key) {
@@ -295,11 +314,13 @@ void SavedResultsPanel::show_details() {
             if (file.key != key) {
                 continue;
             }
-            // How it was made, as its file records it.
+            // The score, as Metric Graphs' table shows it, then how it was
+            // made, as its file records it.
             QStringList made{time_text(file.saved)};
             if (auto score = read_saved_score(file.file)) {
                 const MetricProvenance& provenance =
                     std::visit([](const auto& metric) -> const MetricProvenance& { return metric.provenance; }, *score);
+                made.prepend(score_text(key, *score));
                 made.append(provenance.compute_backend == "gpu" ? QStringLiteral("GPU") : QStringLiteral("CPU"));
                 made.append(qt_text(provenance.implementation + " " + provenance.implementation_version).trimmed());
                 if (const auto model = provenance.parameters.find("model"); model != provenance.parameters.end()) {

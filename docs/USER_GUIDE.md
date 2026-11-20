@@ -702,8 +702,10 @@ ones there are, and could not be calculated again without it. **Delete...**
 says so when it would delete any such, and **Settings > Storage > Clear saved
 results** keeps them, saying how many it kept; delete them here.
 
-**Saved scores** lists the selected comparison's scores, each with when and
-how it was made (GPU or CPU, the program, the VMAF model, the CVVDP display).
+**Saved scores** lists the selected comparison's scores: each metric's score
+for the whole video, as Metric Graphs' table shows it, then when and how it
+was made (GPU or CPU, the program, the VMAF model by its version, the CVVDP
+display).
 Where a metric has more than one (CVVDP for two displays; SSIMULACRA2 on the
 GPU and the CPU), the newest is used unless another is picked there.
 

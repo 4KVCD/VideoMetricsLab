@@ -5,6 +5,7 @@
 #include <QAction>
 #include <QComboBox>
 #include <QCoreApplication>
+#include <QLabel>
 #include <QLayout>
 #include <QLineEdit>
 #include <QMenu>
@@ -86,6 +87,17 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
     panel.layout()->activate();
     EXPECT_EQ(table.height(), height);
     EXPECT_EQ(panel.score_choice("vmaf"), nullptr);  // one score: nothing to pick
+    // Each line starts with the score itself, as Metric Graphs shows it,
+    // before how it was made.
+    for (const std::string key : {"vmaf", "psnr"}) {
+        const std::string score =
+            find_metric(key)->format_value(result.metric_results.frame(key)->aggregate()) + " \xC2\xB7 ";
+        bool found = false;
+        for (const QLabel* label : panel.findChildren<QLabel*>()) {
+            found = found || label->text().startsWith(QString::fromStdString(score));
+        }
+        EXPECT_TRUE(found) << key << ": no line starts with " << score;
+    }
     const std::vector<LoadedSavedResult> read = panel.selected_results();
     ASSERT_EQ(read.size(), 1U);
     EXPECT_EQ(read[0].label, "t");
