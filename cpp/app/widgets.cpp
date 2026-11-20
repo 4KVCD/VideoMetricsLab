@@ -1,6 +1,10 @@
 #include "widgets.h"
 
+#include <QAbstractItemView>
 #include <QAbstractSpinBox>
+#include <QHelpEvent>
+#include <QToolTip>
+#include <QTextDocument>
 #include <QApplication>
 #include <QComboBox>
 #include <QDragEnterEvent>
@@ -686,6 +690,53 @@ bool WheelPastValueBoxes::eventFilter(QObject* watched, QEvent* event) {
         if (page_->isAncestorOf(widget)) {
             no_wheel_focus(widget);
         }
+    }
+    return false;
+}
+
+// A plain line of a tooltip longer than this many characters is wrapped.
+constexpr int tool_tip_line = 70;
+
+QString wrapped_tool_tip(const QString& text) {
+    if (text.size() <= tool_tip_line || Qt::mightBeRichText(text)) {
+        return text;
+    }
+    return Qt::convertFromPlainText(text, Qt::WhiteSpaceNormal);
+}
+
+WrapLongToolTips::WrapLongToolTips(QObject* parent) : QObject(parent) {
+    QCoreApplication::instance()->installEventFilter(this);  // Qt takes it off when it is deleted
+}
+
+bool WrapLongToolTips::eventFilter(QObject* watched, QEvent* event) {
+    if (event->type() == QEvent::ToolTipChange) {
+        // A widget's tooltip, as it is set: set again wrapped (which comes
+        // back here as rich text, and is left).
+        if (auto* widget = qobject_cast<QWidget*>(watched)) {
+            const QString tip = widget->toolTip();
+            const QString wrapped = wrapped_tool_tip(tip);
+            if (wrapped != tip) {
+                widget->setToolTip(wrapped);
+            }
+        }
+        return false;
+    }
+    if (event->type() == QEvent::ToolTip) {
+        // An item's, as it is shown: the view's own showing of it, wrapped.
+        auto* viewport = qobject_cast<QWidget*>(watched);
+        auto* view = viewport == nullptr ? nullptr : qobject_cast<QAbstractItemView*>(viewport->parentWidget());
+        if (view == nullptr || view->viewport() != viewport) {
+            return false;
+        }
+        const auto* help = static_cast<QHelpEvent*>(event);
+        const QModelIndex index = view->indexAt(help->pos());
+        const QString tip = index.isValid() ? index.data(Qt::ToolTipRole).toString() : QString();
+        const QString wrapped = wrapped_tool_tip(tip);
+        if (wrapped == tip) {
+            return false;  // the view shows it as it would
+        }
+        QToolTip::showText(help->globalPos(), wrapped, viewport, view->visualRect(index));
+        return true;
     }
     return false;
 }
