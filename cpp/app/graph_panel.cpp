@@ -1373,8 +1373,11 @@ void GraphPanel::select_available_metric() {
 }
 
 QWidget* GraphPanel::build_action_bar() {
-    // The buttons under the graph: add saved results, export, go to a frame.
+    // The buttons under the graph, a toolbar of its own in VML Modern, in
+    // groups a line apart: add saved results and export; go to a frame and
+    // the range; the view (Difference, Worst frames).
     auto* bar = new QWidget;
+    theme::set_role(bar, "toolbar");
     auto* layout = new QHBoxLayout(bar);
     // A run file's line on the graph, whatever its reference, the Videos
     // table left as it is (the Videos tab's Import run file... adds a row).
@@ -1391,9 +1394,9 @@ QWidget* GraphPanel::build_action_bar() {
     auto* png_button = new QPushButton(app::tr("Export graph as PNG"));
     connect(png_button, &QPushButton::clicked, this, [this] { on_export_png(); });
     layout->addWidget(png_button);
-    layout->addSpacing(16);
+    layout->addWidget(theme::separator(16));
     layout->addWidget(frame_controls_);  // made in the constructor
-    layout->addSpacing(16);
+    layout->addWidget(theme::separator(16));
     // Usable once a page shows two lines (refresh_page_controls).
     difference_box_ = new QCheckBox(app::tr("Difference"));
     difference_box_->setEnabled(false);

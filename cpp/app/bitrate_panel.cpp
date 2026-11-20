@@ -374,11 +374,14 @@ void BitratePanel::add_chart(QVBoxLayout* root) {
 // The footer, as Metric Graphs' is: Export graph as PNG, then Go to frame
 // and the frame range, and what the table's figures are of.
 void BitratePanel::add_frame_controls(QVBoxLayout* root) {
-    auto* row = new QHBoxLayout;
+    // A toolbar of its own in VML Modern, in groups a line apart, as Metric
+    // Graphs' is; in Classic the row as it was.
+    QBoxLayout* row = nullptr;
+    QWidget* bar = theme::container("toolbar", true, &row);
     export_button = new QPushButton(app::tr("Export graph as PNG"));
     connect(export_button, &QPushButton::clicked, this, [this] { on_export_png(); });
     row->addWidget(export_button);
-    row->addSpacing(16);
+    row->addWidget(theme::separator(16));
     frame_controls = new FrameControls;
     // Go to time and the range in times, as on Metric Graphs: the time of
     // the first line's frames, as the readout's time is (on_frame_requested).
@@ -388,11 +391,11 @@ void BitratePanel::add_frame_controls(QVBoxLayout* root) {
     connect(frame_controls, &FrameControls::frame_requested, this, [this](int frame) { on_frame_requested(frame); });
     connect(frame_controls, &FrameControls::range_changed, this, [this](bool finished) { on_range_changed(finished); });
     row->addWidget(frame_controls);
-    row->addSpacing(16);
+    row->addWidget(theme::separator(16));
     range_label = new QLabel;
     row->addWidget(range_label);
     row->addStretch(1);
-    root->addLayout(row);
+    root->addWidget(bar);
 }
 
 // What the views show, and the files' reading in progress.
