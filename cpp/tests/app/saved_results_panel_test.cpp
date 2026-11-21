@@ -457,7 +457,8 @@ TEST(SavedResultsPanel, AFewScoresSitAtTheTopOfTheBox) {
 TEST(SavedResultsPanel, TheHeaderMenuHidesAndShowsColumns) {
     Settings settings;
     const Dialogs dialogs = standard_dialogs(nullptr);
-    SavedResultsPanel panel(settings, dialogs);
+    FileWrites writes;
+    SavedResultsPanel panel(settings, dialogs, writes);
     QSignalSpy changed(&panel, &SavedResultsPanel::columns_changed);
     QTableWidget& table = *panel.table();
     QMenu menu;
@@ -500,7 +501,8 @@ TEST(SavedResultsPanel, TheColumnsAreKeptInSettings) {
     ASSERT_EQ(settings.save_to(folder / "settings.json"), std::nullopt);
     const Settings loaded = Settings::load_from(folder / "settings.json");
     const Dialogs dialogs = standard_dialogs(nullptr);
-    SavedResultsPanel panel(loaded, dialogs);
+    FileWrites writes;
+    SavedResultsPanel panel(loaded, dialogs, writes);
     QTableWidget& table = *panel.table();
     EXPECT_FALSE(table.isColumnHidden(0));
     EXPECT_TRUE(table.isColumnHidden(1));
@@ -519,7 +521,7 @@ TEST(SavedResultsPanel, TheColumnsAreKeptInSettings) {
     EXPECT_EQ(table.columnWidth(1), 250);
 
     const Settings old = Settings::load_from(folder / "missing.json");
-    SavedResultsPanel fitted(old, dialogs);
+    SavedResultsPanel fitted(old, dialogs, writes);
     EXPECT_TRUE(fitted.hidden_columns().empty());
     EXPECT_TRUE(fitted.column_widths().empty());
     for (int column = 0; column < fitted.table()->columnCount(); ++column) {

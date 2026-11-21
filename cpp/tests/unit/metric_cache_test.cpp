@@ -1185,9 +1185,9 @@ TEST(MetricCache, AStreamRecordedInAnotherFormIsReadAgainAndNotMatched) {
     {
         std::ofstream(saved / "identity.json") << identity.dump();
     }
-    std::filesystem::last_write_time(saved / "identity.json",
-                                     std::filesystem::last_write_time(saved / "identity.json") +
-                                         std::chrono::seconds(2));  // read again
+    // Read again as a record of an earlier version is: its folder's time
+    // changed (recorded_comparisons reads again only where it did).
+    std::filesystem::last_write_time(saved, std::filesystem::last_write_time(saved) + std::chrono::seconds(2));
     EXPECT_FALSE(load());
     EXPECT_TRUE(test_stream_wanted(cache, folder / "t.mkv"));
     EXPECT_TRUE(record_test_stream(cache, folder / "t.mkv"));
