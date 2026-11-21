@@ -965,6 +965,58 @@ TEST_F(GraphPanelTest, WorstFramesListsTheDipsAndOpensThemInVideoCompare) {
     EXPECT_EQ(suggested, (QStringList{"a.vmaf.segments.json", "a.vmaf.segments.csv"}));
 }
 
+TEST_F(GraphPanelTest, WeakSegmentsTakesProfilesChangedInSettingsWhileOpen) {
+    // Issue #135: the dialog is not modal. A profile made in Settings while
+    // it is open is not replaced by Save as new profile under its name, and
+    // Save to profile on one deleted there does not bring it back.
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    std::vector<float> values(90, 95.0F);
+    values[40] = 60.0F;
+    panel.add_run({shared(vmaf_result("a.mkv", values)), "a", "row:a", true});
+    Settings settings;
+    settings.weak_segment_conditions = {"vmaf<70"};
+    settings.weak_segment_profiles_json = R"([{"name": "Strict", "conditions": ["vmaf<92"]}])";
+    const auto hand_back = [&] {
+        panel.set_segment_profiles(segment_profiles(settings), segment_profile_in_use(settings).name);
+    };
+    hand_back();
+    QObject::connect(&panel, &GraphPanel::weak_segment_rules_saved,
+                     [&](const std::string& profile, const SegmentRules& rules) {
+                         store_segment_profile(settings, profile, rules);
+                         hand_back();
+                     });
+    QString alerted;
+    panel.dialogs.ask_text = [](const QString&, const QString&, const QString&) -> std::optional<QString> {
+        return QStringLiteral("film");
+    };
+    panel.dialogs.alert = [&alerted](const QString& title, const QString&) { alerted = title; };
+    page(panel, "vmaf");
+    worst_button(panel).click();
+    worst_panel(panel).segments_button()->click();
+    auto* dialog = panel.findChild<WeakSegmentsDialog*>();
+    ASSERT_NE(dialog, nullptr);
+    dialog->profile_combo()->setCurrentIndex(dialog->profile_combo()->findText("Strict"));
+
+    // Meanwhile, in Settings: Film made, Strict deleted.
+    store_segment_profiles(settings,
+                           {segment_profiles(settings).front(), {"Film", SegmentRules{{{"vmaf", '<', 80.0}}}}});
+    hand_back();
+    EXPECT_EQ(dialog->profile_combo()->findText("Strict"), -1);
+    EXPECT_EQ(dialog->profile_combo()->currentText(), "Default");  // the one in use
+    EXPECT_EQ(condition_texts(dialog->rules().conditions), std::vector<std::string>{"vmaf<92"});  // kept
+
+    dialog->save_new_button()->click();
+    EXPECT_EQ(alerted, "Profile not saved");
+    EXPECT_EQ(condition_texts(segment_profile_named(settings, "Film")->rules.conditions),
+              std::vector<std::string>{"vmaf<80"});
+    ASSERT_TRUE(dialog->save_button()->isEnabled());
+    dialog->save_button()->click();
+    EXPECT_FALSE(segment_profile_named(settings, "Strict"));
+    EXPECT_EQ(condition_texts(segment_profile_named(settings, "")->rules.conditions),
+              std::vector<std::string>{"vmaf<92"});
+}
+
 TEST_F(GraphPanelTest, WeakSegmentsStartsFromAProfileAndSavesOnlyWhenAsked) {
     // The profile in use (Settings > Weak segments) is where the dialog
     // starts; another can be picked. What is changed there holds for the

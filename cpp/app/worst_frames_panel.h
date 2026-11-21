@@ -106,6 +106,12 @@ public:
                        std::optional<std::pair<int, int>> range, std::vector<SegmentProfile> profiles,
                        const std::string& in_use, Dialogs dialogs, QWidget* parent = nullptr);
 
+    // The profiles as Settings has them now (changed there while this is
+    // open): the one picked stays picked where it is still there, else the
+    // profile in use is, with the rules shown kept. Save as new profile
+    // checks names against these, and Save to profile saves to one of them.
+    void set_profiles(std::vector<SegmentProfile> profiles, const std::string& in_use);
+
     // The rules shown, with the range.
     SegmentRules rules() const;
     // What Save to profile saves: rules() without the range, and the
@@ -147,7 +153,7 @@ private:
     std::optional<std::pair<int, int>> range_;
     Dialogs dialogs_;
     std::vector<std::string> keys_;  // the metrics the video has scores of, in the app's order
-    std::vector<SegmentProfile> profiles_;  // as saved in Settings (since the dialog opened, or saved here)
+    std::vector<SegmentProfile> profiles_;  // as saved in Settings (set_profiles), or saved here
     SegmentRules saved_;  // the profile picked's rules, as saved
     std::vector<WeakSegment> segments_;
     SegmentRulesEditor* editor_ = nullptr;

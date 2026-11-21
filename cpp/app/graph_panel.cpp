@@ -1396,6 +1396,15 @@ void GraphPanel::refresh_worst_frames() {
     worst_panel_->set_view(metric, std::move(videos), selected_frames());
 }
 
+void GraphPanel::set_segment_profiles(std::vector<SegmentProfile> profiles, std::string in_use) {
+    segment_profiles_ = std::move(profiles);
+    segment_profile_ = std::move(in_use);
+    // The dialog is not modal: Settings can change them while it is open.
+    for (WeakSegmentsDialog* dialog : findChildren<WeakSegmentsDialog*>()) {
+        dialog->set_profiles(segment_profiles_, segment_profile_);
+    }
+}
+
 void GraphPanel::open_weak_segments() {
     // The video Worst frames shows, on its metric, within the range.
     const WeakFramesVideo* video = worst_panel_->chosen_video();

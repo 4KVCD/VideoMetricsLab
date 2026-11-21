@@ -258,11 +258,9 @@ public:
     // How many dips Worst frames lists (Settings.graph_worst_frames).
     void set_worst_count(int count);
     // The weak segment profiles (Settings > Weak segments) and the one in
-    // use, which Weak segments starts from.
-    void set_segment_profiles(std::vector<SegmentProfile> profiles, std::string in_use) {
-        segment_profiles_ = std::move(profiles);
-        segment_profile_ = std::move(in_use);
-    }
+    // use, which Weak segments starts from; an open Weak segments dialog
+    // takes them too.
+    void set_segment_profiles(std::vector<SegmentProfile> profiles, std::string in_use);
     // Whether any run is shown.
     bool empty() const { return entries_.empty(); }
 
