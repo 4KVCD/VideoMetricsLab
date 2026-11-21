@@ -163,7 +163,7 @@ bool each_child(std::istream& in, std::int64_t end, Read read) {
 
 // A track entry's number and picture size, where its codec is AV2's and its
 // frames are stored as they are (no ContentEncodings: header stripping or
-// compression would give dav2d other bytes).
+// compression would give splot other bytes).
 std::optional<MatroskaTrack> av2_track_entry(std::istream& in, std::int64_t end) {
     MatroskaTrack track;
     std::string codec;
@@ -253,17 +253,185 @@ std::optional<MatroskaTrack> matroska_av2_track(std::istream& in) {
     }
 }
 
-}  // namespace
-
-UnitKind kind_of(std::span<const std::uint8_t> unit) {
-    UnitKind kind;
+// Calls `visit(begin, header, end)` for each whole OBU of `unit`, in order:
+// where it starts (its size field), where its header is and where it ends.
+// The first that does not fit ends the walk (a damaged unit says no more
+// than its whole OBUs say).
+template <typename Visit>
+void each_obu(std::span<const std::uint8_t> unit, Visit&& visit) {
     std::size_t at = 0;
     while (at < unit.size()) {
         const auto size = leb128(unit.data() + at, unit.size() - at);
         if (!size || size->first == 0 || size->first > unit.size() - at - size->second) {
-            break;
+            return;
         }
         const std::size_t header = at + size->second;
+        visit(at, header, header + size->first);
+        at = header + size->first;
+    }
+}
+
+// Whether an OBU of this type sends a setting a decoder keeps (TemporalUnit::carried).
+bool is_kept_setting(ObuType type) {
+    return type == ObuType::film_grain || type == ObuType::quantization_matrix || type == ObuType::multi_frame_header;
+}
+
+// AV2's bits, most significant first, as its syntax reads them: f(n) and uvlc().
+class BitReader {
+public:
+    explicit BitReader(std::span<const std::uint8_t> bytes) : bytes_(bytes) {}
+
+    // The next `count` bits (at most 32), or nothing past the end.
+    std::optional<std::uint32_t> bits(int count) {
+        std::uint32_t value = 0;
+        for (int i = 0; i < count; i++, at_++) {
+            if (at_ / 8 >= bytes_.size()) {
+                return std::nullopt;
+            }
+            value = value << 1 | ((bytes_[at_ / 8] >> (7 - at_ % 8)) & 1);
+        }
+        return value;
+    }
+
+    // uvlc(): n zeros, a one, then n bits.
+    std::optional<std::uint32_t> uvlc() {
+        int zeros = 0;
+        while (true) {
+            const std::optional<std::uint32_t> bit = bits(1);
+            if (!bit || zeros == 32) {
+                return std::nullopt;
+            }
+            if (*bit) {
+                break;
+            }
+            zeros++;
+        }
+        const std::optional<std::uint32_t> rest = bits(zeros);
+        return rest ? std::optional(static_cast<std::uint32_t>((1ULL << zeros) - 1 + *rest)) : std::nullopt;
+    }
+
+private:
+    std::span<const std::uint8_t> bytes_;
+    std::size_t at_ = 0;
+};
+
+// The slots a kept setting's OBU sets, a bit each, as its payload's first
+// fields say (as AOM's read_fgm_obu, read_qm_obu and
+// av2_read_multi_frame_header read them): a film grain OBU's 8
+// (fgm_bit_map), a quantization matrix OBU's 15 (qm_bit_map; 0 sets them all,
+// to the predefined matrices), a multi-frame header's id (1 to 15). 0 where
+// the payload is too short.
+std::uint32_t slots_of(ObuType type, std::span<const std::uint8_t> payload) {
+    BitReader read(payload);
+    switch (type) {
+        case ObuType::film_grain:
+            return read.bits(8).value_or(0);
+        case ObuType::quantization_matrix: {
+            constexpr std::uint32_t every_slot = (1U << 15) - 1;
+            const std::optional<std::uint32_t> map = read.bits(15);
+            return !map ? 0 : *map == 0 ? every_slot : *map;
+        }
+        case ObuType::multi_frame_header: {
+            const std::optional<std::uint32_t> sequence_header_id = read.uvlc();
+            const std::optional<std::uint32_t> id_minus_1 = read.uvlc();
+            return sequence_header_id && id_minus_1 && *id_minus_1 < 15 ? 1U << (*id_minus_1 + 1) : 0;
+        }
+        default:
+            return 0;
+    }
+}
+
+// Calls `visit(type, slots, obu)` for each kept setting `unit` sends, in
+// order: its type, the slots it sets and the whole OBU.
+template <typename Visit>
+void each_kept_setting(std::span<const std::uint8_t> unit, Visit&& visit) {
+    each_obu(unit, [&](std::size_t begin, std::size_t header, std::size_t end) {
+        const ObuType type = type_of(unit[header]);
+        // The payload follows the header and, where its first bit says so, its extension byte.
+        const std::size_t payload = header + 1 + (unit[header] >> 7);
+        if (!is_kept_setting(type) || payload > end) {
+            return;
+        }
+        if (const std::uint32_t slots = slots_of(type, unit.subspan(payload, end - payload)); slots != 0) {
+            visit(type, slots, unit.subspan(begin, end - begin));
+        }
+    });
+}
+
+// The kept settings a decoder has been sent, as a file is scanned in
+// decoding order: what each closed-loop keyframe carries (TemporalUnit::carried).
+class KeptSettings {
+public:
+    // What a decoder started at the closed-loop keyframe `unit` needs first,
+    // from those sent before it: each setting whose slots are all still its
+    // own, and that `unit` does not send again. Nothing where none.
+    std::shared_ptr<const std::vector<std::uint8_t>> carried_into(std::span<const std::uint8_t> unit) {
+        std::vector<std::pair<ObuType, std::uint32_t>> sent_again;
+        each_kept_setting(unit, [&](ObuType type, std::uint32_t slots, std::span<const std::uint8_t>) {
+            sent_again.emplace_back(type, slots);
+        });
+        std::vector<std::uint8_t> carried;
+        for (const Setting& setting : settings_) {
+            const bool overlaps = std::ranges::any_of(sent_again, [&](const auto& again) {
+                return again.first == setting.type && (again.second & setting.slots) != 0;
+            });
+            if (setting.live == setting.slots && !overlaps) {
+                carried.insert(carried.end(), setting.obu.begin(), setting.obu.end());
+            }
+        }
+        if (carried.empty()) {
+            return nullptr;
+        }
+        if (!last_ || *last_ != carried) {
+            last_ = std::make_shared<const std::vector<std::uint8_t>>(std::move(carried));
+        }
+        return last_;
+    }
+
+    // The settings `unit` sends, in order, each slot's last.
+    void add(std::span<const std::uint8_t> unit) {
+        each_kept_setting(unit, [&](ObuType type, std::uint32_t slots, std::span<const std::uint8_t> obu) {
+            for (Setting& setting : settings_) {
+                if (setting.type == type) {
+                    setting.live &= ~slots;
+                }
+            }
+            std::erase_if(settings_, [](const Setting& setting) { return setting.live == 0; });
+            settings_.push_back({type, slots, slots, {obu.begin(), obu.end()}});
+        });
+    }
+
+private:
+    struct Setting {
+        ObuType type;
+        std::uint32_t slots;  // the slots it set
+        std::uint32_t live;   // those no later one has set (never 0: one is dropped then)
+        std::vector<std::uint8_t> obu;
+    };
+    // In the order sent, at most one a slot (8 + 15 + 15).
+    std::vector<Setting> settings_;
+    // The last keyframe's, shared by those after it that carry the same.
+    std::shared_ptr<const std::vector<std::uint8_t>> last_;
+};
+
+// Puts `settings` (whole OBUs) into `unit` after its sequence header, or
+// after its temporal delimiter where it has none.
+void put_in(std::vector<std::uint8_t>& unit, const std::vector<std::uint8_t>& settings) {
+    std::size_t at = 0;
+    each_obu(unit, [&](std::size_t, std::size_t header, std::size_t end) {
+        const ObuType type = type_of(unit[header]);
+        if (type == ObuType::sequence_header || (type == ObuType::temporal_delimiter && at == 0)) {
+            at = end;
+        }
+    });
+    unit.insert(unit.begin() + static_cast<std::ptrdiff_t>(at), settings.begin(), settings.end());
+}
+
+}  // namespace
+
+UnitKind kind_of(std::span<const std::uint8_t> unit) {
+    UnitKind kind;
+    each_obu(unit, [&](std::size_t, std::size_t header, std::size_t) {
         switch (type_of(unit[header])) {
             case ObuType::closed_loop_key:
                 kind.closed_key = true;
@@ -279,8 +447,7 @@ UnitKind kind_of(std::span<const std::uint8_t> unit) {
             default:
                 break;
         }
-        at = header + size->first;
-    }
+    });
     return kind;
 }
 
@@ -367,7 +534,10 @@ std::optional<TemporalUnit> Reader::next() {
     std::optional<TemporalUnit> unit = container_ == Container::section5 ? next_section5() : next_framed();
     if (!unit) {
         ended_ = true;
+    } else if (carried_) {
+        put_in(unit->data, *carried_);
     }
+    carried_.reset();
     return unit;
 }
 
@@ -421,7 +591,8 @@ bool Reader::read_payload(std::uint64_t size, std::vector<std::uint8_t>& into) {
         return file_.gcount() == static_cast<std::streamsize>(size);
     }
     // Each OBU's size field and header: the header kept as a payload-less
-    // OBU (size 1), the rest passed over. A damaged OBU ends the frame's.
+    // OBU (size 1), the rest passed over; a kept setting kept whole. A
+    // damaged OBU ends the frame's.
     into.clear();
     while (position(file_) < end) {
         std::array<std::uint8_t, 8> field{};
@@ -441,8 +612,23 @@ bool Reader::read_payload(std::uint64_t size, std::vector<std::uint8_t>& into) {
         if (!obu_size || obu_size->first == 0 || payload + static_cast<std::int64_t>(obu_size->first) > end) {
             break;
         }
-        into.push_back(1);
-        into.push_back(static_cast<std::uint8_t>(file_.get()));
+        const auto header = static_cast<std::uint8_t>(file_.get());
+        if (is_kept_setting(type_of(header))) {
+            const std::size_t begin = into.size();
+            into.insert(into.end(), field.begin(), field.begin() + static_cast<std::ptrdiff_t>(length));
+            into.push_back(header);
+            const std::size_t rest = into.size();
+            const auto payload_size = static_cast<std::streamsize>(obu_size->first - 1);
+            into.resize(rest + obu_size->first - 1);
+            file_.read(reinterpret_cast<char*>(into.data() + rest), payload_size);
+            if (file_.gcount() != payload_size) {
+                into.resize(begin);  // cut short by the file's end: no setting from it
+                return false;
+            }
+        } else {
+            into.push_back(1);
+            into.push_back(header);
+        }
         file_.seekg(payload + static_cast<std::int64_t>(obu_size->first));
     }
     file_.clear();
@@ -550,6 +736,7 @@ std::optional<TemporalUnit> Reader::next_framed() {
 
 void Reader::seek(const TemporalUnit& unit) {
     ended_ = false;
+    carried_ = unit.carried;
     sought_time_.reset();
     file_.clear();
     file_.seekg(unit.offset);
@@ -592,14 +779,14 @@ bool Reader::read_obu(std::vector<std::uint8_t>& obu) {
     if (!size || size->first == 0 || size->first > largest_unit) {
         return false;
     }
-    if (payloads_ == Payloads::skipped) {
+    const std::size_t field = obu.size();
+    if (payloads_ == Payloads::skipped && !is_kept_setting(type_of(static_cast<std::uint8_t>(file_.peek())))) {
         // Its header alone, as an OBU of size 1.
         const std::int64_t next = position(file_) + static_cast<std::int64_t>(size->first);
         obu = {1, static_cast<std::uint8_t>(file_.get())};
         file_.seekg(next);
         return file_ && next <= static_cast<std::int64_t>(file_size_);
     }
-    const std::size_t field = obu.size();
     obu.resize(field + size->first);
     file_.read(reinterpret_cast<char*>(obu.data() + field), static_cast<std::streamsize>(size->first));
     return file_.gcount() == static_cast<std::streamsize>(size->first);
@@ -656,7 +843,16 @@ std::shared_ptr<const std::vector<TemporalUnit>> closed_keyframes(const std::fil
     // file scanned twice at once finds the same keyframes).
     auto keyframes = std::make_shared<std::vector<TemporalUnit>>();
     Reader scan(path, Payloads::skipped);
+    KeptSettings settings;
     while (std::optional<TemporalUnit> unit = scan.next()) {
+        if (unit->kind.closed_key) {
+            unit->carried = settings.carried_into(unit->data);
+        }
+        // A leading picture's settings are left out: AOM's decoder drops
+        // them at the next picture that is not one, unless sent again.
+        if (!unit->kind.leading) {
+            settings.add(unit->data);
+        }
         if (unit->kind.closed_key) {
             keyframes->push_back(std::move(*unit));
         }

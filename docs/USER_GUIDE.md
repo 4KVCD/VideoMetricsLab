@@ -330,12 +330,12 @@ Linux it sends it with the system's `curl`.
 
 ### AV2 videos
 
-AV2, AOM's codec after AV1 (not yet final), is decoded by dav2d, VideoLAN's
-AV2 decoder, on the CPU: FFmpeg knows no AV2 and no GPU decodes it, so the
+AV2, AOM's codec after AV1 (not yet final), is decoded by splot, an AV2
+decoder, on the CPU: FFmpeg knows no AV2 and no GPU decodes it, so the
 app reads AV2 files itself. It reads them as AOM's AV2 encoder (AVM's
 `avmenc`) writes them: WebM (its default), IVF (`--ivf`) and raw OBU streams
 (`--obu`, `.obu`; these store no frame rate that can be read, so the app asks for it and the command line needs `--fps`).
-Their film grain can be scored with it or without it, as AV1's. dav2d's
+Their film grain can be scored with it or without it, as AV1's. splot's
 pictures are AVM's own decoder's, checked at 8 and 10 bits, with and without
 film grain. A WebM or IVF file's frame rate is found from its timestamps.
 

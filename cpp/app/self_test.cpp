@@ -109,10 +109,10 @@ void check_native_playback(SelfTestReport& report) {
         } else {
             report.ok("AV1 in software in Video Compare, where the GPU has no AV1 decoder (dav1d)");
         }
-        if (const std::optional<QString> no_dav2d = Dav2dVideo::unavailable()) {
-            report.warn("Video Compare cannot decode AV2 (" + no_dav2d->toStdString() + "): AV2 videos do not play");
+        if (const std::optional<QString> no_splot = SplotVideo::unavailable()) {
+            report.warn("Video Compare cannot decode AV2 (" + no_splot->toStdString() + "): AV2 videos do not play");
         } else {
-            report.ok("AV2 in Video Compare (dav2d)");
+            report.ok("AV2 in Video Compare (splot)");
         }
     }
     if (const std::optional<QString> problem = NativePresentation::unavailable()) {

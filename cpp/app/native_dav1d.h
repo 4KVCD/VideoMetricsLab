@@ -1,11 +1,9 @@
 // AV1 and AV2 decoded in software for Video Compare's native playback, by
-// dav1d and dav2d: FFmpeg's own AV1 decoder only drives a GPU's, the app's
-// FFmpeg has no dav1d wrapper, and FFmpeg has no AV2 decoder at all. Each
-// library is loaded by its path (dav1d_library_path(), dav2d_library_path()),
-// through the structures native/dav1d/dav1d_api.h and native/dav2d/dav2d_api.h
-// mirror, as the GPU metrics' software decoder loads them. dav2d is dav1d's
-// counterpart for AV2, with the same API under other names: one decoder
-// (native_dav1d.cpp's DavDecoder) serves both.
+// dav1d and splot: FFmpeg's own AV1 decoder only drives a GPU's, the app's
+// FFmpeg has no dav1d wrapper, and FFmpeg has no AV2 decoder at all. dav1d is
+// loaded by its path (dav1d_library_path()), through the structures
+// native/dav1d/dav1d_api.h mirrors, as the GPU metrics' software decoder
+// loads it; splot through splot_library() (vml/splot_library.h).
 #pragma once
 
 #include <QString>
@@ -24,8 +22,7 @@ class SoftwareVideo {
 public:
     virtual ~SoftwareVideo() = default;
     // As avcodec_send_packet: a packet, with its presentation time, or
-    // nullptr at the end of the stream. 0, or a negative error (dav1d's and
-    // dav2d's errors are AVERROR's: negative errno values).
+    // nullptr at the end of the stream. 0, or a negative AVERROR.
     virtual int send(const AVPacket* packet) = 0;
     // As avcodec_receive_frame: the next picture into `frame`, its planes the
     // decoder's own, held until release(); AVERROR(EAGAIN) when it needs
@@ -62,19 +59,19 @@ private:
     std::unique_ptr<State> state_;
 };
 
-class Dav2dVideo : public SoftwareVideo {
+class SplotVideo : public SoftwareVideo {
 public:
     // Why AV2 cannot be decoded here, or nothing when it can.
     static std::optional<QString> unavailable();
 
     // A decoder for an AV2 stream, its colours its pictures' own (AV2's
     // content interpretation; the container says none), its film grain added
-    // where `apply_grain`. Throws std::runtime_error when dav2d is
+    // where `apply_grain`. Throws std::runtime_error when splot is
     // unavailable or does not start.
-    explicit Dav2dVideo(bool apply_grain);
-    ~Dav2dVideo() override;
-    Dav2dVideo(const Dav2dVideo&) = delete;
-    Dav2dVideo& operator=(const Dav2dVideo&) = delete;
+    explicit SplotVideo(bool apply_grain);
+    ~SplotVideo() override;
+    SplotVideo(const SplotVideo&) = delete;
+    SplotVideo& operator=(const SplotVideo&) = delete;
 
     int send(const AVPacket* packet) override;
     int receive(AVFrame* frame) override;

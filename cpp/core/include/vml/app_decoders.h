@@ -26,7 +26,7 @@ inline constexpr std::array<AppDecodedCodec, 2> app_decoded_codecs{{
     // model 1 grain at 10 bits (VMAF 26.92 where VVdeC's pictures score 95.23).
     {"vvc", "VVdeC", true},
     // FFmpeg 9 has no AV2 decoder, nor reads AV2's files (av2_stream.h).
-    {"av2", "dav2d", false},
+    {"av2", "splot", false},
 }};
 
 // The entry of `codec` (ffprobe's name, lower case), or nullptr where FFmpeg

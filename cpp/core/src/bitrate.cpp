@@ -482,7 +482,7 @@ namespace {
 // An AV2 video's temporal units as packets: each one's size, and a frame's
 // time at its number. That is its place in decoding order: a unit's picture
 // may be shown a few frames from it, as a B-frame's would, but AV2's files
-// do not say where (dav2d's display order is known only by decoding).
+// do not say where (an AV2 video's display order is known only by decoding).
 BitrateData av2_bitrate(const VideoInfo& info, const CancelToken& cancel,
                         const std::function<void(long long, long long)>& on_progress) {
     if (info.fps <= 0) {

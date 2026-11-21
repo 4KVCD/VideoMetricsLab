@@ -301,9 +301,11 @@ std::pair<std::vector<std::string>, std::string> software_codecs();
 // build has the Python app's and a development build has none.
 std::filesystem::path dav1d_library_path();
 
-// dav2d's library, which decodes AV2 (scripts/build_dav2d.ps1,
-// build_dav2d_macos.sh), beside dav1d.
-std::filesystem::path dav2d_library_path();
+// splot's library, which decodes AV2 (scripts/build_splot.ps1,
+// build_splot_macos.sh), beside dav1d. On Windows, splot.dll is built for
+// x86-64-v3 (AVX2, FMA, BMI2; splot's own choice, about 15 % faster); a CPU
+// without them gets splot-x86-64-v2.dll, the same source built for x86-64-v2.
+std::filesystem::path splot_library_path();
 
 // Whether GPU `device`'s decoder takes the plan's codec, bit depth and size,
 // and why not; for the software decoder, whether its libraries decode the

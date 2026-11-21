@@ -1,5 +1,5 @@
 // An AV2 video's details (VideoInfo), which ffprobe cannot read (av2_stream.h):
-// the size, depth, colour and film grain of its first picture, as dav2d
+// the size, depth, colour and film grain of its first picture, as splot
 // decodes it, and its frames' count and rate, from its temporal units. The
 // decoding runs in a process of its own (isolated.h, task "av2-probe"), as
 // the app's other native decoding does.

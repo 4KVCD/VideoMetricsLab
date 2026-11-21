@@ -1,8 +1,9 @@
 // The AV2 reader (av2_stream.h) on streams made here: the OBUs of four
 // temporal units, in AOM's IVF and in WebM (two of them in one frame or
 // block, as avmenc writes them) and as a Section 5 stream; the display
-// times of dav2d's pictures (dav2d/display_order.h); and the probe's
-// refusal where dav2d is not bundled (av2_probe.h).
+// times of the decoder's pictures (av2/display_order.h); where splot's
+// pictures start (av2/splot_api.h); and the probe's refusal where splot is
+// not bundled (av2_probe.h).
 #include <gtest/gtest.h>
 
 #include <cstdint>
@@ -11,7 +12,8 @@
 #include <string>
 #include <vector>
 
-#include "dav2d/display_order.h"
+#include "av2/display_order.h"
+#include "av2/splot_api.h"
 #include "test_videos.h"
 #include "vml/av2_probe.h"
 #include "vml/av2_stream.h"
@@ -309,6 +311,48 @@ TEST(Av2Stream, ASeekGivesTheUnitAgain) {
     }
 }
 
+// A closed-loop keyframe carries the settings a decoder keeps that were sent
+// before it (film grain models, quantization matrices, multi-frame headers),
+// each the last to set all of its slots, and a seek to it puts them in after
+// its sequence header: not one set partly again since, one a leading picture
+// sent, or one the keyframe sends again itself.
+TEST(Av2Stream, AKeyframeCarriesTheSettingsSentBeforeIt) {
+    using av2::ObuType;
+    const Bytes grain_01 = obu(ObuType::film_grain, {0x03, 0xa1});  // slots 0 and 1
+    const Bytes grain_0 = obu(ObuType::film_grain, {0x01, 0xb2});   // slot 0
+    const Bytes grain_leading = obu(ObuType::film_grain, {0x04, 0xc3});
+    const Bytes header_1 = obu(ObuType::multi_frame_header, {0xc0});  // uvlc() 0 and 0: id 1
+    const Bytes regular = obu(static_cast<ObuType>(7), {0x00});
+    const Bytes td = obu(ObuType::temporal_delimiter);
+    const Bytes sh = obu(ObuType::sequence_header, {1, 2});
+    const Bytes clk = obu(ObuType::closed_loop_key, {0xaa, 0xbb});
+    const std::vector<Bytes> units{
+        joined({td, sh, clk, grain_01, header_1}),
+        inter_unit,
+        key_unit,  // carries grain_01 and header_1
+        joined({td, grain_0, regular}),
+        joined({td, obu(ObuType::open_loop_key, {0x01}), obu(ObuType::leading_tile_group, {0x02}), grain_leading}),
+        key_unit,  // carries header_1 and grain_0 (grain_01 is partly set again)
+        joined({td, sh, clk, grain_0}),  // carries header_1 alone: it sends grain_0 again
+    };
+    const test::Folder folder;
+    write(folder / "a.ivf", ivf(units));
+    const std::shared_ptr<const std::vector<av2::TemporalUnit>> keyframes = av2::closed_keyframes(folder / "a.ivf");
+    ASSERT_EQ(keyframes->size(), 4u);
+    const std::vector<Bytes> carried{{}, joined({grain_01, header_1}), joined({header_1, grain_0}), header_1};
+    for (std::size_t i = 0; i < keyframes->size(); i++) {
+        const av2::TemporalUnit& key = (*keyframes)[i];
+        EXPECT_EQ(key.carried ? *key.carried : Bytes{}, carried[i]) << "key " << key.number;
+    }
+
+    av2::Reader reader(folder / "a.ivf");
+    reader.seek((*keyframes)[2]);
+    EXPECT_EQ(reader.next()->data, joined({td, sh, header_1, grain_0, clk}));
+    EXPECT_EQ(reader.next()->data, units[6]);  // once only
+    reader.seek((*keyframes)[0]);
+    EXPECT_EQ(reader.next()->data, units[0]);
+}
+
 // A file cut inside a frame ends at the frame before; a file of another form,
 // IVF of another codec or AV1's raw streams, is no AV2 stream.
 TEST(Av2Stream, ACutFileEndsAtItsLastWholeFrameAndOtherFilesAreRefused) {
@@ -335,37 +379,61 @@ TEST(Av2Stream, ACutFileEndsAtItsLastWholeFrameAndOtherFilesAreRefused) {
     }
 }
 
-// dav2d's pictures come in display order, each with the stamp of the unit
-// that decoded it, as it gave them for avmenc's 20-picture test stream: the
+// The decoder's pictures come in display order, each with the stamp of the
+// unit that decoded it, as dav2d gave them for avmenc's 20-picture test stream: the
 // first unit's picture at once, nothing for the next four (decoded ahead),
 // then two pictures after the sixth, stamped 5 and 4. Each is due at the
 // smallest stamp not yet given; after a seek, at the new units' stamps.
-TEST(Av2Stream, Dav2dsPicturesAreTimedInDisplayOrder) {
-    Dav2dDisplayOrder order;
+TEST(Av2Stream, PicturesAreTimedInDisplayOrder) {
+    Av2DisplayOrder order;
     order.fed(0);
     EXPECT_EQ(order.shown(), 0);
     for (long long unit = 1; unit <= 5; unit++) {
         order.fed(unit);
     }
-    EXPECT_EQ(order.shown(), 1);  // dav2d's stamp 5
-    EXPECT_EQ(order.shown(), 2);  // dav2d's stamp 4
+    EXPECT_EQ(order.shown(), 1);  // the decoder's stamp 5
+    EXPECT_EQ(order.shown(), 2);  // the decoder's stamp 4
     order.clear();
     EXPECT_EQ(order.shown(), std::nullopt);  // more pictures than units
     order.fed(8);
     EXPECT_EQ(order.shown(), 8);
 }
 
-// Where dav2d is not bundled, an AV2 video is refused by that name,
+// splot's planes start at the first sample stored: the first one shown is
+// its crop further, halved for 4:2:0's chroma, two bytes a sample past 8
+// bits. A picture says its colour where its codes are not all 2
+// (unspecified) or its range is full.
+TEST(Av2Stream, SplotsPicturesStartAtTheirCrop) {
+    std::vector<std::uint16_t> luma(64 * 8), chroma(32 * 4);
+    SplotPicture picture{};
+    picture.data[0] = luma.data();
+    picture.data[1] = picture.data[2] = chroma.data();
+    picture.stride[0] = 128;  // bytes
+    picture.stride[1] = picture.stride[2] = 64;
+    picture.crop_left = 6;
+    picture.crop_top = 4;
+    picture.bit_depth = 10;
+    picture.layout = kSplotI420;
+    const auto* start = static_cast<const std::uint8_t*>(picture.data[0]);
+    EXPECT_EQ(splot_visible_plane(picture, 0), start + 4 * 128 + 6 * 2);
+    start = static_cast<const std::uint8_t*>(picture.data[1]);
+    EXPECT_EQ(splot_visible_plane(picture, 1), start + 2 * 64 + 3 * 2);
+    EXPECT_FALSE(splot_says_colour(SplotColor{2, 2, 2, 0}));
+    EXPECT_TRUE(splot_says_colour(SplotColor{2, 2, 2, 1}));
+    EXPECT_TRUE(splot_says_colour(SplotColor{9, 16, 9, 0}));
+}
+
+// Where splot is not bundled, an AV2 video is refused by that name,
 // as the software decoder refuses it, not by the loader's error and paths.
-TEST(Av2Stream, AnAppWithoutDav2dSaysSo) {
+TEST(Av2Stream, AnAppWithoutSplotSaysSo) {
     const test::Folder folder;
     std::filesystem::create_directories(folder / "resources");
     write(folder / "a.ivf", ivf({key_unit, inter_unit}));
     const test::ScopedVariable resources("VML_RESOURCES", platform::path_text(folder / "resources"));
     try {
         av2_probe_task({{"path", platform::path_text(folder / "a.ivf")}});
-        FAIL() << "probed without dav2d";
+        FAIL() << "probed without splot";
     } catch (const std::runtime_error& error) {
-        EXPECT_STREQ(error.what(), "dav2d is not bundled");
+        EXPECT_STREQ(error.what(), "splot is not bundled");
     }
 }

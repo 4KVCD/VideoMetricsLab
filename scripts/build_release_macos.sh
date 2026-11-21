@@ -55,7 +55,7 @@ fi
 
 # 1. The bundled tools, from their pinned releases' source: libvmaf-fast's
 #    libvmaf.dylib, Video Compare's FFmpeg libraries,
-#    dav1d and dav2d (a pinned commit: dav2d has no release yet), and the
+#    dav1d and splot (a pinned commit: splot has no release yet), and the
 #    software decoder the GPU metrics decode with in the app (not in git).
 if $allow_local_libvmaf; then
     step "Keeping the local libvmaf-fast build"
@@ -67,8 +67,8 @@ step "Building FFmpeg's libraries for Video Compare"
 "$project/scripts/build_ffmpeg_decoders_macos.sh" | sed 's/^/    /'
 step "Building dav1d"
 "$project/scripts/build_dav1d_macos.sh" | sed 's/^/    /'
-step "Building dav2d"
-"$project/scripts/build_dav2d_macos.sh" | sed 's/^/    /'
+step "Building splot"
+"$project/scripts/build_splot_macos.sh" | sed 's/^/    /'
 step "Building the software decoder for the GPU metrics"
 "$project/scripts/build_software_frames_macos.sh" | sed 's/^/    /'
 step "Building Vulkan (the loader and MoltenVK) and Vship for the GPU metrics"

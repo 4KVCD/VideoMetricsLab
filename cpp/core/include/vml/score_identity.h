@@ -61,7 +61,8 @@ inline bool is_vship_fast_id(std::string_view id) {
 
 // A video's film grain as a score was made with it, where it records that
 // (film_grain_identity in film_grain_scoring.h): H.274's added by VVdeC,
-// AFGS1 by FFmpeg's decoders, AV2's by dav2d; or the grain left out. AV1's,
+// AFGS1 by FFmpeg's decoders, AV2's by splot (its mark keeps the name of dav2d, which
+// added it before, alike); or the grain left out. AV1's,
 // which every decoder adds alike, is recorded by no score (its mark is
 // metric_cache.cpp's): film_grain_av1 is only what the window compares outside
 // Windows (film_grain_route_identity).

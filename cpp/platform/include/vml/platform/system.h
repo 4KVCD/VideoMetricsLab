@@ -88,6 +88,11 @@ std::optional<std::filesystem::path> find_on_path(std::string_view name);
 // How many logical cores the CPU has (Python's os.cpu_count()), at least 1.
 unsigned logical_cores();
 
+// Whether the CPU and the system run x86-64-v3 code (AVX, AVX2, BMI1, BMI2,
+// F16C, FMA, LZCNT and MOVBE, the AVX registers saved by the system): Intel
+// since Haswell (2013), AMD since Excavator (2015). False on other CPUs.
+bool cpu_runs_x86_64_v3();
+
 // How many bytes of memory programs can be given now without the system
 // swapping, as psutil's virtual_memory().available gives it: the available
 // physical memory on Windows, MemAvailable on Linux, the free and inactive

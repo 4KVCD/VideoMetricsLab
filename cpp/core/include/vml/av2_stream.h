@@ -31,15 +31,18 @@
 
 namespace vml::av2 {
 
-// The OBU types this reader looks at (AV2's, as dav2d's headers.h names them).
+// The OBU types this reader looks at (AV2's, as the AV2 specification names them).
 enum class ObuType : int {
     sequence_header = 1,
     temporal_delimiter = 2,
+    multi_frame_header = 3,  // a setting kept (TemporalUnit::carried)
     closed_loop_key = 4,     // a keyframe: decoding starts here
     open_loop_key = 5,       // a keyframe whose leading pictures need the ones before it
     leading_tile_group = 6,  // a leading picture of an open-loop keyframe
     leading_sef = 11,
     leading_tip = 13,
+    quantization_matrix = 22,  // a setting kept
+    film_grain = 23,           // a setting kept: film grain models
 };
 
 // What a temporal unit's OBUs say about decoding from it.
@@ -68,7 +71,7 @@ struct TemporalUnit {
     std::vector<std::uint8_t> data;
     // Its place in the stream from 0, in decoding order. Each unit decodes one
     // picture, shown once, but not always in this order: the k-th picture
-    // shown is the k-th smallest number (dav2d/display_order.h).
+    // shown is the k-th smallest number (av2/display_order.h).
     long long number = 0;
     // Its IVF frame's or Matroska block's time (time_base()), the same for
     // every unit the frame holds; a Section 5 unit's number.
@@ -79,12 +82,26 @@ struct TemporalUnit {
     // where seek() goes.
     std::int64_t offset = 0;
     int index = 0;
+    // A closed-loop keyframe's, from closed_keyframes(): the settings a
+    // decoder keeps from the units before it that it does not send again
+    // itself, as OBUs (or nothing). A decoder keeps film grain models,
+    // quantization matrices and multi-frame headers until they are sent
+    // again, through keyframes too (AOM's sets them only when created and by
+    // their OBUs), and an encoder may send them once (avmenc sends a film
+    // grain model in the first unit only): a decoder started here needs them
+    // (Reader::seek). Each is the one that last set all of its slots: one
+    // partly set again since could not be sent without setting a slot twice
+    // in a unit (which AOM's decoder refuses) or bringing an old setting
+    // back, and is left out. Layered streams' settings (layer configuration,
+    // operating points, atlas) are not kept: the app reads one layer.
+    std::shared_ptr<const std::vector<std::uint8_t>> carried;
 };
 
 // What a reader gives of each unit: its bytes; or, to scan a file for its
 // units' numbers, times and keyframes, only its OBUs' headers, each as an
 // OBU of that type with no payload, the payloads passed over in the file
-// (a few bytes read of each picture's).
+// (a few bytes read of each picture's), but for the settings a decoder
+// keeps (TemporalUnit::carried), read whole (small).
 enum class Payloads { read, skipped };
 
 // One file's temporal units, one after another.
@@ -106,7 +123,9 @@ public:
     std::optional<TemporalUnit> next();
 
     // Goes back (or on) to `unit`, one this reader or another of the same
-    // file gave: next() gives it again, numbered as it was.
+    // file gave: next() gives it again, numbered as it was, with the
+    // settings it carries (a keyframe from closed_keyframes()) put in after
+    // its sequence header, for a decoder started there.
     void seek(const TemporalUnit& unit);
 
 private:
@@ -150,10 +169,13 @@ private:
     // Section 5: the OBU that starts the next unit, and where it starts.
     std::vector<std::uint8_t> pending_;
     std::int64_t pending_offset_ = 0;
+    // The settings the unit sought carries, for next() to put in it.
+    std::shared_ptr<const std::vector<std::uint8_t>> carried_;
 };
 
-// A file's closed-loop keyframes, in decoding order, as a scan of its OBUs'
-// headers finds them (Payloads::skipped): scanned once and kept for the life
+// A file's closed-loop keyframes, in decoding order, each with the settings
+// it carries, as a scan of its OBUs' headers (and of the settings')
+// finds them (Payloads::skipped): scanned once and kept for the life
 // of the process, by the file's path, size and time, so that a file written
 // again is scanned again (a 2 GB file of 280,000 pictures took about 2 s).
 // Throws Av2StreamError where the file is not AV2.

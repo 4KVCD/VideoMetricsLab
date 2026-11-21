@@ -102,7 +102,7 @@ if(WIN32 AND MSVC)
     add_dependencies(vml_app vml_ffmpeg_imports)
     target_sources(vml_app PRIVATE native_common.cpp native_dav1d.cpp native_decoder.cpp native_device.cpp native_pool.cpp
                                    native_presentation.cpp native_probe.cpp native_soundtrack.cpp)
-    # dav1d's and dav2d's structures as the app mirrors them (native_dav1d.h).
+    # dav1d's and splot's structures as the app mirrors them (native_dav1d.h).
     target_include_directories(vml_app SYSTEM PRIVATE ${vml_ffmpeg}/include ${PROJECT_SOURCE_DIR}/../native/dav1d ${PROJECT_SOURCE_DIR}/../native)
     target_link_libraries(vml_app PUBLIC ${vml_ffmpeg_imports} delayimp d3d11 dxgi dxguid)
     # VML_NATIVE_PLAYBACK public: the view's members depend on it, and the

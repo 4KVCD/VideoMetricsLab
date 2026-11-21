@@ -72,7 +72,8 @@ struct Params {
 // The Params layout and the library calls this library was built with. The
 // app refuses a library of another: it would read the fields given as other
 // ones (one built before the film grain fields would leave them unread). 3:
-// nvf_set_libraries takes dav2d, and CODEC_AV2. 4: via_w and via_h.
+// nvf_set_libraries takes dav2d (now splot), and CODEC_AV2. 4: via_w and
+// via_h.
 #define NVF_PARAMS_VERSION 4
 NVF_API int nvf_params_version() { return NVF_PARAMS_VERSION; }
 

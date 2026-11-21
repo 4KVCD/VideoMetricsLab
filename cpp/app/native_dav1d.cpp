@@ -12,93 +12,80 @@
 #include <type_traits>
 #include <vector>
 
+#include "av2/display_order.h"
 #include "dav1d_api.h"
-#include "dav2d/dav2d_api.h"
-#include "dav2d/display_order.h"
 #include "ffmpeg_api.h"
 
 #include "vml/gpu_frames.h"
 #include "vml/platform/library.h"
+#include "vml/splot_library.h"
 
 namespace vml::app {
 
 namespace {
 
-// dav1d's or dav2d's functions, from its library, loaded once for the life
-// of the process; or why they could not be. One API under two names.
-template <typename SettingsT, typename DataT, typename PictureT>
-struct DavLibrary {
-    using Settings = SettingsT;
-    using Data = DataT;
-    using Picture = PictureT;
+// dav1d's functions, from its library, loaded once for the life of the
+// process; or why they could not be.
+struct Dav1dLibrary {
     std::optional<platform::DynamicLibrary> library;
     QString problem;
     unsigned (*version_api)() = nullptr;
-    void (*default_settings)(Settings*) = nullptr;
-    int (*open)(void**, const Settings*) = nullptr;
-    int (*send_data)(void*, Data*) = nullptr;
-    int (*get_picture)(void*, Picture*) = nullptr;
+    void (*default_settings)(Dav1dSettings*) = nullptr;
+    int (*open)(void**, const Dav1dSettings*) = nullptr;
+    int (*send_data)(void*, Dav1dData*) = nullptr;
+    int (*get_picture)(void*, Dav1dPicture*) = nullptr;
     void (*flush)(void*) = nullptr;
     void (*close)(void**) = nullptr;
-    std::uint8_t* (*data_create)(Data*, std::size_t) = nullptr;
-    void (*data_unref)(Data*) = nullptr;
-    void (*picture_unref)(Picture*) = nullptr;
+    std::uint8_t* (*data_create)(Dav1dData*, std::size_t) = nullptr;
+    void (*data_unref)(Dav1dData*) = nullptr;
+    void (*picture_unref)(Dav1dPicture*) = nullptr;
 
-    // Loads the library at `path` and binds its functions by `prefix`
-    // ("dav1d", "dav2d"), checking its API's major version.
-    void load(const std::filesystem::path& path, const std::string& prefix, unsigned api_major) {
-        const QString name = QString::fromStdString(prefix);
+    // Loads the library at `path` and binds its functions, checking its API's
+    // major version.
+    void load(const std::filesystem::path& path) {
         std::error_code ignored;
         if (!std::filesystem::is_regular_file(path, ignored)) {
-            problem = QStringLiteral("%1 is not bundled").arg(name);
+            problem = QStringLiteral("dav1d is not bundled");
             return;
         }
         try {
             const platform::DynamicLibrary& loaded = library.emplace(path);
             const auto bind = [&](auto& target, const char* function) {
-                target = loaded.function<std::remove_reference_t<decltype(target)>>((prefix + function).c_str());
+                target = loaded.function<std::remove_reference_t<decltype(target)>>(function);
             };
-            bind(version_api, "_version_api");
-            bind(default_settings, "_default_settings");
-            bind(open, "_open");
-            bind(send_data, "_send_data");
-            bind(get_picture, "_get_picture");
-            bind(flush, "_flush");
-            bind(close, "_close");
-            bind(data_create, "_data_create");
-            bind(data_unref, "_data_unref");
-            bind(picture_unref, "_picture_unref");
+            bind(version_api, "dav1d_version_api");
+            bind(default_settings, "dav1d_default_settings");
+            bind(open, "dav1d_open");
+            bind(send_data, "dav1d_send_data");
+            bind(get_picture, "dav1d_get_picture");
+            bind(flush, "dav1d_flush");
+            bind(close, "dav1d_close");
+            bind(data_create, "dav1d_data_create");
+            bind(data_unref, "dav1d_data_unref");
+            bind(picture_unref, "dav1d_picture_unref");
         } catch (const platform::LibraryError& error) {
-            problem = QStringLiteral("%1 could not be loaded: %2").arg(name, QString::fromUtf8(error.what()));
+            problem = QStringLiteral("dav1d could not be loaded: %1").arg(QString::fromUtf8(error.what()));
             library.reset();
             return;
         }
-        if (version_api() >> 16 != api_major) {
-            problem = QStringLiteral("%1 is not the version the app was made for").arg(name);
+        if (version_api() >> 16 != kDav1dApiMajor) {
+            problem = QStringLiteral("dav1d is not the version the app was made for");
             library.reset();
         }
     }
 };
-using Dav1dLibrary = DavLibrary<Dav1dSettings, Dav1dData, Dav1dPicture>;
-using Dav2dLibrary = DavLibrary<Dav2dSettings, Dav2dData, Dav2dPicture>;
 
 const Dav1dLibrary& dav1d() {
     static std::once_flag loaded;
     static Dav1dLibrary functions;
-    std::call_once(loaded, [] { functions.load(dav1d_library_path(), "dav1d", kDav1dApiMajor); });
-    return functions;
-}
-
-const Dav2dLibrary& dav2d() {
-    static std::once_flag loaded;
-    static Dav2dLibrary functions;
-    std::call_once(loaded, [] { functions.load(dav2d_library_path(), "dav2d", kDav2dApiMajor); });
+    std::call_once(loaded, [] { functions.load(dav1d_library_path()); });
     return functions;
 }
 
 // FFmpeg's pixel format for pictures of `layout` (I400 to I444, the same
-// values in both) and `depth`.
+// values in dav1d and splot) and `depth`.
 AVPixelFormat pixel_format(int layout, int depth) {
+    static_assert(kDav1dI400 == kSplotI400 && kDav1dI444 == kSplotI444, "dav1d's and splot's layouts");
     const int index = depth == 8 ? 0 : depth == 10 ? 1 : depth == 12 ? 2 : -1;
     if (index < 0) {
         return AV_PIX_FMT_NONE;
@@ -112,60 +99,33 @@ AVPixelFormat pixel_format(int layout, int depth) {
     return layout >= kDav1dI400 && layout <= kDav1dI444 ? formats[layout][index] : AV_PIX_FMT_NONE;
 }
 
-// The colours a picture says (AV2's content interpretation), where it says
-// them; dav1d's pictures say none the stream did not (theirs are given).
-void take_picture_colour(const Dav1dPicture&, AVFrame*) {}
-void take_picture_colour(const Dav2dPicture& picture, AVFrame* frame) {
-    if (picture.content == nullptr || !picture.content->color_description_present) {
-        return;
-    }
-    int codes[3];
-    dav2d_colour_codes(*picture.content, codes);
-    frame->color_primaries = static_cast<AVColorPrimaries>(codes[0]);  // H.273's codes are FFmpeg's
-    frame->color_trc = static_cast<AVColorTransferCharacteristic>(codes[1]);
-    frame->colorspace = static_cast<AVColorSpace>(codes[2]);
-    frame->color_range = picture.content->color.range ? AVCOL_RANGE_JPEG : AVCOL_RANGE_MPEG;
-}
-
-// When a picture is shown: dav1d's carries its own time; dav2d's, in display
-// order, are timed by the packets given (dav2d/display_order.h).
-std::optional<long long> picture_time(const Dav1dPicture& picture, Dav2dDisplayOrder&) {
-    return picture.m.timestamp;
-}
-std::optional<long long> picture_time(const Dav2dPicture&, Dav2dDisplayOrder& order) { return order.shown(); }
-
-// One decoder of either library, as avcodec is asked.
-template <typename Library>
-struct DavDecoder {
-    static constexpr bool av2 = std::is_same_v<Library, Dav2dLibrary>;
-    const Library& api;
+// A dav1d decoder, as avcodec is asked.
+struct Dav1dDecoder {
+    const Dav1dLibrary& api;
     void* context = nullptr;
-    // AV1's sequence header, given before the first packet and again after
-    // each seek, in case the packets after it do not repeat it (none for AV2).
+    // The sequence header, given before the first packet and again after
+    // each seek, in case the packets after it do not repeat it.
     std::vector<std::uint8_t> sequence_header;
     bool header_due = true;
     // The packet last sent, as much of it as the decoder has not taken yet.
-    typename Library::Data pending{};
+    Dav1dData pending{};
     // Whether the decoder has been asked for a picture since it was last
     // given data (see receive()).
     bool asked_since_data = false;
     // The picture last received, held until release().
-    typename Library::Picture picture{};
-    // AV2: the times of the packets given, to time its pictures by.
-    Dav2dDisplayOrder display_order;
-    // Whether the end of the stream was sent, and (AV2) passed on to dav2d.
+    Dav1dPicture picture{};
+    // Whether the end of the stream was sent.
     bool finished = false;
-    bool end_given = false;
     AVColorSpace matrix = AVCOL_SPC_UNSPECIFIED;
     AVColorRange range = AVCOL_RANGE_UNSPECIFIED;
     AVColorPrimaries primaries = AVCOL_PRI_UNSPECIFIED;
     AVColorTransferCharacteristic transfer = AVCOL_TRC_UNSPECIFIED;
 
-    DavDecoder(const Library& library, const char* name, bool apply_grain) : api(library) {
+    Dav1dDecoder(const Dav1dLibrary& library, bool apply_grain) : api(library) {
         if (!api.library) {
             throw std::runtime_error(api.problem.toStdString());
         }
-        typename Library::Settings settings{};
+        Dav1dSettings settings{};
         api.default_settings(&settings);
         // As FFmpeg's libdav1d decoder sets it, and the software decoder: the
         // operating point's highest spatial layer only, film grain applied as
@@ -177,11 +137,11 @@ struct DavDecoder {
         settings.apply_grain = apply_grain ? 1 : 0;
         settings.logger_callback = nullptr;
         if (api.open(&context, &settings) < 0) {
-            throw std::runtime_error(std::string(name) + " could not start");
+            throw std::runtime_error("dav1d could not start");
         }
     }
 
-    ~DavDecoder() {
+    ~Dav1dDecoder() {
         release();
         if (pending.sz > 0) {
             api.data_unref(&pending);
@@ -220,16 +180,10 @@ struct DavDecoder {
         }
         // EAGAIN: it still holds some of the packet before, and takes this one
         // once a picture has been taken.
-        const long long stamp = pending.m.timestamp;
         const int result = api.send_data(context, &pending);
         if (result < 0 && result != kDav1dAgain) {
             api.data_unref(&pending);
             return result;
-        }
-        if constexpr (av2) {
-            if (result == 0) {
-                display_order.fed(stamp);  // taken: its picture will come
-            }
         }
         asked_since_data = false;
         return 0;
@@ -250,28 +204,12 @@ struct DavDecoder {
             const bool draining = asked_since_data;
             const int result = api.get_picture(context, &picture);
             asked_since_data = true;
-            if (result == kDav2dEof) {
-                // dav2d has given every picture it held: one for each unit, or
-                // the pictures shown were timed wrongly.
-                return display_order.empty() ? AVERROR_EOF : AVERROR_INVALIDDATA;
-            }
             if (result == kDav1dAgain) {
                 if (pending.sz > 0) {
                     continue;  // it has read what it held, and takes the rest of the packet now
                 }
                 if (!finished) {
                     return AVERROR(EAGAIN);
-                }
-                if constexpr (av2) {
-                    // dav2d gives the pictures it holds at the end once told it
-                    // is the end, and only once it has parsed every unit (which
-                    // it has when it wants more): told before, it would give
-                    // them before the last unit's picture.
-                    if (!end_given) {
-                        api.send_data(context, nullptr);
-                        end_given = true;
-                        continue;
-                    }
                 }
                 if (draining) {
                     return AVERROR_EOF;
@@ -282,8 +220,7 @@ struct DavDecoder {
                 return result;
             }
             const AVPixelFormat format = pixel_format(picture.p.layout, picture.p.bpc);
-            const std::optional<long long> time = picture_time(picture, display_order);
-            if (format == AV_PIX_FMT_NONE || !time) {
+            if (format == AV_PIX_FMT_NONE) {
                 release();
                 return AVERROR_INVALIDDATA;
             }
@@ -295,13 +232,12 @@ struct DavDecoder {
                 frame->data[plane] = static_cast<std::uint8_t*>(picture.data[plane]);
                 frame->linesize[plane] = static_cast<int>(picture.stride[plane == 0 ? 0 : 1]);
             }
-            frame->pts = *time;
-            frame->best_effort_timestamp = *time;
+            frame->pts = picture.m.timestamp;
+            frame->best_effort_timestamp = picture.m.timestamp;
             frame->colorspace = matrix;
             frame->color_range = range;
             frame->color_primaries = primaries;
             frame->color_trc = transfer;
-            take_picture_colour(picture, frame);
             return 0;
         }
     }
@@ -310,7 +246,7 @@ struct DavDecoder {
         if (picture.ref != nullptr || picture.data[0] != nullptr) {
             api.picture_unref(&picture);
         }
-        picture = typename Library::Picture{};
+        picture = Dav1dPicture{};
     }
 
     void flush() {
@@ -318,20 +254,178 @@ struct DavDecoder {
         if (pending.sz > 0) {
             api.data_unref(&pending);
         }
-        pending = typename Library::Data{};
+        pending = Dav1dData{};
         api.flush(context);
-        display_order.clear();
         header_due = true;
         asked_since_data = false;
         finished = false;
-        end_given = false;
+    }
+};
+
+// splot's error as FFmpeg's: a stream it cannot decode, or a wrong call.
+int splot_error(int result) {
+    return result == kSplotDecodeError ? AVERROR_INVALIDDATA : AVERROR(EINVAL);
+}
+
+// A splot decoder, as avcodec is asked. splot copies each temporal unit it
+// is given into its own queue and gives its pictures in display order, timed
+// here by the units fed (av2/display_order.h). Asked for a picture, it says
+// EAGAIN at once while it wants units; with its queue full, or drained, it
+// waits until it has decoded one.
+struct SplotDecoder {
+    const SplotCalls& api;
+    const SplotSettings settings;
+    void* context = nullptr;
+    // The unit last sent while splot's queue was full: fed once a picture has
+    // been taken.
+    std::vector<std::uint8_t> pending;
+    long long pending_stamp = 0;
+    bool has_pending = false;
+    // The picture last received, held until release().
+    SplotPicture picture{};
+    bool holding = false;
+    // The stamps of the units splot took, to time its pictures by.
+    Av2DisplayOrder display_order;
+    // Whether the end of the stream was sent, and passed on to splot.
+    bool finished = false;
+    bool drained = false;
+
+    SplotDecoder(const SplotLibrary& library, bool apply_grain)
+        : api(library.calls), settings(library.library ? splot_settings(library.calls, apply_grain) : SplotSettings{}) {
+        if (!library.library) {
+            throw std::runtime_error(library.problem);
+        }
+        if (api.open(&context, &settings) != kSplotOk) {
+            throw std::runtime_error("splot could not start");
+        }
+    }
+
+    ~SplotDecoder() {
+        release();
+        api.close(&context);
+    }
+
+    int send(const AVPacket* packet) {
+        if (packet == nullptr) {
+            finished = true;
+            return 0;
+        }
+        if (has_pending) {
+            // Never so once receive() has said EAGAIN: it says so only once
+            // splot has taken the unit before.
+            return AVERROR(EAGAIN);
+        }
+        pending.assign(packet->data, packet->data + packet->size);
+        pending_stamp = packet->pts != AV_NOPTS_VALUE ? packet->pts : packet->dts;
+        has_pending = true;
+        return feed();
+    }
+
+    // Gives splot the unit last sent, if it has not taken it yet.
+    int feed() {
+        if (!has_pending || context == nullptr) {
+            return 0;
+        }
+        const SplotDataProps props{pending_stamp, 0, 0};
+        const int result = api.send_data(context, pending.data(), pending.size(), &props);
+        if (result == kSplotAgain) {
+            return 0;  // its queue is full: taken once a picture has been
+        }
+        has_pending = false;
+        if (result != kSplotOk) {
+            return splot_error(result);
+        }
+        display_order.fed(pending_stamp);  // taken: its picture will come
+        return 0;
+    }
+
+    int receive(AVFrame* frame) {
+        release();
+        if (context == nullptr) {
+            return AVERROR(EINVAL);  // it did not start again after a seek
+        }
+        while (true) {
+            if (const int fed = feed(); fed < 0) {
+                return fed;
+            }
+            if (finished && !has_pending && !drained) {
+                api.drain(context);  // the end: it gives every picture it holds
+                drained = true;
+            }
+            const int result = api.get_picture(context, &picture);
+            if (result == kSplotAgain) {
+                if (has_pending) {
+                    continue;  // room again in its queue: the unit goes in now
+                }
+                return AVERROR(EAGAIN);
+            }
+            if (result == kSplotEof) {
+                // splot has given every picture: one for each unit, or the
+                // pictures shown were timed wrongly.
+                return display_order.empty() ? AVERROR_EOF : AVERROR_INVALIDDATA;
+            }
+            if (result != kSplotOk) {
+                return splot_error(result);
+            }
+            holding = true;
+            const AVPixelFormat format = pixel_format(picture.layout, static_cast<int>(picture.bit_depth));
+            const std::optional<long long> time = display_order.shown();
+            if (format == AV_PIX_FMT_NONE || !time) {
+                release();
+                return AVERROR_INVALIDDATA;
+            }
+            frame->format = format;
+            frame->width = static_cast<int>(picture.width);
+            frame->height = static_cast<int>(picture.height);
+            const int planes = picture.layout == kSplotI400 ? 1 : 3;
+            for (int plane = 0; plane < planes; ++plane) {
+                frame->data[plane] = const_cast<std::uint8_t*>(splot_visible_plane(picture, plane));
+                frame->linesize[plane] = static_cast<int>(picture.stride[plane]);
+            }
+            frame->pts = *time;
+            frame->best_effort_timestamp = *time;
+            frame->colorspace = AVCOL_SPC_UNSPECIFIED;
+            frame->color_range = AVCOL_RANGE_UNSPECIFIED;
+            frame->color_primaries = AVCOL_PRI_UNSPECIFIED;
+            frame->color_trc = AVCOL_TRC_UNSPECIFIED;
+            if (splot_says_colour(picture.color)) {
+                frame->color_primaries = static_cast<AVColorPrimaries>(picture.color.primaries);  // H.273's codes are FFmpeg's
+                frame->color_trc = static_cast<AVColorTransferCharacteristic>(picture.color.transfer);
+                frame->colorspace = static_cast<AVColorSpace>(picture.color.matrix);
+                frame->color_range = picture.color.full_range ? AVCOL_RANGE_JPEG : AVCOL_RANGE_MPEG;
+            }
+            return 0;
+        }
+    }
+
+    void release() {
+        if (holding) {
+            api.picture_unref(&picture);
+            holding = false;
+        }
+        picture = SplotPicture{};
+    }
+
+    // splot has no flush: a seek starts it again, with the same settings.
+    // Where it does not start, receive() says so.
+    void flush() {
+        release();
+        api.close(&context);
+        if (api.open(&context, &settings) != kSplotOk) {
+            context = nullptr;
+        }
+        pending.clear();
+        has_pending = false;
+        display_order.clear();
+        finished = false;
+        drained = false;
     }
 };
 
 }  // namespace
 
-struct Dav1dVideo::State : DavDecoder<Dav1dLibrary> {
-    using DavDecoder::DavDecoder;
+struct Dav1dVideo::State : Dav1dDecoder {
+    using Dav1dDecoder::Dav1dDecoder;
 };
 
 std::optional<QString> Dav1dVideo::unavailable() {
@@ -339,7 +433,7 @@ std::optional<QString> Dav1dVideo::unavailable() {
 }
 
 Dav1dVideo::Dav1dVideo(const AVCodecParameters& stream, bool apply_grain)
-    : state_(std::make_unique<State>(dav1d(), "dav1d", apply_grain)) {
+    : state_(std::make_unique<State>(dav1d(), apply_grain)) {
     state_->matrix = stream.color_space;
     state_->range = stream.color_range;
     state_->primaries = stream.color_primaries;
@@ -357,20 +451,21 @@ int Dav1dVideo::receive(AVFrame* frame) { return state_->receive(frame); }
 void Dav1dVideo::release() { state_->release(); }
 void Dav1dVideo::flush() { state_->flush(); }
 
-struct Dav2dVideo::State : DavDecoder<Dav2dLibrary> {
-    using DavDecoder::DavDecoder;
+struct SplotVideo::State : SplotDecoder {
+    using SplotDecoder::SplotDecoder;
 };
 
-std::optional<QString> Dav2dVideo::unavailable() {
-    return dav2d().library ? std::nullopt : std::optional(dav2d().problem);
+std::optional<QString> SplotVideo::unavailable() {
+    const SplotLibrary& splot = splot_library();
+    return splot.library ? std::nullopt : std::optional(QString::fromStdString(splot.problem));
 }
 
-Dav2dVideo::Dav2dVideo(bool apply_grain) : state_(std::make_unique<State>(dav2d(), "dav2d", apply_grain)) {}
+SplotVideo::SplotVideo(bool apply_grain) : state_(std::make_unique<State>(splot_library(), apply_grain)) {}
 
-Dav2dVideo::~Dav2dVideo() = default;
-int Dav2dVideo::send(const AVPacket* packet) { return state_->send(packet); }
-int Dav2dVideo::receive(AVFrame* frame) { return state_->receive(frame); }
-void Dav2dVideo::release() { state_->release(); }
-void Dav2dVideo::flush() { state_->flush(); }
+SplotVideo::~SplotVideo() = default;
+int SplotVideo::send(const AVPacket* packet) { return state_->send(packet); }
+int SplotVideo::receive(AVFrame* frame) { return state_->receive(frame); }
+void SplotVideo::release() { state_->release(); }
+void SplotVideo::flush() { state_->flush(); }
 
 }  // namespace vml::app

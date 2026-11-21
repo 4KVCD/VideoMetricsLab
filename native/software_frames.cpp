@@ -12,14 +12,13 @@
 // resources/tools/ffmpeg, from scripts/build_ffmpeg_decoders.ps1). AV1 is
 // decoded by dav1d (BSD; beside them, from scripts/build_dav1d.ps1), because
 // this FFmpeg has no dav1d wrapper and FFmpeg's own AV1 decoder only drives a
-// GPU's; AV2, which FFmpeg does not decode, by dav2d (VideoLAN's AV2 decoder,
-// dav1d's API with other names; scripts/build_dav2d.ps1), through the same
-// code (DavApi). The app loads them (cpp/core/src/gpu_frames.cpp) and hands
-// them over with nvf_set_libraries; this library links none. It is compiled
-// against FFmpeg's headers (native/ffmpeg) and refuses libraries of another
-// major version; of dav1d and dav2d it mirrors the few structures it uses
-// (dav1d/dav1d_api.h, dav2d/dav2d_api.h), checked against their API
-// versions. The app feeds the packets FFmpeg copies out of the container
+// GPU's; AV2, which FFmpeg does not decode, by splot (an AV2 decoder in
+// Rust; scripts/build_splot.ps1). The app loads them
+// (cpp/core/src/gpu_frames.cpp) and hands them over with nvf_set_libraries;
+// this library links none. It is compiled against FFmpeg's headers
+// (native/ffmpeg) and refuses libraries of another major version; of dav1d
+// and splot it mirrors the few structures it uses (dav1d/dav1d_api.h,
+// av2/splot_api.h), checked against their versions. The app feeds the packets FFmpeg copies out of the container
 // with their timestamps (a raw stream's made up), as for the GPU decoders;
 // AV2's units, which FFmpeg cannot read, come from the app's own reader.
 //
@@ -27,7 +26,7 @@
 // film grain a stream asks for is as the video is scored (Params::film_grain):
 // left out, its parameters exported; or added, VVC's H.274 by VVdeC (FFmpeg's
 // libvvdec, of either model at any depth), AFGS1 as FFmpeg 9 adds it and
-// AV1's by dav1d; or, the grain not known, as the decoders add it by
+// AV1's by dav1d, AV2's by splot; or, the grain not known, as the decoders add it by
 // themselves (FFmpeg's H.274 at 8 bits only). Pictures are held as the
 // decoder made them, by reference, until the caller has downloaded them or
 // read them where they are (nvf_slot_planes, for a picture a download would
@@ -45,7 +44,7 @@
 // app runs is the user's, of whatever version. libavcodec reports
 // what it finds at its error level, which this library counts (the log goes
 // nowhere else: ffmpeg.exe's is read by the app, but this one would print to
-// the scoring process's console), and dav1d fails decoding: either stops
+// the scoring process's console), and dav1d or splot fails decoding: either stops
 // decoding here, and the run is made again through FFmpeg.
 //
 // One thread feeds the packets (nvf_push, nvf_finish) and waits for a free
@@ -82,8 +81,8 @@ extern "C" {
 }
 
 #include "dav1d/dav1d_api.h"
-#include "dav2d/dav2d_api.h"
-#include "dav2d/display_order.h"
+#include "av2/display_order.h"
+#include "av2/splot_api.h"
 #include "gpu_frames.h"
 #include "grain/grain_decoding.h"
 
@@ -116,16 +115,16 @@ struct Ffmpeg {
     decltype(&::av_packet_unref) av_packet_unref;
 };
 
-// ------------------------------------------ dav1d's and dav2d's, as mirrored
+// -------------------------------------------- dav1d's and splot's, as mirrored
 
-// dav1d's or dav2d's functions, as this library calls them: one API under two
-// names, each over its own structures (dav1d/dav1d_api.h, dav2d/dav2d_api.h).
+// dav1d's functions, as this library calls them, over its structures
+// (dav1d/dav1d_api.h); splot's are SplotCalls (av2/splot_api.h).
 template <typename SettingsT, typename DataT, typename PictureT>
 struct DavApi {
     using Settings = SettingsT;
     using Data = DataT;
     using Picture = PictureT;
-    const char *name;  // "dav1d" or "dav2d": its functions' prefix, and for messages
+    const char *name;  // "dav1d": its functions' prefix, and for messages
     unsigned api_major;
     unsigned (*version_api)() = nullptr;
     void (*default_settings)(Settings *) = nullptr;
@@ -138,12 +137,11 @@ struct DavApi {
     void (*picture_unref)(Picture *) = nullptr;
 };
 using Dav1d = DavApi<Dav1dSettings, Dav1dData, Dav1dPicture>;
-using Dav2d = DavApi<Dav2dSettings, Dav2dData, Dav2dPicture>;
-static_assert(kDav1dAgain == kDav2dAgain && kDav1dI420 == kDav2dI420, "dav1d's and dav2d's codes");
+static_assert(kDav1dI420 == kSplotI420, "dav1d's and splot's layouts");
 
 Ffmpeg g_av{};
 Dav1d g_dav1d{"dav1d", kDav1dApiMajor};
-Dav2d g_dav2d{"dav2d", kDav2dApiMajor};
+SplotCalls g_splot;
 // Errors libavcodec has reported in this process (its log's error level),
 // and the last one's words, for the failure it ends a decoder with.
 std::atomic<unsigned> g_ffmpeg_errors{0};
@@ -167,11 +165,11 @@ std::string last_ffmpeg_error() {
     std::lock_guard<std::mutex> guard(g_last_error_lock);
     return g_last_error;
 }
-bool g_av_ready = false, g_dav1d_ready = false, g_dav2d_ready = false;
+bool g_av_ready = false, g_dav1d_ready = false, g_splot_ready = false;
 std::string g_libraries_error = "the decoding libraries were not loaded";
-// Why AV2 is not decoded where dav2d is not bundled: said to an AV2 video
+// Why AV2 is not decoded where splot is not bundled: said to an AV2 video
 // alone, as a library the app may ship without (the others always come).
-std::string g_dav2d_missing;
+std::string g_splot_missing;
 std::mutex g_libraries_lock;
 
 // `module` as the app loaded it (platform::DynamicLibrary's handle): an
@@ -287,19 +285,18 @@ struct Ready {
     long long pts;
 };
 
-// A decoded picture held for the caller: libavcodec's frame, dav1d's or dav2d's picture.
+// A decoded picture held for the caller: libavcodec's frame, dav1d's or splot's picture.
 struct Slot {
     AVFrame *frame = nullptr;
     Dav1dPicture picture{};
-    Dav2dPicture av2_picture{};
+    SplotPicture splot_picture{};
     bool held = false;
 };
 
 Dav1dPicture &held_picture(Slot &slot, const Dav1d &) { return slot.picture; }
-Dav2dPicture &held_picture(Slot &slot, const Dav2d &) { return slot.av2_picture; }
 
 // Which library decodes a decoder's video.
-enum class Engine { libavcodec, dav1d, dav2d };
+enum class Engine { libavcodec, dav1d, splot };
 
 struct Decoder {
     Params params{};
@@ -310,8 +307,8 @@ struct Decoder {
     AVCodecContext *codec_context = nullptr;
     AVPacket *packet = nullptr;
     AVFrame *frame = nullptr;              // received into, then moved into a slot
-    void *dav = nullptr;                   // dav1d's or dav2d's context
-    Dav2dDisplayOrder display_order;       // AV2: the stamps of the units fed, to time its pictures by
+    void *dav = nullptr;                   // dav1d's or splot's decoder
+    Av2DisplayOrder display_order;         // AV2: the stamps of the units fed, to time its pictures by
     unsigned errors_seen = 0;              // g_ffmpeg_errors when this decoder last looked
 
     std::mutex mutex;
@@ -357,7 +354,7 @@ void queue_picture(Decoder *d, int slot, long long pts) {
 void unhold(Decoder *d, Slot &slot) {
     switch (d->engine) {
     case Engine::dav1d: g_dav1d.picture_unref(&slot.picture); break;
-    case Engine::dav2d: g_dav2d.picture_unref(&slot.av2_picture); break;
+    case Engine::splot: g_splot.picture_unref(&slot.splot_picture); break;
     case Engine::libavcodec: g_av.av_frame_unref(slot.frame); break;
     }
     slot.held = false;
@@ -449,33 +446,24 @@ bool send_packet(Decoder *d, const AVPacket *packet) {
     }
 }
 
-// When a picture dav1d or dav2d gives is shown: dav1d's carries its own
-// time; dav2d's, in display order, are timed by the units fed
-// (dav2d/display_order.h). Nothing where dav2d gives more pictures than units.
-bool picture_time(Decoder *, const Dav1dPicture &picture, long long &pts) {
-    pts = picture.m.timestamp;
-    return true;
-}
-bool picture_time(Decoder *d, const Dav2dPicture &, long long &pts) {
-    const std::optional<long long> shown = d->display_order.shown();
-    if (shown) pts = *shown;
-    return shown.has_value();
+// What is wrong with a picture of `width` x `height`, `layout` and `depth`
+// for this decoder's video; nullptr when nothing. `text` holds the words.
+const char *picture_wrong(const Decoder *d, int width, int height, int layout, int depth, char (&text)[200]) {
+    if (width != d->params.width || height != d->params.height) {
+        snprintf(text, sizeof text, "a picture is %dx%d, not %dx%d", width, height, d->params.width,
+                 d->params.height);
+        return text;
+    }
+    if (layout != kDav1dI420 || depth != d->params.bit_depth) return "a picture is not 4:2:0 at the video's depth";
+    return nullptr;
 }
 
-// A picture dav1d or dav2d has decoded, checked and queued. False when decoding has stopped.
+// A picture dav1d has decoded, checked and queued. False when decoding has stopped.
 template <typename Api>
 bool deliver_picture(Decoder *d, const Api &api, typename Api::Picture &picture) {
     char text[200];
-    const char *wrong = nullptr;
-    if (picture.p.w != d->params.width || picture.p.h != d->params.height) {
-        snprintf(text, sizeof text, "a picture is %dx%d, not %dx%d", picture.p.w, picture.p.h, d->params.width,
-                 d->params.height);
-        wrong = text;
-    } else if (picture.p.layout != kDav1dI420 || picture.p.bpc != d->params.bit_depth) {
-        wrong = "a picture is not 4:2:0 at the video's depth";
-    }
-    long long pts = 0;
-    if (!wrong && !picture_time(d, picture, pts)) wrong = "the decoder gave more pictures than packets";
+    const char *wrong = picture_wrong(d, picture.p.w, picture.p.h, picture.p.layout, picture.p.bpc, text);
+    const long long pts = picture.m.timestamp;
     if (wrong) {
         api.picture_unref(&picture);
         d->fail(wrong);
@@ -492,15 +480,15 @@ bool deliver_picture(Decoder *d, const Api &api, typename Api::Picture &picture)
     return true;
 }
 
-// Asks dav1d or dav2d for a picture: delivers it if it has one, and says if it
-// had (`given`). False when decoding has stopped.
+// Asks dav1d for a picture: delivers it if it has one, and says if it had
+// (`given`). False when decoding has stopped.
 template <typename Api>
 bool get_picture(Decoder *d, const Api &api, bool &given) {
     given = false;
     if (d->stopped()) return false;
     typename Api::Picture picture{};
     int result = api.get_picture(d->dav, &picture);
-    if (result == kDav1dAgain || result == kDav2dEof) return true;  // more data wanted; dav2d drained
+    if (result == kDav1dAgain) return true;  // more data wanted
     if (result < 0) {
         d->fail(std::string(api.name) + " failed decoding (error " + std::to_string(result) + ")");
         return false;
@@ -509,7 +497,7 @@ bool get_picture(Decoder *d, const Api &api, bool &given) {
     return deliver_picture(d, api, picture);
 }
 
-// At the end: every picture dav1d or dav2d holds. False when decoding has stopped.
+// At the end: every picture dav1d holds. False when decoding has stopped.
 template <typename Api>
 bool drain_pictures(Decoder *d, const Api &api) {
     bool given = true;
@@ -545,7 +533,7 @@ bool send_data(Decoder *d, const Api &api, typename Api::Data &data) {
     return true;
 }
 
-// Starts dav1d or dav2d as FFmpeg's libdav1d decoder starts dav1d: the
+// Starts dav1d as FFmpeg's libdav1d decoder starts it: the
 // operating point's highest spatial layer only, film grain applied unless
 // the video is scored without it; its own threads. False when it cannot.
 template <typename Api>
@@ -560,8 +548,8 @@ bool open_dav(Decoder *d, const Api &api, bool apply_grain) {
     return api.open(&d->dav, &settings) >= 0;
 }
 
-// One packet to dav1d or dav2d (AV1's sequence header before the first, as
-// the GPU decoders are given it). False when decoding has stopped.
+// One packet to dav1d (AV1's sequence header before the first, as the GPU
+// decoders are given it). False when decoding has stopped.
 template <typename Api>
 bool push_dav(Decoder *d, const Api &api, const unsigned char *data, int size, long long pts) {
     typename Api::Data input{};
@@ -575,11 +563,118 @@ bool push_dav(Decoder *d, const Api &api, const unsigned char *data, int size, l
     memcpy(buffer + extra, data, static_cast<size_t>(size));
     d->extradata.clear();
     input.m.timestamp = pts;
-    if (d->engine == Engine::dav2d) d->display_order.fed(pts);
     return send_data(d, api, input);
 }
 
-// Binds dav1d's or dav2d's functions in `module`, by its prefix. True when
+// ------------------------------------------------------------------- splot
+
+// splot's picture, checked, timed (av2/display_order.h) and queued; or why
+// decoding stops. False when decoding has stopped.
+bool deliver_splot_picture(Decoder *d, SplotPicture &picture) {
+    char text[200];
+    const char *wrong = picture_wrong(d, static_cast<int>(picture.width), static_cast<int>(picture.height),
+                                      picture.layout, static_cast<int>(picture.bit_depth), text);
+    const std::optional<long long> pts = wrong ? std::nullopt : d->display_order.shown();
+    if (!wrong && !pts) wrong = "the decoder gave more pictures than packets";
+    if (wrong) {
+        g_splot.picture_unref(&picture);
+        d->fail(wrong);
+        return false;
+    }
+    const int slot = take_slot(d);
+    if (slot < 0) {
+        g_splot.picture_unref(&picture);
+        return false;
+    }
+    d->slots[slot].splot_picture = picture;  // the reference moves into the slot
+    picture = SplotPicture{};
+    queue_picture(d, slot, *pts);
+    return true;
+}
+
+// Takes splot's next picture, if it has one (`given`): at once where it wants
+// data, else (its input full, or drained) once it has decoded one. False when
+// decoding has stopped; at the end of a drained stream, true and not given.
+bool take_splot_picture(Decoder *d, bool &given) {
+    given = false;
+    if (d->stopped()) return false;
+    SplotPicture picture{};
+    const int result = g_splot.get_picture(d->dav, &picture);
+    if (result == kSplotAgain || result == kSplotEof) return true;
+    if (result != kSplotOk) {
+        d->fail("splot failed decoding (error " + std::to_string(result) + ")");
+        return false;
+    }
+    given = true;
+    return deliver_splot_picture(d, picture);
+}
+
+// Starts splot: as many threads as the CPU has, the film grain added unless
+// the video is scored without it (as cpp/core's splot_settings).
+bool open_splot(Decoder *d, bool apply_grain) {
+    SplotSettings settings{};
+    g_splot.default_settings(&settings);
+    settings.n_threads = 0;
+    settings.max_frame_delay = 0;
+    settings.skip_film_grain = apply_grain ? 0 : 1;
+    return g_splot.open(&d->dav, &settings) == kSplotOk;
+}
+
+// One temporal unit to splot, which copies it: when it is full, the pictures
+// it gives first. Then the pictures it has ready. False when decoding has
+// stopped.
+bool push_splot(Decoder *d, const unsigned char *data, int size, long long pts) {
+    const SplotDataProps props{pts, 0, 0};
+    bool given = false;
+    while (true) {
+        if (d->stopped()) return false;
+        const int result = g_splot.send_data(d->dav, data, static_cast<size_t>(size), &props);
+        if (result == kSplotOk) break;
+        if (result != kSplotAgain) {
+            d->fail("splot failed decoding (error " + std::to_string(result) + ")");
+            return false;
+        }
+        if (!take_splot_picture(d, given)) return false;  // full: waits for a picture
+    }
+    d->display_order.fed(pts);
+    do {
+        if (!take_splot_picture(d, given)) return false;
+    } while (given);
+    return true;
+}
+
+// At the end: every picture splot holds, once it has decoded them. False when
+// decoding has stopped.
+bool finish_splot(Decoder *d) {
+    g_splot.drain(d->dav);
+    bool given = true;
+    while (given) {
+        if (!take_splot_picture(d, given)) return false;
+    }
+    return true;
+}
+
+// Binds splot's functions in `module`. True when all are there and it is the
+// version mirrored; else says why in `problems`.
+bool bind_splot(void *module, std::string &problems) {
+    const char *missing = g_splot.bind([module](const char *name) {
+#ifdef _WIN32
+        return GetProcAddress(static_cast<HMODULE>(module), name);
+#else
+        return dlsym(module, name);
+#endif
+    });
+    std::string text;
+    if (missing) {
+        text = std::string("splot has no ") + missing;
+    } else if (strcmp(g_splot.version(), kSplotVersion) != 0) {
+        text = "splot is not the version this decoder was made for";
+    }
+    if (!text.empty()) problems += (problems.empty() ? "" : "; ") + text;
+    return text.empty();
+}
+
+// Binds dav1d's functions in `module`, by its prefix. True when
 // all are there and its API is the one mirrored; else says why in `problems`.
 template <typename Api>
 bool bind_dav(void *module, Api &api, std::string &problems) {
@@ -613,7 +708,7 @@ void destroy(Decoder *d) {
     if (d->packet) g_av.av_packet_free(&d->packet);
     if (d->frame) g_av.av_frame_free(&d->frame);
     if (d->dav && d->engine == Engine::dav1d) g_dav1d.close(&d->dav);
-    if (d->dav && d->engine == Engine::dav2d) g_dav2d.close(&d->dav);
+    if (d->dav && d->engine == Engine::splot) g_splot.close(&d->dav);
     delete d;
 }
 
@@ -638,8 +733,8 @@ const char *decoder_name(int codec) {
 bool decodes(int codec, std::string &why) {
     std::lock_guard<std::mutex> lock(g_libraries_lock);
     if (codec == CODEC_AV1 || codec == CODEC_AV2) {
-        const bool ready = codec == CODEC_AV1 ? g_dav1d_ready : g_dav2d_ready;
-        if (!ready) why = codec == CODEC_AV2 && !g_dav2d_missing.empty() ? g_dav2d_missing : g_libraries_error;
+        const bool ready = codec == CODEC_AV1 ? g_dav1d_ready : g_splot_ready;
+        if (!ready) why = codec == CODEC_AV2 && !g_splot_missing.empty() ? g_splot_missing : g_libraries_error;
         return ready;
     }
     if (!g_av_ready) {
@@ -666,10 +761,10 @@ NVF_API int nvf_libraries_error(char *out, int size) {
 }
 
 // The libraries to decode with, loaded by the app (their module handles):
-// its FFmpeg's libavutil and libavcodec, dav1d and dav2d (any may be null).
+// its FFmpeg's libavutil and libavcodec, dav1d and splot (any may be null).
 // 0 when all work; else what is wrong, in nvf_open's and nvf_supports'
 // refusals.
-NVF_API int nvf_set_libraries(void *avutil, void *avcodec, void *dav1d, void *dav2d) {
+NVF_API int nvf_set_libraries(void *avutil, void *avcodec, void *dav1d, void *splot) {
     std::lock_guard<std::mutex> lock(g_libraries_lock);
     std::string missing, problems;
     if (avutil && avcodec) {
@@ -714,8 +809,8 @@ NVF_API int nvf_set_libraries(void *avutil, void *avcodec, void *dav1d, void *da
     } else {
         problems += (problems.empty() ? "" : "; ") + std::string("dav1d is not bundled");
     }
-    g_dav2d_missing = dav2d ? "" : "dav2d is not bundled";
-    if (dav2d) g_dav2d_ready = bind_dav(dav2d, g_dav2d, problems);
+    g_splot_missing = splot ? "" : "splot is not bundled";
+    if (splot) g_splot_ready = bind_splot(splot, problems);
     g_libraries_error = problems.empty() ? "" : problems;
     return problems.empty() ? 0 : NVF_ERROR;
 }
@@ -728,7 +823,7 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
     }
     Decoder *d = new Decoder();
     d->params = *params;
-    d->engine = params->codec == CODEC_AV1 ? Engine::dav1d : params->codec == CODEC_AV2 ? Engine::dav2d
+    d->engine = params->codec == CODEC_AV1 ? Engine::dav1d : params->codec == CODEC_AV2 ? Engine::splot
                                                                                        : Engine::libavcodec;
     if (d->engine == Engine::dav1d && params->extradata && params->extradata_size > 0)
         d->extradata.assign(params->extradata, params->extradata + params->extradata_size);
@@ -750,9 +845,9 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
     const GrainDecoding grain = grain_decoding(params->codec == CODEC_VVC, params->film_grain);
     if (d->engine != Engine::libavcodec) {
         const bool opened =
-            d->engine == Engine::dav1d ? open_dav(d, g_dav1d, grain.apply_grain) : open_dav(d, g_dav2d, grain.apply_grain);
+            d->engine == Engine::dav1d ? open_dav(d, g_dav1d, grain.apply_grain) : open_splot(d, grain.apply_grain);
         if (!opened) {
-            copy_text(error, error_size, std::string(d->engine == Engine::dav1d ? "dav1d" : "dav2d") + " could not start");
+            copy_text(error, error_size, std::string(d->engine == Engine::dav1d ? "dav1d" : "splot") + " could not start");
             destroy(d);
             return nullptr;
         }
@@ -825,8 +920,8 @@ NVF_API int nvf_push(void *handle, const unsigned char *data, int size, long lon
     }
     if (d->engine == Engine::dav1d) {
         push_dav(d, g_dav1d, data, size, pts);
-    } else if (d->engine == Engine::dav2d) {
-        push_dav(d, g_dav2d, data, size, pts);
+    } else if (d->engine == Engine::splot) {
+        push_splot(d, data, size, pts);
     } else {
         if (g_av.av_new_packet(d->packet, size) < 0) {
             d->fail("out of memory");
@@ -847,9 +942,8 @@ NVF_API int nvf_finish(void *handle) {
     if (!d->stopped()) {
         if (d->engine == Engine::dav1d) {
             drain_pictures(d, g_dav1d);
-        } else if (d->engine == Engine::dav2d) {
-            g_dav2d.send_data(d->dav, nullptr);  // the end: dav2d gives the pictures it holds
-            drain_pictures(d, g_dav2d);
+        } else if (d->engine == Engine::splot) {
+            finish_splot(d);
         } else {
             send_packet(d, nullptr);
         }
@@ -888,12 +982,17 @@ bool held_planes(Decoder *d, int slot, uint8_t *planes[3], ptrdiff_t pitches[3])
         std::lock_guard<std::mutex> guard(d->mutex);
         if (!held.held) return false;
     }
-    if (d->engine != Engine::libavcodec) {
-        void *const *data = d->engine == Engine::dav1d ? held.picture.data : held.av2_picture.data;
-        const ptrdiff_t *stride = d->engine == Engine::dav1d ? held.picture.stride : held.av2_picture.stride;
-        for (int c = 0; c < 3; c++) planes[c] = static_cast<uint8_t *>(data[c]);
-        pitches[0] = stride[0];
-        pitches[1] = pitches[2] = stride[1];
+    if (d->engine == Engine::dav1d) {
+        for (int c = 0; c < 3; c++) planes[c] = static_cast<uint8_t *>(held.picture.data[c]);
+        pitches[0] = held.picture.stride[0];
+        pitches[1] = pitches[2] = held.picture.stride[1];
+    } else if (d->engine == Engine::splot) {
+        // splot's planes start at their first stored sample: here, at the
+        // first visible one (its picture's crop).
+        for (int c = 0; c < 3; c++) {
+            planes[c] = const_cast<uint8_t *>(splot_visible_plane(held.splot_picture, c));
+            pitches[c] = held.splot_picture.stride[c];
+        }
     } else {
         for (int c = 0; c < 3; c++) {
             planes[c] = held.frame->data[c];

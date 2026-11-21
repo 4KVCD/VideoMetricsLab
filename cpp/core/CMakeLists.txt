@@ -79,6 +79,7 @@ add_library(vml_core
     src/sha256.cpp
     src/size_changes.cpp
     src/soundtrack_clock.cpp
+    src/splot_library.cpp
     src/ssimulacra2.cpp
     src/ssimulacra2_kernels.cpp
     src/stats.cpp
@@ -119,9 +120,9 @@ target_include_directories(vml_core PRIVATE ../../native/scale)
 # The film grain rule the scoring decoder and Video Compare's decode by
 # (native/grain/grain_decoding.h, plain C++).
 target_include_directories(vml_core PUBLIC ../../native/grain)
-# dav2d's structures as the app mirrors them (native/dav2d/dav2d_api.h), for
-# probing AV2 videos (av2_probe.cpp).
-target_include_directories(vml_core PRIVATE ../../native)
+# splot's structures as the app mirrors them (native/av2/splot_api.h), for
+# decoding AV2 videos (splot_library.h); public with that header.
+target_include_directories(vml_core PUBLIC ../../native)
 # libvmaf-fast's public headers, at the commit of the library the app ships
 # (third_party/README.md). SYSTEM: their warnings are not ours to fix.
 target_include_directories(vml_core SYSTEM PUBLIC ../third_party/libvmaf-fast/include)

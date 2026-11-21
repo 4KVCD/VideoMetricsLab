@@ -295,8 +295,9 @@ struct NativeParams {
     int via_w;
     int via_h;
 };
-// The layout above, and nvf_set_libraries with dav2d: a library that says
-// another is refused (DecoderLibrary).
+// The layout above, and nvf_set_libraries with an AV2 decoder: a library
+// that says another is refused (DecoderLibrary). (A software decoder built
+// for dav2d, given splot, refuses AV2 videos: it finds no dav2d_ functions.)
 constexpr int native_params_version = 4;
 
 // A function of `library` that some builds of it lack: nullptr where it has
@@ -402,7 +403,7 @@ struct DecoderLibrary {
     // The software decoder's: the libraries it decodes with (their handles),
     // and why it cannot use one of them; a slot's picture in place, in
     // system memory.
-    int (*set_libraries)(void* avutil, void* avcodec, void* dav1d, void* dav2d) = nullptr;
+    int (*set_libraries)(void* avutil, void* avcodec, void* dav1d, void* splot) = nullptr;
     int (*libraries_error)(char* out, int size) = nullptr;
     int (*slot_planes)(void* decoder, int slot, const void** planes, long long* pitches) = nullptr;
     // Intel's and AMD's, which scale the pictures on the GPU when they can:
@@ -432,10 +433,10 @@ std::filesystem::path library_path(std::string_view backend) {
 // only the decoders it needs (LGPL, built by
 // scripts/build_ffmpeg_decoders.ps1, build_ffmpeg_decoders_macos.sh), dav1d
 // for AV1 (dav1d_library_path, built by scripts/build_dav1d.ps1,
-// build_dav1d_macos.sh) and dav2d for AV2 (dav2d_library_path, built by
-// scripts/build_dav2d.ps1, build_dav2d_macos.sh), all beside each other.
+// build_dav1d_macos.sh) and splot for AV2 (splot_library_path, built by
+// scripts/build_splot.ps1, build_splot_macos.sh), all beside each other.
 // Without dav1d, FFmpeg decodes the AV1 videos FFmpeg would decode in
-// software; without dav2d, no AV2 video is decoded.
+// software; without splot, no AV2 video is decoded.
 std::filesystem::path software_folder() { return resource_folder() / "tools" / "ffmpeg"; }
 #ifdef __APPLE__
 constexpr std::array<const char*, 2> ffmpeg_libraries{"libavutil.61.dylib", "libavcodec.63.dylib"};
@@ -483,7 +484,7 @@ const DecoderLibrary& load_decoder(std::string_view backend) {
         std::array<void*, 4> handles{};
         const std::array<std::filesystem::path, 4> paths{software_folder() / ffmpeg_libraries[0],
                                                          software_folder() / ffmpeg_libraries[1],
-                                                         dav1d_library_path(), dav2d_library_path()};
+                                                         dav1d_library_path(), splot_library_path()};
         for (std::size_t i = 0; i < paths.size(); ++i) {
             if (std::filesystem::is_regular_file(paths[i], ignored)) {
                 try {
@@ -1417,11 +1418,12 @@ std::filesystem::path dav1d_library_path() {
 #endif
 }
 
-std::filesystem::path dav2d_library_path() {
+std::filesystem::path splot_library_path() {
 #ifdef __APPLE__
-    return software_folder() / "libdav2d.dylib";  // scripts/build_dav2d_macos.sh
+    return software_folder() / "libsplot.dylib";  // scripts/build_splot_macos.sh
 #else
-    return software_folder() / "dav2d.dll";
+    static const bool v3 = platform::cpu_runs_x86_64_v3();
+    return software_folder() / (v3 ? "splot.dll" : "splot-x86-64-v2.dll");
 #endif
 }
 
@@ -2028,7 +2030,7 @@ void plan_pair_seek(std::vector<DecodePlan>& plans, const VideoInfo& test, const
 // An AV2 video's temporal units, read by the app (av2_stream.h): FFmpeg 9
 // names no AV2 codec and marks none of its pictures as a keyframe. Each unit
 // decodes one picture and is stamped with its number; the decoder gives the
-// k-th picture it shows the k-th smallest stamp (dav2d/display_order.h), so a
+// k-th picture it shows the k-th smallest stamp (av2/display_order.h), so a
 // picture's stamp is its place, timed at the video's frame rate (`frame_time`
 // a frame's time, as the time base): avmenc's IVF frames and WebM blocks hold
 // several units and time only their first. As FFmpeg's -ss with a stream

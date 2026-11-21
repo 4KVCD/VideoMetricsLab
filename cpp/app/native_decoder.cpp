@@ -343,11 +343,11 @@ bool decodes_on_gpu(const AVCodec* codec) {
 struct FfmpegNativeVideo::Decoding {
     AVFormatContext* format = nullptr;
     AVCodecContext* codec = nullptr;
-    // AV1's or AV2's decoder in software (dav1d, dav2d), in place of `codec`.
+    // AV1's or AV2's decoder in software (dav1d, splot), in place of `codec`.
     std::unique_ptr<SoftwareVideo> software;
     // An AV2 video's temporal units, read by the app (av2_stream.h) in place
     // of `format`: FFmpeg cannot read AV2, and avmenc's IVF frames and WebM
-    // blocks hold several pictures, which dav2d is given a unit at a time so
+    // blocks hold several pictures, which splot is given a unit at a time so
     // that each is timed by its number. Its closed-loop keyframes, to seek to
     // (av2::closed_keyframes: found once for the process).
     std::optional<av2::Reader> av2_reader;
@@ -528,7 +528,7 @@ void FfmpegNativeVideo::fail(const QString& error) {
 
 namespace {
 
-// An AV2 video's decoding: its units from the app's reader, dav2d in
+// An AV2 video's decoding: its units from the app's reader, splot in
 // software (no GPU decodes AV2), at `fps` (the video's: av2_probe.h), and its
 // closed-loop keyframes found to seek to.
 std::unique_ptr<FfmpegNativeVideo::Decoding> open_av2(const std::filesystem::path& path, bool hardware, double fps,
@@ -545,7 +545,7 @@ std::unique_ptr<FfmpegNativeVideo::Decoding> open_av2(const std::filesystem::pat
         return nullptr;
     }
     try {
-        decoding->software = std::make_unique<Dav2dVideo>(grain.apply_grain);
+        decoding->software = std::make_unique<SplotVideo>(grain.apply_grain);
         decoding->av2_keyframes = av2::closed_keyframes(path);
         decoding->av2_reader.emplace(path);
     } catch (const std::exception& problem) {
@@ -556,7 +556,7 @@ std::unique_ptr<FfmpegNativeVideo::Decoding> open_av2(const std::filesystem::pat
     decoding->stream = 0;
     decoding->time_base = AVRational{static_cast<int>(rate.denominator), static_cast<int>(rate.numerator)};
     decoding->frame_ns = av_rescale(1'000'000'000, rate.denominator, rate.numerator);
-    decoding->codec_name = "dav2d";
+    decoding->codec_name = "splot";
     return decoding;
 }
 

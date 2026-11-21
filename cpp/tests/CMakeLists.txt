@@ -62,7 +62,7 @@ add_executable(vml_tests
     unit/test_videos.cpp
 )
 target_link_libraries(vml_tests PRIVATE vml_cli vml_core vml_compile_options vml_miniz nlohmann_json gtest)  # its own main (unit/main.cpp)
-target_include_directories(vml_tests PRIVATE ../../native)  # the decoders' headers the app shares (dav2d/display_order.h)
+target_include_directories(vml_tests PRIVATE ../../native)  # the decoders' headers the app shares (av2/display_order.h, av2/splot_api.h)
 target_compile_definitions(vml_tests PRIVATE
     VML_REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/reference"
     VML_TEST_CHILD="$<TARGET_FILE:vml_test_child>"

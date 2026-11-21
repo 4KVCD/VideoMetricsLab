@@ -7,15 +7,15 @@
 #include <optional>
 #include <string>
 
-#include "dav2d/dav2d_api.h"
+#include "av2/splot_api.h"
 #include "vml/av2_stream.h"
 #include "vml/colour.h"
 #include "vml/ffprobe.h"
 #include "vml/film_grain_detect.h"
 #include "vml/gpu_frames.h"
 #include "vml/isolated.h"
-#include "vml/platform/library.h"
 #include "vml/platform/system.h"
+#include "vml/splot_library.h"
 
 namespace vml {
 
@@ -37,109 +37,76 @@ std::string name_of(const std::map<int, std::string_view>& names, int code) {
     return found == names.end() ? std::string() : std::string(found->second);
 }
 
-// dav2d's functions, as the probe calls them.
-struct Dav2dCalls {
-    unsigned (*version_api)() = nullptr;
-    void (*default_settings)(Dav2dSettings*) = nullptr;
-    int (*open)(void**, const Dav2dSettings*) = nullptr;
-    int (*send_data)(void*, Dav2dData*) = nullptr;
-    int (*get_picture)(void*, Dav2dPicture*) = nullptr;
-    void (*close)(void**) = nullptr;
-    uint8_t* (*data_create)(Dav2dData*, size_t) = nullptr;
-    void (*data_unref)(Dav2dData*) = nullptr;
-    void (*picture_unref)(Dav2dPicture*) = nullptr;
-
-    explicit Dav2dCalls(const platform::DynamicLibrary& library)
-        : version_api(library.function<unsigned (*)()>("dav2d_version_api")),
-          default_settings(library.function<void (*)(Dav2dSettings*)>("dav2d_default_settings")),
-          open(library.function<int (*)(void**, const Dav2dSettings*)>("dav2d_open")),
-          send_data(library.function<int (*)(void*, Dav2dData*)>("dav2d_send_data")),
-          get_picture(library.function<int (*)(void*, Dav2dPicture*)>("dav2d_get_picture")),
-          close(library.function<void (*)(void**)>("dav2d_close")),
-          data_create(library.function<uint8_t* (*)(Dav2dData*, size_t)>("dav2d_data_create")),
-          data_unref(library.function<void (*)(Dav2dData*)>("dav2d_data_unref")),
-          picture_unref(library.function<void (*)(Dav2dPicture*)>("dav2d_picture_unref")) {}
-};
-
-// The first picture dav2d decodes from the stream's first units: its size,
+// The first picture splot decodes from the stream's first units: its size,
 // depth, layout, colour and whether it carries a film grain model.
 nlohmann::json first_picture(const std::filesystem::path& path) {
-    // Missing (macOS bundles none), it is named as the software decoder's
-    // refusal names it, not by the loader's error and paths.
-    const std::filesystem::path dav2d_path = dav2d_library_path();
-    if (std::error_code ignored; !std::filesystem::is_regular_file(dav2d_path, ignored)) {
-        throw std::runtime_error("dav2d is not bundled");
+    // Missing (not built for this system), it is named as the software
+    // decoder's refusal names it, not by the loader's error and paths. Looked
+    // for at each probe: the library is loaded once, where it was first found.
+    if (std::error_code ignored; !std::filesystem::is_regular_file(splot_library_path(), ignored)) {
+        throw std::runtime_error("splot is not bundled");
     }
-    const platform::DynamicLibrary library(dav2d_path);
-    const Dav2dCalls dav2d(library);
-    if (dav2d.version_api() >> 16 != kDav2dApiMajor) {
-        throw std::runtime_error("dav2d is not the version the app was made for");
+    const SplotLibrary& splot = splot_library();
+    if (!splot.library) {
+        throw std::runtime_error(splot.problem);
     }
-    Dav2dSettings settings{};
-    dav2d.default_settings(&settings);
+    const SplotCalls& api = splot.calls;
+    // One thread, one picture in flight: the first picture is all it decodes.
+    SplotSettings settings = splot_settings(api, true);
     settings.n_threads = 1;
     settings.max_frame_delay = 1;
-    settings.all_layers = 0;
-    settings.logger_callback = nullptr;
-    av2::Reader reader(path);  // before dav2d starts: it throws for a file it cannot read
+    av2::Reader reader(path);  // before splot starts: it throws for a file it cannot read
     void* context = nullptr;
-    if (dav2d.open(&context, &settings) < 0) {
-        throw std::runtime_error("dav2d could not start");
+    if (api.open(&context, &settings) != kSplotOk) {
+        throw std::runtime_error("splot could not start");
     }
-    Dav2dPicture picture{};
-    bool got = false;
+    SplotPicture picture{};
+    int result = kSplotAgain;
     // A picture comes out within a few units; a stream that gives none in 64
     // is not decoded.
-    for (int units = 0; units < 64 && !got; units++) {
-        std::optional<av2::TemporalUnit> unit = reader.next();
-        Dav2dData data{};
-        if (unit) {
-            std::uint8_t* buffer = dav2d.data_create(&data, unit->data.size());
-            if (buffer == nullptr) {
-                break;
-            }
-            std::copy(unit->data.begin(), unit->data.end(), buffer);
-        }
+    for (int units = 0; units < 64 && result == kSplotAgain; units++) {
+        const std::optional<av2::TemporalUnit> unit = reader.next();
         if (!unit) {
-            // The end: dav2d gives the pictures it holds once told so.
-            dav2d.send_data(context, nullptr);
-            got = dav2d.get_picture(context, &picture) == 0;
+            // The end: splot gives the pictures it holds, waiting for them.
+            api.drain(context);
+            result = api.get_picture(context, &picture);
             break;
         }
-        do {
-            const int sent = dav2d.send_data(context, &data);
-            const int result = dav2d.get_picture(context, &picture);
-            if (result == 0) {
-                got = true;
+        const SplotDataProps props{unit->number, 0, 0};
+        int sent = api.send_data(context, unit->data.data(), unit->data.size(), &props);
+        if (sent == kSplotAgain) {
+            // Its queue is full: it waits for a picture, then takes the unit.
+            result = api.get_picture(context, &picture);
+            if (result != kSplotAgain) {
                 break;
             }
-            if ((sent < 0 && sent != kDav2dAgain) || (result < 0 && result != kDav2dAgain)) {
-                break;
-            }
-        } while (data.sz > 0);
-        if (data.sz > 0) {
-            dav2d.data_unref(&data);
+            sent = api.send_data(context, unit->data.data(), unit->data.size(), &props);
         }
+        if (sent != kSplotOk) {
+            result = sent;
+            break;
+        }
+        result = api.get_picture(context, &picture);  // EAGAIN at once where it has none yet
     }
-    nlohmann::json result;
+    nlohmann::json json;
+    const bool got = result == kSplotOk;
     if (got) {
-        result = {{"width", picture.p.w},
-                  {"height", picture.p.h},
-                  {"bit_depth", picture.p.bpc},
-                  {"layout", picture.p.layout},
-                  {"film_grain", dav2d_adds_grain(picture.film_grain)}};
-        if (picture.content != nullptr && picture.content->color_description_present) {
-            int codes[3];
-            dav2d_colour_codes(*picture.content, codes);
-            result["colour"] = {codes[0], codes[1], codes[2], picture.content->color.range};
+        json = {{"width", picture.width},
+                {"height", picture.height},
+                {"bit_depth", picture.bit_depth},
+                {"layout", picture.layout},
+                {"film_grain", picture.has_film_grain != 0}};
+        if (splot_says_colour(picture.color)) {
+            json["colour"] = {picture.color.primaries, picture.color.transfer, picture.color.matrix,
+                              picture.color.full_range};
         }
-        dav2d.picture_unref(&picture);
+        api.picture_unref(&picture);
     }
-    dav2d.close(&context);
+    api.close(&context);
     if (!got) {
-        throw std::runtime_error("dav2d decoded no picture of it");
+        throw std::runtime_error("splot decoded no picture of it");
     }
-    return result;
+    return json;
 }
 
 }  // namespace
@@ -192,8 +159,8 @@ VideoInfo av2_info_from(const std::filesystem::path& path, const nlohmann::json&
     info.height = result.at("height").get<int>();
     const int depth = result.at("bit_depth").get<int>();
     const int layout = result.at("layout").get<int>();
-    const std::string format = layout == kDav2dI400 ? "gray" : layout == kDav2dI422 ? "yuv422p"
-                                                       : layout == kDav2dI444 ? "yuv444p"
+    const std::string format = layout == kSplotI400 ? "gray" : layout == kSplotI422 ? "yuv422p"
+                                                       : layout == kSplotI444 ? "yuv444p"
                                                                               : "yuv420p";
     info.pix_fmt = depth > 8 ? format + std::to_string(depth) + "le" : format;
     info.nb_frames = result.at("frames").get<long long>();
@@ -230,7 +197,7 @@ VideoInfo probe_av2(const std::filesystem::path& path, const CancelToken& cancel
     const nlohmann::json request{{"path", platform::path_text(path)}};
     nlohmann::json result;
     try {
-        result = isolation_program() ? run_isolated("av2-probe", "dav2d", request, {}, cancel)
+        result = isolation_program() ? run_isolated("av2-probe", "splot", request, {}, cancel)
                                      : av2_probe_task(request);  // the tests: no program to run it in
     } catch (const Cancelled&) {
         throw;
