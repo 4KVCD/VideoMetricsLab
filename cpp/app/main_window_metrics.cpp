@@ -5,7 +5,6 @@
 
 #include <QAction>
 #include <QMenu>
-#include <QMouseEvent>
 #include <QTableWidgetItem>
 
 #include <algorithm>
@@ -15,6 +14,7 @@
 #include "formatting.h"
 #include "i18n.h"
 #include "settings_panel.h"
+#include "stay_open_menu.h"
 #include "vml/metric_cache.h"
 #include "vml/metrics.h"
 #include "vml/score_identity.h"
@@ -24,27 +24,6 @@
 #include "window_helpers.h"
 
 namespace vml::app {
-
-namespace {
-
-// A menu of check boxes that stays open while boxes are ticked, so several
-// metrics can be switched in one visit.
-class StayOpenMenu : public QMenu {
-public:
-    using QMenu::QMenu;
-
-protected:
-    void mouseReleaseEvent(QMouseEvent* event) override {
-        QAction* action = actionAt(event->position().toPoint());
-        if (action != nullptr && action->isCheckable() && action->isEnabled()) {
-            action->trigger();
-            return;
-        }
-        QMenu::mouseReleaseEvent(event);
-    }
-};
-
-}  // namespace
 
 // ------------------------------------------------------------- the metrics
 

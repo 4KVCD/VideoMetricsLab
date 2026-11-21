@@ -21,7 +21,7 @@ using Json = nlohmann::ordered_json;
 
 // Where a setting is kept in Settings, by its type.
 using Field = std::variant<bool Settings::*, int Settings::*, std::string Settings::*,
-                           std::vector<std::string> Settings::*>;
+                           std::vector<std::string> Settings::*, std::vector<int> Settings::*>;
 
 // Every setting by its key in settings.json (the Python dataclass's field
 // names), except the CVVDP presets, which are read apart.
@@ -101,6 +101,8 @@ const std::unordered_map<std::string, Field>& fields() {
         {"pushover_priority", &Settings::pushover_priority},
         {"discord_enabled", &Settings::discord_enabled},
         {"discord_webhook", &Settings::discord_webhook},
+        {"saved_results_column_widths", &Settings::saved_results_column_widths},
+        {"saved_results_hidden_columns", &Settings::saved_results_hidden_columns},
     };
     return by_key;
 }
@@ -129,6 +131,12 @@ std::optional<std::string> set_if_it_fits(Settings& settings, const Field& field
             return "list[str]";
         }
         settings.*(*list) = value.get<std::vector<std::string>>();
+    } else if (const auto* numbers = std::get_if<std::vector<int> Settings::*>(&field)) {
+        if (!value.is_array() ||
+            !std::all_of(value.begin(), value.end(), [](const Json& v) { return v.is_number_integer(); })) {
+            return "list[int]";
+        }
+        settings.*(*numbers) = value.get<std::vector<int>>();
     }
     return std::nullopt;
 }
@@ -415,6 +423,8 @@ std::string Settings::text() const {
     data["pushover_priority"] = pushover_priority;
     data["discord_enabled"] = discord_enabled;
     data["discord_webhook"] = discord_webhook;
+    data["saved_results_column_widths"] = saved_results_column_widths;
+    data["saved_results_hidden_columns"] = saved_results_hidden_columns;
     return python_json_dumps(data, 2);
 }
 

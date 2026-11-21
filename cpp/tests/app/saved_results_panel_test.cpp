@@ -258,5 +258,81 @@ TEST(SavedResultsPanel, AFewScoresSitAtTheTopOfTheBox) {
     EXPECT_LE(combo->geometry().top(), 2);
 }
 
+// The header's menu: every column ticked, unticking one hides it and ticking
+// shows it again, each change told to be saved; the test video's can't be
+// unticked.
+TEST(SavedResultsPanel, TheHeaderMenuHidesAndShowsColumns) {
+    Settings settings;
+    const Dialogs dialogs = standard_dialogs(nullptr);
+    SavedResultsPanel panel(settings, dialogs);
+    QSignalSpy changed(&panel, &SavedResultsPanel::columns_changed);
+    QTableWidget& table = *panel.table();
+    QMenu menu;
+    panel.fill_column_menu(menu);
+    std::vector<QAction*> columns;
+    for (QAction* action : menu.actions()) {
+        if (action->isCheckable()) {
+            columns.push_back(action);
+        }
+    }
+    ASSERT_EQ(columns.size(), static_cast<std::size_t>(table.columnCount()));
+    for (int column = 0; column < table.columnCount(); ++column) {
+        EXPECT_TRUE(columns[static_cast<std::size_t>(column)]->isChecked());
+        EXPECT_FALSE(table.isColumnHidden(column));
+    }
+
+    columns[3]->trigger();  // Metrics
+    EXPECT_TRUE(table.isColumnHidden(3));
+    EXPECT_EQ(panel.hidden_columns(), std::vector<std::string>{"metrics"});
+    EXPECT_EQ(changed.count(), 1);
+    columns[3]->trigger();
+    EXPECT_FALSE(table.isColumnHidden(3));
+    EXPECT_TRUE(panel.hidden_columns().empty());
+    EXPECT_EQ(changed.count(), 2);
+
+    EXPECT_FALSE(columns[0]->isEnabled());  // the test video's
+    columns[0]->trigger();
+    EXPECT_FALSE(table.isColumnHidden(0));
+    EXPECT_EQ(changed.count(), 2);
+}
+
+// The columns hidden and their widths, saved in Settings and read back: the
+// same columns hidden and the same widths in a new tab. Settings without
+// them (older ones) show every column, fitted to the tab.
+TEST(SavedResultsPanel, TheColumnsAreKeptInSettings) {
+    const test::Folder folder;
+    Settings settings;
+    settings.saved_results_hidden_columns = {"reference", "size", "test"};  // "test" can't be hidden
+    settings.saved_results_column_widths = {310, 250, 140, 230, 90};
+    ASSERT_EQ(settings.save_to(folder / "settings.json"), std::nullopt);
+    const Settings loaded = Settings::load_from(folder / "settings.json");
+    const Dialogs dialogs = standard_dialogs(nullptr);
+    SavedResultsPanel panel(loaded, dialogs);
+    QTableWidget& table = *panel.table();
+    EXPECT_FALSE(table.isColumnHidden(0));
+    EXPECT_TRUE(table.isColumnHidden(1));
+    EXPECT_FALSE(table.isColumnHidden(2));
+    EXPECT_TRUE(table.isColumnHidden(4));
+    EXPECT_EQ(table.columnWidth(0), 310);
+    EXPECT_EQ(table.columnWidth(2), 140);
+    EXPECT_EQ(panel.hidden_columns(), (std::vector<std::string>{"reference", "size"}));
+    EXPECT_EQ(panel.column_widths(), settings.saved_results_column_widths);
+
+    // A hidden column shown again at its width.
+    QMenu menu;
+    panel.fill_column_menu(menu);
+    menu.actions()[1]->trigger();
+    EXPECT_FALSE(table.isColumnHidden(1));
+    EXPECT_EQ(table.columnWidth(1), 250);
+
+    const Settings old = Settings::load_from(folder / "missing.json");
+    SavedResultsPanel fitted(old, dialogs);
+    EXPECT_TRUE(fitted.hidden_columns().empty());
+    EXPECT_TRUE(fitted.column_widths().empty());
+    for (int column = 0; column < fitted.table()->columnCount(); ++column) {
+        EXPECT_FALSE(fitted.table()->isColumnHidden(column));
+    }
+}
+
 }  // namespace
 }  // namespace vml::app

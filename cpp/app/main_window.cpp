@@ -687,6 +687,11 @@ void MainWindow::build_ui() {
                 export_saved_results(kind, results);
             });
     connect(saved_results_panel_, &SavedResultsPanel::deleted, this, [this] { settings_panel_->refresh_status(); });
+    connect(saved_results_panel_, &SavedResultsPanel::columns_changed, this, [this] {
+        settings_.saved_results_column_widths = saved_results_panel_->column_widths();
+        settings_.saved_results_hidden_columns = saved_results_panel_->hidden_columns();
+        save_settings();
+    });
     tabs_->addTab(new ScrollingPage(saved_results_panel_), app::tr("Saved Results"));
     tabs_->addTab(new ScrollingPage(settings_panel_), app::tr("Settings"));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
