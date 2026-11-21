@@ -35,6 +35,46 @@ long long length_frames(const VideoInfo& video) {
     return std::llround(video.duration * video.fps);
 }
 
+// The first frame a ranged run's scores start at (their provenance's
+// range_frames, frame_range.h); nothing for scores of the whole videos.
+std::optional<long long> range_start(const FrameMetricResult& metric) {
+    const auto marked = metric.provenance.parameters.find("range_frames");
+    if (marked == metric.provenance.parameters.end()) {
+        return std::nullopt;
+    }
+    const nlohmann::json frames = nlohmann::json::parse(marked->second, nullptr, false);
+    if (!frames.is_array() || frames.empty() || !frames[0].is_number_integer()) {
+        return 0LL;  // a range, from where not known
+    }
+    return frames[0].get<long long>();
+}
+
+// The frame pairs a ranged run compared: of the frame metric whose scores
+// reach furthest, those from its range's start (a range keeps whole-video
+// frame numbers). Nothing when no frame metric's scores are of a range.
+std::optional<long long> ranged_pairs(const ComparisonResult& result) {
+    std::optional<long long> pairs;
+    long long reach = 0;
+    for (const std::string& key : result.metric_results.keys()) {
+        const FrameMetricResult* metric = result.metric_results.frame(key);
+        if (metric == nullptr || metric->frame.empty()) {
+            continue;
+        }
+        const std::optional<long long> start = range_start(*metric);
+        if (!start) {
+            continue;
+        }
+        const std::vector<int>& frames = metric->frame;
+        const long long step = frames.size() > 1 ? std::max(1, frames[1] - frames[0]) : 1;
+        const long long end = frames.back() + step;
+        if (!pairs || end > reach) {
+            reach = end;
+            pairs = std::max(0LL, end - *start);
+        }
+    }
+    return pairs;
+}
+
 }  // namespace
 
 bool FramesShort::different_lengths() const {
@@ -178,6 +218,15 @@ nlohmann::ordered_json frame_pairing_json(const ComparisonResult& result) {
                 {"length_frames", short_of->length_frames},
                 {"reference_frames", count(short_of->source_frames)},
                 {"test_frames", count(short_of->test_frames)}};
+    }
+    if (const std::optional<long long> ranged = ranged_pairs(result)) {
+        // Only part of the videos: whatever the pairs, nothing is checked.
+        return {{"status", "not_checked"},
+                {"note", "Not checked: only part of the videos was compared."},
+                {"compared_pairs", *ranged},
+                {"length_frames", shorter > 0 ? nlohmann::ordered_json(shorter) : nlohmann::ordered_json(nullptr)},
+                {"reference_frames", nullptr},
+                {"test_frames", nullptr}};
     }
     if (result.resample_target) {
         status = "not_checked";

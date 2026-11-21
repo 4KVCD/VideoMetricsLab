@@ -54,6 +54,23 @@ TEST(FramePairing, EveryResultSaysHowItsFramesWerePairedAndWhatThatMeans) {
     EXPECT_EQ(frames_short_text(*short_of.frames_short), "");  // no command-line note
 }
 
+// A range keeps whole-video frame numbers, so a range from the middle to
+// the end reaches the videos' length: it is still only part of them, and
+// its pairs are those from the range's start.
+TEST(FramePairing, ARangeToTheEndIsNotCheckedAndCountsOnlyItsOwnPairs) {
+    ComparisonResult range = scored(120);
+    FrameMetricResult psnr = *range.metric_results.frame("psnr");
+    for (int& frame : psnr.frame) {
+        frame += 120;  // frames 120 to 239 of 240
+    }
+    psnr.provenance.parameters["range_frames"] = "[120, null]";
+    range.metric_results = MetricResultSet();
+    range.metric_results.add(std::move(psnr));
+    const nlohmann::ordered_json sync = frame_pairing_json(range);
+    EXPECT_EQ(sync.at("status"), "not_checked");
+    EXPECT_EQ(sync.at("compared_pairs"), 120);
+}
+
 // The pairs always end with the video that has fewer frames, so of two
 // videos of different lengths, in step or not depends on which lacks more of
 // its length's frames. A reference with a remux's gaps (2,390 frames, length
