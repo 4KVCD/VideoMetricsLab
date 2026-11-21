@@ -13,14 +13,14 @@
 
 namespace vml::platform {
 
-HttpResponse http_post(std::string_view url, std::string_view content_type, std::string_view body,
-                       std::chrono::seconds timeout) {
+HttpResponse http_post(const HttpRequest& request, std::chrono::seconds timeout) {
     HttpResponse response;
-    if (url.substr(0, 8) != "https://") {
-        response.error = "not an https URL";
+    const std::string_view url = request.url;
+    if (url.substr(0, 8) != "https://" && !(request.plain_http && url.substr(0, 7) == "http://")) {
+        response.error = request.plain_http ? "not an http or https URL" : "not an https URL";
         return response;
     }
-    const std::string config = curl_config(url, content_type, body, timeout);
+    const std::string config = curl_config(request, timeout);
     int ends[2];
     if (pipe(ends) != 0) {
         response.error = std::string("a pipe could not be made: ") + std::strerror(errno);

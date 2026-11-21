@@ -183,9 +183,49 @@ struct Settings {
     std::string pushover_user;
     std::string pushover_token;
     int pushover_priority = 0;
-    // Discord: a channel's webhook URL (as stored_secret keeps it).
+    // Discord: a channel's webhook URL (as stored_secret keeps it); whom a
+    // message mentions ("<@&role ID>", "<@user ID>", "@here", "@everyone";
+    // "" no one) and when ("problems": a run with failures or cancelled;
+    // "always"); and whether a message that mentions no one is sent without
+    // a push or a sound.
     bool discord_enabled = false;
     std::string discord_webhook;
+    std::string discord_mention;
+    std::string discord_mention_when = "problems";
+    bool discord_silent = false;
+    // Gotify: its server's address, an application's token (as stored_secret
+    // keeps it), and the messages' priority (0 to 10).
+    bool gotify_enabled = false;
+    std::string gotify_url;
+    std::string gotify_token;
+    int gotify_priority = 5;
+    // ntfy: its server's address, the topic (whose name is its password, so
+    // kept as a secret), an access token where the topic needs one, and the
+    // messages' priority (1 to 5).
+    bool ntfy_enabled = false;
+    std::string ntfy_url = "https://ntfy.sh";
+    std::string ntfy_topic;
+    std::string ntfy_token;
+    int ntfy_priority = 3;
+    // Pushbullet: an access token, and a device's iden ("" every device).
+    bool pushbullet_enabled = false;
+    std::string pushbullet_token;
+    std::string pushbullet_device;
+    // Slack: an incoming webhook's URL.
+    bool slack_enabled = false;
+    std::string slack_webhook;
+    // Telegram: a bot's token, the chat's ID (or a public channel's
+    // @name), and whether messages are sent without a sound.
+    bool telegram_enabled = false;
+    std::string telegram_token;
+    std::string telegram_chat;
+    bool telegram_silent = false;
+    // A webhook of the user's own (Home Assistant, n8n, a script): its URL
+    // and a header sent with it ("Authorization: Bearer ...", or ""). It
+    // gets the run as JSON (webhook_request).
+    bool webhook_enabled = false;
+    std::string webhook_url;
+    std::string webhook_header;
 
     // The saved settings: defaults for a missing or unreadable file, and
     // for each value of the wrong type (that setting alone); unknown keys

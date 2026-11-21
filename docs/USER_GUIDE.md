@@ -229,9 +229,10 @@ reference's (`frame_sync`, with a plain-language note: see
 
 ### Notifications
 
-**Settings > Notifications** sends a message when a run ends, to Pushover (a
-phone or desktop app) or a Discord channel, so a run of hours needn't be
-watched.
+**Settings > Notifications** sends a message when a run ends, to the
+services you choose, so a run of hours needn't be watched. The list on the
+left names them; a tick sends to that one, and choosing it shows its
+settings and where its keys come from.
 
 - **When a run ends:** finished, finished with failures (a video or some of
   its metrics failed) and cancelled, each on or off, and only for runs of at
@@ -239,8 +240,51 @@ watched.
 - **Pushover:** your user key, and the token of an application you create on
   pushover.net for this app; the messages' priority.
 - **Discord:** a channel's webhook URL (the channel's settings, Integrations >
-  Webhooks). The message's colour says how the run ended; a name in it
-  mentions no one.
+  Webhooks). The message's colour says how the run ended, and when the
+  message lists the test videos, each is a field of its own (its name, then
+  its line), up to Discord's 25. **Mention** names whom it notifies:
+  `<@&role ID>`, `<@user ID>` (Discord's Developer Mode shows IDs: right-click,
+  Copy ID), `@here` or `@everyone`, either when a run has failures or is
+  cancelled or for every run; a name in the message itself mentions no one.
+  **Send without a push or a sound** keeps the messages that mention no one
+  quiet.
+- **Gotify:** your server's address and an application's token (its Apps
+  tab), with a priority from 0 to 10.
+- **ntfy:** the server (`https://ntfy.sh`, or your own), the topic, and an
+  access token where the topic needs one; a priority from lowest to highest.
+  On a public server anyone who knows a topic's name can read it, so the
+  topic is kept like a key: choose one that can't be guessed.
+- **Pushbullet:** an access token (pushbullet.com, Settings > Account), and a
+  device's iden to send to that one alone (empty: every device).
+- **Slack:** an incoming webhook's URL (`https://hooks.slack.com/...`, from a
+  Slack app's Incoming Webhooks). The message is sent as plain text, so
+  nothing in it is read as Slack's markup.
+- **Telegram:** a bot's token (from @BotFather) and the chat's ID (send the
+  bot a message, then open `api.telegram.org/bot<token>/getUpdates`), or a
+  public channel's `@name`; it can send without a sound.
+- **Webhook:** any address that takes a POST (Home Assistant, n8n, a script),
+  and a header to send with it (`Authorization: Bearer ...`), if it needs one.
+  It gets the run as JSON:
+
+  ```json
+  {"event": "run_ended", "app": "VideoMetricsLab 2.7",
+   "outcome": "finished_with_failures", "outcome_text": "Finished with failures",
+   "title": "...", "message": "...", "finished_at": "2026-11-21T12:00:00Z",
+   "duration_seconds": 3725, "reference": "reference.mkv",
+   "videos": [{"name": "encode.mkv", "result": "Scored", "scored": true,
+               "frames": 1440,
+               "metrics": {"vmaf": {"mean": 95.21, "min": 80.1, "max": 99.0,
+                                    "median": 95.2, "worst_10": 90.1,
+                                    "worst_5": 88.9, "worst_1": 88.2,
+                                    "worst_0_1": 84.0}}}]}
+  ```
+
+  `outcome` is `finished`, `finished_with_failures` or `cancelled`; `title`
+  and `message` are the message as the templates below make it; a statistic
+  a metric has no value for is `null`.
+- Gotify, ntfy and the webhook take an `http://` address too, for a server
+  on your own network: there the keys and the message are sent unencrypted.
+  Every other service, and these with an `https://` address, use HTTPS.
 - **Send test** sends the message shown in the preview, there and then, and
   says what the service answered.
 - **Message:** a title, a message, and a line for each test video, each made
@@ -256,8 +300,8 @@ watched.
   ended and how long it took: no file name or score leaves the PC),
   **Standard** (the default: also the reference, and each test video's name
   and mean scores) or **Detailed** (also minimums and the worst 1 %).
-- **Keys:** the Pushover keys and the webhook URL let anyone who has them send
-  messages as you. **Encrypted for this Windows user**, the default, stores
+- **Keys:** the services' keys, tokens and webhook URLs (and ntfy's topic)
+  let anyone who has them send messages as you. **Encrypted for this Windows user**, the default, stores
   them so that only you, on this PC, can read them back (Windows' DPAPI): a
   backup or a copy of your profile doesn't carry them, and on another PC
   they're entered again. **As plain text in settings.json** stores them as
@@ -265,7 +309,9 @@ watched.
   they are stored as plain text for now.)
 
 A message that can't be sent stops nothing: the status bar and the log say
-why, with the service's answer. The keys are never written to the log.
+why, with the service's answer. A service that asks to wait a moment (Discord
+when sent to too often) gets the message again once, after that moment. The
+keys are never written to the log.
 
 The command line sends the same message with `--notify` (see [Command
 line](#command-line)), as these settings say: to the services on, with the

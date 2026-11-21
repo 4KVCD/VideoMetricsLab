@@ -18,6 +18,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "dialogs.h"
@@ -30,9 +31,11 @@ class QGroupBox;
 class QHBoxLayout;
 class QLabel;
 class QLineEdit;
+class QListWidget;
 class QPlainTextEdit;
 class QPushButton;
 class QSpinBox;
+class QStackedWidget;
 class QTabWidget;
 class QTimer;
 template <typename T>
@@ -160,14 +163,39 @@ public:
     QCheckBox* notify_with_failures = nullptr;
     QCheckBox* notify_cancelled = nullptr;
     QSpinBox* notify_min_minutes = nullptr;
+    // The services: a list (ticked: on) and the chosen one's page.
+    QListWidget* notify_services = nullptr;
+    QStackedWidget* service_pages = nullptr;
     QCheckBox* pushover_enabled = nullptr;
     QLineEdit* pushover_user = nullptr;
     QLineEdit* pushover_token = nullptr;
     QComboBox* pushover_priority = nullptr;
-    QPushButton* pushover_test = nullptr;
     QCheckBox* discord_enabled = nullptr;
     QLineEdit* discord_webhook = nullptr;
-    QPushButton* discord_test = nullptr;
+    QLineEdit* discord_mention = nullptr;
+    QComboBox* discord_mention_when = nullptr;  // data: "problems", "always"
+    QCheckBox* discord_silent = nullptr;
+    QCheckBox* gotify_enabled = nullptr;
+    QLineEdit* gotify_url = nullptr;
+    QLineEdit* gotify_token = nullptr;
+    QSpinBox* gotify_priority = nullptr;
+    QCheckBox* ntfy_enabled = nullptr;
+    QLineEdit* ntfy_url = nullptr;
+    QLineEdit* ntfy_topic = nullptr;
+    QLineEdit* ntfy_token = nullptr;
+    QComboBox* ntfy_priority = nullptr;
+    QCheckBox* pushbullet_enabled = nullptr;
+    QLineEdit* pushbullet_token = nullptr;
+    QLineEdit* pushbullet_device = nullptr;
+    QCheckBox* slack_enabled = nullptr;
+    QLineEdit* slack_webhook = nullptr;
+    QCheckBox* telegram_enabled = nullptr;
+    QLineEdit* telegram_token = nullptr;
+    QLineEdit* telegram_chat = nullptr;
+    QCheckBox* telegram_silent = nullptr;
+    QCheckBox* webhook_enabled = nullptr;
+    QLineEdit* webhook_url = nullptr;
+    QLineEdit* webhook_header = nullptr;
     QCheckBox* show_keys = nullptr;
     QComboBox* secret_storage = nullptr;  // data: true encrypted
     QLabel* secret_note = nullptr;
@@ -207,8 +235,14 @@ private:
     QGroupBox* build_window_box();
     QWidget* build_notifications_page();
     QGroupBox* build_notify_when_box();
-    QGroupBox* build_pushover_box();
-    QGroupBox* build_discord_box();
+    QGroupBox* build_services_box();
+    // A service's page: "Send to {service}" (`enabled`), its rows, where its
+    // keys come from (`hint`), and Send test.
+    QWidget* service_page(const QString& service, QCheckBox*& enabled, bool on,
+                          const std::vector<std::pair<QString, QWidget*>>& rows, const QString& hint);
+    // A field for a key: hidden as typed until Show keys, its stored value
+    // shown (show_secret).
+    QLineEdit* secret_edit(const std::string& stored);
     QGroupBox* build_keys_box();
     QGroupBox* build_message_box();
     // A secret's field: its stored value as it reads back, or empty with a
@@ -265,6 +299,7 @@ private:
     // Send test's sender; the templates' edits saved a moment after typing
     // stops; the template a field is inserted into.
     Notifier* test_notifier_ = nullptr;
+    std::vector<QLineEdit*> secret_edits_;  // hidden until Show keys
     QTimer* template_typing_ = nullptr;
     QWidget* last_template_ = nullptr;
 };

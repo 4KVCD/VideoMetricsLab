@@ -3,15 +3,15 @@
 #include <QByteArray>
 #include <QDateTime>
 #include <QLocale>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QTimer>
 #include <QUrl>
 
 #include <algorithm>
+#include <cmath>
+#include <optional>
 
 #include "i18n.h"
 #include "row_state.h"
@@ -32,23 +32,6 @@ ScoreStats sample_stats(double mean, double minimum, double worst_1) {
     stats.worst_1_percent = worst_1;
     stats.worst_0_1_percent = (worst_1 + minimum) / 2;
     return stats;
-}
-
-// What a service said about a message it refused: Pushover's "errors",
-// Discord's "message", else the start of its answer.
-QString service_answer(const QByteArray& body) {
-    const QJsonObject answer = QJsonDocument::fromJson(body).object();
-    if (const QJsonArray errors = answer.value("errors").toArray(); !errors.isEmpty()) {
-        QStringList texts;
-        for (const QJsonValue& error : errors) {
-            texts << error.toString();
-        }
-        return texts.join("; ");
-    }
-    if (const QString message = answer.value("message").toString(); !message.isEmpty()) {
-        return message;
-    }
-    return QString::fromUtf8(body.left(200)).simplified();
 }
 
 }  // namespace
@@ -94,9 +77,15 @@ QStringList notification_problems(const NotificationPlan& plan) {
         lines << app::tr("{service} has no keys yet: enter them in Settings > Notifications.",
                          {{"service", QString::fromStdString(service)}});
     }
-    if (plan.not_a_webhook) {
-        lines << app::tr("The Discord webhook URL isn't a Discord webhook's: copy it from the channel's settings, "
-                         "Integrations > Webhooks.");
+    for (const std::string& service : plan.bad_address) {
+        lines << (service == "Discord"
+                      ? app::tr("The Discord webhook URL isn't a Discord webhook's: copy it from the channel's "
+                                "settings, Integrations > Webhooks.")
+                  : service == "Slack"
+                      ? app::tr("The Slack webhook URL isn't an incoming webhook's: copy it from the app's Incoming "
+                                "Webhooks page (https://hooks.slack.com/...).")
+                      : app::tr("{service}'s address isn't one it takes: check it in Settings > Notifications.",
+                                {{"service", QString::fromStdString(service)}}));
     }
     return lines;
 }
@@ -105,34 +94,48 @@ Notifier::Notifier(QObject* parent) : QObject(parent), network_(new QNetworkAcce
 
 void Notifier::send(const std::vector<NotificationRequest>& requests) {
     for (const NotificationRequest& item : requests) {
-        QNetworkRequest request(QUrl(QString::fromStdString(item.url)));
-        request.setHeader(QNetworkRequest::ContentTypeHeader, QByteArray::fromStdString(item.content_type));
-        request.setHeader(QNetworkRequest::UserAgentHeader, "VideoMetricsLab/" VML_VERSION);
-        // A webhook's URL is its key: never followed elsewhere.
-        request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
-        request.setTransferTimeout(20000);
-        QNetworkReply* reply = network_->post(request, QByteArray::fromStdString(item.body));
-        const QString service = QString::fromStdString(item.service);
-        const QString url = QString::fromStdString(item.url);
-        connect(reply, &QNetworkReply::finished, this, [this, reply, service, url] {
-            reply->deleteLater();
-            const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-            if (status >= 200 && status < 300) {
-                emit sent(service, QString());
-                return;
-            }
-            const QString answer = service_answer(reply->readAll());
-            if (status == 0) {
-                // Qt's text can hold the URL, which for a webhook is its key,
-                // or its path alone (the token in it).
-                emit sent(service, QString::fromStdString(vml::without_secret_url(
-                                       reply->errorString().toStdString(), url.toStdString(), service.toStdString())));
-            } else {
-                emit sent(service, answer.isEmpty() ? QStringLiteral("HTTP %1").arg(status)
-                                                    : QStringLiteral("HTTP %1: %2").arg(status).arg(answer));
-            }
-        });
+        post(item, false);
     }
+}
+
+void Notifier::post(const NotificationRequest& item, bool again) {
+    const QUrl url(QString::fromStdString(item.url));
+    const QString service = QString::fromStdString(item.service);
+    if (url.scheme() != "https" && !(item.plain_http && url.scheme() == "http")) {
+        emit sent(service, item.plain_http ? app::tr("its address isn't an http or https URL")
+                                           : app::tr("its address isn't an https URL"));
+        return;
+    }
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QByteArray::fromStdString(item.content_type));
+    request.setHeader(QNetworkRequest::UserAgentHeader, "VideoMetricsLab/" VML_VERSION);
+    for (const auto& [name, value] : item.headers) {
+        request.setRawHeader(QByteArray::fromStdString(name), QByteArray::fromStdString(value));
+    }
+    // A webhook's URL is its key: never followed elsewhere.
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
+    request.setTransferTimeout(20000);
+    QNetworkReply* reply = network_->post(request, QByteArray::fromStdString(item.body));
+    connect(reply, &QNetworkReply::finished, this, [this, reply, item, service, again] {
+        reply->deleteLater();
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (status >= 200 && status < 300) {
+            emit sent(service, QString());
+            return;
+        }
+        const std::string body = reply->readAll().toStdString();
+        // Discord asks to wait a moment when sent to too often: once, a short wait.
+        if (const std::optional<double> wait = retry_after(status, body); wait && *wait <= 5.0 && !again) {
+            QTimer::singleShot(static_cast<int>(std::lround(*wait * 1000)), this, [this, item] { post(item, true); });
+            return;
+        }
+        // Qt's text can hold the URL, which for a webhook is its key, or its
+        // path alone (the token in it); an answer could repeat a key.
+        const std::string why = status == 0 ? reply->errorString().toStdString()
+                                : body.empty() ? "HTTP " + std::to_string(status)
+                                               : "HTTP " + std::to_string(status) + ": " + service_answer(body);
+        emit sent(service, QString::fromStdString(without_secrets(why, item)));
+    });
 }
 
 }  // namespace vml::app

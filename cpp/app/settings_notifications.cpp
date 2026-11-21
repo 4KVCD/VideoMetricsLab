@@ -1,6 +1,7 @@
-// Settings > Notifications: a message when a run ends, to Pushover and
-// Discord (notifications.h), when and how it is sent, the services' keys and
-// how they are stored, and the message's templates with a preview.
+// Settings > Notifications: a message when a run ends, to the services
+// (notifications.h: Pushover, Discord, Gotify, ntfy, Pushbullet, Slack,
+// Telegram, a webhook), when and how it is sent, each service's keys and how
+// they are stored, and the message's templates with a preview.
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDateTime>
@@ -9,10 +10,14 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMenu>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSpinBox>
+#include <QStackedWidget>
+#include <QStyle>
 #include <QTextCursor>
 #include <QTextDocument>
 #include <QTimer>
@@ -77,7 +82,9 @@ QWidget* SettingsPanel::build_notifications_page() {
     auto* page = new QWidget;
     auto* columns = new QHBoxLayout(page);
     auto* left = new QVBoxLayout;
-    for (QGroupBox* box : {build_notify_when_box(), build_pushover_box(), build_discord_box(), build_keys_box()}) {
+    // Keys first: Show keys is read as the services' key fields are made.
+    QGroupBox* keys = build_keys_box();
+    for (QGroupBox* box : {build_notify_when_box(), build_services_box(), keys}) {
         left->addWidget(box);
     }
     left->addStretch(1);
@@ -121,23 +128,75 @@ QGroupBox* SettingsPanel::build_notify_when_box() {
     return box;
 }
 
-QGroupBox* SettingsPanel::build_pushover_box() {
-    auto* box = new QGroupBox("Pushover");
-    auto* form = new QFormLayout(box);
-    pushover_enabled = new QCheckBox(app::tr("Send to {service}", {{"service", "Pushover"}}));
-    pushover_enabled->setChecked(settings_.pushover_enabled);
-    connect(pushover_enabled, &QCheckBox::toggled, this, [this] { on_edited(); });
-    form->addRow(pushover_enabled);
-    pushover_user = new QLineEdit;
-    pushover_token = new QLineEdit;
-    for (QLineEdit* edit : {pushover_user, pushover_token}) {
-        edit->setEchoMode(QLineEdit::Password);
-        connect(edit, &QLineEdit::editingFinished, this, [this] { on_edited(); });
+QLineEdit* SettingsPanel::secret_edit(const std::string& stored) {
+    auto* edit = new QLineEdit;
+    edit->setEchoMode(show_keys != nullptr && show_keys->isChecked() ? QLineEdit::Normal : QLineEdit::Password);
+    connect(edit, &QLineEdit::editingFinished, this, [this] { on_edited(); });
+    show_secret(edit, stored);
+    secret_edits_.push_back(edit);
+    return edit;
+}
+
+QWidget* SettingsPanel::service_page(const QString& service, QCheckBox*& enabled, bool on,
+                                     const std::vector<std::pair<QString, QWidget*>>& rows, const QString& hint) {
+    auto* page = new QWidget;
+    auto* form = new QFormLayout(page);
+    form->setContentsMargins(0, 0, 0, 0);
+    enabled = new QCheckBox(app::tr("Send to {service}", {{"service", service}}));
+    enabled->setChecked(on);
+    form->addRow(enabled);
+    for (const auto& [label, widget] : rows) {
+        if (label.isEmpty()) {
+            form->addRow(widget);
+        } else {
+            form->addRow(label, widget);
+        }
     }
-    show_secret(pushover_user, settings_.pushover_user);
-    show_secret(pushover_token, settings_.pushover_token);
-    form->addRow(app::tr("User key:"), pushover_user);
-    form->addRow(app::tr("Application token:"), pushover_token);
+    auto* note = new QLabel(hint);
+    note->setWordWrap(true);
+    note->setOpenExternalLinks(true);
+    note->setTextFormat(Qt::RichText);
+    theme::style(note, "color: {muted};");
+    auto* test = new QPushButton(app::tr("Send test"));
+    connect(test, &QPushButton::clicked, this, [this, service] { send_notification_test(service); });
+    auto* row = new QHBoxLayout;
+    row->addWidget(note, 1);
+    row->addWidget(test, 0, Qt::AlignTop);
+    form->addRow(row);
+    // The list's tick and the page's box are one setting.
+    QCheckBox* const box = enabled;
+    connect(box, &QCheckBox::toggled, this, [this, box, service](bool checked) {
+        for (int at = 0; at < notify_services->count(); ++at) {
+            if (QListWidgetItem* item = notify_services->item(at); item->data(Qt::UserRole).toString() == service) {
+                const QSignalBlocker blocker(notify_services);
+                item->setCheckState(checked ? Qt::Checked : Qt::Unchecked);
+            }
+        }
+        on_edited();
+    });
+    return page;
+}
+
+QGroupBox* SettingsPanel::build_services_box() {
+    auto* box = new QGroupBox(app::tr("Services"));
+    auto* layout = new QHBoxLayout(box);
+    notify_services = new QListWidget;
+    notify_services->setObjectName("notificationServices");
+    service_pages = new QStackedWidget;
+
+    // A page's note: its words as they are (escaped), {link} a link.
+    const auto hint = [](const QString& words, const char* url = nullptr, const QString& shown = QString()) {
+        QString html = words.toHtmlEscaped();
+        if (url != nullptr) {
+            html.replace("{link}", QStringLiteral("<a href=\"%1\">%2</a>")
+                                       .arg(QString::fromLatin1(url), shown.toHtmlEscaped()));
+        }
+        return html;
+    };
+
+    // Pushover
+    pushover_user = secret_edit(settings_.pushover_user);
+    pushover_token = secret_edit(settings_.pushover_token);
     pushover_priority = new QComboBox;
     pushover_priority->addItem(app::tr("Lowest"), -2);
     pushover_priority->addItem(app::tr("Low"), -1);
@@ -145,33 +204,154 @@ QGroupBox* SettingsPanel::build_pushover_box() {
     pushover_priority->addItem(app::tr("High"), 1);
     pushover_priority->setCurrentIndex(std::max(0, pushover_priority->findData(settings_.pushover_priority)));
     connect(pushover_priority, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
-    pushover_test = new QPushButton(app::tr("Send test"));
-    connect(pushover_test, &QPushButton::clicked, this, [this] { send_notification_test("Pushover"); });
-    auto* row = new QHBoxLayout;
-    row->addWidget(pushover_priority);
-    row->addStretch(1);
-    row->addWidget(pushover_test);
-    form->addRow(app::tr("Priority:"), row);
-    return box;
-}
+    QWidget* pushover = service_page(
+        "Pushover", pushover_enabled, settings_.pushover_enabled,
+        {{app::tr("User key:"), pushover_user},
+         {app::tr("Application token:"), pushover_token},
+         {app::tr("Priority:"), pushover_priority}},
+        hint(app::tr("Your user key is on {link}'s front page once signed in; make an application there for its token."), "https://pushover.net", "pushover.net"));
 
-QGroupBox* SettingsPanel::build_discord_box() {
-    auto* box = new QGroupBox("Discord");
-    auto* form = new QFormLayout(box);
-    discord_enabled = new QCheckBox(app::tr("Send to {service}", {{"service", "Discord"}}));
-    discord_enabled->setChecked(settings_.discord_enabled);
-    connect(discord_enabled, &QCheckBox::toggled, this, [this] { on_edited(); });
-    form->addRow(discord_enabled);
-    discord_webhook = new QLineEdit;
-    discord_webhook->setEchoMode(QLineEdit::Password);
-    connect(discord_webhook, &QLineEdit::editingFinished, this, [this] { on_edited(); });
-    show_secret(discord_webhook, settings_.discord_webhook);
-    discord_test = new QPushButton(app::tr("Send test"));
-    connect(discord_test, &QPushButton::clicked, this, [this] { send_notification_test("Discord"); });
-    auto* row = new QHBoxLayout;
-    row->addWidget(discord_webhook, 1);
-    row->addWidget(discord_test);
-    form->addRow(app::tr("Webhook URL:"), row);
+    // Discord
+    discord_webhook = secret_edit(settings_.discord_webhook);
+    discord_mention = new QLineEdit(text_of(settings_.discord_mention));
+    discord_mention->setPlaceholderText(app::tr("No one"));
+    discord_mention->setToolTip(app::tr("Whom the message mentions, so that they get a push: <@&role ID> for a "
+                                        "role, <@user ID> for a person (Discord's Developer Mode shows IDs: "
+                                        "right-click, Copy ID), @here or @everyone. Leave it empty for no one."));
+    connect(discord_mention, &QLineEdit::editingFinished, this, [this] { on_edited(); });
+    discord_mention_when = new QComboBox;
+    discord_mention_when->addItem(app::tr("When a run has failures or is cancelled"), "problems");
+    discord_mention_when->addItem(app::tr("Every run"), "always");
+    discord_mention_when->setCurrentIndex(
+        std::max(0, discord_mention_when->findData(text_of(settings_.discord_mention_when))));
+    connect(discord_mention_when, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
+    discord_silent = new QCheckBox(app::tr("Send without a push or a sound when no one is mentioned"));
+    discord_silent->setChecked(settings_.discord_silent);
+    connect(discord_silent, &QCheckBox::toggled, this, [this] { on_edited(); });
+    QWidget* discord = service_page(
+        "Discord", discord_enabled, settings_.discord_enabled,
+        {{app::tr("Webhook URL:"), discord_webhook},
+         {app::tr("Mention:"), discord_mention},
+         {app::tr("Mention them:"), discord_mention_when},
+         {QString(), discord_silent}},
+        hint(app::tr("Make a webhook in the channel's settings, Integrations > Webhooks, and copy its URL. Each test "
+                "video is a field of its own when the message lists them.")));
+
+    // Gotify
+    gotify_url = new QLineEdit(text_of(settings_.gotify_url));
+    gotify_url->setPlaceholderText("https://gotify.example.org");
+    connect(gotify_url, &QLineEdit::editingFinished, this, [this] { on_edited(); });
+    gotify_token = secret_edit(settings_.gotify_token);
+    gotify_priority = new QSpinBox;
+    gotify_priority->setRange(0, 10);
+    gotify_priority->setValue(settings_.gotify_priority);
+    connect(gotify_priority, &QSpinBox::valueChanged, this, [this] { on_edited(); });
+    QWidget* gotify = service_page(
+        "Gotify", gotify_enabled, settings_.gotify_enabled,
+        {{app::tr("Server:"), gotify_url},
+         {app::tr("Application token:"), gotify_token},
+         {app::tr("Priority:"), gotify_priority}},
+        hint(app::tr("Your Gotify server's address, and the token of an application made in its Apps tab. An http:// "
+                "address sends the token unencrypted: use it only on your own network.")));
+
+    // ntfy
+    ntfy_url = new QLineEdit(text_of(settings_.ntfy_url));
+    ntfy_url->setPlaceholderText("https://ntfy.sh");
+    connect(ntfy_url, &QLineEdit::editingFinished, this, [this] { on_edited(); });
+    ntfy_topic = secret_edit(settings_.ntfy_topic);
+    ntfy_topic->setToolTip(app::tr("Anyone who knows a topic's name on a public server can read its messages: "
+                                   "choose one that can't be guessed. Letters, digits, - and _, up to 64."));
+    ntfy_token = secret_edit(settings_.ntfy_token);
+    if (secret_of(settings_.ntfy_token)) {  // else it says to enter it again
+        ntfy_token->setPlaceholderText(app::tr("Only for a topic that needs one"));
+    }
+    ntfy_priority = new QComboBox;
+    ntfy_priority->addItem(app::tr("Lowest"), 1);
+    ntfy_priority->addItem(app::tr("Low"), 2);
+    ntfy_priority->addItem(app::tr("Normal"), 3);
+    ntfy_priority->addItem(app::tr("High"), 4);
+    ntfy_priority->addItem(app::tr("Highest"), 5);
+    ntfy_priority->setCurrentIndex(std::max(0, ntfy_priority->findData(settings_.ntfy_priority)));
+    connect(ntfy_priority, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
+    QWidget* ntfy = service_page(
+        "ntfy", ntfy_enabled, settings_.ntfy_enabled,
+        {{app::tr("Server:"), ntfy_url},
+         {app::tr("Topic:"), ntfy_topic},
+         {app::tr("Access token:"), ntfy_token},
+         {app::tr("Priority:"), ntfy_priority}},
+        hint(app::tr("Subscribe to the topic in the ntfy app ({link}). A topic on your own server can need an access "
+                "token."), "https://ntfy.sh", "ntfy.sh"));
+
+    // Pushbullet
+    pushbullet_token = secret_edit(settings_.pushbullet_token);
+    pushbullet_device = new QLineEdit(text_of(settings_.pushbullet_device));
+    pushbullet_device->setPlaceholderText(app::tr("Every device"));
+    connect(pushbullet_device, &QLineEdit::editingFinished, this, [this] { on_edited(); });
+    QWidget* pushbullet = service_page(
+        "Pushbullet", pushbullet_enabled, settings_.pushbullet_enabled,
+        {{app::tr("Access token:"), pushbullet_token}, {app::tr("Device iden:"), pushbullet_device}},
+        hint(app::tr("Make an access token in {link}, Settings > Account."), "https://www.pushbullet.com/#settings/account", "pushbullet.com"));
+
+    // Slack
+    slack_webhook = secret_edit(settings_.slack_webhook);
+    QWidget* slack = service_page(
+        "Slack", slack_enabled, settings_.slack_enabled, {{app::tr("Webhook URL:"), slack_webhook}},
+        hint(app::tr("Add Incoming Webhooks to a Slack app, pick the channel, and copy the webhook's URL "
+                "(https://hooks.slack.com/...).")));
+
+    // Telegram
+    telegram_token = secret_edit(settings_.telegram_token);
+    telegram_chat = new QLineEdit(text_of(settings_.telegram_chat));
+    telegram_chat->setPlaceholderText(app::tr("A chat's ID, or @channelname"));
+    connect(telegram_chat, &QLineEdit::editingFinished, this, [this] { on_edited(); });
+    telegram_silent = new QCheckBox(app::tr("Send without a sound"));
+    telegram_silent->setChecked(settings_.telegram_silent);
+    connect(telegram_silent, &QCheckBox::toggled, this, [this] { on_edited(); });
+    QWidget* telegram = service_page(
+        "Telegram", telegram_enabled, settings_.telegram_enabled,
+        {{app::tr("Bot token:"), telegram_token}, {app::tr("Chat:"), telegram_chat}, {QString(), telegram_silent}},
+        hint(app::tr("Make a bot with {link} for its token, and send it a message: the chat's ID is in "
+                "api.telegram.org/bot<token>/getUpdates."), "https://t.me/BotFather", "@BotFather"));
+
+    // Webhook
+    webhook_url = secret_edit(settings_.webhook_url);
+    webhook_header = secret_edit(settings_.webhook_header);
+    if (secret_of(settings_.webhook_header)) {  // else it says to enter it again
+        webhook_header->setPlaceholderText(app::tr("Optional: Authorization: Bearer ..."));
+    }
+    QWidget* webhook = service_page(
+        "Webhook", webhook_enabled, settings_.webhook_enabled,
+        {{app::tr("URL:"), webhook_url}, {app::tr("Header:"), webhook_header}},
+        hint(app::tr("Any address that takes a POST (Home Assistant, n8n, a script): it gets the run as JSON, with the "
+                "message and each test video's statistics. An http:// address sends it unencrypted: use it only on "
+                "your own network.")));
+
+    for (QWidget* page : {pushover, discord, gotify, ntfy, pushbullet, slack, telegram, webhook}) {
+        service_pages->addWidget(page);
+    }
+    for (const std::string_view name : notification_services()) {
+        auto* item = new QListWidgetItem(text_of(std::string(name)), notify_services);
+        item->setData(Qt::UserRole, text_of(std::string(name)));
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(service_enabled(settings_, name) ? Qt::Checked : Qt::Unchecked);
+    }
+    const std::vector<QCheckBox*> boxes{pushover_enabled,   discord_enabled, gotify_enabled,   ntfy_enabled,
+                                        pushbullet_enabled, slack_enabled,   telegram_enabled, webhook_enabled};
+    connect(notify_services, &QListWidget::itemChanged, this, [this, boxes](QListWidgetItem* item) {
+        boxes[static_cast<std::size_t>(notify_services->row(item))]->setChecked(item->checkState() == Qt::Checked);
+    });
+    connect(notify_services, &QListWidget::currentRowChanged, service_pages, &QStackedWidget::setCurrentIndex);
+    notify_services->setCurrentRow(0);
+    // Every service in sight, with no scroll bar: as wide as the longest
+    // name with its box, as tall as all the rows.
+    notify_services->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    notify_services->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    notify_services->setFixedWidth(notify_services->sizeHintForColumn(0) + 2 * notify_services->frameWidth() +
+                                   notify_services->style()->pixelMetric(QStyle::PM_IndicatorWidth) + 24);
+    notify_services->setMinimumHeight(notify_services->sizeHintForRow(0) * notify_services->count() +
+                                      2 * notify_services->frameWidth() + 4);
+    layout->addWidget(notify_services);
+    layout->addWidget(service_pages, 1);
     return box;
 }
 
@@ -193,7 +373,7 @@ QGroupBox* SettingsPanel::build_keys_box() {
     });
     show_keys = new QCheckBox(app::tr("Show keys"));
     connect(show_keys, &QCheckBox::toggled, this, [this](bool shown) {
-        for (QLineEdit* edit : {pushover_user, pushover_token, discord_webhook}) {
+        for (QLineEdit* edit : secret_edits_) {
             edit->setEchoMode(shown ? QLineEdit::Normal : QLineEdit::Password);
         }
     });
@@ -315,6 +495,22 @@ void SettingsPanel::read_notification_controls() {
     settings_.pushover_enabled = pushover_enabled->isChecked();
     settings_.pushover_priority = pushover_priority->currentData().toInt();
     settings_.discord_enabled = discord_enabled->isChecked();
+    settings_.discord_mention = discord_mention->text().trimmed().toStdString();
+    settings_.discord_mention_when = discord_mention_when->currentData().toString().toStdString();
+    settings_.discord_silent = discord_silent->isChecked();
+    settings_.gotify_enabled = gotify_enabled->isChecked();
+    settings_.gotify_url = gotify_url->text().trimmed().toStdString();
+    settings_.gotify_priority = gotify_priority->value();
+    settings_.ntfy_enabled = ntfy_enabled->isChecked();
+    settings_.ntfy_url = ntfy_url->text().trimmed().toStdString();
+    settings_.ntfy_priority = ntfy_priority->currentData().toInt();
+    settings_.pushbullet_enabled = pushbullet_enabled->isChecked();
+    settings_.pushbullet_device = pushbullet_device->text().trimmed().toStdString();
+    settings_.slack_enabled = slack_enabled->isChecked();
+    settings_.telegram_enabled = telegram_enabled->isChecked();
+    settings_.telegram_chat = telegram_chat->text().trimmed().toStdString();
+    settings_.telegram_silent = telegram_silent->isChecked();
+    settings_.webhook_enabled = webhook_enabled->isChecked();
     const bool encrypted = secret_storage->currentData().toBool();
     settings_.notify_secrets_encrypted = encrypted;
     // Stored again only where it changed, or how it is to be stored did; one
@@ -332,6 +528,14 @@ void SettingsPanel::read_notification_controls() {
     store(settings_.pushover_user, pushover_user);
     store(settings_.pushover_token, pushover_token);
     store(settings_.discord_webhook, discord_webhook);
+    store(settings_.gotify_token, gotify_token);
+    store(settings_.ntfy_topic, ntfy_topic);
+    store(settings_.ntfy_token, ntfy_token);
+    store(settings_.pushbullet_token, pushbullet_token);
+    store(settings_.slack_webhook, slack_webhook);
+    store(settings_.telegram_token, telegram_token);
+    store(settings_.webhook_url, webhook_url);
+    store(settings_.webhook_header, webhook_header);
 }
 
 void SettingsPanel::show_notification_preview() {

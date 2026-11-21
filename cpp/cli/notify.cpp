@@ -1,43 +1,16 @@
 #include "notify.h"
 
-#include <nlohmann/json.hpp>
-
 #include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <thread>
 
 #include "report.h"
 
 namespace vml::cli {
-
-namespace {
-
-// What a service said about a message it refused: Pushover's "errors",
-// Discord's "message", else the start of its answer on one line.
-std::string service_answer(const std::string& body) {
-    const nlohmann::json answer = nlohmann::json::parse(body, nullptr, false);
-    if (answer.is_object()) {
-        if (answer.contains("errors") && answer["errors"].is_array() && !answer["errors"].empty()) {
-            std::string joined;
-            for (const nlohmann::json& error : answer["errors"]) {
-                if (error.is_string()) {
-                    joined += (joined.empty() ? "" : "; ") + error.get<std::string>();
-                }
-            }
-            if (!joined.empty()) {
-                return joined;
-            }
-        }
-        if (answer.contains("message") && answer["message"].is_string()) {
-            return answer["message"].get<std::string>();
-        }
-    }
-    std::string start = body.substr(0, 200);
-    std::replace(start.begin(), start.end(), '\n', ' ');
-    std::replace(start.begin(), start.end(), '\r', ' ');
-    return start;
-}
-
-}  // namespace
 
 NotifiedVideo notified_video(const TestVideo& video, bool cancelled) {
     NotifiedVideo notified;
@@ -61,7 +34,8 @@ NotifiedVideo notified_video(const TestVideo& video, bool cancelled) {
 
 std::vector<NotifyLine> notify_run_end(const Settings& settings, const NotifiedRun& run, const HttpPost& post,
                                        const std::string& utc_timestamp) {
-    if (!settings.pushover_enabled && !settings.discord_enabled) {
+    if (std::none_of(notification_services().begin(), notification_services().end(),
+                     [&settings](std::string_view service) { return service_enabled(settings, service); })) {
         return {{true, "No notification sent: no service is on in the app's Settings > Notifications"}};
     }
     const bool outcome_on = run.outcome == RunOutcome::finished                 ? settings.notify_finished
@@ -88,11 +62,17 @@ std::vector<NotifyLine> notify_run_end(const Settings& settings, const NotifiedR
         lines.push_back({true, "No notification sent to " + name +
                                    ": it has no keys yet; enter them in the app's Settings > Notifications"});
     }
-    if (plan.not_a_webhook) {
-        lines.push_back({true, "No notification sent to Discord: its webhook URL isn't a Discord webhook's"});
+    for (const std::string& name : plan.bad_address) {
+        lines.push_back({true, "No notification sent to " + name +
+                                   ": its address isn't one it takes; check it in the app's Settings > Notifications"});
     }
     for (const NotificationRequest& request : plan.requests) {
-        const platform::HttpResponse answer = post(request);
+        platform::HttpResponse answer = post(request);
+        // Discord asks to wait a moment when sent to too often: once, a short wait.
+        if (const std::optional<double> wait = retry_after(answer.status, answer.body); wait && *wait <= 5.0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(std::llround(*wait * 1000)));
+            answer = post(request);
+        }
         if (answer.status >= 200 && answer.status < 300) {
             lines.push_back({false, "Notification sent to " + request.service});
             continue;
@@ -102,13 +82,13 @@ std::vector<NotifyLine> notify_run_end(const Settings& settings, const NotifiedR
                                : "HTTP " + std::to_string(answer.status) +
                                      (answer.body.empty() ? std::string() : ": " + service_answer(answer.body));
         lines.push_back({true, "The notification to " + request.service +
-                                   " could not be sent: " + without_secret_url(why, request.url, request.service)});
+                                   " could not be sent: " + without_secrets(why, request)});
     }
     return lines;
 }
 
 platform::HttpResponse post_notification(const NotificationRequest& request) {
-    return platform::http_post(request.url, request.content_type, request.body);
+    return platform::http_post({request.url, request.content_type, request.body, request.headers, request.plain_http});
 }
 
 }  // namespace vml::cli
