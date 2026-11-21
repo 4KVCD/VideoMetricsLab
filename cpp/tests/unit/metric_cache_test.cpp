@@ -1122,6 +1122,31 @@ TEST(MetricCache, AStreamRecordedInAnotherFormIsReadAgainAndNotMatched) {
     set_stream_fingerprinter(nullptr);
 }
 
+// A stream re-tagged (h264_metadata from BT.601 to BT.709, or muxed into a
+// container that states other tags) is read with another YUV->RGB matrix,
+// which SSIMULACRA2, Butteraugli and CVVDP score: another stream. A range
+// not stated is read as limited, as a remux to MP4 can drop it.
+TEST(MetricCache, AStreamReadWithOtherColourIsAnotherStream) {
+    VideoInfo untagged;
+    untagged.codec_name = "h264";
+    untagged.pix_fmt = "yuv420p";
+    VideoInfo bt601 = untagged;
+    bt601.color_space = "smpte170m";
+    bt601.color_primaries = "smpte170m";
+    bt601.color_transfer = "smpte170m";
+    VideoInfo bt709 = untagged;
+    bt709.color_space = "bt709";
+    bt709.color_primaries = "bt709";
+    bt709.color_transfer = "bt709";
+    const std::string digest(64, 'a');
+    EXPECT_NE(stream_fingerprint_of(digest, bt601, 0), stream_fingerprint_of(digest, bt709, 0));
+    EXPECT_NE(stream_fingerprint_of(digest, untagged, 0), stream_fingerprint_of(digest, bt709, 0));
+    VideoInfo limited = bt709;
+    limited.color_range = "tv";
+    EXPECT_EQ(stream_fingerprint_of(digest, limited, 0), stream_fingerprint_of(digest, bt709, 0));
+    EXPECT_EQ(stream_fingerprint_of(digest, bt709, 0), stream_fingerprint_of(digest, bt709, 0));
+}
+
 // A file's bitrate is saved by its content and read back as it was, under
 // the path the file has now; frame types the command line did not read are
 // told apart from types read and unknown. Settings counts and clears it with

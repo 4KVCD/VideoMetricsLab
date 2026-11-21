@@ -18,7 +18,9 @@
 //   or MP4. Only the units that carry pictures are hashed (H.264, HEVC and
 //   VVC's VCL NAL units, in Annex B form; AV1's frame, frame header and
 //   tile group OBUs), so that the parameter sets, SEI and temporal
-//   delimiters a container moves, rewrites or drops change nothing. Only
+//   delimiters a container moves, rewrites or drops change nothing; the
+//   colour it is read with (the stream's tags, or its container's) is
+//   added, as it changes the scores of the metrics that convert to RGB. Only
 //   the pictures shown are hashed: an MP4 cut with an edit list keeps the
 //   packets before its first picture shown, which a remux to MKV or a raw
 //   stream shows, so the two are different videos. Any re-encode, of any
@@ -52,21 +54,26 @@ std::vector<double> fingerprint_times(double duration, double fps);
 std::optional<std::string> video_fingerprint(const std::filesystem::path& file, const VideoInfo& info,
                                              const std::string& ffmpeg, const CancelToken& cancel = {});
 
-// The stream fingerprint of `file`, whose first video stream is coded with
-// `codec` (VideoInfo::codec_name), read by `ffmpeg`: of its first `packets`
-// packets, or of all of them for 0. Nothing when it cannot be read or is
+// The stream fingerprint of `file`, whose first video stream `info`
+// describes (probe_video's: its codec, and the colour it is read with), read
+// by `ffmpeg`: of its first `packets` packets, or of all of them for 0. Nothing when it cannot be read or is
 // cancelled, and for raw pictures (rawvideo: a raw YUV file, whose scores
 // are not saved). A codec other than H.264, HEVC, VVC and AV1 has its
 // packets hashed as they are: the same in every container that keeps them
 // so.
-std::optional<std::string> stream_fingerprint(const std::filesystem::path& file, const std::string& codec,
+std::optional<std::string> stream_fingerprint(const std::filesystem::path& file, const VideoInfo& info,
                                               const std::string& ffmpeg, int packets = 0,
                                               const CancelToken& cancel = {});
 
 // What stream_fingerprint hashes, in which form: a stream recorded with
 // another (a saved comparison's identity.json) is read again, and never
-// matched. 2: the packets an edit list leaves out are left out.
-constexpr int stream_fingerprint_format = 2;
+// matched. 2: the packets an edit list leaves out are left out; 3: with the
+// colour the stream is read with.
+constexpr int stream_fingerprint_format = 3;
+
+// The stream fingerprint of a stream whose pictures hash to `digest` (the
+// command's SHA-256), `info` its video's (codec and colour as read).
+std::string stream_fingerprint_of(const std::string& digest, const VideoInfo& info, int packets);
 
 // FFmpeg's command that stream_fingerprint runs.
 std::vector<std::string> stream_fingerprint_command(const std::filesystem::path& file, const std::string& codec,

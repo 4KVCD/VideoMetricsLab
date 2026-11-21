@@ -98,6 +98,25 @@ std::vector<double> fingerprint_times(double duration, double fps) {
     return times;
 }
 
+namespace {
+
+// The video's colour as the app reads it (colour_tags_of): its transfer,
+// matrix, range, primaries and chroma siting. A range not stated is limited
+// ("tv") for YUV, as it is read: an MKV states the range its stream leaves
+// out, and a remux to MP4 can drop it.
+void add_colour(Sha256& hash, const VideoInfo& info) {
+    ColourTags colour = colour_tags_of(info);
+    if ((colour.color_range.empty() || colour.color_range == "unknown") && !info.pix_fmt.starts_with("yuvj")) {
+        colour.color_range = "tv";
+    }
+    for (const std::string* tag : {&colour.color_transfer, &colour.color_space, &colour.color_range,
+                                   &colour.color_primaries, &colour.chroma_location}) {
+        add_text(hash, *tag);
+    }
+}
+
+}  // namespace
+
 std::optional<std::string> video_fingerprint(const std::filesystem::path& file, const VideoInfo& info,
                                              const std::string& ffmpeg, const CancelToken& cancel) {
     const std::vector<double> times = fingerprint_times(info.duration, info.fps);
@@ -111,16 +130,7 @@ std::optional<std::string> video_fingerprint(const std::filesystem::path& file, 
     add_text(hash, info.pix_fmt);
     add_text(hash, python_repr(std::round(info.fps * 100.0) / 100.0));
     add_text(hash, std::to_string(static_cast<long long>(std::round(info.duration))));
-    ColourTags colour = colour_tags_of(info);
-    // A range not stated is limited ("tv") for YUV, as it is read: an MKV
-    // states the range its stream leaves out, and a remux to MP4 can drop it.
-    if ((colour.color_range.empty() || colour.color_range == "unknown") && !info.pix_fmt.starts_with("yuvj")) {
-        colour.color_range = "tv";
-    }
-    for (const std::string* tag : {&colour.color_transfer, &colour.color_space, &colour.color_range,
-                                   &colour.color_primaries, &colour.chroma_location}) {
-        add_text(hash, *tag);
-    }
+    add_colour(hash, info);
     for (const double time : times) {
         // One picture, decoded as stored (no scaling or conversion), from
         // the first video stream; -ss before -i seeks and then decodes up
@@ -191,8 +201,9 @@ std::vector<std::string> stream_fingerprint_command(const std::filesystem::path&
     return command;
 }
 
-std::optional<std::string> stream_fingerprint(const std::filesystem::path& file, const std::string& codec,
+std::optional<std::string> stream_fingerprint(const std::filesystem::path& file, const VideoInfo& info,
                                               const std::string& ffmpeg, int packets, const CancelToken& cancel) {
+    const std::string& codec = info.codec_name;
     if (ffmpeg.empty() || codec.empty()) {
         return std::nullopt;
     }
@@ -219,11 +230,19 @@ std::optional<std::string> stream_fingerprint(const std::filesystem::path& file,
     if (digest.size() != 64) {
         return std::nullopt;
     }
+    return stream_fingerprint_of(digest, info, packets);
+}
+
+std::string stream_fingerprint_of(const std::string& digest, const VideoInfo& info, int packets) {
     Sha256 hash;
     add_text(hash, "vml-stream-" + std::to_string(stream_fingerprint_format));
-    add_text(hash, name);
+    add_text(hash, ascii_lower(info.codec_name));
     add_text(hash, std::to_string(packets));
     add_text(hash, digest);
+    // The colour it is read with: a stream re-tagged (h264_metadata, or
+    // muxed into a container that states other tags) is read with another
+    // YUV->RGB matrix, which SSIMULACRA2, Butteraugli and CVVDP score.
+    add_colour(hash, info);
     return hash.hexdigest();
 }
 
@@ -236,8 +255,7 @@ stream_fingerprinter_using(std::string ffmpeg, std::string ffprobe) {
             return std::nullopt;
         }
         try {
-            return stream_fingerprint(file, probe_video(file, ffprobe, cancel).codec_name, ffmpeg, packets,
-                                      cancel);
+            return stream_fingerprint(file, probe_video(file, ffprobe, cancel), ffmpeg, packets, cancel);
         } catch (const std::exception&) {
             return std::nullopt;  // not read: the test video is only recognised by its path and sampled hash
         }
