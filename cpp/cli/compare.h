@@ -76,15 +76,22 @@ CvvdpDisplayChoice display_for(const std::vector<CvvdpDisplayChoice>& displays, 
 // separators and "." parts dropped, no separator at the end.
 std::filesystem::path python_path(const std::string& text);
 
+// `path` made absolute, from the working folder, as the window gives its
+// videos: a video's path is recorded and read again from other folders (the
+// saved scores' context.json, which the window's Saved Results reads). Links
+// are not followed and ".." is kept, as Python's path.absolute() keeps them.
+// `path` as it is where it cannot be made absolute.
+std::filesystem::path absolute_path(const std::filesystem::path& path);
+
 // A path resolved (links followed, made absolute) as text that is equal for
 // two paths of the same file, as Python compares path.resolve() with another:
 // on Windows ignoring case.
 std::string resolved(const std::filesystem::path& path);
 
-// The test videos named: each file as given, and what each pattern finds,
-// in name order; the reference and files already listed are left out of
-// what patterns find. A pattern that finds nothing is kept, to be reported
-// as a video not compared (found_nothing).
+// The test videos named, made absolute (absolute_path): each file as given,
+// and what each pattern finds, in name order; the reference and files
+// already listed are left out of what patterns find. A pattern that finds
+// nothing is kept, to be reported as a video not compared (found_nothing).
 std::vector<std::filesystem::path> expand_tests(const std::vector<std::string>& patterns,
                                                 const std::filesystem::path& reference);
 // expand_tests for any command's videos: `excluded` (if any) left out of what

@@ -937,6 +937,21 @@ std::filesystem::path python_path(const std::string& text) {
     return platform::path_from_text(whole.empty() ? "." : whole);
 }
 
+std::filesystem::path absolute_path(const std::filesystem::path& path) {
+    if (path.is_absolute()) {
+        return path;
+    }
+    // Under the working folder, as Python's path.absolute() puts it: ".."
+    // kept, which std::filesystem::absolute (GetFullPathNameW) drops, though
+    // a link before it can make it another folder. A path with a drive or a
+    // root but not both ("C:name", "\name") takes the working folder's.
+    std::error_code error;
+    std::filesystem::path absolute = path.has_root_name() || path.has_root_directory()
+                                         ? std::filesystem::absolute(path, error)
+                                         : std::filesystem::current_path(error) / path;
+    return error ? path : absolute;
+}
+
 std::vector<std::filesystem::path> expand_tests(const std::vector<std::string>& patterns,
                                                 const std::filesystem::path& reference) {
     return expand_videos(patterns, reference);
@@ -1000,6 +1015,11 @@ std::vector<std::filesystem::path> expand_videos(const std::vector<std::string>&
                 add(match, file);
             }
         }
+    }
+    // Made absolute: the paths are recorded (the saved scores' context.json,
+    // the saved bitrate, the JSON) and read again from other folders.
+    for (std::filesystem::path& path : found) {
+        path = absolute_path(path);
     }
     return found;
 }
@@ -1595,13 +1615,13 @@ Comparisons comparisons_asked(const CompareArguments& arguments, std::vector<Bat
     Comparisons comparisons;
     if (!arguments.batch) {
         auto comparison = std::make_unique<Comparison>();
-        comparison->reference = python_path(*arguments.reference);
+        comparison->reference = absolute_path(python_path(*arguments.reference));
         comparison->tests = expand_tests(arguments.tests, comparison->reference);
         comparisons.push_back(std::move(comparison));
         return comparisons;
     }
     const std::filesystem::path list = python_path(*arguments.batch);
-    groups = read_batch_file(read_whole_file(list), list.parent_path(), platform::path_text(list));
+    groups = read_batch_file(read_whole_file(list), absolute_path(list).parent_path(), platform::path_text(list));
     for (const BatchGroup& group : groups) {
         comparisons.push_back(batch_comparison(group));
     }

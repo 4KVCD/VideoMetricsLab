@@ -305,6 +305,21 @@ TEST(CommandLine, FindsTestVideosAsThePythonApp) {
     std::filesystem::remove_all(folder, error);
 }
 
+// A video named relative to the working folder is recorded from another
+// folder too (the saved scores' context.json, read by the window's Saved
+// Results), so the videos are made absolute: "..\clips\reference.mkv" was
+// saved as typed, and the window called its reference not found.
+TEST(CommandLine, VideosAreMadeAbsolute) {
+    const std::filesystem::path here = std::filesystem::current_path();
+    EXPECT_EQ(absolute_path(python_path("../clips/reference.mkv")), here / ".." / "clips" / "reference.mkv");
+    EXPECT_EQ(absolute_path(here / "a.mkv"), here / "a.mkv");
+    const std::vector<std::filesystem::path> found = expand_tests({"swap.mkv", "missing*.mkv"}, "reference.mkv");
+    ASSERT_EQ(found.size(), 2U);
+    EXPECT_EQ(found[0], here / "swap.mkv");
+    EXPECT_EQ(found[1], here / "missing*.mkv");
+    EXPECT_EQ(found_nothing(found[1]), "no file matches it");
+}
+
 // ? and [seq] stand for a character, however many bytes it takes in UTF-8.
 TEST(CommandLine, PatternsMatchWholeCharacters) {
     const test::Folder temporary;
