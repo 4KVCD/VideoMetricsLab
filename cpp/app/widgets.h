@@ -207,6 +207,14 @@ private:
     int reserved_lines_ = 0;
 };
 
+// A click on one of `tabs`' tabs leaves the focus where it was outside the
+// pages, and nowhere in them: Qt moves the focus from the page it leaves to
+// the first control of the one it shows (QStackedLayout), so once a box on a
+// page had been clicked, every tab clicked then had its first box focused
+// (Video Compare's Zoom, Videos' reference, BD-rate's Name). Switching tabs
+// from the keyboard (Ctrl+Tab) still takes the focus along, as Qt has it.
+void keep_focus_on_tab_click(QTabWidget* tabs);
+
 // A QTabWidget that lays itself out again, and repaints, only when that can
 // change something. Qt's QTabWidget lays itself out again at every
 // LayoutRequest, and repaints the whole of itself with it, so a label's text

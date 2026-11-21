@@ -508,7 +508,19 @@ void ReadoutLabel::remeasure() {
 
 // --------------------------------------------------------------- QuietTabWidget
 
+void keep_focus_on_tab_click(QTabWidget* tabs) {
+    // Before the tab changes (tabBarClicked comes first): a focus in the page
+    // shown now is cleared, so the page coming has none to take over.
+    QObject::connect(tabs->tabBar(), &QTabBar::tabBarClicked, tabs, [tabs] {
+        QWidget* focus = QApplication::focusWidget();
+        if (focus != nullptr && tabs->currentWidget() != nullptr && tabs->currentWidget()->isAncestorOf(focus)) {
+            focus->clearFocus();
+        }
+    });
+}
+
 QuietTabWidget::QuietTabWidget(QWidget* parent) : QTabWidget(parent) {
+    keep_focus_on_tab_click(this);
 #ifdef Q_OS_MACOS
     // Control+Tab reaches the window, not the focused control, and only as
     // a ShortcutOverride (no KeyPress follows): seen before either takes it.

@@ -114,6 +114,7 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
     sections = new QTabWidget;
     sections->setObjectName("settingsSections");
     sections->setDocumentMode(true);
+    keep_focus_on_tab_click(sections);  // a section clicked focuses none of its boxes
     const auto add_section = [this](const QString& name, std::initializer_list<QGroupBox*> boxes) {
         auto* page = new QWidget;
         auto* page_layout = new QVBoxLayout(page);

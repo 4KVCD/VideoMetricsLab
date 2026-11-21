@@ -137,6 +137,7 @@ if(TARGET vml_app)
         app/results_export_test.cpp
         app/saved_results_panel_test.cpp
         app/settings_panel_test.cpp
+        app/tab_focus_test.cpp
         app/table_selection_test.cpp
         app/tool_tips_test.cpp
         app/vship_names_test.cpp
