@@ -122,18 +122,28 @@ std::vector<std::string> condition_texts(const std::vector<WeakCondition>& condi
 // order. A frame sample is weak on its own frame, and the frames between
 // two weak samples of a subsample are weak too; a per-second sample (CVVDP)
 // covers its second, to the frame before the next sample's (the last one:
-// to `last_frame`, the run's last compared frame). A metric `results` does
-// not have is weak nowhere. `fps` gives the times.
+// to `last_frame`, the run's last compared frame). A condition on a metric
+// `results` has no scores for is left out (scored_rules), whether any or
+// every condition must hold: the dialog, the exports and the command line
+// apply the rest. `fps` gives the times.
 std::vector<WeakSegment> weak_segments(const MetricResultSet& results, const SegmentRules& rules, double fps,
                                        int last_frame);
 // The same over the whole of `result`: its scores, frame rate and last
 // compared frame.
 std::vector<WeakSegment> weak_segments(const ComparisonResult& result, const SegmentRules& rules);
 
+// The rules as they apply to `results`: without the conditions on a metric
+// it has no scores for, which weak_segments leaves out. `left_out`, where
+// given, gets those.
+SegmentRules scored_rules(const MetricResultSet& results, const SegmentRules& rules,
+                          std::vector<WeakCondition>* left_out = nullptr);
+
 // The segments as JSON: the rules used, then one object per segment with
 // first_frame, last_frame, start_time, end_time, frames and each metric's
-// min, max and mean.
-nlohmann::ordered_json segments_json(const std::vector<WeakSegment>& segments, const SegmentRules& rules);
+// min, max and mean. Conditions `left_out` (scored_rules') are given after
+// the rules' as "left_out", where there are any.
+nlohmann::ordered_json segments_json(const std::vector<WeakSegment>& segments, const SegmentRules& rules,
+                                     const std::vector<WeakCondition>& left_out = {});
 
 // What an export of segments by `rules` is named after, before ".json" or
 // ".csv": its conditions' metrics, each once, in the conditions' order,
@@ -157,7 +167,8 @@ struct SegmentsReportVideo {
 // Every video's segments by `rules`, as one JSON report: the rules (as
 // segments_json gives them, without ranges), then "videos", each with its
 // name, path, reference, segment_count, weak_frames (the segments' frames
-// added up) and segments (segments_json's).
+// added up) and segments (segments_json's); a video without scores for a
+// condition's metric has it in "left_out" (scored_rules'), before segments.
 nlohmann::ordered_json segments_report_json(const std::vector<SegmentsReportVideo>& videos,
                                             const SegmentRules& rules);
 

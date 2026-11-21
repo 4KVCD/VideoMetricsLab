@@ -211,6 +211,14 @@ TEST(WeakFrames, ReportHoldsEveryVideosSegments) {
               "video,reference,first_frame,last_frame,start_time,end_time,frames,vmaf_min,vmaf_max,vmaf_mean\n"
               "\"a, b\",D:/ref.mkv,3,4,0.3,0.5,2,70.0,80.0,75.0\n"
               "\"a, b\",D:/ref.mkv,12,12,1.2,1.3,1,85.0,85.0,85.0\n");
+
+    // Issue #132: every condition must hold, one on a metric no video has:
+    // it is left out (and said), not taken as weak nowhere.
+    SegmentRules every{{*parse_weak_condition("vmaf<90"), *parse_weak_condition("cvvdp<9")}};
+    every.all = true;
+    const nlohmann::ordered_json strict = segments_report_json(videos, every);
+    EXPECT_EQ(strict["videos"][0]["segment_count"], 2);
+    EXPECT_EQ(strict["videos"][0]["left_out"], nlohmann::ordered_json::array({"cvvdp<9"}));
 }
 
 // Weak segment profiles: Default from the weak_segment_* settings, then the

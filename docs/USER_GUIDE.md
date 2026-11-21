@@ -821,7 +821,9 @@ The thresholds are starting points on each metric's scale: VMAF's 0-100
 
 The weak segments exports follow the profile in use (or, from the Weak
 segments dialog, the dialog's rules), and are named after the metrics their
-conditions cover.
+conditions cover. A condition on a metric a video was not scored with is
+left out for that video, as in the dialog and on the command line, also
+when every condition must hold; the JSON lists it under `left_out`.
 
 - With **Weak segments** ticked in **Settings > Storage > Exports
   include**, **Export all videos'...** in the right-click menus saves every
