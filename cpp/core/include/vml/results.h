@@ -114,8 +114,8 @@ FrameScores frame_scores_from_results(const MetricResultSet& results);
 struct FramesShort {
     long long scored_pairs = 0;   // the frame pairs scored
     long long length_frames = 0;  // the frames the shorter video's length holds
-    std::optional<long long> source_frames;
-    std::optional<long long> test_frames;
+    std::optional<long long> source_frames{};
+    std::optional<long long> test_frames{};
 
     bool counted() const { return source_frames.has_value() && test_frames.has_value(); }
     bool in_step() const { return counted() && *source_frames == *test_frames; }
