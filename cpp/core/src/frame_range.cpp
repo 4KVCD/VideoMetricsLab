@@ -6,6 +6,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "vml/frame_sync.h"
 #include "vml/number_format.h"
 
 namespace vml {
@@ -48,22 +49,20 @@ namespace {
 
 // The first frame shown at `milliseconds` or after: the first whose time,
 // frame i's i / fps, is not before it (as first_frame_of_second for a
-// second's).
+// second's). Counted in whole numbers at the exact rate (24000/1001, which
+// `fps` is the nearest double to): in doubles, a frame exactly at a
+// millisecond (frame 120 at 5.005 s) can come out a hair before it.
 long long first_frame_at(long long milliseconds, double fps) {
     if (milliseconds <= 0 || fps <= 0) {
         return 0;
     }
-    const auto before = [milliseconds, fps](long long frame) {
-        return static_cast<double>(frame) * 1000.0 < static_cast<double>(milliseconds) * fps;
-    };
-    auto frame = static_cast<long long>(std::ceil(static_cast<double>(milliseconds) * fps / 1000.0));
-    while (frame > 0 && !before(frame - 1)) {
-        --frame;
+    const Rational rate = limit_denominator(fps);
+    if (rate.numerator <= 0 || rate.denominator <= 0) {
+        return 0;
     }
-    while (before(frame)) {
-        ++frame;
-    }
-    return frame;
+    // The least i with i * 1000 * denominator >= milliseconds * numerator.
+    const long long per_frame = 1000 * rate.denominator;
+    return (milliseconds * rate.numerator + per_frame - 1) / per_frame;
 }
 
 }  // namespace

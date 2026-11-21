@@ -5,6 +5,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+
 #include <nlohmann/json.hpp>
 
 #include "vml/analysis_request.h"
@@ -105,6 +107,23 @@ TEST(FrameRange, ARangeOfFramesIsExactAndCvvdpsTheNearestSeconds) {
     const double ntsc = 30000.0 / 1001.0;
     EXPECT_EQ(cvvdp_seconds(ComparedRange{45, 300, true}, ntsc, 900), (ComparedRange{2, 10, false}));
     EXPECT_EQ(cvvdp_seconds(ComparedRange{44, 300, true}, ntsc, 900), (ComparedRange{1, 10, false}));
+}
+
+// A frame whose time is a whole millisecond is the frame at that time, at
+// any rate: at 24000/1001, frame 120 is at exactly 5.005 s (frames 24k at
+// 1001k ms), which doubles once put a hair before it, on frame 121.
+TEST(FrameRange, AFrameAtAWholeMillisecondIsTheFrameAtThatTime) {
+    const double film = 24000.0 / 1001.0;
+    EXPECT_EQ(in_frames_at(ComparedRange{5005, 0, false, true}, film), (ComparedRange{120, 0, true}));
+    for (long long k = 1; k < 200000 / 24; ++k) {
+        ASSERT_EQ(in_frames_at(ComparedRange{1001 * k, 0, false, true}, film).start, 24 * k) << k;
+    }
+    for (const double fps : {30000.0 / 1001.0, 60000.0 / 1001.0}) {  // frames 30k, 60k at 1001k ms
+        const long long per = std::llround(fps * 1001.0 / 1000.0);
+        for (long long k = 1; k < 20000; ++k) {
+            ASSERT_EQ(in_frames_at(ComparedRange{1001 * k, 0, false, true}, fps).start, per * k) << fps << " " << k;
+        }
+    }
 }
 
 // A time to the millisecond (the Options panel's Range, hh:mm:ss.zzz) covers
