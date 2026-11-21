@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <exception>
+#include <iterator>
 #include <set>
 #include <stdexcept>
 #include <system_error>
@@ -115,17 +116,21 @@ std::vector<std::string> take_saved_segments(CompareArguments& arguments, const 
         throw std::invalid_argument(option + ": no weak segment profile has that name; the app's: " + names);
     }
     const SegmentRules& saved = profile->rules;
-    // The conditions given after it: each replaces the profile's on its
-    // metric, in its place, or is added after them.
+    // The conditions given after it: those on a metric replace all the
+    // profile's on it, in the first one's place, or are added after them.
     const std::vector<WeakCondition> given = arguments.segments;
     const auto given_on = [&given](const std::string& key) {
-        return std::find_if(given.begin(), given.end(), [&key](const WeakCondition& c) { return c.key == key; });
+        return std::any_of(given.begin(), given.end(), [&key](const WeakCondition& c) { return c.key == key; });
     };
     std::vector<std::string> left_out;
+    std::set<std::string> replaced;
     arguments.segments.clear();
     for (const WeakCondition& condition : saved.conditions) {
-        if (const auto replaced = given_on(condition.key); replaced != given.end()) {
-            arguments.segments.push_back(*replaced);
+        if (given_on(condition.key)) {
+            if (replaced.insert(condition.key).second) {
+                std::copy_if(given.begin(), given.end(), std::back_inserter(arguments.segments),
+                             [&condition](const WeakCondition& c) { return c.key == condition.key; });
+            }
         } else if (std::find(asked.begin(), asked.end(), condition.key) != asked.end()) {
             arguments.segments.push_back(condition);
         } else {

@@ -857,6 +857,9 @@ TEST(CommandLine, SegmentsChangeAProfileOrPresetFromTheCommandLine) {
     EXPECT_EQ(changed.segments_preset, "grainy-film");
     EXPECT_EQ(condition_texts(changed.segments), (std::vector<std::string>{"vmaf<80", "ssimulacra2<55", "psnr<30"}));
     EXPECT_EQ(changed.segment_min_frames, 6);  // the preset's options stay
+    // Issue #135: two on a metric the preset has, both kept in its place.
+    changed = taken({"--segments", "preset:grainy-film,vmaf<85,vmaf>20"}, {"vmaf", "ssimulacra2"});
+    EXPECT_EQ(condition_texts(changed.segments), (std::vector<std::string>{"vmaf<85", "vmaf>20", "ssimulacra2<55"}));
 
     // SSIMULACRA2 not compared: the saved profile's left out, unless
     // replaced (then the replacement is refused later, as given conditions
