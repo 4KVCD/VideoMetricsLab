@@ -3,6 +3,7 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QFont>
 #include <QFrame>
@@ -100,6 +101,11 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
       file_writes_(file_writes),
       reading_(new QFutureWatcher<std::vector<SavedComparison>>(this)) {
     connect(&file_writes_, &FileWrites::became_idle, this, [this] { on_writes_idle(); });
+    details_reading_ = new QFutureWatcher<ReadScores>(this);
+    connect(details_reading_, &QFutureWatcher<ReadScores>::finished, this, [this] {
+        details_read_ = details_reading_->result();
+        show_details();  // if it is still the one selected
+    });
     connect(reading_, &QFutureWatcher<std::vector<SavedComparison>>::finished, this,
             [this] { show_list(reading_->result()); });
     auto* layout = new QVBoxLayout(this);
@@ -206,6 +212,7 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
 
 SavedResultsPanel::~SavedResultsPanel() {
     reading_->waitForFinished();
+    details_reading_->waitForFinished();
 }
 
 std::filesystem::path SavedResultsPanel::base() const {
@@ -219,6 +226,7 @@ void SavedResultsPanel::refresh() {
 
 void SavedResultsPanel::show_list(std::vector<SavedComparison> list) {
     list_ = std::move(list);
+    details_read_ = {};  // its files may have changed since: read again
     folder_label_->setText(ntr("{count} saved comparison in {directory}", "{count} saved comparisons in {directory}",
                                static_cast<long long>(list_.size()), {{"directory", text_of(base())}}));
     const QSignalBlocker blocker(table_);
@@ -300,6 +308,31 @@ void SavedResultsPanel::show_details() {
                                  0, 0, 1, -1, Qt::AlignLeft | Qt::AlignTop);
         return;
     }
+    const SavedComparison& saved = *chosen.front();
+    details_->setTitle(app::tr("Saved scores of {name}", {{"name", qt_text(saved.label)}}));
+    if (details_read_.folder == saved.folder) {
+        fill_details(saved);
+        return;
+    }
+    // Read on a thread of their own: each file is read whole, its per-frame
+    // scores too, which for a long film takes a while. Issue #133: every
+    // row clicked was read on the window's thread.
+    details_grid_->addWidget(new QLabel(app::tr("Reading...")), 0, 0, 1, -1, Qt::AlignLeft | Qt::AlignTop);
+    details_reading_->setFuture(QtConcurrent::run([saved] {
+        ReadScores read{saved.folder, {}};
+        for (const SavedScoreFile& file : saved.scores) {
+            read.scores[file.file] = read_saved_score(file.file);
+        }
+        return read;
+    }));
+}
+
+void SavedResultsPanel::wait_for_details() {
+    details_reading_->waitForFinished();
+    QCoreApplication::sendPostedEvents(details_reading_);
+}
+
+void SavedResultsPanel::fill_details(const SavedComparison& saved) {
     // Two metrics a row: a metric's label, then its score or the list to pick
     // one from.
     int placed = 0;
@@ -310,8 +343,6 @@ void SavedResultsPanel::show_details() {
         details_grid_->addWidget(field, row, column + 1, Qt::AlignLeft);
         ++placed;
     };
-    const SavedComparison& saved = *chosen.front();
-    details_->setTitle(app::tr("Saved scores of {name}", {{"name", qt_text(saved.label)}}));
     for (const std::string& key : saved.keys()) {
         auto* combo = new QComboBox;
         int first_usable = -1;  // the score used unless another is picked
@@ -323,7 +354,10 @@ void SavedResultsPanel::show_details() {
             // The score, as Metric Graphs' table shows it, then how it was
             // made, as its file records it.
             QStringList made{time_text(file.saved)};
-            if (auto score = read_saved_score(file.file)) {
+            const auto read = details_read_.scores.find(file.file);
+            const SavedScore* score =
+                read != details_read_.scores.end() && read->second ? &*read->second : nullptr;
+            if (score != nullptr) {
                 const MetricProvenance& provenance = std::visit(
                     [](const auto& metric) -> const MetricProvenance& { return metric.provenance; }, score->metric);
                 made.prepend(score_text(key, score->metric));
@@ -392,8 +426,18 @@ std::vector<LoadedSavedResult> SavedResultsPanel::selected_results() const {
     std::vector<LoadedSavedResult> results;
     for (const SavedComparison* saved : selected()) {
         const auto picked = picked_.find(saved->folder);
+        // The scores the box has read, where it has: not read again.
+        const auto read = [this, saved](const std::filesystem::path& file) -> std::optional<SavedScore> {
+            if (details_read_.folder == saved->folder) {
+                if (const auto found = details_read_.scores.find(file); found != details_read_.scores.end()) {
+                    return found->second;
+                }
+            }
+            return read_saved_score(file);
+        };
         const std::optional<std::pair<ComparisonResult, std::string>> loaded = load_saved_comparison(
-            *saved, picked != picked_.end() ? picked->second : std::map<std::string, std::filesystem::path>{});
+            *saved, picked != picked_.end() ? picked->second : std::map<std::string, std::filesystem::path>{},
+            read);
         if (loaded) {
             results.push_back({std::make_shared<const ComparisonResult>(loaded->first), qt_text(loaded->second),
                                saved->folder});

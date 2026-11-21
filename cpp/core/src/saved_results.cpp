@@ -85,7 +85,8 @@ std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path&
 }
 
 std::optional<std::pair<ComparisonResult, std::string>> load_saved_comparison(
-    const SavedComparison& comparison, const std::map<std::string, std::filesystem::path>& chosen) {
+    const SavedComparison& comparison, const std::map<std::string, std::filesystem::path>& chosen,
+    const std::function<std::optional<SavedScore>(const std::filesystem::path&)>& read) {
     std::optional<std::pair<ComparisonResult, std::string>> loaded = saved_comparison(comparison.folder);
     if (!loaded) {
         return std::nullopt;
@@ -102,7 +103,7 @@ std::optional<std::pair<ComparisonResult, std::string>> load_saved_comparison(
             }
         }
         for (const std::filesystem::path& file : files) {
-            if (auto score = read_saved_score(file); score && !score->outdated) {
+            if (auto score = read(file); score && !score->outdated) {
                 std::visit([&loaded](auto&& metric) { loaded->first.metric_results.add(std::move(metric)); },
                            std::move(score->metric));
                 break;

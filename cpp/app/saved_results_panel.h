@@ -17,6 +17,7 @@
 
 #include "dialogs.h"
 #include "file_writes.h"
+#include "vml/metric_cache.h"
 #include "vml/results.h"
 #include "vml/saved_results.h"
 #include "vml/settings.h"
@@ -82,6 +83,8 @@ public:
     QLineEdit* filter() const { return filter_; }
     // The list a metric's saved score is picked from: none where it has one.
     QComboBox* score_choice(const std::string& key) const;
+    // Waits for the selected comparison's scores to be read, and shows them.
+    void wait_for_details();
     // The Export button's menu, made as it opens: the right-click menu's
     // export, then results, per-frame scores, graphs and weak segments each
     // on its own.
@@ -138,6 +141,16 @@ private:
     };
     std::shared_ptr<Deleting> deleting_;
     void on_writes_idle();
+    // The score files of the comparison the box shows, as read on a thread
+    // of their own (show_details): none where one can't be read. Open and
+    // the exports take them from here rather than read them again.
+    struct ReadScores {
+        std::filesystem::path folder;
+        std::map<std::filesystem::path, std::optional<SavedScore>> scores;
+    };
+    QFutureWatcher<ReadScores>* details_reading_ = nullptr;
+    ReadScores details_read_;
+    void fill_details(const SavedComparison& saved);
 };
 
 }  // namespace vml::app

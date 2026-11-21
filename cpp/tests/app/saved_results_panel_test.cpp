@@ -87,6 +87,7 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
     panel.layout()->activate();
     const int height = table.height();
     table.selectRow(0);
+    panel.wait_for_details();
     panel.layout()->activate();
     EXPECT_EQ(table.height(), height);
     EXPECT_EQ(panel.score_choice("vmaf"), nullptr);  // one score: nothing to pick
@@ -233,6 +234,7 @@ TEST(SavedResultsPanel, ScoresTheVideosTabRefusesAreMarkedAndLeftOut) {
     ASSERT_EQ(panel.table()->rowCount(), 1);
     ASSERT_TRUE(panel.table()->item(0, 3)->text().contains("XPSNR"));  // saved
     panel.table()->selectRow(0);
+    panel.wait_for_details();
     int marked = 0;
     for (const QLabel* label : panel.findChildren<QLabel*>()) {
         marked += label->text().contains("out of date") ? 1 : 0;
@@ -242,6 +244,54 @@ TEST(SavedResultsPanel, ScoresTheVideosTabRefusesAreMarkedAndLeftOut) {
     ASSERT_EQ(read.size(), 1U);
     EXPECT_TRUE(read[0].result->metric_results.frame("vmaf"));
     EXPECT_FALSE(read[0].result->metric_results.frame("xpsnr"));
+}
+
+// Issue #133: every row clicked read all of its comparison's score files in
+// full, per-frame scores too, on the window's thread, and Open read them
+// again. They are read on a thread of their own, the box saying so
+// meanwhile, and what was read is what Open takes.
+TEST(SavedResultsPanel, ScoresAreReadOffTheWindowsThreadAndKept) {
+    const test::Folder folder;
+    std::ofstream(folder / "s.mkv") << "s";
+    std::ofstream(folder / "t.mkv") << "t";
+    Settings settings;
+    settings.cache_dir = (folder / "cache").string();
+    ComparisonResult result;
+    result.source = folder / "s.mkv";
+    result.distorted = folder / "t.mkv";
+    result.fps = 24.0;
+    result.metric_results.add(frame_metric("vmaf", {95.0F, 60.0F, 95.0F}));
+    const AnalysisRequest request =
+        analysis_request(VmafOptions{}, {"vmaf"}, {}, CvvdpSettings{}, VideoInfo{}, VideoInfo{});
+    const std::filesystem::path saved =
+        store_result(folder / "cache", result.source, result.distorted, request.recipe, result, "t", request.metrics);
+    const Dialogs dialogs = standard_dialogs(nullptr);
+    FileWrites writes;
+    SavedResultsPanel panel(settings, dialogs, writes);
+    panel.show_list(list_saved_comparisons(folder / "cache"));
+    const auto texts = [&panel] {
+        QStringList found;
+        for (const QLabel* label : panel.findChildren<QLabel*>()) {
+            found << label->text();
+        }
+        return found.join(QStringLiteral(" | "));
+    };
+    panel.table()->selectRow(0);
+    EXPECT_TRUE(texts().contains("Reading..."));  // until the thread is done
+    panel.wait_for_details();
+    EXPECT_FALSE(texts().contains("Reading..."));
+    EXPECT_TRUE(texts().contains("VMAF"));
+
+    // Its files gone since: Open takes the scores read.
+    for (const auto& file : std::filesystem::directory_iterator(saved)) {
+        if (file.path().extension() == ".npz") {
+            std::filesystem::remove(file.path());
+        }
+    }
+    const std::vector<LoadedSavedResult> read = panel.selected_results();
+    ASSERT_EQ(read.size(), 1U);
+    ASSERT_TRUE(read[0].result->metric_results.frame("vmaf"));
+    EXPECT_EQ(read[0].result->metric_results.frame("vmaf")->values, (std::vector<float>{95.0F, 60.0F, 95.0F}));
 }
 
 // Issue #133: Delete kept pointers into the list across its question, whose
@@ -341,6 +391,7 @@ TEST(SavedResultsPanel, ClickingARowKeepsTheListWhereItWas) {
     const int last = table.rowAt(table.viewport()->height() - 2);
     ASSERT_GE(last, 0);
     QTest::mouseClick(table.viewport(), Qt::LeftButton, {}, table.visualItemRect(table.item(last, 0)).center());
+    panel.wait_for_details();
     panel.layout()->activate();
     QCoreApplication::processEvents();
     EXPECT_NE(panel.score_choice("vmaf"), nullptr);
@@ -366,6 +417,7 @@ TEST(SavedResultsPanel, AFewScoresSitAtTheTopOfTheBox) {
     panel.resize(900, 700);
     panel.show();
     panel.table()->selectRow(0);
+    panel.wait_for_details();
     panel.layout()->activate();
     QCoreApplication::processEvents();
     QComboBox* combo = panel.score_choice("vmaf");
