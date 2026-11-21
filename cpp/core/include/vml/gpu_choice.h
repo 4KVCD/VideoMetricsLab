@@ -27,10 +27,17 @@ std::optional<std::string> chosen_gpu();
 // nothing or an empty name.
 void choose_gpu(const std::optional<std::string>& name);
 
+// The text that chooses each of `names` (GPUs as a driver or DirectX names
+// them, in its order), as Settings saves it: its name, or, where more than one
+// GPU has that name (two of one card), the name and its place among them,
+// from 1: "NVIDIA GeForce RTX 3070 #2".
+std::vector<std::string> gpu_choice_texts(const std::vector<std::string>& names);
+
 // Which of `names` (GPUs as a driver or DirectX names them) `chosen` can
-// name: the first that is `chosen` itself, ignoring case; else every one that
-// has it in its name ("radeon" for "AMD Radeon(TM) Graphics"). None for an
-// empty `chosen`.
+// name, ignoring case: the first that is `chosen` itself; else, for a name
+// and a place ("... #2", gpu_choice_texts), that one of the GPUs of that
+// name, or none where there are fewer; else every one that has it in its name
+// ("radeon" for "AMD Radeon(TM) Graphics"). None for an empty `chosen`.
 std::vector<std::size_t> gpus_named(const std::vector<std::string>& names, std::string_view chosen);
 
 // The one of `names` that `chosen` names (gpus_named), or nothing: also when a
@@ -39,8 +46,9 @@ std::vector<std::size_t> gpus_named(const std::vector<std::string>& names, std::
 // of each would not be the same GPU.
 std::optional<std::size_t> chosen_among(const std::vector<std::string>& names, std::string_view chosen);
 
-// Makes the GPU chosen in this process (VML_GPU) the whole name of the one
-// DirectX lists that it names (chosen_among), once, as the app and the
+// Makes the GPU chosen in this process (VML_GPU) the choice text
+// (gpu_choice_texts) of the one DirectX lists that it names (chosen_among),
+// once, as the app and the
 // command line start: a part of a name ("radeon") is then matched in every
 // API's list as that GPU's name. Left as it is where it names no GPU
 // DirectX lists, or more than one (each API then finds none: the CPU), and

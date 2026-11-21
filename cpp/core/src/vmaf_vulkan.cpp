@@ -187,16 +187,13 @@ std::optional<VulkanDevice> chosen_vulkan_device(const std::vector<VulkanDevice>
         return named != found.end() && named->usable ? std::optional(*named) : std::nullopt;
     }
     if (const std::optional<std::string> chosen = chosen_gpu()) {
-        std::vector<VulkanDevice> usable;
+        // Every GPU listed, usable or not: "... #2" is the second Vulkan lists of that name.
         std::vector<std::string> names;
         for (const VulkanDevice& device : found) {
-            if (device.usable) {
-                usable.push_back(device);
-                names.push_back(device.name);
-            }
+            names.push_back(device.name);
         }
-        if (const std::optional<std::size_t> index = chosen_among(names, *chosen)) {
-            return usable[*index];
+        if (const std::optional<std::size_t> index = chosen_among(names, *chosen); index && found[*index].usable) {
+            return found[*index];
         }
         // Not another GPU: the one chosen may be kept free of it (the CPU
         // calculates VMAF, as Vship's metrics are when their GPU cannot).

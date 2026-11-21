@@ -95,5 +95,31 @@ TEST(VmafVulkan, APartOfTwoGpusNamesNamesNeither) {
     EXPECT_FALSE(device.has_value()) << device->name;
 }
 
+// Of two GPUs of one name (two RTX 3070s), the second can be chosen: the
+// choice saved is the name and its place among them, which every API matches
+// in its own list. A name alone is the first of that name, as it was.
+TEST(VmafVulkan, TheSecondOfTwoGpusOfOneNameCanBeChosen) {
+    const std::vector<std::string> directx{"NVIDIA GeForce RTX 3070", "AMD Radeon(TM) Graphics",
+                                           "NVIDIA GeForce RTX 3070"};
+    EXPECT_EQ(gpu_choice_texts(directx), (std::vector<std::string>{"NVIDIA GeForce RTX 3070 #1",
+                                                                   "AMD Radeon(TM) Graphics",
+                                                                   "NVIDIA GeForce RTX 3070 #2"}));
+    EXPECT_EQ(chosen_among(directx, "nvidia geforce rtx 3070 #2"), 2u);
+    EXPECT_EQ(chosen_among(directx, "NVIDIA GeForce RTX 3070 #1"), 0u);
+    EXPECT_EQ(chosen_among(directx, "NVIDIA GeForce RTX 3070"), 0u);
+    EXPECT_EQ(chosen_among(directx, "NVIDIA GeForce RTX 3070 #3"), std::nullopt);
+    EXPECT_EQ(chosen_among(directx, "rtx 3070"), std::nullopt);  // a part of two names
+    EXPECT_EQ(chosen_among({"NVIDIA GeForce RTX 3070"}, "NVIDIA GeForce RTX 3070 #1"), 0u);
+
+    const std::vector<VulkanDevice> found{{0, "NVIDIA GeForce RTX 3070", 0x10DE, 2, true, true},
+                                          {1, "NVIDIA GeForce RTX 3070", 0x10DE, 2, true, true}};
+    const std::optional<std::string> before = chosen_gpu();
+    choose_gpu("NVIDIA GeForce RTX 3070 #2");
+    const std::optional<VulkanDevice> device = chosen_vulkan_device(found);
+    choose_gpu(before);
+    ASSERT_TRUE(device.has_value());
+    EXPECT_EQ(device->index, 1);
+}
+
 }  // namespace
 }  // namespace vml
