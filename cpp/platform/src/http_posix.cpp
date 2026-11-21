@@ -45,8 +45,7 @@ HttpResponse http_post(std::string_view url, std::string_view content_type, std:
     ProcessOptions options;
     options.inherited_descriptors = {ends[0]};  // curl's now; closed here once it has started
     try {
-        const ProcessOutput output = run_program({"curl", "-K", "/dev/fd/" + std::to_string(ends[0])},
-                                                 timeout + std::chrono::seconds(5), options);
+        const ProcessOutput output = run_program(curl_command(ends[0]), timeout + std::chrono::seconds(5), options);
         // The status is the output's last line (curl_config's write-out).
         const std::string& text = output.standard_output;
         const std::size_t line = text.rfind('\n');

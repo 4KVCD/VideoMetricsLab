@@ -139,5 +139,12 @@ TEST(CliNotify, CurlReadsTheRequestAsSent) {
     EXPECT_NE(config.find("write-out = \"\\n%{http_code}\"\n"), std::string::npos);
 }
 
+// curl reads only that request: -q, as its first argument (the only place
+// curl takes it), keeps the user's ~/.curlrc (`insecure`, `location`,
+// `verbose`) out of it.
+TEST(CliNotify, CurlReadsNoCurlrc) {
+    EXPECT_EQ(platform::curl_command(7), (std::vector<std::string>{"curl", "-q", "-K", "/dev/fd/7"}));
+}
+
 }  // namespace
 }  // namespace vml::cli

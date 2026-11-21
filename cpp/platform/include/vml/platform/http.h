@@ -7,6 +7,7 @@
 #include <chrono>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace vml::platform {
 
@@ -28,5 +29,13 @@ HttpResponse http_post(std::string_view url, std::string_view content_type, std:
 // It asks for the status on the last line of the output.
 std::string curl_config(std::string_view url, std::string_view content_type, std::string_view body,
                         std::chrono::seconds timeout);
+
+// The command that runs curl with that configuration, read from the
+// descriptor `config` (curl -K /dev/fd/N). -q, first (curl reads it only
+// there), keeps the user's ~/.curlrc out: a line there such as `insecure`
+// (no TLS checks for the keys), `location` (the POST followed elsewhere) or
+// `verbose` (the webhook's token on standard error) would apply to this
+// request too.
+std::vector<std::string> curl_command(int config);
 
 }  // namespace vml::platform
