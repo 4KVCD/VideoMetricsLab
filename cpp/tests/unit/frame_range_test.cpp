@@ -5,6 +5,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+
 #include <nlohmann/json.hpp>
 
 #include "vml/analysis_request.h"
@@ -107,6 +109,23 @@ TEST(FrameRange, ARangeOfFramesIsExactAndCvvdpsTheNearestSeconds) {
     EXPECT_EQ(cvvdp_seconds(ComparedRange{44, 300, true}, ntsc, 900), (ComparedRange{1, 10, false}));
 }
 
+// A frame whose time is a whole millisecond is the frame at that time, at
+// any rate: at 24000/1001, frame 120 is at exactly 5.005 s (frames 24k at
+// 1001k ms), which doubles once put a hair before it, on frame 121.
+TEST(FrameRange, AFrameAtAWholeMillisecondIsTheFrameAtThatTime) {
+    const double film = 24000.0 / 1001.0;
+    EXPECT_EQ(in_frames_at(ComparedRange{5005, 0, false, true}, film), (ComparedRange{120, 0, true}));
+    for (long long k = 1; k < 200000 / 24; ++k) {
+        ASSERT_EQ(in_frames_at(ComparedRange{1001 * k, 0, false, true}, film).start, 24 * k) << k;
+    }
+    for (const double fps : {30000.0 / 1001.0, 60000.0 / 1001.0}) {  // frames 30k, 60k at 1001k ms
+        const long long per = std::llround(fps * 1001.0 / 1000.0);
+        for (long long k = 1; k < 20000; ++k) {
+            ASSERT_EQ(in_frames_at(ComparedRange{1001 * k, 0, false, true}, fps).start, per * k) << fps << " " << k;
+        }
+    }
+}
+
 // A time to the millisecond (the Options panel's Range, hh:mm:ss.zzz) covers
 // the frames whose times are in it, as a range of whole seconds does; CVVDP
 // scores the nearest whole seconds, as of a range of frames.
@@ -119,11 +138,16 @@ TEST(FrameRange, ARangeOfMillisecondsIsTheFramesInIt) {
     EXPECT_EQ(compared_frames(ComparedRange{2510, 0, false, true}, 24.0),
               std::pair(61LL, std::optional<long long>()));
     // At 24000/1001 fps, frame 1438 is at 59.9766 s, 1439 at 60.0183 s and
-    // 1440 at 60.06 s: 59.977 to 60.018 s has no frame.
+    // 1440 at 60.06 s, shown as 59.977, 60.018 and 60.060 s (Metric Graphs):
+    // a time names the frame within half a millisecond of it, so 59.977 is
+    // frame 1438 and 60.018 frame 1439, and 59.978 to 60.018 s has no frame.
     const double film = 24000.0 / 1001.0;
     EXPECT_EQ(compared_frames(ComparedRange{60000, 60020, false, true}, film), std::pair(1439LL, std::optional(1440LL)));
     EXPECT_EQ(compared_frames(ComparedRange{59976, 60019, false, true}, film), std::pair(1438LL, std::optional(1440LL)));
-    EXPECT_EQ(compared_frames(ComparedRange{59977, 60018, false, true}, film), std::pair(1439LL, std::optional(1439LL)));
+    EXPECT_EQ(compared_frames(ComparedRange{59977, 60018, false, true}, film), std::pair(1438LL, std::optional(1439LL)));
+    EXPECT_EQ(compared_frames(ComparedRange{59978, 60018, false, true}, film), std::pair(1439LL, std::optional(1439LL)));
+    // At 24 fps frame 100 is at 4.1667 s, shown as 4.167: typed, it is frame 100.
+    EXPECT_EQ(compared_frames(ComparedRange{4167, 0, false, true}, 24.0), std::pair(100LL, std::optional<long long>()));
     // Whole seconds in milliseconds are the seconds' frames.
     for (const double fps : {24.0, film, 25.0, 30000.0 / 1001.0, 50.0, 60000.0 / 1001.0}) {
         EXPECT_EQ(compared_frames(ComparedRange{7000, 93000, false, true}, fps),
@@ -210,7 +234,7 @@ TEST(FrameRange, SwitchingTheRangeUnitKeepsTheRange) {
         }
     }
     // To the end stays to the end; the whole videos stay whole; a unit's own range is itself.
-    EXPECT_EQ(range_in_unit(ComparedRange{100, 0, true}, false, 24.0), (ComparedRange{4166, 0, false, true}));
+    EXPECT_EQ(range_in_unit(ComparedRange{100, 0, true}, false, 24.0), (ComparedRange{4167, 0, false, true}));
     EXPECT_EQ(range_in_unit(ComparedRange{}, true, film), (ComparedRange{0, 0, true}));
     EXPECT_EQ(range_in_unit(ComparedRange{0, 0, true}, false, film), ComparedRange{});
     EXPECT_EQ(range_in_unit(ComparedRange{2500, 4000, false, true}, false, 0.0),

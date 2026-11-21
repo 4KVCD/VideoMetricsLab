@@ -18,9 +18,10 @@ struct ComparedRange {
     long long start = 0;
     long long end = 0;
     bool in_frames = false;
-    // Milliseconds: the frames whose times (frame i's: i / fps) are in
-    // [start, end), as a range of whole seconds counts them. Never set for
-    // whole seconds, which keep the identity they have always had.
+    // Milliseconds: the frames whose times (frame i's: i / fps), to the
+    // nearest millisecond as Metric Graphs shows them, are in [start, end).
+    // Never set for whole seconds, which keep the identity they have always
+    // had.
     bool in_milliseconds = false;
 
     bool whole() const { return start <= 0 && end <= 0; }

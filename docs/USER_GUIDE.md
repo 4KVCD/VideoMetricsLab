@@ -16,7 +16,9 @@
    **Range** compares only a part of the videos, from one time to another, to
    the millisecond (hh:mm:ss.zzz; an end of 00:00:00.000 compares to the
    videos' end). It compares the frames whose times are from the first time up
-   to, not including, the second (frame *n* is at *n* / frame rate). CVVDP
+   to, not including, the second (frame *n* is at *n* / frame rate), each time
+   to the nearest millisecond as Metric Graphs shows it, so a time copied from
+   the graph is that frame's. CVVDP
    scores whole seconds: a range that isn't whole seconds is rounded to the
    nearest seconds for it. Switching between **Time** and **Frames** keeps
    the range: it is shown as the same frames in the other unit (at the
