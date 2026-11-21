@@ -43,6 +43,9 @@
   "its address isn't an http or https URL": "jego adres nie jest adresem URL http ani https",
   "its address isn't an https URL": "jego adres nie jest adresem URL https",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "Adres {service} nie jest akceptowany: sprawdź go w Ustawienia > Powiadomienia.",
+  "A frame is weak only where every condition holds on it.": "Klatka jest słaba tylko tam, gdzie spełniony jest każdy warunek.",
+  "Weak by": "Słaba przez",
+  "{condition}: no frame": "{condition}: żadnej klatki",
   "Export the difference": "Eksportuj różnicę",
   "Export the difference as CSV...": "Eksportuj różnicę jako CSV...",
   "Exporting the difference to {path}...": "Eksportowanie różnicy do {path}...",
@@ -1204,6 +1207,11 @@
   "Recording {name}'s stream, so that a remux of it keeps its scores…": "Zapisywanie strumienia {name}, by jego przemuksowanie zachowało wyniki…"
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["Serie krótsze niż {count} klatka są pomijane.", "Serie krótsze niż {count} klatki są pomijane.", "Serie krótsze niż {count} klatek są pomijane."],
+  "{condition}: {count} frame": ["{condition}: {count} klatka", "{condition}: {count} klatki", "{condition}: {count} klatek"],
+  "{condition}: {count} frame, in a segment": ["{condition}: {count} klatka, w segmencie", "{condition}: {count} klatki, wszystkie w segmentach", "{condition}: {count} klatek, wszystkie w segmentach"],
+  "{condition}: {count} frame, in no segment": ["{condition}: {count} klatka, w żadnym segmencie", "{condition}: {count} klatki, w żadnym segmencie", "{condition}: {count} klatek, w żadnym segmencie"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}: {count} klatka, w tym {in} w segmentach", "{condition}: {count} klatki, w tym {in} w segmentach", "{condition}: {count} klatek, w tym {in} w segmentach"],
   "about {count} day": [
    "około {count} dnia",
    "około {count} dni",

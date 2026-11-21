@@ -43,6 +43,9 @@
   "its address isn't an http or https URL": "его адрес — не URL http или https",
   "its address isn't an https URL": "его адрес — не URL https",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "Адрес {service} не подходит: проверьте его в Настройки > Уведомления.",
+  "A frame is weak only where every condition holds on it.": "Кадр слаб только там, где выполняется каждое условие.",
+  "Weak by": "Слабый по",
+  "{condition}: no frame": "{condition}: ни одного кадра",
   "Export the difference": "Экспорт разницы",
   "Export the difference as CSV...": "Экспорт разницы в CSV...",
   "Exporting the difference to {path}...": "Экспорт разницы в {path}...",
@@ -1204,6 +1207,11 @@
   "Recording {name}'s stream, so that a remux of it keeps its scores…": "Запись потока {name}, чтобы его перепакованная версия сохранила оценки…"
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["Серии короче {count} кадра не учитываются.", "Серии короче {count} кадров не учитываются.", "Серии короче {count} кадров не учитываются."],
+  "{condition}: {count} frame": ["{condition}: {count} кадр", "{condition}: {count} кадра", "{condition}: {count} кадров"],
+  "{condition}: {count} frame, in a segment": ["{condition}: {count} кадр, в сегменте", "{condition}: {count} кадра, все в сегментах", "{condition}: {count} кадров, все в сегментах"],
+  "{condition}: {count} frame, in no segment": ["{condition}: {count} кадр, ни в одном сегменте", "{condition}: {count} кадра, ни в одном сегменте", "{condition}: {count} кадров, ни в одном сегменте"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}: {count} кадр, из них {in} в сегментах", "{condition}: {count} кадра, из них {in} в сегментах", "{condition}: {count} кадров, из них {in} в сегментах"],
   "about {count} day": [
    "около {count} дня",
    "около {count} дней",

@@ -43,6 +43,9 @@
   "its address isn't an http or https URL": "عنوانها ليس عنوان URL من نوع http أو https",
   "its address isn't an https URL": "عنوانها ليس عنوان URL من نوع https",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "عنوان {service} ليس عنوانًا تقبله: تحقق منه في الإعدادات > الإشعارات.",
+  "A frame is weak only where every condition holds on it.": "لا يكون الإطار ضعيفًا إلا حيث يتحقق كل شرط.",
+  "Weak by": "ضعيف بسبب",
+  "{condition}: no frame": "{condition}: لا إطار",
   "Export the difference": "تصدير الفرق",
   "Export the difference as CSV...": "تصدير الفرق بصيغة CSV...",
   "Exporting the difference to {path}...": "جارٍ تصدير الفرق إلى {path}...",
@@ -1204,6 +1207,11 @@
   "Recording {name}'s stream, so that a remux of it keeps its scores…": "يجري تسجيل تدفق {name}، كي تحتفظ أي إعادة تغليف له بدرجاته…"
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["تُستبعد السلاسل الأقصر من {count} إطار.", "تُستبعد السلاسل الأقصر من {count} إطار.", "تُستبعد السلاسل الأقصر من {count} إطار.", "تُستبعد السلاسل الأقصر من {count} إطار.", "تُستبعد السلاسل الأقصر من {count} إطار.", "تُستبعد السلاسل الأقصر من {count} إطار."],
+  "{condition}: {count} frame": ["{condition}: {count} إطار", "{condition}: إطار واحد ({count})", "{condition}: إطاران ({count})", "{condition}: {count} إطارات", "{condition}: {count} إطارًا", "{condition}: {count} إطار"],
+  "{condition}: {count} frame, in a segment": ["{condition}: {count} إطار، كلها في مقاطع", "{condition}: إطار واحد ({count})، في مقطع", "{condition}: إطاران ({count})، كلاهما في مقاطع", "{condition}: {count} إطارات، كلها في مقاطع", "{condition}: {count} إطارًا، كلها في مقاطع", "{condition}: {count} إطار، كلها في مقاطع"],
+  "{condition}: {count} frame, in no segment": ["{condition}: {count} إطار، في لا مقطع", "{condition}: إطار واحد ({count})، في لا مقطع", "{condition}: إطاران ({count})، في لا مقطع", "{condition}: {count} إطارات، في لا مقطع", "{condition}: {count} إطارًا، في لا مقطع", "{condition}: {count} إطار، في لا مقطع"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}: {count} إطار، منها {in} في مقاطع", "{condition}: إطار واحد ({count})، منه {in} في مقاطع", "{condition}: إطاران ({count})، منهما {in} في مقاطع", "{condition}: {count} إطارات، منها {in} في مقاطع", "{condition}: {count} إطارًا، منها {in} في مقاطع", "{condition}: {count} إطار، منها {in} في مقاطع"],
   "about {count} day": [
    "نحو {count} يوم",
    "نحو {count} يوم",

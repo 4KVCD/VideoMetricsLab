@@ -38,6 +38,9 @@
   "its address isn't an http or https URL": "주소가 http 또는 https URL이 아닙니다",
   "its address isn't an https URL": "주소가 https URL이 아닙니다",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "{service}에서 받지 않는 주소입니다: 설정 > 알림에서 확인하세요.",
+  "A frame is weak only where every condition holds on it.": "프레임은 모든 조건을 만족하는 곳에서만 약한 것으로 봅니다.",
+  "Weak by": "약한 원인",
+  "{condition}: no frame": "{condition}: 프레임 없음",
   "Export the difference": "차이 내보내기",
   "Export the difference as CSV...": "차이를 CSV로 내보내기...",
   "Exporting the difference to {path}...": "차이를 {path}(으)로 내보내는 중...",
@@ -1204,6 +1207,11 @@
   "Recording {name}'s stream, so that a remux of it keeps its scores…": "{name}의 스트림을 기록하는 중(다시 먹싱해도 점수를 유지하도록)…"
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["{count}프레임보다 짧은 구간은 제외됩니다."],
+  "{condition}: {count} frame": ["{condition}: {count}프레임"],
+  "{condition}: {count} frame, in a segment": ["{condition}: {count}프레임, 모두 세그먼트 안"],
+  "{condition}: {count} frame, in no segment": ["{condition}: {count}프레임, 어느 세그먼트에도 없음"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}: {count}프레임, 그중 {in}프레임이 세그먼트 안"],
   "about {count} day": [
    "약 {count}일"
   ],

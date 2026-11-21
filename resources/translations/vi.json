@@ -43,6 +43,9 @@
   "its address isn't an http or https URL": "địa chỉ của nó không phải URL http hay https",
   "its address isn't an https URL": "địa chỉ của nó không phải URL https",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "Địa chỉ của {service} không phải địa chỉ nó nhận: hãy kiểm tra trong Cài đặt > Thông báo.",
+  "A frame is weak only where every condition holds on it.": "Một khung hình chỉ yếu ở nơi mọi điều kiện đều đúng.",
+  "Weak by": "Yếu do",
+  "{condition}: no frame": "{condition}: không có khung hình nào",
   "Export the difference": "Xuất chênh lệch",
   "Export the difference as CSV...": "Xuất chênh lệch dưới dạng CSV...",
   "Exporting the difference to {path}...": "Đang xuất chênh lệch vào {path}...",
@@ -1204,6 +1207,11 @@
   "Recording {name}'s stream, so that a remux of it keeps its scores…": "Đang ghi luồng của {name}, để bản remux của nó giữ được điểm…"
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["Các chuỗi ngắn hơn {count} khung hình bị bỏ qua."],
+  "{condition}: {count} frame": ["{condition}: {count} khung hình"],
+  "{condition}: {count} frame, in a segment": ["{condition}: {count} khung hình, đều nằm trong phân đoạn"],
+  "{condition}: {count} frame, in no segment": ["{condition}: {count} khung hình, không nằm trong phân đoạn nào"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}: {count} khung hình, {in} trong số đó nằm trong phân đoạn"],
   "about {count} day": [
    "khoảng {count} ngày"
   ],

@@ -43,6 +43,9 @@
   "its address isn't an http or https URL": "його адреса — не URL http або https",
   "its address isn't an https URL": "його адреса — не URL https",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "Адреса {service} не підходить: перевірте її в Налаштування > Сповіщення.",
+  "A frame is weak only where every condition holds on it.": "Кадр слабкий лише там, де виконується кожна умова.",
+  "Weak by": "Слабкий через",
+  "{condition}: no frame": "{condition}: жодного кадру",
   "Export the difference": "Експорт різниці",
   "Export the difference as CSV...": "Експорт різниці в CSV...",
   "Exporting the difference to {path}...": "Експорт різниці в {path}...",
@@ -1204,6 +1207,11 @@
   "Recording {name}'s stream, so that a remux of it keeps its scores…": "Запис потоку {name}, щоб його перепакована версія зберегла оцінки…"
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["Серії, коротші за {count} кадр, пропускаються.", "Серії, коротші за {count} кадри, пропускаються.", "Серії, коротші за {count} кадрів, пропускаються."],
+  "{condition}: {count} frame": ["{condition}: {count} кадр", "{condition}: {count} кадри", "{condition}: {count} кадрів"],
+  "{condition}: {count} frame, in a segment": ["{condition}: {count} кадр, у сегменті", "{condition}: {count} кадри, усі в сегментах", "{condition}: {count} кадрів, усі в сегментах"],
+  "{condition}: {count} frame, in no segment": ["{condition}: {count} кадр, у жодному сегменті", "{condition}: {count} кадри, у жодному сегменті", "{condition}: {count} кадрів, у жодному сегменті"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}: {count} кадр, з них {in} у сегментах", "{condition}: {count} кадри, з них {in} у сегментах", "{condition}: {count} кадрів, з них {in} у сегментах"],
   "about {count} day": [
    "близько {count} дня",
    "близько {count} днів",

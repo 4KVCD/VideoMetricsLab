@@ -43,6 +43,9 @@
   "its address isn't an http or https URL": "su dirección no es una URL http o https",
   "its address isn't an https URL": "su dirección no es una URL https",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "La dirección de {service} no es una que acepte: revísela en Configuración > Notificaciones.",
+  "A frame is weak only where every condition holds on it.": "Un fotograma solo es débil donde se cumplen todas las condiciones.",
+  "Weak by": "Débil por",
+  "{condition}: no frame": "{condition}: ningún fotograma",
   "Export the difference": "Exportar la diferencia",
   "Export the difference as CSV...": "Exportar la diferencia como CSV...",
   "Exporting the difference to {path}...": "Exportando la diferencia a {path}...",
@@ -1204,6 +1207,11 @@
   "Recording {name}'s stream, so that a remux of it keeps its scores…": "Registrando el flujo de {name}, para que un remux suyo conserve sus puntuaciones…"
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["Se omiten las series de menos de {count} fotograma.", "Se omiten las series de menos de {count} fotogramas."],
+  "{condition}: {count} frame": ["{condition}: {count} fotograma", "{condition}: {count} fotogramas"],
+  "{condition}: {count} frame, in a segment": ["{condition}: {count} fotograma, en un segmento", "{condition}: {count} fotogramas, todos en segmentos"],
+  "{condition}: {count} frame, in no segment": ["{condition}: {count} fotograma, en ningún segmento", "{condition}: {count} fotogramas, en ningún segmento"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}: {count} fotograma, {in} de ellos en segmentos", "{condition}: {count} fotogramas, {in} de ellos en segmentos"],
   "about {count} day": [
    "unos {count} día",
    "unos {count} días"

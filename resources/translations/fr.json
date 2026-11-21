@@ -43,6 +43,9 @@
   "its address isn't an http or https URL": "son adresse n'est pas une URL http ou https",
   "its address isn't an https URL": "son adresse n'est pas une URL https",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "L'adresse de {service} n'est pas acceptée : vérifiez-la dans Paramètres > Notifications.",
+  "A frame is weak only where every condition holds on it.": "Une image n'est faible que là où chaque condition est remplie.",
+  "Weak by": "Faible par",
+  "{condition}: no frame": "{condition} : aucune image",
   "Export the difference": "Exporter la différence",
   "Export the difference as CSV...": "Exporter la différence en CSV...",
   "Exporting the difference to {path}...": "Exportation de la différence vers {path}...",
@@ -1204,6 +1207,11 @@
   "Recording {name}'s stream, so that a remux of it keeps its scores…": "Enregistrement du flux de {name}, pour qu'un remux de celle-ci garde ses scores…"
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["Les séries de moins de {count} image sont écartées.", "Les séries de moins de {count} images sont écartées."],
+  "{condition}: {count} frame": ["{condition} : {count} image", "{condition} : {count} images"],
+  "{condition}: {count} frame, in a segment": ["{condition} : {count} image, dans un segment", "{condition} : {count} images, toutes dans des segments"],
+  "{condition}: {count} frame, in no segment": ["{condition} : {count} image, dans aucun segment", "{condition} : {count} images, dans aucun segment"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition} : {count} image, dont {in} dans des segments", "{condition} : {count} images, dont {in} dans des segments"],
   "about {count} day": [
    "environ {count} jour",
    "environ {count} jours"

@@ -150,6 +150,8 @@ private:
     // Save to profile enabled, and the note beside it, as the rules shown
     // differ from the profile's or not.
     void show_saved_state();
+    // Each condition's frames, and how many are in the segments listed.
+    void show_condition_counts();
     void fill_table();
     enum class ExportKind { json, csv };
     void export_segments(ExportKind kind);
@@ -174,6 +176,8 @@ private:
     QComboBox* profile_combo_ = nullptr;
     QPushButton* preset_button_ = nullptr;
     QLabel* summary_ = nullptr;
+    // Each condition's frames, and why some are in no segment.
+    QLabel* conditions_note_ = nullptr;
     QTableWidget* table_ = nullptr;
 };
 

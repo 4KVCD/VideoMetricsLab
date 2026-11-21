@@ -43,6 +43,9 @@
   "its address isn't an http or https URL": "het adres is geen http- of https-URL",
   "its address isn't an https URL": "het adres is geen https-URL",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "Het adres van {service} wordt niet aangenomen: controleer het bij Instellingen > Meldingen.",
+  "A frame is weak only where every condition holds on it.": "Een frame is alleen zwak waar elke voorwaarde geldt.",
+  "Weak by": "Zwak door",
+  "{condition}: no frame": "{condition}: geen frame",
   "Export the difference": "Verschil exporteren",
   "Export the difference as CSV...": "Verschil exporteren als CSV...",
   "Exporting the difference to {path}...": "Verschil wordt geëxporteerd naar {path}...",
@@ -1204,6 +1207,11 @@
   "Recording {name}'s stream, so that a remux of it keeps its scores…": "De stream van {name} wordt vastgelegd, zodat een remux ervan de scores houdt…"
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["Reeksen korter dan {count} frame worden weggelaten.", "Reeksen korter dan {count} frames worden weggelaten."],
+  "{condition}: {count} frame": ["{condition}: {count} frame", "{condition}: {count} frames"],
+  "{condition}: {count} frame, in a segment": ["{condition}: {count} frame, in een segment", "{condition}: {count} frames, alle in segmenten"],
+  "{condition}: {count} frame, in no segment": ["{condition}: {count} frame, in geen segment", "{condition}: {count} frames, in geen segment"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}: {count} frame, waarvan {in} in segmenten", "{condition}: {count} frames, waarvan {in} in segmenten"],
   "about {count} day": [
    "ongeveer {count} dag",
    "ongeveer {count} dagen"

@@ -43,6 +43,9 @@
   "its address isn't an http or https URL": "ihre Adresse ist keine http- oder https-URL",
   "its address isn't an https URL": "ihre Adresse ist keine https-URL",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "Die Adresse von {service} wird nicht angenommen: Prüfen Sie sie unter Einstellungen > Benachrichtigungen.",
+  "A frame is weak only where every condition holds on it.": "Ein Frame ist nur dort schwach, wo jede Bedingung zutrifft.",
+  "Weak by": "Schwach durch",
+  "{condition}: no frame": "{condition}: kein Frame",
   "Export the difference": "Differenz exportieren",
   "Export the difference as CSV...": "Differenz als CSV exportieren...",
   "Exporting the difference to {path}...": "Differenz wird nach {path} exportiert...",
@@ -1204,6 +1207,11 @@
   "Recording {name}'s stream, so that a remux of it keeps its scores…": "Der Stream von {name} wird erfasst, damit ein Remux davon seine Werte behält…"
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["Läufe kürzer als {count} Frame werden ausgelassen.", "Läufe kürzer als {count} Frames werden ausgelassen."],
+  "{condition}: {count} frame": ["{condition}: {count} Frame", "{condition}: {count} Frames"],
+  "{condition}: {count} frame, in a segment": ["{condition}: {count} Frame, in einem Segment", "{condition}: {count} Frames, alle in Segmenten"],
+  "{condition}: {count} frame, in no segment": ["{condition}: {count} Frame, in keinem Segment", "{condition}: {count} Frames, in keinem Segment"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}: {count} Frame, davon {in} in Segmenten", "{condition}: {count} Frames, davon {in} in Segmenten"],
   "about {count} day": [
    "etwa {count} Tag",
    "etwa {count} Tage"

@@ -43,6 +43,9 @@
   "its address isn't an http or https URL": "adresi bir http veya https URL’si değil",
   "its address isn't an https URL": "adresi bir https URL’si değil",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "{service} adresi kabul ettiği bir adres değil: Ayarlar > Bildirimler bölümünde kontrol edin.",
+  "A frame is weak only where every condition holds on it.": "Bir kare yalnızca her koşulun sağlandığı yerde zayıftır.",
+  "Weak by": "Zayıflatan",
+  "{condition}: no frame": "{condition}: hiç kare yok",
   "Export the difference": "Farkı dışa aktar",
   "Export the difference as CSV...": "Farkı CSV olarak dışa aktar...",
   "Exporting the difference to {path}...": "Fark şuraya aktarılıyor: {path}...",
@@ -1204,6 +1207,11 @@
   "Recording {name}'s stream, so that a remux of it keeps its scores…": "{name} akışı kaydediliyor, böylece yeniden muxlanmış hâli puanlarını korur…"
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["{count} kareden kısa diziler dışarıda bırakılır.", "{count} kareden kısa diziler dışarıda bırakılır."],
+  "{condition}: {count} frame": ["{condition}: {count} kare", "{condition}: {count} kare"],
+  "{condition}: {count} frame, in a segment": ["{condition}: {count} kare, bir segmentte", "{condition}: {count} kare, tümü segmentlerde"],
+  "{condition}: {count} frame, in no segment": ["{condition}: {count} kare, hiçbir segmentte değil", "{condition}: {count} kare, hiçbir segmentte değil"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}: {count} kare, {in} tanesi segmentlerde", "{condition}: {count} kare, {in} tanesi segmentlerde"],
   "about {count} day": [
    "yaklaşık {count} gün",
    "yaklaşık {count} gün"

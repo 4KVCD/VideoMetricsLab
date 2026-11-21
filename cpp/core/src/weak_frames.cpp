@@ -285,8 +285,12 @@ std::vector<WeakSegment> weak_segments(const MetricResultSet& results, const Seg
         return {};
     }
     std::vector<char> weak;
+    // Each condition's own frames, kept to say which made each segment weak
+    // (none for a condition on a metric without scores).
+    std::vector<std::vector<char>> masks(rules.conditions.size());
     for (const auto& [condition, samples] : scored) {
         const std::vector<char> mask = weak_mask(samples, *condition, begin, last_frame);
+        masks[static_cast<std::size_t>(condition - rules.conditions.data())] = mask;
         if (weak.empty()) {
             weak = mask;
             continue;
@@ -305,7 +309,7 @@ std::vector<WeakSegment> weak_segments(const MetricResultSet& results, const Seg
         if (!segments.empty() && frame - segments.back().last_frame - 1 <= rules.merge_frames) {
             segments.back().last_frame = frame;
         } else {
-            segments.push_back(WeakSegment{frame, frame, 0.0, 0.0, {}});
+            segments.push_back(WeakSegment{frame, frame, 0.0, 0.0, {}, {}});
         }
     }
     std::erase_if(segments, [&rules](const WeakSegment& segment) { return segment.frames() < rules.min_frames; });
@@ -319,12 +323,45 @@ std::vector<WeakSegment> weak_segments(const MetricResultSet& results, const Seg
             segment.metrics.push_back(samples ? segment_metric(*samples, key, segment)
                                               : SegmentMetric{key, std::nullopt, std::nullopt, std::nullopt});
         }
+        for (const std::vector<char>& mask : masks) {
+            long long frames = 0;
+            for (int frame = segment.first_frame; !mask.empty() && frame <= segment.last_frame; ++frame) {
+                frames += mask[static_cast<std::size_t>(frame - begin)] && inside(frame, rules.ranges) ? 1 : 0;
+            }
+            segment.condition_frames.push_back(frames);
+        }
     }
     return segments;
 }
 
 std::vector<WeakSegment> weak_segments(const ComparisonResult& result, const SegmentRules& rules) {
     return weak_segments(result.metric_results, rules, result.fps, last_compared_frame(result));
+}
+
+std::vector<ConditionCount> condition_counts(const MetricResultSet& results, const SegmentRules& rules,
+                                             int last_frame, const std::vector<WeakSegment>& segments) {
+    std::vector<ConditionCount> counts(rules.conditions.size());
+    for (std::size_t c = 0; c < rules.conditions.size(); ++c) {
+        const std::optional<ScoreSamples> samples = score_samples(results, rules.conditions[c].key);
+        if (samples && !samples->frame.empty() && samples->frame.front() <= last_frame) {
+            const int begin = samples->frame.front();
+            const std::vector<char> mask = weak_mask(*samples, rules.conditions[c], begin, last_frame);
+            for (int frame = begin; frame <= last_frame; ++frame) {
+                counts[c].holds += mask[static_cast<std::size_t>(frame - begin)] && inside(frame, rules.ranges) ? 1 : 0;
+            }
+        }
+        for (const WeakSegment& segment : segments) {
+            if (c < segment.condition_frames.size()) {
+                counts[c].in_segments += segment.condition_frames[c];
+            }
+        }
+    }
+    return counts;
+}
+
+std::vector<ConditionCount> condition_counts(const ComparisonResult& result, const SegmentRules& rules,
+                                             const std::vector<WeakSegment>& segments) {
+    return condition_counts(result.metric_results, rules, last_compared_frame(result), segments);
 }
 
 Json segments_json(const std::vector<WeakSegment>& segments, const SegmentRules& rules,

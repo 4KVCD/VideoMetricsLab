@@ -43,6 +43,9 @@
   "its address isn't an http or https URL": "ที่อยู่ไม่ใช่ URL แบบ http หรือ https",
   "its address isn't an https URL": "ที่อยู่ไม่ใช่ URL แบบ https",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "{service} ไม่รับที่อยู่นี้: ตรวจสอบใน การตั้งค่า > การแจ้งเตือน",
+  "A frame is weak only where every condition holds on it.": "เฟรมจะอ่อนก็ต่อเมื่อทุกเงื่อนไขเป็นจริงเท่านั้น",
+  "Weak by": "อ่อนเพราะ",
+  "{condition}: no frame": "{condition}: ไม่มีเฟรม",
   "Export the difference": "ส่งออกผลต่าง",
   "Export the difference as CSV...": "ส่งออกผลต่างเป็น CSV...",
   "Exporting the difference to {path}...": "กำลังส่งออกผลต่างไปที่ {path}...",
@@ -1204,6 +1207,11 @@
   "Recording {name}'s stream, so that a remux of it keeps its scores…": "กำลังบันทึกสตรีมของ {name} เพื่อให้การรีมักซ์ยังคงใช้คะแนนเดิม…"
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["ช่วงที่สั้นกว่า {count} เฟรมจะถูกตัดออก"],
+  "{condition}: {count} frame": ["{condition}: {count} เฟรม"],
+  "{condition}: {count} frame, in a segment": ["{condition}: {count} เฟรม อยู่ในเซกเมนต์ทั้งหมด"],
+  "{condition}: {count} frame, in no segment": ["{condition}: {count} เฟรม ไม่อยู่ในเซกเมนต์ใดเลย"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}: {count} เฟรม อยู่ในเซกเมนต์ {in} เฟรม"],
   "about {count} day": [
    "ประมาณ {count} วัน"
   ],

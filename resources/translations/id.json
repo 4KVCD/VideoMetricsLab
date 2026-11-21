@@ -43,6 +43,9 @@
   "its address isn't an http or https URL": "alamatnya bukan URL http atau https",
   "its address isn't an https URL": "alamatnya bukan URL https",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "Alamat {service} bukan alamat yang diterimanya: periksa di Pengaturan > Notifikasi.",
+  "A frame is weak only where every condition holds on it.": "Sebuah frame hanya lemah di tempat setiap kondisi terpenuhi.",
+  "Weak by": "Lemah karena",
+  "{condition}: no frame": "{condition}: tidak ada frame",
   "Export the difference": "Ekspor selisih",
   "Export the difference as CSV...": "Ekspor selisih sebagai CSV...",
   "Exporting the difference to {path}...": "Mengekspor selisih ke {path}...",
@@ -1204,6 +1207,11 @@
   "Recording {name}'s stream, so that a remux of it keeps its scores…": "Merekam stream {name}, agar remux-nya tetap memakai skornya…"
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["Rangkaian yang lebih pendek dari {count} frame tidak disertakan."],
+  "{condition}: {count} frame": ["{condition}: {count} frame"],
+  "{condition}: {count} frame, in a segment": ["{condition}: {count} frame, semuanya dalam segmen"],
+  "{condition}: {count} frame, in no segment": ["{condition}: {count} frame, tidak dalam segmen mana pun"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}: {count} frame, {in} di antaranya dalam segmen"],
   "about {count} day": [
    "sekitar {count} hari"
   ],

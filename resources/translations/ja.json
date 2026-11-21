@@ -38,6 +38,9 @@
   "its address isn't an http or https URL": "アドレスが http または https の URL ではありません",
   "its address isn't an https URL": "アドレスが https の URL ではありません",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "{service} のアドレスが受け付けられない形式です：設定 > 通知 で確認してください。",
+  "A frame is weak only where every condition holds on it.": "フレームはすべての条件を満たす場合にのみ弱いとみなされます。",
+  "Weak by": "弱い要因",
+  "{condition}: no frame": "{condition}：フレームなし",
   "Export the difference": "差分をエクスポート",
   "Export the difference as CSV...": "差分を CSV でエクスポート...",
   "Exporting the difference to {path}...": "差分を {path} にエクスポートしています...",
@@ -1204,6 +1207,11 @@
   "Recording {name}'s stream, so that a remux of it keeps its scores…": "{name} のストリームを記録しています（再多重化してもスコアを引き継ぐため）…"
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["{count} フレーム未満の連続は除外されます。"],
+  "{condition}: {count} frame": ["{condition}：{count} フレーム"],
+  "{condition}: {count} frame, in a segment": ["{condition}：{count} フレーム、すべてセグメント内"],
+  "{condition}: {count} frame, in no segment": ["{condition}：{count} フレーム、どのセグメントにもなし"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}：{count} フレーム、うち {in} がセグメント内"],
   "about {count} day": [
    "約 {count} 日"
   ],

@@ -38,6 +38,9 @@
   "its address isn't an http or https URL": "其位址不是 http 或 https URL",
   "its address isn't an https URL": "其位址不是 https URL",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "{service} 不接受該位址：請在「設定 > 通知」中檢查。",
+  "A frame is weak only where every condition holds on it.": "只有每個條件都成立的影格才算弱影格。",
+  "Weak by": "弱於",
+  "{condition}: no frame": "{condition}：沒有影格",
   "Export the difference": "匯出差值",
   "Export the difference as CSV...": "將差值匯出為 CSV...",
   "Exporting the difference to {path}...": "正在將差值匯出到 {path}...",
@@ -1204,6 +1207,11 @@
   "Recording {name}'s stream, so that a remux of it keeps its scores…": "正在記錄 {name} 的串流，以便其重新封裝版本保留分數…"
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["短於 {count} 影格的連續段不計入。"],
+  "{condition}: {count} frame": ["{condition}：{count} 影格"],
+  "{condition}: {count} frame, in a segment": ["{condition}：{count} 影格，全部在片段中"],
+  "{condition}: {count} frame, in no segment": ["{condition}：{count} 影格，不在任何片段中"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}：{count} 影格，其中 {in} 影格在片段中"],
   "about {count} day": [
    "約 {count} 天"
   ],

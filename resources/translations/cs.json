@@ -43,6 +43,9 @@
   "its address isn't an http or https URL": "jeho adresa není URL http ani https",
   "its address isn't an https URL": "jeho adresa není URL https",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "Adresu {service} služba nepřijímá: zkontrolujte ji v Nastavení > Oznámení.",
+  "A frame is weak only where every condition holds on it.": "Snímek je slabý jen tam, kde platí každá podmínka.",
+  "Weak by": "Slabý kvůli",
+  "{condition}: no frame": "{condition}: žádný snímek",
   "Export the difference": "Exportovat rozdíl",
   "Export the difference as CSV...": "Exportovat rozdíl jako CSV...",
   "Exporting the difference to {path}...": "Exportuje se rozdíl do {path}...",
@@ -1204,6 +1207,11 @@
   "Recording {name}'s stream, so that a remux of it keeps its scores…": "Zaznamenává se stream videa {name}, aby si jeho přebalení ponechalo skóre…"
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["Úseky kratší než {count} snímek se vynechávají.", "Úseky kratší než {count} snímky se vynechávají.", "Úseky kratší než {count} snímků se vynechávají."],
+  "{condition}: {count} frame": ["{condition}: {count} snímek", "{condition}: {count} snímky", "{condition}: {count} snímků"],
+  "{condition}: {count} frame, in a segment": ["{condition}: {count} snímek, v segmentu", "{condition}: {count} snímky, všechny v segmentech", "{condition}: {count} snímků, všechny v segmentech"],
+  "{condition}: {count} frame, in no segment": ["{condition}: {count} snímek, v žádném segmentu", "{condition}: {count} snímky, v žádném segmentu", "{condition}: {count} snímků, v žádném segmentu"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}: {count} snímek, z toho {in} v segmentech", "{condition}: {count} snímky, z toho {in} v segmentech", "{condition}: {count} snímků, z toho {in} v segmentech"],
   "about {count} day": [
    "asi {count} den",
    "asi {count} dny",

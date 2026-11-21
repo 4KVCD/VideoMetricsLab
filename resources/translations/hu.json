@@ -43,6 +43,9 @@
   "its address isn't an http or https URL": "a címe nem http vagy https URL",
   "its address isn't an https URL": "a címe nem https URL",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "A(z) {service} címe nem olyan, amit elfogad: ellenőrizze a Beállítások > Értesítések lapon.",
+  "A frame is weak only where every condition holds on it.": "Egy képkocka csak ott gyenge, ahol minden feltétel teljesül.",
+  "Weak by": "Gyenge ettől",
+  "{condition}: no frame": "{condition}: egy képkocka sem",
   "Export the difference": "Különbség exportálása",
   "Export the difference as CSV...": "Különbség exportálása CSV-ként...",
   "Exporting the difference to {path}...": "A különbség exportálása ide: {path}...",
@@ -1204,6 +1207,11 @@
   "Recording {name}'s stream, so that a remux of it keeps its scores…": "A(z) {name} streamjének rögzítése, hogy újramuxolása megtartsa a pontszámait…"
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["A(z) {count} képkockánál rövidebb szakaszok kimaradnak.", "A(z) {count} képkockánál rövidebb szakaszok kimaradnak."],
+  "{condition}: {count} frame": ["{condition}: {count} képkocka", "{condition}: {count} képkocka"],
+  "{condition}: {count} frame, in a segment": ["{condition}: {count} képkocka, egy szakaszban", "{condition}: {count} képkocka, mind szakaszokban"],
+  "{condition}: {count} frame, in no segment": ["{condition}: {count} képkocka, egy szakaszban sem", "{condition}: {count} képkocka, egy szakaszban sem"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}: {count} képkocka, ebből {in} szakaszokban", "{condition}: {count} képkocka, ebből {in} szakaszokban"],
   "about {count} day": [
    "kb. {count} nap",
    "kb. {count} nap"
