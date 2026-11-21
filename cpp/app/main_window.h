@@ -527,6 +527,9 @@ private:
         bool automatic = false;
         // Each file written into `destination`, a folder, rather than a .zip.
         bool loose = false;
+        // Saved comparisons' files drawn as their bitrate was saved
+        // (saved_bitrates).
+        SavedBitrates saved_bitrate;
     };
     // The scored test videos of the reference the Videos tab compares with,
     // in its order; a row's, when it is one of them.
@@ -561,6 +564,7 @@ private:
         bool graphs = false;
         bool several = false;
         QString name;
+        SavedBitrates saved_bitrate;  // PendingBundle's
     };
     ExportPlan export_plan(std::vector<BundleVideo> videos, const std::filesystem::path& reference,
                            const std::function<nlohmann::ordered_json()>& document, const SegmentRules& rules,
@@ -574,9 +578,10 @@ private:
     void export_all_videos();
     // The Saved results tab's: the comparisons selected.
     void export_saved_contents(const std::vector<LoadedSavedResult>& results);
-    // The saved bitrate of a selected comparison's file no longer there,
-    // for its graphs (the Saved results tab's exports).
-    void add_saved_bitrates(const std::vector<LoadedSavedResult>& results);
+    // The bitrate the Saved results tab's exports draw for the selected
+    // comparisons' files that are not those their scores were saved for
+    // (gone, or another file there now): as it was saved with them.
+    SavedBitrates saved_bitrates(const std::vector<LoadedSavedResult>& results) const;
     // Settings > Storage > After each run, for a video just scored: what
     // Exports include, next to it or in the export folder.
     void export_automatically(const RowData& row_data);

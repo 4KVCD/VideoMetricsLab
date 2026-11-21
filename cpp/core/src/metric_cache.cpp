@@ -1978,6 +1978,18 @@ ClearedResults clear_saved_results(const std::filesystem::path& base, bool keep_
     return cleared;
 }
 
+bool saved_file_at(const std::filesystem::path& folder, bool reference, const std::filesystem::path& path) {
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(path, error)) {
+        return false;
+    }
+    const std::optional<nlohmann::json> identity = read_json(folder / "identity.json");
+    const std::string recorded =
+        identity && identity->is_object() ? text_at(*identity, reference ? "source" : "distorted", "path")
+                                          : std::string();
+    return recorded.empty() || recorded == file_identity(path);
+}
+
 std::string saved_content_hash(const std::filesystem::path& folder, bool reference) {
     const std::optional<nlohmann::json> identity = read_json(folder / "identity.json");
     return identity && identity->is_object() ? text_at(*identity, reference ? "source" : "distorted", "sampled")

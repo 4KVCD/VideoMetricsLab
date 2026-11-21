@@ -692,8 +692,9 @@ videos again:
     scores as JSON](RESULTS_JSON.md#per-frame-scores-as-json));
   - **Graphs as ZIP...**: the graphs Export all graphs saves, for
     comparisons of one reference. The bitrate graphs of a video no longer on
-    disk come from its saved bitrate, where the Bitrate Viewer or the
-    command line read it before it went;
+    disk, or replaced since by another file of the same name (a new
+    encode), come from its saved bitrate, where the Bitrate Viewer or the
+    command line read it before;
   - **Weak segments**: **Export weak segments...** saves the weak segments
     report by the rules ticked below it: the profile in use, any profile or
     a preset. The first entry's weak segments use the same rules. Weak

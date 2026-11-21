@@ -714,6 +714,13 @@ TEST(MetricCache, ClearingKeepsTheComparisonsWhoseReferenceIsGone) {
     EXPECT_TRUE(reference_where_saved(saved["here"]));
     EXPECT_FALSE(reference_where_saved(saved["gone"]));
     EXPECT_FALSE(reference_where_saved(saved["replaced"]));
+    // The file at a path is the one saved for (#134): not where another is
+    // there now, t.mp4 written again since "here" was saved, say.
+    EXPECT_TRUE(saved_file_at(saved["here"], true, folder / "here.mp4"));
+    EXPECT_FALSE(saved_file_at(saved["here"], false, folder / "t.mp4"));
+    EXPECT_TRUE(saved_file_at(saved["replaced"], false, folder / "t.mp4"));
+    EXPECT_FALSE(saved_file_at(saved["gone"], true, folder / "gone.mp4"));
+    EXPECT_FALSE(saved_file_at(saved["replaced"], true, folder / "replaced.mp4"));
     for (const SavedComparison& listed : list_saved_comparisons(cache)) {
         EXPECT_EQ(listed.reference_found, listed.label == "here") << listed.label;
     }
