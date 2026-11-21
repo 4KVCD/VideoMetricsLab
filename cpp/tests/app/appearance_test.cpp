@@ -265,6 +265,11 @@ TEST_F(Appearance, EveryRoleInTheWindowIsOneModernStyles) {
         ASSERT_NE(bitrate_card, nullptr) << name;
         EXPECT_EQ(bitrate_card->property("vmlRole").toString(), "card") << name;
     }
+
+    // Metric Graphs': the metrics' pills, chart and readout one card.
+    const auto* graph_card = window_->findChild<QWidget*>("graphCard");
+    ASSERT_NE(graph_card, nullptr);
+    EXPECT_EQ(graph_card->property("vmlRole").toString(), "card");
 }
 
 TEST_F(Appearance, ModernLight) {

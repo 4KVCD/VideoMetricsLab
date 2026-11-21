@@ -1247,7 +1247,13 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     // divider between them can be dragged.
     auto* middle = new QSplitter(Qt::Horizontal);
     middle->setChildrenCollapsible(false);
-    middle->addWidget(tabs_);
+    // VML Modern: the metrics' pills, the chart and its readout one card,
+    // as the stats are; Classic: the tabs as they were (theme::container).
+    QBoxLayout* graph_layout = nullptr;
+    QWidget* graph_card = theme::container("card", false, &graph_layout);
+    graph_card->setObjectName("graphCard");
+    graph_layout->addWidget(tabs_);
+    middle->addWidget(graph_card);
     worst_panel_ = new WorstFramesPanel;
     worst_panel_->hide();
     connect(worst_panel_, &WorstFramesPanel::frame_clicked, this, [this](int frame) { on_frame_requested(frame); });
