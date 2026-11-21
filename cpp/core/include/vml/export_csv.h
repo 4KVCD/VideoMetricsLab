@@ -30,6 +30,13 @@ std::string per_frame_csv(const ComparisonResult& result);
 // export_csv does.
 std::string per_frame_json(const ComparisonResult& result);
 void export_per_frame_json(const ComparisonResult& result, const std::filesystem::path& path);
+// per_frame_csv's and per_frame_json's text, each where wanted (else empty),
+// made from one table: a 2-hour video's takes a few hundred milliseconds.
+struct PerFrameTexts {
+    std::string csv;
+    std::string json;
+};
+PerFrameTexts per_frame_texts(const ComparisonResult& result, bool csv, bool json);
 
 // Writes `first` minus `second` as CSV, paired as vml/difference.h pairs
 // them: export_csv's rows, times and header for `first`, each cell the

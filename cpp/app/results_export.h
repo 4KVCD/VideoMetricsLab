@@ -86,17 +86,30 @@ std::vector<std::filesystem::path> write_loose_export(const std::filesystem::pat
 // CSV text as the command line writes it: CR LF on Windows.
 std::string text_lines(const std::string& text);
 
+// A video's per-frame scores in an export ("<stem>.json", "<stem>.csv"),
+// made only as they are written (made_files), on the file-write queue: a
+// 2-hour video's take most of a second, which the window's thread would
+// wait, and an export cancelled in its save dialog too.
+struct FrameFiles {
+    std::shared_ptr<const ComparisonResult> result;
+    std::string stem;
+    bool json = false;
+    bool csv = false;
+};
+// `files`, then each of `frames`' files, made now.
+std::vector<BundleFile> made_files(std::vector<BundleFile> files, const std::vector<FrameFiles>& frames);
+
 // The files of an export besides its graphs, as Settings' Exports include
 // (exported_items) and its formats say, named after `name`: the results
-// (`document`, made only when they're included), each video's per-frame
-// scores ("<video> - frames", named as its graphs are), and the weak segments by
-// `rules` of the one video, or (`several`) a report of all of `videos`. Weak
-// segments need a condition in `rules`: without one there are none, and
-// `segments_skipped` is set.
+// (`document`, made only when they're included), and the weak segments by
+// `rules` of the one video, or (`several`) a report of all of `videos`; each
+// video's per-frame scores ("<video> - frames", named as its graphs are) in
+// `frames`, made later. Weak segments need a condition in `rules`: without
+// one there are none, and `segments_skipped` is set.
 std::vector<BundleFile> export_files(const Settings& settings, const std::vector<BundleVideo>& videos,
                                      const std::filesystem::path& reference,
                                      const std::function<nlohmann::ordered_json()>& document,
                                      const SegmentRules& rules, bool several, const QString& name,
-                                     bool& segments_skipped);
+                                     std::vector<FrameFiles>& frames, bool& segments_skipped);
 
 }  // namespace vml::app

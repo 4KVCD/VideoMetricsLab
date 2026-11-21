@@ -534,6 +534,8 @@ private:
         // Saved comparisons' files drawn as their bitrate was saved
         // (saved_bitrates).
         SavedBitrates saved_bitrate;
+        // Per-frame scores, made with the files (made_files).
+        std::vector<FrameFiles> frames;
     };
     // The scored test videos of the reference the Videos tab compares with,
     // in its order; a row's, when it is one of them.
@@ -565,6 +567,7 @@ private:
         std::vector<BundleVideo> videos;
         std::filesystem::path reference;
         std::vector<BundleFile> files;
+        std::vector<FrameFiles> frames;  // made as they are written
         bool graphs = false;
         bool several = false;
         QString name;
