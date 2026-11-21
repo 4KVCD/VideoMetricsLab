@@ -253,18 +253,32 @@ WeakCondition default_weak_condition(const MetricDefinition& metric) {
                                                                 : WeakCondition{key, '<', 9.0};
 }
 
+SegmentRules scored_rules(const MetricResultSet& results, const SegmentRules& rules,
+                          std::vector<WeakCondition>* left_out) {
+    SegmentRules scored = rules;
+    scored.conditions.clear();
+    for (const WeakCondition& condition : rules.conditions) {
+        const std::optional<ScoreSamples> samples = score_samples(results, condition.key);
+        if (samples && !samples->frame.empty()) {
+            scored.conditions.push_back(condition);
+        } else if (left_out != nullptr) {
+            left_out->push_back(condition);
+        }
+    }
+    return scored;
+}
+
 std::vector<WeakSegment> weak_segments(const MetricResultSet& results, const SegmentRules& rules, double fps,
                                        int last_frame) {
     // The frame axis: from the first scored frame to the run's last.
     std::vector<std::pair<const WeakCondition*, ScoreSamples>> scored;
     int begin = last_frame;
     for (const WeakCondition& condition : rules.conditions) {
+        // One on a metric with no scores is left out, as scored_rules does.
         if (const std::optional<ScoreSamples> samples = score_samples(results, condition.key);
             samples && !samples->frame.empty()) {
             scored.emplace_back(&condition, *samples);
             begin = std::min(begin, samples->frame.front());
-        } else if (rules.all) {
-            return {};  // a metric with no scores is weak nowhere
         }
     }
     if (scored.empty() || begin > last_frame) {
@@ -313,7 +327,8 @@ std::vector<WeakSegment> weak_segments(const ComparisonResult& result, const Seg
     return weak_segments(result.metric_results, rules, result.fps, last_compared_frame(result));
 }
 
-Json segments_json(const std::vector<WeakSegment>& segments, const SegmentRules& rules) {
+Json segments_json(const std::vector<WeakSegment>& segments, const SegmentRules& rules,
+                   const std::vector<WeakCondition>& left_out) {
     Json conditions = Json::array();
     for (const WeakCondition& condition : rules.conditions) {
         conditions.push_back(condition.text());
@@ -337,12 +352,16 @@ Json segments_json(const std::vector<WeakSegment>& segments, const SegmentRules&
                             {"frames", segment.frames()},
                             {"metrics", std::move(metrics)}});
     }
-    return Json{{"conditions", std::move(conditions)},
-                {"combine", rules.all ? "all" : "any"},
-                {"min_frames", rules.min_frames},
-                {"merge_frames", rules.merge_frames},
-                {"ranges", std::move(ranges)},
-                {"segments", std::move(list)}};
+    Json json{{"conditions", std::move(conditions)}};
+    if (!left_out.empty()) {
+        json["left_out"] = condition_texts(left_out);
+    }
+    json["combine"] = rules.all ? "all" : "any";
+    json["min_frames"] = rules.min_frames;
+    json["merge_frames"] = rules.merge_frames;
+    json["ranges"] = std::move(ranges);
+    json["segments"] = std::move(list);
+    return json;
 }
 
 std::string segments_file_suffix(const SegmentRules& rules) {
@@ -384,12 +403,18 @@ Json segments_report_json(const std::vector<SegmentsReportVideo>& videos, const 
         for (const WeakSegment& segment : segments) {
             frames += segment.frames();
         }
-        list.push_back(Json{{"name", video.name},
-                            {"path", video.path},
-                            {"reference", video.reference},
-                            {"segment_count", segments.size()},
-                            {"weak_frames", frames},
-                            {"segments", segments_json(segments, without_ranges).at("segments")}});
+        Json entry{{"name", video.name},
+                   {"path", video.path},
+                   {"reference", video.reference},
+                   {"segment_count", segments.size()},
+                   {"weak_frames", frames}};
+        std::vector<WeakCondition> left_out;
+        scored_rules(video.result->metric_results, without_ranges, &left_out);
+        if (!left_out.empty()) {
+            entry["left_out"] = condition_texts(left_out);
+        }
+        entry["segments"] = segments_json(segments, without_ranges).at("segments");
+        list.push_back(std::move(entry));
     }
     report["videos"] = std::move(list);
     return report;

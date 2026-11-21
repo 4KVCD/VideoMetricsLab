@@ -273,15 +273,22 @@ std::vector<BundleFile> export_files(const Settings& settings, const std::vector
             files.push_back({stem + ".csv", text_lines(segments_report_csv(report, rules))});
         }
     } else {
+        // By the conditions on the video's metrics, as the Weak segments
+        // dialog and the command line take them; the rest are said.
         const BundleVideo& video = videos.front();
-        const std::vector<WeakSegment> segments = weak_segments(*video.result, rules);
+        std::vector<WeakCondition> left_out;
+        const SegmentRules used = scored_rules(video.result->metric_results, rules, &left_out);
+        const std::vector<WeakSegment> segments = weak_segments(*video.result, used);
+        // Named after the metrics used; after the profile's where it has none.
         const std::string stem =
-            suggested_file_name(video.label, "." + qt_text(segments_file_suffix(rules))).toStdString();
+            suggested_file_name(video.label,
+                                "." + qt_text(segments_file_suffix(used.conditions.empty() ? rules : used)))
+                .toStdString();
         if (json) {
-            files.push_back({stem + ".json", python_json_dumps(segments_json(segments, rules)) + "\n"});
+            files.push_back({stem + ".json", python_json_dumps(segments_json(segments, used, left_out)) + "\n"});
         }
         if (csv) {
-            files.push_back({stem + ".csv", text_lines(segments_csv(segments, rules))});
+            files.push_back({stem + ".csv", text_lines(segments_csv(segments, used))});
         }
     }
     return files;

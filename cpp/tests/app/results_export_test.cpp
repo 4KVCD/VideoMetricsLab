@@ -189,5 +189,37 @@ TEST(ResultsExport, AnExportIntoAFolderReplacesNoneOfAnothersFiles) {
     EXPECT_FALSE(std::filesystem::exists(folder / "movie - frames.csv"));
 }
 
+// Issue #132: a profile where every condition must hold, one on a metric the
+// video was not scored with. The export leaves that one out, as the Weak
+// segments dialog and vml-cli --segments saved do, and says so; it found no
+// segment at all before.
+TEST(ResultsExport, WeakSegmentsLeaveOutAMetricNotScored) {
+    auto result = std::make_shared<ComparisonResult>();
+    FrameMetricResult vmaf;
+    vmaf.key = "vmaf";
+    vmaf.frame = {0, 1, 2};
+    vmaf.time = {0.0, 1 / 24.0, 2 / 24.0};
+    vmaf.values = {95.0F, 60.0F, 95.0F};
+    result->metric_results.add(vmaf);
+    Settings settings;
+    settings.export_items = {"weak_segments"};
+    settings.export_formats = {"json"};
+    SegmentRules rules{{{"vmaf", '<', 90.0}, {"cvvdp", '<', 9.0}}};
+    rules.all = true;
+    bool skipped = true;
+    std::vector<FrameFiles> frames;
+    const std::vector<BundleFile> files =
+        export_files(settings, {{result, QStringLiteral("a"), "a.mkv"}}, "r.mkv",
+                     [] { return nlohmann::ordered_json::object(); }, rules, false, QStringLiteral("a"), frames, skipped);
+    EXPECT_FALSE(skipped);
+    ASSERT_EQ(files.size(), 1U);
+    EXPECT_EQ(files[0].first, "a.vmaf.segments.json");  // as the dialog names it
+    const nlohmann::ordered_json json = nlohmann::ordered_json::parse(files[0].second);
+    EXPECT_EQ(json["conditions"], nlohmann::ordered_json::array({"vmaf<90"}));
+    EXPECT_EQ(json["left_out"], nlohmann::ordered_json::array({"cvvdp<9"}));
+    ASSERT_EQ(json["segments"].size(), 1U);
+    EXPECT_EQ(json["segments"][0]["first_frame"], 1);
+}
+
 }  // namespace
 }  // namespace vml::app

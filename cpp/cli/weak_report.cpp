@@ -256,16 +256,21 @@ bool write_segment_files(std::vector<TestVideo>& videos, const SegmentRules& rul
         if (!video.result) {
             continue;
         }
-        const std::vector<WeakSegment> segments = weak_segments(*video.result, rules);
+        // By the conditions on metrics it has scores for, as the window's
+        // exports: the rest are said in the JSON.
+        std::vector<WeakCondition> left_out;
+        const SegmentRules used = scored_rules(video.result->metric_results, rules, &left_out);
+        const std::vector<WeakSegment> segments = weak_segments(*video.result, used);
         // Named after the conditions' metrics, as the window names them.
-        const std::string suffix = "." + segments_file_suffix(rules);
+        const std::string suffix = "." + segments_file_suffix(used.conditions.empty() ? rules : used);
         const std::vector<std::filesystem::path> paths =
             unique_output_paths(folder, video.file_stem(), {suffix + ".json", suffix + ".csv"}, reserved);
         try {
-            if (const std::optional<std::string> wrong = write_json_file(paths[0], segments_json(segments, rules))) {
+            if (const std::optional<std::string> wrong =
+                    write_json_file(paths[0], segments_json(segments, used, left_out))) {
                 throw std::runtime_error(*wrong);
             }
-            write_text(paths[1], text_file(segments_csv(segments, rules)));
+            write_text(paths[1], text_file(segments_csv(segments, used)));
         } catch (const std::exception& failure) {
             failed(video.name() + ": the segment files could not be written (" + failure.what() + ")");
             written = false;
