@@ -478,7 +478,9 @@ std::optional<GpuVendor> vendor_from(const std::string& text) {
 // goes on.
 // The probe in a process of its own. A crash on one GPU's check (its driver's
 // fault) leaves the others: the probe runs again without the GPU it said it
-// was checking, which the answer's reason then names.
+// was checking, which the answer's reason then names. A pass found so is
+// saved for the first request too (gpu_check_key), so the next start does
+// not crash on that GPU again.
 std::pair<std::optional<VshipDevice>, std::string> probe_isolated(VshipBuild build, bool& failed,
                                                                   const CancelToken& cancel) {
     const std::string what = std::string(vship_build_label(build)) + "'s GPU probe";
