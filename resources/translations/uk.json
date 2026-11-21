@@ -1,5 +1,6 @@
 {
  "strings": {
+  "This video has {test:,} frames for a length that should have {test_length:,}, and the reference has {source:,} for {source_length:,}. The one with fewer frames is missing more of its length than the other, so it lacks frames the other has. From the first such frame, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "У цьому відео {test:,} кадрів за тривалості, на яку має припадати {test_length:,}, а в еталоні {source:,} за {source_length:,}. Відео з меншою кількістю кадрів бракує відносно його тривалості більше кадрів, ніж іншому, тож у ньому немає кадрів, які є в іншому. Починаючи з першого такого кадру, кожен кадр порівнюється не з тим кадром еталона, тож усі оцінки після цього місця хибні. Зазвичай так буває, коли під час кодування кадри дублюються або викидаються. Кодування зі змінною частотою кадрів, як у джерела, цьому запобігає.",
   "Export the difference": "Експорт різниці",
   "Export the difference as CSV...": "Експорт різниці в CSV...",
   "Exporting the difference to {path}...": "Експорт різниці в {path}...",

@@ -643,12 +643,13 @@ TEST(JobRunner, AResultShortOfTheVideosLengthsSaysTheirFramesMayBeOutOfStep) {
         };
     };
 
-    EXPECT_EQ(finished(job_scoring(short_frames), nullptr), (FramesShort{235, 240}));
+    const FramesShort uncounted{235, 240, std::nullopt, std::nullopt, 240, 240};
+    EXPECT_EQ(finished(job_scoring(short_frames), nullptr), uncounted);
     EXPECT_EQ(finished(job_scoring(short_frames), counts(235, 240)),
-              (FramesShort{235, 240, 235, 240}));  // out of step
+              (FramesShort{235, 240, 235, 240, 240, 240}));  // out of step
     EXPECT_TRUE(finished(job_scoring(short_frames), counts(235, 235))->in_step());
     // A count far from what the length holds (an interlaced video's fields)
-    EXPECT_EQ(finished(job_scoring(short_frames), counts(470, 240)), (FramesShort{235, 240}));
+    EXPECT_EQ(finished(job_scoring(short_frames), counts(470, 240)), uncounted);
     EXPECT_EQ(counted, 6);
     EXPECT_EQ(finished(job_scoring(short_frames, 5), counts(235, 240)), std::nullopt);
     EXPECT_EQ(finished(job_scoring(every_second), counts(235, 240)), std::nullopt);

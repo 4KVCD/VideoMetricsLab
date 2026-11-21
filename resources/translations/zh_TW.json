@@ -1,5 +1,6 @@
 {
  "strings": {
+  "This video has {test:,} frames for a length that should have {test_length:,}, and the reference has {source:,} for {source_length:,}. The one with fewer frames is missing more of its length than the other, so it lacks frames the other has. From the first such frame, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "此影片的長度應有 {test_length:,} 格，實際有 {test:,} 格；參考影片的長度應有 {source_length:,} 格，實際有 {source:,} 格。格數較少的一方相對其長度缺少的影格比另一方多，因此缺少了另一方有的影格。從第一個這樣的影格起，每一格都會和錯誤的參考影格比較，因此之後的所有分數都是錯的。這通常是編碼時重複或捨棄了影格所造成。使用與來源一致的可變影格率編碼即可避免。",
   "Export the difference": "匯出差值",
   "Export the difference as CSV...": "將差值匯出為 CSV...",
   "Exporting the difference to {path}...": "正在將差值匯出到 {path}...",

@@ -1,5 +1,6 @@
 {
  "strings": {
+  "This video has {test:,} frames for a length that should have {test_length:,}, and the reference has {source:,} for {source_length:,}. The one with fewer frames is missing more of its length than the other, so it lacks frames the other has. From the first such frame, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "В этом видео {test:,} кадров при длительности, на которую должно приходиться {test_length:,}, а в эталоне {source:,} при {source_length:,}. Видео с меньшим числом кадров недостаёт относительно его длительности больше кадров, чем другому, значит, в нём нет кадров, которые есть в другом. Начиная с первого такого кадра, каждый кадр сравнивается не с тем кадром эталона, поэтому все оценки после этого места неверны. Обычно так бывает, когда при кодировании кадры дублируются или выбрасываются. Кодирование с переменной частотой кадров, как у источника, этого не допускает.",
   "Export the difference": "Экспорт разницы",
   "Export the difference as CSV...": "Экспорт разницы в CSV...",
   "Exporting the difference to {path}...": "Экспорт разницы в {path}...",

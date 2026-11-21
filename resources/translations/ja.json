@@ -1,5 +1,6 @@
 {
  "strings": {
+  "This video has {test:,} frames for a length that should have {test_length:,}, and the reference has {source:,} for {source_length:,}. The one with fewer frames is missing more of its length than the other, so it lacks frames the other has. From the first such frame, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "この動画は本来 {test_length:,} フレームあるはずの長さで {test:,} フレーム、基準動画は {source_length:,} フレームの長さで {source:,} フレームです。フレームの少ない方は、長さに対して欠けているフレームがもう一方より多いため、もう一方にあるフレームが欠けています。最初のそのようなフレームから、各フレームは誤った基準フレームと比較されるため、それ以降のスコアはすべて誤りです。多くはエンコード時にフレームが複製されたり落とされたりしたことが原因です。ソースに合わせた可変フレームレートでエンコードすれば防げます。",
   "Export the difference": "差分をエクスポート",
   "Export the difference as CSV...": "差分を CSV でエクスポート...",
   "Exporting the difference to {path}...": "差分を {path} にエクスポートしています...",

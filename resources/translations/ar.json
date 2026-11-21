@@ -1,5 +1,6 @@
 {
  "strings": {
+  "This video has {test:,} frames for a length that should have {test_length:,}, and the reference has {source:,} for {source_length:,}. The one with fewer frames is missing more of its length than the other, so it lacks frames the other has. From the first such frame, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "يحتوي هذا الفيديو على {test:,} إطارًا لطول ينبغي أن يحوي {test_length:,}، ويحتوي المرجع على {source:,} لطول {source_length:,}. وصاحب الإطارات الأقل ينقصه من طوله أكثر مما ينقص الآخر، فهو يفتقد إطارات موجودة في الآخر. فمن أول إطار كهذا، يُقارَن كل إطار بإطار المرجع الخطأ، فتكون كل نتيجة بعد ذلك خاطئة. يحدث هذا عادةً عند تكرار إطارات أو حذفها أثناء الترميز. ويمنع ذلك الترميزُ بمعدل إطارات متغير يطابق المصدر.",
   "Export the difference": "تصدير الفرق",
   "Export the difference as CSV...": "تصدير الفرق بصيغة CSV...",
   "Exporting the difference to {path}...": "جارٍ تصدير الفرق إلى {path}...",

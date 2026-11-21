@@ -1,5 +1,6 @@
 {
  "strings": {
+  "This video has {test:,} frames for a length that should have {test_length:,}, and the reference has {source:,} for {source_length:,}. The one with fewer frames is missing more of its length than the other, so it lacks frames the other has. From the first such frame, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "วิดีโอนี้มี {test:,} เฟรม สำหรับความยาวที่ควรมี {test_length:,} เฟรม และวิดีโออ้างอิงมี {source:,} เฟรม สำหรับ {source_length:,} เฟรม วิดีโอที่มีเฟรมน้อยกว่าขาดเฟรมเมื่อเทียบกับความยาวของมันมากกว่าอีกวิดีโอ จึงขาดเฟรมที่อีกวิดีโอมี ตั้งแต่เฟรมแรกเช่นนั้น แต่ละเฟรมจะถูกเปรียบเทียบกับเฟรมอ้างอิงที่ผิด คะแนนทุกค่าหลังจุดนั้นจึงผิด มักเกิดเมื่อมีเฟรมถูกทำซ้ำหรือทิ้งไประหว่างการเข้ารหัส การเข้ารหัสด้วยอัตราเฟรมแปรผันที่ตรงกับต้นฉบับจะช่วยป้องกันได้",
   "Export the difference": "ส่งออกผลต่าง",
   "Export the difference as CSV...": "ส่งออกผลต่างเป็น CSV...",
   "Exporting the difference to {path}...": "กำลังส่งออกผลต่างไปที่ {path}...",

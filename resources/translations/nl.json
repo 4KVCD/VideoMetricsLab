@@ -1,5 +1,6 @@
 {
  "strings": {
+  "This video has {test:,} frames for a length that should have {test_length:,}, and the reference has {source:,} for {source_length:,}. The one with fewer frames is missing more of its length than the other, so it lacks frames the other has. From the first such frame, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "Deze video heeft {test:,} frames voor een lengte die er {test_length:,} zou moeten hebben, en de referentie heeft er {source:,} voor {source_length:,}. Bij de video met minder frames ontbreken er voor zijn lengte meer dan bij de andere, dus mist hij frames die de andere heeft. Vanaf het eerste zulke frame wordt elk frame met het verkeerde referentieframe vergeleken, dus elke score daarna is fout. Dit gebeurt meestal als er bij het coderen frames worden verdubbeld of weggelaten. Coderen met een variabele framerate die gelijk is aan die van de bron voorkomt het.",
   "Export the difference": "Verschil exporteren",
   "Export the difference as CSV...": "Verschil exporteren als CSV...",
   "Exporting the difference to {path}...": "Verschil wordt geëxporteerd naar {path}...",

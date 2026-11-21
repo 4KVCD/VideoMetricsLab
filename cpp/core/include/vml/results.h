@@ -110,15 +110,32 @@ FrameScores frame_scores_from_results(const MetricResultSet& results);
 // in the same time, and frames are paired by number, so from where they
 // part every pair would be of two different pictures. With the two videos'
 // frame counts once they were counted: the same, and the frames were paired
-// in step after all; different, and they were not.
+// in step after all; different, and they were not, unless the videos are of
+// different lengths (in_step).
 struct FramesShort {
     long long scored_pairs = 0;   // the frame pairs scored
     long long length_frames = 0;  // the frames the shorter video's length holds
     std::optional<long long> source_frames;
     std::optional<long long> test_frames;
+    // The frames each video's length holds. Nothing in a verdict saved
+    // before they were kept: those were judged as of the same length.
+    std::optional<long long> source_length;
+    std::optional<long long> test_length;
 
     bool counted() const { return source_frames.has_value() && test_frames.has_value(); }
-    bool in_step() const { return counted() && *source_frames == *test_frames; }
+    // Whether the lengths are known to differ by more than a duration's
+    // rounding.
+    bool different_lengths() const;
+    // Counted, and the counts leave the pairs in step. The pairs always end
+    // with the video that has fewer frames, so it is not enough that they
+    // match its count. Of the same length, the two must have the same
+    // count: the one with fewer frames lacks some the other has. Of
+    // different lengths (a test video of the first half of its reference),
+    // the one with fewer frames must lack no more of its length's frames
+    // than the other does: each frame it lacks can then be one the other
+    // lacks too (both keep a remux's timestamp gaps). Lacking more, it
+    // lacks one the other has, from where the pairs part.
+    bool in_step() const;
     bool operator==(const FramesShort&) const = default;
 };
 

@@ -1,5 +1,6 @@
 {
  "strings": {
+  "This video has {test:,} frames for a length that should have {test_length:,}, and the reference has {source:,} for {source_length:,}. The one with fewer frames is missing more of its length than the other, so it lacks frames the other has. From the first such frame, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "Ennek a videónak {test:,} képkockája van egy olyan hosszhoz, amelynek {test_length:,} kellene, a referenciának pedig {source:,} egy {source_length:,} képkockás hosszhoz. A kevesebb képkockájú videóból a hosszához képest több hiányzik, mint a másikból, így olyan képkockák hiányoznak belőle, amelyek a másikban megvannak. Az első ilyen képkockától minden képkocka a rossz referencia-képkockával kerül összehasonlításra, így onnantól minden pontszám hibás. Ez általában akkor fordul elő, ha kódoláskor képkockák megkettőződnek vagy kimaradnak. A forrásnak megfelelő változó képkockasebességű kódolás megelőzi.",
   "Export the difference": "Különbség exportálása",
   "Export the difference as CSV...": "Különbség exportálása CSV-ként...",
   "Exporting the difference to {path}...": "A különbség exportálása ide: {path}...",

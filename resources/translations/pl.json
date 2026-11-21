@@ -1,5 +1,6 @@
 {
  "strings": {
+  "This video has {test:,} frames for a length that should have {test_length:,}, and the reference has {source:,} for {source_length:,}. The one with fewer frames is missing more of its length than the other, so it lacks frames the other has. From the first such frame, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "Ten film ma {test:,} klatek przy długości, która powinna mieć {test_length:,}, a film referencyjny {source:,} przy {source_length:,}. Filmowi z mniejszą liczbą klatek brakuje względem jego długości więcej klatek niż drugiemu, więc brakuje mu klatek, które ma drugi. Od pierwszej takiej klatki każda klatka jest porównywana z niewłaściwą klatką referencyjną, więc każdy wynik od tego miejsca jest błędny. Zwykle dzieje się tak, gdy przy kodowaniu klatki zostają zduplikowane lub pominięte. Zapobiega temu kodowanie ze zmienną liczbą klatek na sekundę zgodną ze źródłem.",
   "Export the difference": "Eksportuj różnicę",
   "Export the difference as CSV...": "Eksportuj różnicę jako CSV...",
   "Exporting the difference to {path}...": "Eksportowanie różnicy do {path}...",

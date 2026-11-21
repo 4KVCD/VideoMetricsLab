@@ -1,5 +1,6 @@
 {
  "strings": {
+  "This video has {test:,} frames for a length that should have {test_length:,}, and the reference has {source:,} for {source_length:,}. The one with fewer frames is missing more of its length than the other, so it lacks frames the other has. From the first such frame, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "Bu videoda {test_length:,} kare olması gereken bir uzunlukta {test:,} kare var, referansta ise {source_length:,} karelik uzunlukta {source:,} kare var. Daha az karesi olanın uzunluğuna göre eksik karesi diğerininkinden fazla, yani diğerinde olan kareler onda yok. Böyle ilk kareden itibaren her kare yanlış referans karesiyle karşılaştırılır, bu yüzden o noktadan sonraki tüm puanlar yanlıştır. Bu genellikle kodlama sırasında kareler çoğaltıldığında ya da atıldığında olur. Kaynağa uyan değişken kare hızıyla kodlamak bunu önler.",
   "Export the difference": "Farkı dışa aktar",
   "Export the difference as CSV...": "Farkı CSV olarak dışa aktar...",
   "Exporting the difference to {path}...": "Fark şuraya aktarılıyor: {path}...",

@@ -1,5 +1,6 @@
 {
  "strings": {
+  "This video has {test:,} frames for a length that should have {test_length:,}, and the reference has {source:,} for {source_length:,}. The one with fewer frames is missing more of its length than the other, so it lacks frames the other has. From the first such frame, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "Toto video má {test:,} snímků při délce, která by měla mít {test_length:,}, a referenční video má {source:,} při {source_length:,}. Video s méně snímky jich vůči své délce postrádá víc než druhé, takže mu chybí snímky, které druhé má. Od prvního takového snímku se každý snímek porovnává se špatným referenčním snímkem, takže každé skóre od toho místa je chybné. Obvykle se to stane, když se při kódování snímky zdvojí nebo vynechají. Předejdete tomu kódováním s proměnnou snímkovou frekvencí odpovídající zdroji.",
   "Export the difference": "Exportovat rozdíl",
   "Export the difference as CSV...": "Exportovat rozdíl jako CSV...",
   "Exporting the difference to {path}...": "Exportuje se rozdíl do {path}...",

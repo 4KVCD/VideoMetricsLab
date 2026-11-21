@@ -1,5 +1,6 @@
 {
  "strings": {
+  "This video has {test:,} frames for a length that should have {test_length:,}, and the reference has {source:,} for {source_length:,}. The one with fewer frames is missing more of its length than the other, so it lacks frames the other has. From the first such frame, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "이 동영상은 {test_length:,}프레임이어야 할 길이에 {test:,}프레임이고, 기준 동영상은 {source_length:,}프레임 길이에 {source:,}프레임입니다. 프레임이 적은 쪽이 길이에 비해 빠진 프레임이 다른 쪽보다 많으므로, 다른 쪽에 있는 프레임이 빠져 있습니다. 그런 첫 프레임부터 각 프레임이 잘못된 기준 프레임과 비교되므로, 그 이후의 모든 점수가 틀립니다. 대개 인코딩 중에 프레임이 복제되거나 빠졌을 때 일어납니다. 소스와 같은 가변 프레임 레이트로 인코딩하면 피할 수 있습니다.",
   "Export the difference": "차이 내보내기",
   "Export the difference as CSV...": "차이를 CSV로 내보내기...",
   "Exporting the difference to {path}...": "차이를 {path}(으)로 내보내는 중...",

@@ -1,5 +1,6 @@
 {
  "strings": {
+  "This video has {test:,} frames for a length that should have {test_length:,}, and the reference has {source:,} for {source_length:,}. The one with fewer frames is missing more of its length than the other, so it lacks frames the other has. From the first such frame, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "Este vídeo tem {test:,} quadros para uma duração que deveria ter {test_length:,}, e a referência tem {source:,} para {source_length:,}. Ao que tem menos quadros faltam mais quadros da sua duração do que ao outro, então faltam a ele quadros que o outro tem. A partir do primeiro desses quadros, cada quadro é comparado com o quadro de referência errado, então todas as pontuações daí em diante estão erradas. Isso costuma acontecer quando quadros são duplicados ou descartados na codificação. Codificar com taxa de quadros variável igual à da fonte evita isso.",
   "Export the difference": "Exportar a diferença",
   "Export the difference as CSV...": "Exportar a diferença como CSV...",
   "Exporting the difference to {path}...": "Exportando a diferença para {path}...",

@@ -1,5 +1,6 @@
 {
  "strings": {
+  "This video has {test:,} frames for a length that should have {test_length:,}, and the reference has {source:,} for {source_length:,}. The one with fewer frames is missing more of its length than the other, so it lacks frames the other has. From the first such frame, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "Video ini punya {test:,} frame untuk durasi yang seharusnya punya {test_length:,}, dan referensinya punya {source:,} untuk {source_length:,}. Video yang frame-nya lebih sedikit kekurangan lebih banyak frame dari durasinya daripada yang lain, jadi ada frame milik yang lain yang tidak dimilikinya. Mulai dari frame pertama seperti itu, setiap frame dibandingkan dengan frame referensi yang salah, jadi semua skor setelah titik itu salah. Biasanya ini terjadi saat frame diduplikasi atau dibuang ketika encoding. Encoding dengan frame rate variabel yang sama dengan sumbernya mencegahnya.",
   "Export the difference": "Ekspor selisih",
   "Export the difference as CSV...": "Ekspor selisih sebagai CSV...",
   "Exporting the difference to {path}...": "Mengekspor selisih ke {path}...",

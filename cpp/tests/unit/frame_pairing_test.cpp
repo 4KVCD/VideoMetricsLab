@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <numeric>
 #include <string>
 #include <vector>
@@ -51,6 +52,29 @@ TEST(FramePairing, EveryResultSaysHowItsFramesWerePairedAndWhatThatMeans) {
     short_of.frames_short = FramesShort{235, 240, 235, 235};
     EXPECT_EQ(status(short_of), "in_sync");
     EXPECT_EQ(frames_short_text(*short_of.frames_short), "");  // no command-line note
+}
+
+// The pairs always end with the video that has fewer frames, so of two
+// videos of different lengths, in step or not depends on which lacks more of
+// its length's frames. A reference with a remux's gaps (2,390 frames, length
+// 2,398) and a test that keeps them but ends 2 frames early (2,388, length
+// 2,396: whole runs allow 0.1 s) are in step; a test at a constant rate that
+// fills the gaps (2,396) is not, nor one that lacks a frame more.
+TEST(FramePairing, VideosOfDifferentLengthsAreInStepWhenTheOneWithFewerFramesLacksNoMore) {
+    const auto short_of = [](long long source, long long source_length, long long test, long long test_length) {
+        const long long pairs = std::min(source, test);
+        return FramesShort{pairs, std::min(source_length, test_length), source, test, source_length, test_length};
+    };
+    const FramesShort keeps_the_gaps = short_of(2390, 2398, 2388, 2396);
+    EXPECT_TRUE(keeps_the_gaps.in_step());
+    EXPECT_EQ(frames_short_note(keeps_the_gaps).find("same length"), std::string::npos);
+    EXPECT_TRUE(short_of(2388, 2396, 2390, 2398).in_step());   // the other way round
+    EXPECT_FALSE(short_of(2390, 2398, 2396, 2396).in_step());  // the gaps filled
+    const FramesShort lacks_more = short_of(2390, 2398, 2387, 2396);
+    EXPECT_FALSE(lacks_more.in_step());
+    EXPECT_EQ(frames_short_note(lacks_more).find("same length"), std::string::npos);
+    // A verdict saved before the lengths were kept: judged as of one length.
+    EXPECT_FALSE((FramesShort{2388, 2396, 2390, 2388}).in_step());
 }
 
 }  // namespace
