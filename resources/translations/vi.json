@@ -451,6 +451,7 @@
   "Choose folder to save runs into": "Chọn thư mục để lưu các lần chạy",
   "Could not {description}: {error}": "Không thể {description}: {error}",
   "clear saved results": "xóa các kết quả đã lưu",
+  "delete saved results": "xóa các kết quả đã lưu",
   "save {name}": "lưu {name}",
   "export {name}": "xuất {name}",
   "no {metric}": "không có {metric}",

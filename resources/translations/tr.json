@@ -451,6 +451,7 @@
   "Choose folder to save runs into": "Çalıştırmaların kaydedileceği klasörü seçin",
   "Could not {description}: {error}": "Yapılamadı ({description}): {error}",
   "clear saved results": "kayıtlı sonuçları temizleme",
+  "delete saved results": "kayıtlı sonuçları silme",
   "save {name}": "{name} kaydetme",
   "export {name}": "{name} dışa aktarma",
   "no {metric}": "{metric} yok",

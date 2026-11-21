@@ -451,6 +451,7 @@
   "Choose folder to save runs into": "실행 결과를 저장할 폴더 선택",
   "Could not {description}: {error}": "{description}할 수 없습니다: {error}",
   "clear saved results": "저장된 결과 지우기",
+  "delete saved results": "저장된 결과 삭제",
   "save {name}": "{name} 저장",
   "export {name}": "{name} 내보내기",
   "no {metric}": "{metric} 없음",

@@ -451,6 +451,7 @@
   "Choose folder to save runs into": "選擇儲存執行結果的資料夾",
   "Could not {description}: {error}": "無法{description}：{error}",
   "clear saved results": "清除已儲存的結果",
+  "delete saved results": "刪除已儲存的結果",
   "save {name}": "儲存 {name}",
   "export {name}": "匯出 {name}",
   "no {metric}": "無 {metric}",

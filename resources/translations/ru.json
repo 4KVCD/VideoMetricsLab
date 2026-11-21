@@ -451,6 +451,7 @@
   "Choose folder to save runs into": "Выберите папку для сохранения расчётов",
   "Could not {description}: {error}": "Не удалось {description}: {error}",
   "clear saved results": "очистить сохранённые результаты",
+  "delete saved results": "удалить сохранённые результаты",
   "save {name}": "сохранить {name}",
   "export {name}": "экспортировать {name}",
   "no {metric}": "нет {metric}",

@@ -451,6 +451,7 @@
   "Choose folder to save runs into": "เลือกโฟลเดอร์ที่จะบันทึกการรัน",
   "Could not {description}: {error}": "ไม่สามารถ{description}: {error}",
   "clear saved results": "ล้างผลลัพธ์ที่บันทึกไว้",
+  "delete saved results": "ลบผลลัพธ์ที่บันทึกไว้",
   "save {name}": "บันทึก {name}",
   "export {name}": "ส่งออก {name}",
   "no {metric}": "ไม่มี {metric}",

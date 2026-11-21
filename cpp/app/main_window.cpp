@@ -669,7 +669,7 @@ void MainWindow::build_ui() {
     connect(settings_panel_, &SettingsPanel::weak_segment_rules_changed, this, [this] {
         graph_panel_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
     });
-    saved_results_panel_ = new SavedResultsPanel(settings_, dialogs_);
+    saved_results_panel_ = new SavedResultsPanel(settings_, dialogs_, *file_writes_);
     connect(saved_results_panel_, &SavedResultsPanel::open_requested, this,
             [this](const std::vector<LoadedSavedResult>& results) {
                 // On Metric Graphs as saved runs: lines of their own, beside the

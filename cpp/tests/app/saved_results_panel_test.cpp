@@ -17,8 +17,10 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <string>
 #include <vector>
 
@@ -64,7 +66,8 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
 
     Dialogs dialogs = standard_dialogs(nullptr);
     dialogs.ask_no_default = [](const QString&, const QString&) { return true; };
-    SavedResultsPanel panel(settings, dialogs);
+    FileWrites writes;
+    SavedResultsPanel panel(settings, dialogs, writes);
     panel.show_list(list_saved_comparisons(folder / "cache"));
     QTableWidget& table = *panel.table();
     ASSERT_EQ(table.rowCount(), 1);
@@ -193,7 +196,11 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
     EXPECT_TRUE(remove->isEnabled());
     QSignalSpy deleted(&panel, &SavedResultsPanel::deleted);
     panel.delete_selected();
+    EXPECT_FALSE(remove->isEnabled());  // until the queue has run it
+    // Said once the queue says it is idle, just after it is.
+    EXPECT_TRUE(deleted.count() == 1 || deleted.wait(30000));
     EXPECT_EQ(deleted.count(), 1);
+    EXPECT_TRUE(remove->isEnabled() || table.rowCount() == 0);  // the listing after it may be done
     EXPECT_FALSE(std::filesystem::exists(saved));
 }
 
@@ -220,7 +227,8 @@ TEST(SavedResultsPanel, ScoresTheVideosTabRefusesAreMarkedAndLeftOut) {
     store_result(folder / "cache", result.source, result.distorted, request.recipe, result, "t", request.metrics);
 
     const Dialogs dialogs = standard_dialogs(nullptr);
-    SavedResultsPanel panel(settings, dialogs);
+    FileWrites writes;
+    SavedResultsPanel panel(settings, dialogs, writes);
     panel.show_list(list_saved_comparisons(folder / "cache"));
     ASSERT_EQ(panel.table()->rowCount(), 1);
     ASSERT_TRUE(panel.table()->item(0, 3)->text().contains("XPSNR"));  // saved
@@ -257,13 +265,49 @@ TEST(SavedResultsPanel, DeleteDeletesWhatWasSelectedWhenTheListChangesUnderItsQu
         shown->show_list({list[1], list[0]});  // the listing done while asked
         return true;
     };
-    SavedResultsPanel panel(settings, dialogs);
+    FileWrites writes;
+    SavedResultsPanel panel(settings, dialogs, writes);
     shown = &panel;
     panel.show_list({list[0]});
     panel.table()->selectRow(0);
     panel.delete_selected();
+    ASSERT_TRUE(writes.wait_until_idle(std::chrono::seconds(30)));
     EXPECT_FALSE(std::filesystem::exists(list[0].folder));
     EXPECT_TRUE(std::filesystem::exists(list[1].folder));
+}
+
+// Issue #133: Delete removed the folders at once, while a run's saves could
+// still be queued to be written: a save then brought a deleted folder back.
+// Delete goes through the same queue, after them.
+TEST(SavedResultsPanel, DeleteWaitsForTheSavesQueuedBeforeIt) {
+    const test::Folder folder;
+    Settings settings;
+    settings.cache_dir = (folder / "cache").string();
+    SavedComparison saved;
+    saved.folder = folder / "cache" / "v2" / "comparison";
+    saved.label = "t";
+    std::filesystem::create_directories(saved.folder);
+    std::ofstream(saved.folder / "context.json") << "{}";
+    Dialogs dialogs = standard_dialogs(nullptr);
+    dialogs.ask_no_default = [](const QString&, const QString&) { return true; };
+    FileWrites writes;
+    SavedResultsPanel panel(settings, dialogs, writes);
+    panel.show_list({saved});
+    panel.table()->selectRow(0);
+    // A run's save, still queued: it writes once let go.
+    std::promise<void> let_go;
+    writes.submit(QStringLiteral("save"), [held = let_go.get_future().share(), into = saved.folder] {
+        held.wait();
+        std::filesystem::create_directories(into);
+        std::ofstream(into / "vmaf_0.npz") << "score";
+    });
+    QSignalSpy deleted(&panel, &SavedResultsPanel::deleted);
+    panel.delete_selected();
+    EXPECT_TRUE(std::filesystem::exists(saved.folder / "context.json"));  // not yet
+    let_go.set_value();
+    EXPECT_TRUE(deleted.count() == 1 || deleted.wait(30000));  // once the queue is idle
+    EXPECT_FALSE(std::filesystem::exists(saved.folder));
+    EXPECT_EQ(deleted.count(), 1);
 }
 
 TEST(SavedResultsPanel, ClickingARowKeepsTheListWhereItWas) {
@@ -283,7 +327,8 @@ TEST(SavedResultsPanel, ClickingARowKeepsTheListWhereItWas) {
     }
     Settings settings;
     const Dialogs dialogs = standard_dialogs(nullptr);
-    SavedResultsPanel panel(settings, dialogs);
+    FileWrites writes;
+    SavedResultsPanel panel(settings, dialogs, writes);
     panel.show_list(list);
     panel.resize(900, 700);
     panel.show();
@@ -315,7 +360,8 @@ TEST(SavedResultsPanel, AFewScoresSitAtTheTopOfTheBox) {
     }
     Settings settings;
     const Dialogs dialogs = standard_dialogs(nullptr);
-    SavedResultsPanel panel(settings, dialogs);
+    FileWrites writes;
+    SavedResultsPanel panel(settings, dialogs, writes);
     panel.show_list({one});
     panel.resize(900, 700);
     panel.show();

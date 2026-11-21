@@ -451,6 +451,7 @@
   "Choose folder to save runs into": "Ordner zum Speichern der Durchläufe wählen",
   "Could not {description}: {error}": "{description} nicht möglich: {error}",
   "clear saved results": "Löschen der gespeicherten Ergebnisse",
+  "delete saved results": "Entfernen der gespeicherten Ergebnisse",
   "save {name}": "Speichern von {name}",
   "export {name}": "Exportieren von {name}",
   "no {metric}": "kein {metric}",

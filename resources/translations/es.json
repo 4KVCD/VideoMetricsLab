@@ -451,6 +451,7 @@
   "Choose folder to save runs into": "Elige la carpeta donde guardar las ejecuciones",
   "Could not {description}: {error}": "No se pudo {description}: {error}",
   "clear saved results": "borrar los resultados guardados",
+  "delete saved results": "eliminar los resultados guardados",
   "save {name}": "guardar {name}",
   "export {name}": "exportar {name}",
   "no {metric}": "sin {metric}",

@@ -451,6 +451,7 @@
   "Choose folder to save runs into": "Pilih folder untuk menyimpan proses",
   "Could not {description}: {error}": "Tidak dapat {description}: {error}",
   "clear saved results": "menghapus hasil tersimpan",
+  "delete saved results": "menghapus hasil tersimpan",
   "save {name}": "menyimpan {name}",
   "export {name}": "mengekspor {name}",
   "no {metric}": "tanpa {metric}",

@@ -451,6 +451,7 @@
   "Choose folder to save runs into": "Vyberte složku pro uložení běhů",
   "Could not {description}: {error}": "Nelze {description}: {error}",
   "clear saved results": "vymazat uložené výsledky",
+  "delete saved results": "odstranit uložené výsledky",
   "save {name}": "uložit {name}",
   "export {name}": "exportovat {name}",
   "no {metric}": "bez {metric}",

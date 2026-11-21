@@ -451,6 +451,7 @@
   "Choose folder to save runs into": "Wybierz folder na zapisane przebiegi",
   "Could not {description}: {error}": "Nie można: {description}: {error}",
   "clear saved results": "czyszczenie zapisanych wyników",
+  "delete saved results": "usuwanie zapisanych wyników",
   "save {name}": "zapis {name}",
   "export {name}": "eksport {name}",
   "no {metric}": "brak {metric}",

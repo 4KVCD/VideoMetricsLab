@@ -451,6 +451,7 @@
   "Choose folder to save runs into": "اختر المجلد لحفظ التشغيلات فيه",
   "Could not {description}: {error}": "تعذّر {description}: {error}",
   "clear saved results": "مسح النتائج المحفوظة",
+  "delete saved results": "حذف النتائج المحفوظة",
   "save {name}": "حفظ {name}",
   "export {name}": "تصدير {name}",
   "no {metric}": "بلا {metric}",

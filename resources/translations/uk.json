@@ -451,6 +451,7 @@
   "Choose folder to save runs into": "Виберіть теку для збереження запусків",
   "Could not {description}: {error}": "Не вдалося {description}: {error}",
   "clear saved results": "очистити збережені результати",
+  "delete saved results": "видалити збережені результати",
   "save {name}": "зберегти {name}",
   "export {name}": "експортувати {name}",
   "no {metric}": "немає {metric}",

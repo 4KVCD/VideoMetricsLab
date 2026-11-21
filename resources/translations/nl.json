@@ -451,6 +451,7 @@
   "Choose folder to save runs into": "Kies een map om de runs in op te slaan",
   "Could not {description}: {error}": "Kan niet {description}: {error}",
   "clear saved results": "opgeslagen resultaten wissen",
+  "delete saved results": "opgeslagen resultaten verwijderen",
   "save {name}": "{name} opslaan",
   "export {name}": "{name} exporteren",
   "no {metric}": "geen {metric}",

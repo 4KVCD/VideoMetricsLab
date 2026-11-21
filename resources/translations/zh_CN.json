@@ -451,6 +451,7 @@
   "Choose folder to save runs into": "选择保存运行结果的文件夹",
   "Could not {description}: {error}": "无法{description}：{error}",
   "clear saved results": "清除已保存的结果",
+  "delete saved results": "删除已保存的结果",
   "save {name}": "保存 {name}",
   "export {name}": "导出 {name}",
   "no {metric}": "无 {metric}",

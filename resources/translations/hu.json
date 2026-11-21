@@ -451,6 +451,7 @@
   "Choose folder to save runs into": "Válasszon mappát a futtatások mentéséhez",
   "Could not {description}: {error}": "Sikertelen: {description}: {error}",
   "clear saved results": "a mentett eredmények törlése",
+  "delete saved results": "a mentett eredmények eltávolítása",
   "save {name}": "{name} mentése",
   "export {name}": "{name} exportálása",
   "no {metric}": "nincs {metric}",

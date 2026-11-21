@@ -451,6 +451,7 @@
   "Choose folder to save runs into": "実行結果を保存するフォルダーを選択",
   "Could not {description}: {error}": "{description}できませんでした：{error}",
   "clear saved results": "保存済みの結果を消去",
+  "delete saved results": "保存済みの結果を削除",
   "save {name}": "{name} を保存",
   "export {name}": "{name} をエクスポート",
   "no {metric}": "{metric} なし",

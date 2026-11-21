@@ -92,11 +92,14 @@ public:
 
 }  // namespace
 
-SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& dialogs, QWidget* parent)
+SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& dialogs, FileWrites& file_writes,
+                                     QWidget* parent)
     : QWidget(parent),
       settings_(settings),
       dialogs_(dialogs),
+      file_writes_(file_writes),
       reading_(new QFutureWatcher<std::vector<SavedComparison>>(this)) {
+    connect(&file_writes_, &FileWrites::became_idle, this, [this] { on_writes_idle(); });
     connect(reading_, &QFutureWatcher<std::vector<SavedComparison>>::finished, this,
             [this] { show_list(reading_->result()); });
     auto* layout = new QVBoxLayout(this);
@@ -445,7 +448,7 @@ void SavedResultsPanel::update_buttons() {
     const std::size_t count = selected().size();
     open_button_->setEnabled(count > 0);
     export_button_->setEnabled(count > 0);
-    delete_button_->setEnabled(count > 0 && !run_active_);
+    delete_button_->setEnabled(count > 0 && !run_active_ && !deleting_);
     delete_button_->setToolTip(run_active_ ? app::tr("Locked while metrics are calculated: the run saves its "
                                                      "scores there.")
                                            : QString());
@@ -541,7 +544,7 @@ void SavedResultsPanel::delete_selected() {
     for (const SavedComparison* saved : selected()) {
         chosen.push_back(*saved);
     }
-    if (chosen.empty() || run_active_) {
+    if (chosen.empty() || run_active_ || deleting_) {
         return;
     }
     QString question =
@@ -554,15 +557,35 @@ void SavedResultsPanel::delete_selected() {
         question += "\n\n" + app::tr("Some of them could not be scored again: their reference video is no longer "
                                       "where it was (marked \"not found\").");
     }
-    if (!dialogs_.ask_no_default(app::tr("Delete saved results"), question)) {
+    if (!dialogs_.ask_no_default(app::tr("Delete saved results"), question) || run_active_ || deleting_) {
         return;
     }
-    int failed = 0;
-    for (const SavedComparison& saved : chosen) {
-        if (!delete_saved_comparison(base(), saved)) {
-            ++failed;
-        }
+    // Through the window's queue of writes, after what is queued there, as
+    // Settings' Clear: a run's saves still queued would otherwise bring a
+    // folder deleted back, or leave one without its context.json, which the
+    // tab can neither list nor delete (issue #133).
+    deleting_ = std::make_shared<Deleting>();
+    update_buttons();
+    file_writes_.submit(app::tr("delete saved results"),
+                        [folder = base(), chosen = std::move(chosen), deleting = deleting_] {
+                            for (const SavedComparison& saved : chosen) {
+                                if (!delete_saved_comparison(folder, saved)) {
+                                    ++deleting->failed;
+                                }
+                            }
+                            deleting->done = true;
+                        });
+}
+
+void SavedResultsPanel::on_writes_idle() {
+    // Once the Delete has run: a write queued before it, finished as it was
+    // queued, says the queue is idle too, too early.
+    if (!deleting_ || !deleting_->done) {
+        return;
     }
+    const int failed = deleting_->failed;
+    deleting_.reset();
+    update_buttons();
     if (failed > 0) {
         dialogs_.alert(app::tr("Not all deleted"),
                        ntr("{count} comparison's saved scores could not be deleted: a file of theirs may be open.",
