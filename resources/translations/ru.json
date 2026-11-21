@@ -265,6 +265,7 @@
   "Add resolution test": "Добавить тест разрешения",
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "Вычисляет выбранные метрики для уменьшения эталона до меньшего разрешения и обратного увеличения — отдельный тестовый файл не нужен.",
   "Remove selected": "Убрать выбранные",
+  "Files": "Файлы",
   "Remove all": "Убрать все",
   "Highlight best/worst results": "Выделять лучшие/худшие результаты",
   "Options": "Параметры",

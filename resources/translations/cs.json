@@ -265,6 +265,7 @@
   "Add resolution test": "Přidat test rozlišení",
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "Spočítá zaškrtnuté metriky pro referenční video zmenšené na nižší rozlišení a znovu zvětšené — bez samostatného testovacího souboru.",
   "Remove selected": "Odebrat vybrané",
+  "Files": "Soubory",
   "Remove all": "Odebrat vše",
   "Highlight best/worst results": "Zvýraznit nejlepší/nejhorší výsledky",
   "Options": "Možnosti",

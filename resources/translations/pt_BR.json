@@ -265,6 +265,7 @@
   "Add resolution test": "Adicionar teste de resolução",
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "Calcula as métricas selecionadas para reduzir a referência a uma resolução menor e ampliá-la de volta — sem precisar de um arquivo de teste separado.",
   "Remove selected": "Remover selecionados",
+  "Files": "Arquivos",
   "Remove all": "Remover todos",
   "Highlight best/worst results": "Destacar os melhores/piores resultados",
   "Options": "Opções",

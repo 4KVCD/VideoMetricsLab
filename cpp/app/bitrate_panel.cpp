@@ -243,21 +243,38 @@ BitratePanel::BitratePanel(std::function<std::string()> ffprobe, VideoColors* co
     setAcceptDrops(true);
 
     auto* root = new QVBoxLayout(this);
-    add_file_controls(root);
-    add_table(root);
-    add_plot_controls(root);
-    add_chart(root);
+    // VML Modern: the files a card (their title, buttons and table), the
+    // graph a card (its view, the chart and its readout), the footer a
+    // strip; Classic: the rows as they were (theme::container).
+    QBoxLayout* files = nullptr;
+    QWidget* files_card = theme::container("card", false, &files);
+    files_card->setObjectName("filesCard");
+    root->addWidget(files_card);
+    add_file_controls(files);
+    add_table(files);
+    QBoxLayout* graph = nullptr;
+    QWidget* graph_card = theme::container("card", false, &graph);
+    graph_card->setObjectName("bitrateGraphCard");
+    root->addWidget(graph_card, 1);
+    add_plot_controls(graph);
+    add_chart(graph);
     add_frame_controls(root);
     add_status_row(root);
     update_buttons();
 }
 
 // Add files, Remove selected and Calculate bitrate.
-void BitratePanel::add_file_controls(QVBoxLayout* root) {
+void BitratePanel::add_file_controls(QBoxLayout* root) {
     auto* file_controls = new QHBoxLayout;
+    auto* title = new QLabel(app::tr("Files"));  // VML Modern's: the card's title
+    theme::set_role(title, "title");
+    title->setContentsMargins(0, 0, 10, 0);
+    theme::modern_only(title);
+    file_controls->addWidget(title);
     add_button = new QPushButton(app::tr("Add files\xE2\x80\xA6"));
     connect(add_button, &QPushButton::clicked, this, [this] { on_add_files(); });
     remove_button = new QPushButton(app::tr("Remove selected"));
+    theme::set_role(remove_button, "quiet");  // VML Modern: read as text
     connect(remove_button, &QPushButton::clicked, this, [this] { on_remove_selected(); });
     analyze_button = new QPushButton(app::tr("Calculate bitrate"));
     theme::set_role(analyze_button, "primary");  // the tab's own action (VML Modern)
@@ -271,7 +288,7 @@ void BitratePanel::add_file_controls(QVBoxLayout* root) {
 }
 
 // The files' table.
-void BitratePanel::add_table(QVBoxLayout* root) {
+void BitratePanel::add_table(QBoxLayout* root) {
     table = new QTableWidget(0, 9);
     auto* swatches = new ColorSwatchDelegate(table);
     connect(swatches, &ColorSwatchDelegate::clicked, this, [this](int row) { choose_video_color(row); });
@@ -297,7 +314,7 @@ void BitratePanel::add_table(QVBoxLayout* root) {
 }
 
 // The plot's view, its start and Reset zoom.
-void BitratePanel::add_plot_controls(QVBoxLayout* root) {
+void BitratePanel::add_plot_controls(QBoxLayout* root) {
     auto* plot_controls = new QHBoxLayout;
     plot_controls->addWidget(new QLabel(app::tr("Plot view:")));
     auto* views = new QButtonGroup(this);
@@ -353,7 +370,7 @@ void BitratePanel::add_plot_controls(QVBoxLayout* root) {
 }
 
 // The chart, and its readout under it.
-void BitratePanel::add_chart(QVBoxLayout* root) {
+void BitratePanel::add_chart(QBoxLayout* root) {
     chart = new ChartWidget(app::tr("Video bitrate (kb/s)"));
     connect(reset_zoom_button, &QPushButton::clicked, chart, &ChartWidget::reset_view);
     connect(chart, &ChartWidget::hovered, this, [this](double time, double /*value*/) { on_hovered(time); });

@@ -265,6 +265,7 @@
   "Add resolution test": "Tambah uji resolusi",
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "Menghitung metrik yang dicentang untuk referensi yang diperkecil ke resolusi lebih rendah lalu diperbesar kembali — tanpa perlu file uji terpisah.",
   "Remove selected": "Hapus yang dipilih",
+  "Files": "Berkas",
   "Remove all": "Hapus semua",
   "Highlight best/worst results": "Sorot hasil terbaik/terburuk",
   "Options": "Opsi",

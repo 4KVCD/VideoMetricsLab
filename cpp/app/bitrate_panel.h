@@ -41,6 +41,7 @@ class QPushButton;
 class QRadioButton;
 class QTableWidget;
 class QTableWidgetItem;
+class QBoxLayout;
 class QVBoxLayout;
 
 namespace vml::app {
@@ -191,10 +192,10 @@ protected:
 private:
     // The constructor's parts: the panel's rows, top to bottom, added to
     // `root`.
-    void add_file_controls(QVBoxLayout* root);
-    void add_table(QVBoxLayout* root);
-    void add_plot_controls(QVBoxLayout* root);
-    void add_chart(QVBoxLayout* root);
+    void add_file_controls(QBoxLayout* root);
+    void add_table(QBoxLayout* root);
+    void add_plot_controls(QBoxLayout* root);
+    void add_chart(QBoxLayout* root);
     void add_frame_controls(QVBoxLayout* root);
     void add_status_row(QVBoxLayout* root);
 

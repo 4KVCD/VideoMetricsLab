@@ -258,6 +258,13 @@ TEST_F(Appearance, EveryRoleInTheWindowIsOneModernStyles) {
         }
     }
     EXPECT_EQ(removing, 2);
+
+    // The Bitrate Viewer's: the files a card, the graph a card.
+    for (const char* name : {"filesCard", "bitrateGraphCard"}) {
+        const auto* bitrate_card = window_->findChild<QWidget*>(name);
+        ASSERT_NE(bitrate_card, nullptr) << name;
+        EXPECT_EQ(bitrate_card->property("vmlRole").toString(), "card") << name;
+    }
 }
 
 TEST_F(Appearance, ModernLight) {
