@@ -546,7 +546,7 @@ $run.videos[0].metrics.vmaf.score
 | `--segment-min-frames N`, `--segment-merge-frames N` | Leave out segments shorter than N frames (default 1); join segments at most N frames apart (default 0). |
 | `--segments-dir FOLDER` | Write each video's segments to FOLDER as `<video>.<metrics>.segments.json` and `.csv`, `<metrics>` the conditions' metrics joined by `+` (`<video>.vmaf+ssimulacra2.segments.json`), as the app names them. |
 | `--segments-report FILE` | Write every test video's segments (with `--batch`, every reference's) to FILE as one report, as the app's exports of all the videos with **Weak segments** ticked: JSON, or CSV when FILE ends in `.csv`. The fields of `--json`'s path are filled in in its path. |
-| `--run-dir FOLDER` | Write each video's result to FOLDER as `<video>.metrics.json`, the file the Videos tab's **Export > Run file (.metrics.json)...** writes: **Load analysis results** (Videos) and **Add analysis results** (Metric Graphs) open it on any PC, without its saved scores. |
+| `--run-dir FOLDER` | Write each video's result to FOLDER as `<video>.metrics.json`, the file the Videos tab's **Export > Run file (.metrics.json)...** writes: **Import run file...**, on the Videos tab or Metric Graphs, opens it on any PC, without its saved scores. |
 | `--log-file FILE` | Also write the app's log to FILE, as the window writes its own: the whole run, whatever `-v` says, added to the end when FILE is there. |
 | `--name TEMPLATE` | Name each test video's files (`--csv`, `--segments-dir`, `--run-dir`) after TEMPLATE in place of `<video>`. Its fields: `{test}` and `{reference}` (the files' names without extension), `{version}` (the app's: `2.6`), `{date}` and `{time}` (the run's start: `20261117`, `180912`) and with `--batch` `{sequence}` (the row's, else the reference's name); `{{` and `}}` are braces. In the names, characters other than letters, digits, `-`, `_` and `.` become `_`, as in `<video>`. The same fields, but `{sequence}`, are filled in in `--json`'s, `--scores-csv`'s, `--segments-report`'s and `--log-file`'s paths, `{test}` and `{reference}` only when one video is compared. A name already taken gets a number, which the JSON's `csv`, `run_file` and `segment_files` give. |
 | `--notify` | Send a notification as the run ends, as **Settings > Notifications** in the app say: to the services on there, with its message, for the outcomes and run lengths it is on for (see [Notifications](#notifications)). Whether it was sent, or why not, is said on the progress lines (a problem with `-q` too); the exit code is the run's either way. On macOS and Linux it needs `curl`, which sends it. |
@@ -804,8 +804,8 @@ selected:
   Saved Results' Export offers them;
 - **Graphs as ZIP...** (below);
 - **Export weak segments...**, by the profile in use;
-- **Run file (.metrics.json)...**: each video's whole run, which **Load
-  analysis results** reads back, on this PC or another. One is saved where
+- **Run file (.metrics.json)...**: each video's whole run, which **Import
+  run file...** reads back, on this PC or another. One is saved where
   you say; several into a folder, each named after its video.
 
 Metric Graphs has its own tab: the Videos tab no longer has a button to open
@@ -870,7 +870,7 @@ of the Saved Results tab offer an export of what is ticked, named after it:
 clicked (once its metrics are all scored), and **Export all videos'
 results, graphs and weak segments...** for every test video scored against
 the reference (**Export the selected videos'...** on Saved Results). Untick
-what you never want, CSV say, and it's left out of every export. A line of a saved run loaded with **Load analysis results** has no
+what you never want, CSV say, and it's left out of every export. A line of a run file imported with **Import run file...** has no
 export of its own (it has no row in the Videos table), but is in all the
 videos' results.
 

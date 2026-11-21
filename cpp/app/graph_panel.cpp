@@ -1264,7 +1264,7 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     status_label_->hide();
     theme::style(status_label_, "color: {muted};");
     root->addWidget(status_label_);
-    metric_hint_ = new QLabel(app::tr("Calculate metrics or load analysis results to view graphs."));
+    metric_hint_ = new QLabel(app::tr("Calculate metrics or import a run file to view graphs."));
     root->addWidget(metric_hint_);
 
     setup_stats_table();
@@ -1373,7 +1373,9 @@ QWidget* GraphPanel::build_action_bar() {
     // The buttons under the graph: add saved results, export, go to a frame.
     auto* bar = new QWidget;
     auto* layout = new QHBoxLayout(bar);
-    auto* add_button = new QPushButton(app::tr("Add analysis results"));
+    // A run file's line on the graph, whatever its reference, the Videos
+    // table left as it is (the Videos tab's Import run file... adds a row).
+    auto* add_button = new QPushButton(app::tr("Import run file..."));
     connect(add_button, &QPushButton::clicked, this, [this] { on_add_saved_run(); });
     layout->addWidget(add_button);
     // The way back for a Videos row's line removed with its table's cross
@@ -2125,8 +2127,8 @@ std::vector<std::string> GraphPanel::scored_metrics() const {
 void GraphPanel::on_add_saved_run() {
     // A saved run's line.
     const QString chosen = dialogs.open_file(
-        app::tr("Open analysis results"),
-        app::tr("Analysis results (*{suffix})",
+        app::tr("Import run file"),
+        app::tr("Run files (*{suffix})",
                 {{"suffix", QString::fromUtf8(result_suffix.data(), static_cast<int>(result_suffix.size()))}}));
     if (chosen.isEmpty()) {
         return;

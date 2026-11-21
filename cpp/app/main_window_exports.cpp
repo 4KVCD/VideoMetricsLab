@@ -172,7 +172,7 @@ std::vector<int> MainWindow::export_menu_rows() const {
 void MainWindow::fill_videos_export_menu(QMenu& menu) {
     // The shared export first, named as the right-click menu names it; then
     // each kind on its own, as Saved Results' Export offers them, and the
-    // run file the app reads back (Load analysis results). Of the selected
+    // run file the app reads back (Import run file...). Of the selected
     // rows scored, else of every scored row.
     menu.clear();
     for (QMenu* kind : menu.findChildren<QMenu*>(Qt::FindDirectChildrenOnly)) {

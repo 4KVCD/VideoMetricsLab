@@ -888,7 +888,7 @@ std::vector<QWidget*> MainWindow::add_file_buttons(QVBoxLayout* layout) {
     // A saved run's file read into the table: a row of its own, as Add files
     // adds one. Frozen during a run with the files: a saved run can bring a
     // reference of its own, which would change what the running videos mean.
-    load_button_ = new QPushButton(app::tr("Load analysis results"));
+    load_button_ = new QPushButton(app::tr("Import run file..."));
     connect(load_button_, &QPushButton::clicked, this, [this] { on_load_saved_run(); });
     buttons->addWidget(add_button);
     buttons->addWidget(add_resample_button);

@@ -10,7 +10,7 @@
 // the ticked videos' metrics calculated with their progress and the scores
 // shown in the table (main_window_run.cpp); the saved scores, looked up for
 // each row, saved as a run goes and forgotten by Recalculate
-// (main_window_saved_scores.cpp); saved analysis results
+// (main_window_saved_scores.cpp); run files imported and exported
 // (main_window_run_files.cpp); and the Metric Graphs and Video Compare tabs'
 // glue (main_window_graph.cpp, main_window_compare.cpp).
 #pragma once
