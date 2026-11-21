@@ -1278,6 +1278,8 @@ thread_local ThreadStreamReads lookup_reads;
 
 // The stream fingerprint of `file`'s first `packets` packets (0: all), read
 // once (a read cancelled is not kept). Not `read`: only one read before.
+// Nothing without a stream fingerprinter (the setting off), not even one
+// read before, and nothing kept for when one is set.
 std::optional<std::string> stream_of(const std::filesystem::path& file, int packets, bool read = true,
                                      const CancelToken& cancel = lookup_reads.cancel.value_or(CancelToken())) {
     const std::pair<std::string, int> key{file_identity(file), packets};
@@ -1285,12 +1287,15 @@ std::optional<std::string> stream_of(const std::filesystem::path& file, int pack
     StreamFingerprinter fingerprinter;
     {
         const std::lock_guard lock(known.mutex);
+        fingerprinter = known.stream_fingerprinter;
+        if (!fingerprinter) {
+            return std::nullopt;
+        }
         if (const auto found = known.stream.find(key); found != known.stream.end()) {
             return found->second;
         }
-        fingerprinter = known.stream_fingerprinter;
     }
-    if (!fingerprinter || !read || cancel.cancelled()) {
+    if (!read || cancel.cancelled()) {
         return std::nullopt;
     }
     std::optional<std::string> fingerprint = fingerprinter(file, packets, cancel);
@@ -1317,6 +1322,15 @@ std::string rate_text(double fps) {
 std::string text_at(const nlohmann::json& data, const char* side, const char* field) {
     const nlohmann::json value = data.value(side, nlohmann::json::object()).value(field, nlohmann::json());
     return value.is_string() ? value.get<std::string>() : std::string();
+}
+
+// Whether identity.json `data` recorded its test stream in the form
+// stream_fingerprint makes now: one recorded in another (or before forms
+// were recorded: 1) is as if none were, read again and never matched.
+bool stream_of_this_format(const nlohmann::json& data) {
+    const nlohmann::json format =
+        data.value("distorted", nlohmann::json::object()).value("stream_format", nlohmann::json());
+    return format.is_number_integer() && format.get<int>() == stream_fingerprint_format;
 }
 
 // Every comparison under `base` with an identity.json, as its files are
@@ -1369,6 +1383,10 @@ std::vector<RecordedComparison> recorded_comparisons(const std::filesystem::path
                                                text_at(*identity, "distorted", "rate"),
                                                text_at(*identity, "distorted", "stream_head"),
                                                text_at(*identity, "distorted", "stream")};
+            if (!stream_of_this_format(*identity)) {
+                read.recorded->distorted_head.clear();
+                read.recorded->distorted_stream.clear();
+            }
         }
         now.emplace(folder->path(), std::move(read));
     }
@@ -1620,6 +1638,7 @@ bool record_test_stream(const std::filesystem::path& base, const std::filesystem
         }
         (*identity)["distorted"]["stream_head"] = *head;
         (*identity)["distorted"]["stream"] = *stream;
+        (*identity)["distorted"]["stream_format"] = stream_fingerprint_format;
         try {
             write_atomically(folder / "identity.json", python_json_compact(*identity));
             recorded_changed(folder);
@@ -1656,7 +1675,7 @@ void cache_parts::record_identity(const std::filesystem::path& directory, const 
         // Or as recorded before for this same file (a metric added since).
         const std::optional<nlohmann::json> before = read_json(directory / "identity.json");
         if (before && before->is_object() && text_at(*before, "distorted", "path") == file_identity(distorted) &&
-            !text_at(*before, "distorted", "stream").empty()) {
+            !text_at(*before, "distorted", "stream").empty() && stream_of_this_format(*before)) {
             head = text_at(*before, "distorted", "stream_head");
             stream = text_at(*before, "distorted", "stream");
         }
@@ -1664,6 +1683,7 @@ void cache_parts::record_identity(const std::filesystem::path& directory, const 
     if (head && stream) {
         distorted_side["stream_head"] = *head;
         distorted_side["stream"] = *stream;
+        distorted_side["stream_format"] = stream_fingerprint_format;
     }
     const nlohmann::json identity = {
         {"format", 1}, {"source", std::move(source_side)}, {"distorted", std::move(distorted_side)}};

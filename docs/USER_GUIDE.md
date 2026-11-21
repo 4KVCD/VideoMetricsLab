@@ -866,10 +866,11 @@ and a run file exported from the row names them.
 With **Settings > Storage > Recognize test videos remuxed after scoring**
 (off by default; the command line's `--test-remuxes on`), a test video
 remuxed (its raw stream, `.264`, `.265`, `.266` or `.obu`, muxed into MKV or
-MP4 with its audio, an MKV remuxed to MP4, a tag edited) keeps its scores
+MP4 with its audio, an MKV remuxed to MP4, a title tag edited) keeps its scores
 too, with the same reference and settings, read at the same frame rate. It
 is recognised by its coded pictures, byte for byte: any re-encode, even of
-one scene, is another video. That takes reading each test video once more
+one scene, is another video, and so is an MP4 cut with an edit list that hides
+its first pictures, against a remux that shows them. That takes reading each test video once more
 after its scores are saved, as long as reading the file takes (about 45 s
 for a 4 GB film on a network share):
 - the app reads it in the background, saying so on the status line, and
@@ -882,7 +883,10 @@ packets and reference match a saved comparison's (a remux, or an encode
 redone in later scenes only) is read whole to tell which: in the app after
 the other videos' saved scores are shown, on the status line, and given up
 when a run starts (the video is calculated); on the command line before
-the run, said first. Off, nothing reads test streams, and test videos are
+the run, said first. A test video whose colour tags were changed is read
+with another colour and is scored again, as a reference is. A test video
+recorded by an older version is read once more, as after a save, before a
+remux of it is recognised. Off, nothing reads test streams, and test videos are
 recognised by their files only.
 
 Settings and the default cache are under `~/.videometricslab/`. Back up that

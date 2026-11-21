@@ -758,9 +758,12 @@ private:
     std::vector<std::filesystem::path> stream_check_paths_;
     ProbeWorker* stream_check_worker_ = nullptr;
     std::vector<std::filesystem::path> stream_checking_paths_;  // the rows it reads
-    // Settings' "Recognize test videos remuxed", as the stream fingerprinter
-    // reads it on the lookups' and the records' threads (sync_remux_setting).
+    // Settings' "Recognize test videos remuxed", as the lookups' and the
+    // records' threads read it (sync_remux_setting).
     std::shared_ptr<std::atomic<bool>> recognise_remuxes_ = std::make_shared<std::atomic<bool>>(false);
+    // Reads a test video's stream with the app's FFmpeg: the saved scores'
+    // stream fingerprinter while the setting is on, none while it is off.
+    std::function<std::optional<std::string>(const std::filesystem::path&, int, const CancelToken&)> stream_reader_;
     // The status line's text about a stream being read, to be taken down
     // when the reading ends if nothing replaced it.
     QString stream_status_;
