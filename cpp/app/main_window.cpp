@@ -1,5 +1,6 @@
 #include "main_window.h"
 
+#include <QMenu>
 #include <QAbstractItemView>
 #include <QApplication>
 #include <QCheckBox>
@@ -197,12 +198,6 @@ MainWindow::MainWindow() {
         [this] { QMetaObject::invokeMethod(this, [this] { end_stream_status(); }, Qt::QueuedConnection); });
     connect(file_writes_, &FileWrites::write_failed, this, [this](const QString& description, const QString& error) {
         show_status(app::tr("Could not {description}: {error}", {{"description", description}, {"error", error}}));
-    });
-    // Saving runs can be asked for again once the saves asked for are written.
-    connect(file_writes_, &FileWrites::became_idle, this, [this] {
-        if (file_writes_->idle()) {
-            save_button_->setEnabled(true);
-        }
     });
 
     // Before the window is built: building it may already change the videos.
@@ -651,6 +646,26 @@ void MainWindow::build_ui() {
         }
     });
     connect(graph_panel_, &GraphPanel::all_videos_export_requested, this, [this] { export_all_videos(); });
+    graph_panel_->row_identities = [this] {
+        std::vector<std::string> identities;
+        for (const std::shared_ptr<RowData>& row_data : rows_) {
+            if (row_data->completed_run) {
+                identities.push_back(row_data->completed_run->graph_identity);
+            }
+        }
+        return identities;
+    };
+    // Every row's line back, those removed with the cross too, as Open
+    // metric graphs brought them back before the Videos tab lost it.
+    connect(graph_panel_, &GraphPanel::restore_removed_requested, this, [this] {
+        std::vector<std::shared_ptr<CompletedRun>> runs;
+        for (const std::shared_ptr<RowData>& row_data : rows_) {
+            if (row_data->completed_run) {
+                runs.push_back(row_data->completed_run);
+            }
+        }
+        open_or_update_graph(runs, false);
+    });
     bitrate_panel_->export_colours = export_colours;
     tabs_->addTab(new ScrollingPage(bitrate_panel_), app::tr("Bitrate Viewer"));
     // Its encodes from the runs Metric Graphs lists, brought up to date first.
@@ -870,8 +885,14 @@ std::vector<QWidget*> MainWindow::add_file_buttons(QVBoxLayout* layout) {
     connect(remove_button, &QPushButton::clicked, this, [this] { on_remove_distorted(); });
     remove_all_button_ = new QPushButton(app::tr("Remove all"));
     connect(remove_all_button_, &QPushButton::clicked, this, [this] { on_remove_all_distorted(); });
+    // A saved run's file read into the table: a row of its own, as Add files
+    // adds one. Frozen during a run with the files: a saved run can bring a
+    // reference of its own, which would change what the running videos mean.
+    load_button_ = new QPushButton(app::tr("Load analysis results"));
+    connect(load_button_, &QPushButton::clicked, this, [this] { on_load_saved_run(); });
     buttons->addWidget(add_button);
     buttons->addWidget(add_resample_button);
+    buttons->addWidget(load_button_);
     buttons->addWidget(remove_button);
     buttons->addWidget(remove_all_button_);
     buttons->addStretch(1);
@@ -879,13 +900,22 @@ std::vector<QWidget*> MainWindow::add_file_buttons(QVBoxLayout* layout) {
     highlight_check_->setChecked(settings_.highlight_best_worst);
     connect(highlight_check_, &QCheckBox::toggled, this, [this](bool on) { on_highlight_toggled(on); });
     buttons->addWidget(highlight_check_);
+    buttons->addSpacing(12);
+    // The rows' exports, one menu made as it opens (fill_videos_export_menu),
+    // as Saved Results' Export: usable during a run, as the right-click
+    // menu's are.
+    export_button_ = new QPushButton(app::tr("Export"));
+    auto* export_menu = new QMenu(export_button_);
+    connect(export_menu, &QMenu::aboutToShow, this, [this, export_menu] { fill_videos_export_menu(*export_menu); });
+    export_button_->setMenu(export_menu);
+    buttons->addWidget(export_button_);
     layout->addLayout(buttons);
     best_worst_timer_ = new QTimer(this);
     best_worst_timer_->setSingleShot(true);
     best_worst_timer_->setInterval(0);
     connect(best_worst_timer_, &QTimer::timeout, this, [this] { apply_best_worst(); });
     connect(distorted_table_->model(), &QAbstractItemModel::rowsRemoved, this, [this] { schedule_best_worst(); });
-    return {add_button, add_resample_button, remove_button, remove_all_button_};
+    return {add_button, add_resample_button, load_button_, remove_button, remove_all_button_};
 }
 
 QWidget* MainWindow::build_run_panel() {
@@ -925,27 +955,6 @@ QWidget* MainWindow::build_run_panel() {
     connect(parallel_jobs_check_, &QCheckBox::toggled, this, [this](bool on) { on_parallel_jobs_changed(on); });
     run_row->addWidget(parallel_jobs_check_);
     run_row->addStretch(1);
-
-    load_button_ = new QPushButton(app::tr("Load analysis results"));
-    connect(load_button_, &QPushButton::clicked, this, [this] { on_load_saved_run(); });
-    // Frozen during a run with the files: a saved run can bring a reference
-    // of its own, which would change what the running videos mean.
-    file_action_widgets_.push_back(load_button_);
-    save_button_ = new QPushButton(app::tr("Save selected results"));
-    connect(save_button_, &QPushButton::clicked, this, [this] { on_save_selected(); });
-    show_graph_button_ = new QPushButton(app::tr("Open metric graphs"));
-    show_graph_button_->setToolTip(app::tr("Opens Metric Graphs with the current results and graph settings."));
-    connect(show_graph_button_, &QPushButton::clicked, this, [this] { on_show_graph_clicked(); });
-    export_graphs_button_ = new QPushButton(app::tr("Export all graphs"));
-    export_graphs_button_->setToolTip(app::tr(
-        "Saves the graphs of every test video scored against the reference as one .zip file: each video's graph "
-        "of every metric, all of them together, and their bitrate with the reference's. The tabs' own graphs are "
-        "left as they are. If the bitrate is still being read, the file is saved as soon as it's done."));
-    connect(export_graphs_button_, &QPushButton::clicked, this, [this] { on_export_all_graphs(); });
-    run_row->addWidget(load_button_);
-    run_row->addWidget(save_button_);
-    run_row->addWidget(export_graphs_button_);
-    run_row->addWidget(show_graph_button_);
     layout->addLayout(run_row);
 
     status_label_ = new QLabel;

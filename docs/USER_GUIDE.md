@@ -546,7 +546,7 @@ $run.videos[0].metrics.vmaf.score
 | `--segment-min-frames N`, `--segment-merge-frames N` | Leave out segments shorter than N frames (default 1); join segments at most N frames apart (default 0). |
 | `--segments-dir FOLDER` | Write each video's segments to FOLDER as `<video>.<metrics>.segments.json` and `.csv`, `<metrics>` the conditions' metrics joined by `+` (`<video>.vmaf+ssimulacra2.segments.json`), as the app names them. |
 | `--segments-report FILE` | Write every test video's segments (with `--batch`, every reference's) to FILE as one report, as the app's exports of all the videos with **Weak segments** ticked: JSON, or CSV when FILE ends in `.csv`. The fields of `--json`'s path are filled in in its path. |
-| `--run-dir FOLDER` | Write each video's result to FOLDER as `<video>.metrics.json`, the file **Save analysis results** writes: Metric Graphs' **Add saved run** opens it on any PC, without its saved scores. |
+| `--run-dir FOLDER` | Write each video's result to FOLDER as `<video>.metrics.json`, the file the Videos tab's **Export > Run file (.metrics.json)...** writes: **Load analysis results** (Videos) and **Add analysis results** (Metric Graphs) open it on any PC, without its saved scores. |
 | `--log-file FILE` | Also write the app's log to FILE, as the window writes its own: the whole run, whatever `-v` says, added to the end when FILE is there. |
 | `--name TEMPLATE` | Name each test video's files (`--csv`, `--segments-dir`, `--run-dir`) after TEMPLATE in place of `<video>`. Its fields: `{test}` and `{reference}` (the files' names without extension), `{version}` (the app's: `2.6`), `{date}` and `{time}` (the run's start: `20261117`, `180912`) and with `--batch` `{sequence}` (the row's, else the reference's name); `{{` and `}}` are braces. In the names, characters other than letters, digits, `-`, `_` and `.` become `_`, as in `<video>`. The same fields, but `{sequence}`, are filled in in `--json`'s, `--scores-csv`'s, `--segments-report`'s and `--log-file`'s paths, `{test}` and `{reference}` only when one video is compared. A name already taken gets a number, which the JSON's `csv`, `run_file` and `segment_files` give. |
 | `--notify` | Send a notification as the run ends, as **Settings > Notifications** in the app say: to the services on there, with its message, for the outcomes and run lengths it is on for (see [Notifications](#notifications)). Whether it was sent, or why not, is said on the progress lines (a problem with `-q` too); the exit code is the run's either way. On macOS and Linux it needs `curl`, which sends it. |
@@ -712,7 +712,8 @@ its other streams and the container's bytes, marked ≈).
 
 ## Saved results and caches
 
-Save portable results as `.metrics.json` or export CSV. For the scores alone,
+Save portable results as `.metrics.json` (the Videos box's **Export > Run file
+(.metrics.json)...**) or export CSV. For the scores alone,
 tick **Results**, and **JSON** or **CSV**, in **Settings > Storage > Exports
 include**, then right-click the Videos table or the statistics table on Metric
 Graphs and choose **Export all videos' results...** (see [Exporting from the
@@ -746,7 +747,7 @@ videos again:
   - **Per-frame scores**, **As JSON...** or **As CSV...**: a file per
     comparison to a folder (the JSON is the CSV's table: see [Per-frame
     scores as JSON](RESULTS_JSON.md#per-frame-scores-as-json));
-  - **Graphs as ZIP...**: the graphs Export all graphs saves, for
+  - **Graphs as ZIP...**: the graphs the Videos tab's Graphs as ZIP saves, for
     comparisons of one reference. The bitrate graphs of a video no longer on
     disk, or replaced since by another file of the same name (a new
     encode), come from its saved bitrate, where the Bitrate Viewer or the
@@ -790,11 +791,33 @@ the Videos tab would not use, and would calculate again (one made by an
 older version that read these videos wrongly, say), is marked "out of date"
 and is not used: not opened, exported or offered to pick.
 
+### The Videos tab's Export menu
+
+**Export** in the Videos box, beside **Highlight best/worst results**, acts
+on the selected test videos that are scored, or on every one with none
+selected:
+
+- its first entry is the right-click menu's export (**Export this video's...**,
+  **Export the selected videos'...** or **Export all videos'...**), of what
+  Settings' Exports include ticks;
+- **Results** and **Per-frame scores**, **As JSON...** or **As CSV...**, as
+  Saved Results' Export offers them;
+- **Graphs as ZIP...** (below);
+- **Export weak segments...**, by the profile in use;
+- **Run file (.metrics.json)...**: each video's whole run, which **Load
+  analysis results** reads back, on this PC or another. One is saved where
+  you say; several into a folder, each named after its video.
+
+Metric Graphs has its own tab: the Videos tab no longer has a button to open
+it. A video removed from the graph with its ✕ stays away when you come back
+to the tab; **Show removed videos** there brings back those of the Videos
+tab.
+
 ### Exporting graphs
 
-**Export all graphs...** (beside **Open metric graphs**) saves the graphs
-of every test video scored against the reference as one `.zip` file of PNG
-images, drawn as Metric Graphs' and the Bitrate Viewer's **Export graph as PNG** draw
+**Export > Graphs as ZIP...** in the Videos box saves the graphs of the
+test videos scored against the reference (the selected ones, or all) as one
+`.zip` file of PNG images, drawn as Metric Graphs' and the Bitrate Viewer's **Export graph as PNG** draw
 them:
 
 - each test video's graph of every metric it has: `<video> - <metric>.png`;
@@ -827,7 +850,7 @@ by the right-click menus or after each run. Tick:
   long video's are big;
 - **Graphs**: each video's graph of every metric and its bitrate with the
   reference's (`<video> - <metric>.png`), with several videos all of them
-  together too, as **Export all graphs...** draws them, once the bitrate is
+  together too, as **Graphs as ZIP...** draws them, once the bitrate is
   read;
 - **Weak segments**: by the profile in use: a video's
   (`<video>.<metrics>.segments.json`, `.csv`), or every video's in one

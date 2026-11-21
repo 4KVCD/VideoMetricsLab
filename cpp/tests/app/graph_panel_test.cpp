@@ -17,6 +17,7 @@
 #include <QMouseEvent>
 #include <QDoubleSpinBox>
 #include <QPushButton>
+#include <QSignalSpy>
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QTableWidget>
@@ -572,20 +573,40 @@ TEST_F(GraphPanelTest, CvvdpsSecondsAreDrawnAtTheirMiddles) {
 TEST_F(GraphPanelTest, ARunHasOneLineAndOneTheUserRemovedStaysAwayUnlessAskedFor) {
     // Added again (a row's result replaced), a run's line is updated, not
     // doubled. Removed by the user, it stays away when the window brings the
-    // graph up to date, and comes back when the user asks for the runs.
+    // graph up to date, and comes back when the user asks for the runs:
+    // Show removed videos, enabled while a row's line is removed.
     VideoColors colors;
     GraphPanel panel(&colors);
+    panel.row_identities = [] { return std::vector<std::string>{"row a", "row b"}; };
+    QPushButton* restore = nullptr;
+    for (QPushButton* button : panel.findChildren<QPushButton*>()) {
+        if (button->text() == "Show removed videos") {
+            restore = button;
+        }
+    }
+    ASSERT_NE(restore, nullptr);
+    QSignalSpy asked(&panel, &GraphPanel::restore_removed_requested);
     panel.add_run({shared(vmaf_result("a.mkv", {80, 80})), "a", "row a", false});
     panel.add_run({shared(vmaf_result("b.mkv", {85, 85})), "b", "row b", false});
     panel.add_run({shared(vmaf_result("a.mkv", {99, 99})), "a", "row a", false});
     ASSERT_EQ(entries(panel).size(), 2u);
     EXPECT_EQ(entries(panel).at(id_of(panel, "a")).means.at("vmaf"), 99.0);
 
+    EXPECT_FALSE(restore->isEnabled());
     panel.remove_runs({id_of(panel, "a")});
+    EXPECT_TRUE(restore->isEnabled());
     panel.add_run({shared(vmaf_result("a.mkv", {99, 99})), "a", "row a", false});
     EXPECT_EQ(entries(panel).size(), 1u);
+    EXPECT_TRUE(restore->isEnabled());
+    restore->click();
+    EXPECT_EQ(asked.count(), 1);
     panel.add_run({shared(vmaf_result("a.mkv", {99, 99})), "a", "row a", true});
     EXPECT_EQ(entries(panel).size(), 2u);
+    EXPECT_FALSE(restore->isEnabled());
+    // A line of no row (added from a file), removed: nothing to bring back.
+    panel.add_run({shared(vmaf_result("c.mkv", {70, 70})), "c", "file c", false});
+    panel.remove_runs({id_of(panel, "c")});
+    EXPECT_FALSE(restore->isEnabled());
 }
 
 TEST_F(GraphPanelTest, AnUpdatedLineKeepsItsPlace) {

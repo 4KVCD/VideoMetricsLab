@@ -310,6 +310,13 @@ public:
     std::function<std::vector<std::string>()> export_items;
     std::function<bool(const std::string& identity)> video_exportable;
     std::function<bool()> videos_exportable;
+    // The identities of the Videos tab's rows' lines: those removed with
+    // their row still there are what Show removed videos brings back.
+    std::function<std::vector<std::string>()> row_identities;
+    // Show removed videos enabled where one of row_identities was removed
+    // here. Called as lines are added or removed, so at each visit to the
+    // tab too (the window's sync_graph adds every row's).
+    void refresh_restore_button();
 
 signals:
     // The metric the user chose to look at.
@@ -330,6 +337,9 @@ signals:
     // Weak segments' Export all videos...: the window's report, by these
     // rules (the dialog's).
     void segments_report_requested(const vml::SegmentRules& rules);
+    // Show removed videos: the rows' lines removed here, to add again with
+    // restore (the window has their results).
+    void restore_removed_requested();
 
 private:
     friend class GraphPanelTest;  // the graph's tests (tests/app)
@@ -418,6 +428,7 @@ private:
     std::vector<SegmentProfile> segment_profiles_;  // Weak segments' profiles
     std::string segment_profile_;  // the one in use, which Weak segments starts from
     QPushButton* worst_button_ = nullptr;
+    QPushButton* restore_button_ = nullptr;  // Show removed videos
     QLabel* status_label_ = nullptr;
     QLabel* metric_hint_ = nullptr;
 };

@@ -1376,6 +1376,13 @@ QWidget* GraphPanel::build_action_bar() {
     auto* add_button = new QPushButton(app::tr("Add analysis results"));
     connect(add_button, &QPushButton::clicked, this, [this] { on_add_saved_run(); });
     layout->addWidget(add_button);
+    // The way back for a Videos row's line removed with its table's cross
+    // (refresh_restore_button): visiting the tab leaves such lines away.
+    restore_button_ = new QPushButton(app::tr("Show removed videos"));
+    restore_button_->setToolTip(app::tr("Brings back the Videos tab's videos removed from the graph."));
+    restore_button_->setEnabled(false);
+    connect(restore_button_, &QPushButton::clicked, this, [this] { emit restore_removed_requested(); });
+    layout->addWidget(restore_button_);
     auto* png_button = new QPushButton(app::tr("Export graph as PNG"));
     connect(png_button, &QPushButton::clicked, this, [this] { on_export_png(); });
     layout->addWidget(png_button);
@@ -1676,6 +1683,7 @@ void GraphPanel::add_run(const Run& run) {
     if (add_series(run)) {
         series_changed();
     }
+    refresh_restore_button();
 }
 
 void GraphPanel::add_runs(const std::vector<Run>& runs) {
@@ -1686,6 +1694,20 @@ void GraphPanel::add_runs(const std::vector<Run>& runs) {
     if (changed) {
         series_changed();
     }
+    refresh_restore_button();
+}
+
+void GraphPanel::refresh_restore_button() {
+    if (restore_button_ == nullptr) {
+        return;  // before the panel is built
+    }
+    bool any = false;
+    if (row_identities && !suppressed_identities_.empty()) {
+        for (const std::string& identity : row_identities()) {
+            any = any || suppressed_identities_.contains(identity);
+        }
+    }
+    restore_button_->setEnabled(any);
 }
 
 bool GraphPanel::add_series(const Run& run) {
@@ -1859,6 +1881,7 @@ void GraphPanel::remove_runs(const std::vector<int>& series_ids, bool suppress) 
         entries_.erase(found);
         removed.push_back(id);
     }
+    refresh_restore_button();
     if (removed.empty()) {
         return;
     }

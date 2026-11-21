@@ -1,6 +1,5 @@
 // The window's side of Metric Graphs (the Python app's _sync_graph,
-// _open_or_update_graph and _on_show_graph_clicked): the rows' results on
-// the graph.
+// _open_or_update_graph): the rows' results on the graph.
 #include "main_window.h"
 
 #include <QTabWidget>
@@ -100,23 +99,6 @@ void MainWindow::show_in_video_compare(const std::string& identity, int frame, c
                                 {{"last", frame_compare_panel_->last_frame()}, {"frame", frame}}));
         return;
     }
-}
-
-void MainWindow::on_show_graph_clicked() {
-    // Every row's result, not only the first ones finished: looked at again
-    // during a run (4 of 8 done), it shows all 4.
-    std::vector<std::shared_ptr<CompletedRun>> runs;
-    for (const std::shared_ptr<RowData>& row_data : rows_) {
-        if (row_data->completed_run) {
-            runs.push_back(row_data->completed_run);
-        }
-    }
-    if (runs.empty() && graph_panel_->empty()) {
-        dialogs_.inform(app::tr("No results yet"),
-                        app::tr("Calculate metrics or load analysis results to view metric graphs."));
-        return;
-    }
-    open_or_update_graph(runs);
 }
 
 }  // namespace vml::app
