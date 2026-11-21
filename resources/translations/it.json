@@ -1116,6 +1116,8 @@
   "Save to profile": "Salva nel profilo",
   "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Dove i punteggi di un video contano come deboli, in profili con nome per diversi tipi di video. Il profilo scelto qui è quello in uso: Grafici metriche > Fotogrammi peggiori > Segmenti deboli parte da esso, e il report dei segmenti deboli, le esportazioni dopo ogni esecuzione e --segments saved della riga di comando lo seguono.",
   "Loads a starting point for a kind of video into this profile, replacing its rules, to adjust as needed. To keep the rules shown too, make a profile with New first.": "Carica in questo profilo un punto di partenza per un tipo di video, sostituendone le regole, da regolare secondo necessità. Per conservare anche le regole mostrate, crea prima un profilo con Nuovo.",
+  "Loads a starting point for a kind of video into these conditions, replacing them, to adjust as needed. Save to profile keeps them.": "Carica in queste condizioni un punto di partenza per un tipo di video, sostituendole, da regolare secondo necessità. Salva nel profilo le conserva.",
+  "This video has no scores of the metrics it uses.": "Questo video non ha punteggi delle metriche che usa.",
   "Animation": "Animazione",
   "CGI": "CGI",
   "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "CVVDP, che modella gli schermi HDR (i modelli di VMAF sono per video SDR): CVVDP deve essere valutato.",

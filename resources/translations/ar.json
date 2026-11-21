@@ -1116,6 +1116,8 @@
   "Save to profile": "حفظ في ملف التعريف",
   "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "متى تُعدّ نتائج الفيديو ضعيفة، في ملفات تعريف مسمّاة لأنواع مختلفة من الفيديو. ملف التعريف المختار هنا هو المستخدم: تبدأ رسوم المقاييس > أسوأ الإطارات > المقاطع الضعيفة منه، ويتبعه تقرير المقاطع الضعيفة والتصديرات بعد كل تشغيل و--segments saved في سطر الأوامر.",
   "Loads a starting point for a kind of video into this profile, replacing its rules, to adjust as needed. To keep the rules shown too, make a profile with New first.": "يحمّل نقطة بداية لنوع من الفيديو في ملف التعريف هذا، ويستبدل قواعده، لتعديلها حسب الحاجة. للاحتفاظ بالقواعد المعروضة أيضًا، أنشئ ملف تعريف بزر «جديد» أولًا.",
+  "Loads a starting point for a kind of video into these conditions, replacing them, to adjust as needed. Save to profile keeps them.": "يحمّل نقطة بداية لنوع من الفيديو في هذه الشروط، ويستبدلها، لتعديلها حسب الحاجة. يحتفظ بها «حفظ في ملف التعريف».",
+  "This video has no scores of the metrics it uses.": "لا توجد لهذا الفيديو درجات للمقاييس التي يستخدمها.",
   "Animation": "رسوم متحركة",
   "CGI": "CGI",
   "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "CVVDP، الذي يحاكي شاشات HDR (نماذج VMAF مخصّصة لفيديو SDR): يجب أن يكون CVVDP مُقيَّمًا.",

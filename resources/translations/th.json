@@ -1116,6 +1116,8 @@
   "Save to profile": "บันทึกลงโปรไฟล์",
   "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "กำหนดว่าคะแนนของวิดีโอถือว่าอ่อนเมื่อใด ในโปรไฟล์ที่ตั้งชื่อไว้สำหรับวิดีโอแต่ละประเภท โปรไฟล์ที่เลือกที่นี่คือโปรไฟล์ที่ใช้อยู่: กราฟเมตริก > เฟรมที่แย่ที่สุด > ช่วงที่อ่อน จะเริ่มจากโปรไฟล์นี้ และรายงานช่วงที่อ่อน การส่งออกหลังการรันแต่ละครั้ง และ --segments saved ของบรรทัดคำสั่งก็ทำตามโปรไฟล์นี้",
   "Loads a starting point for a kind of video into this profile, replacing its rules, to adjust as needed. To keep the rules shown too, make a profile with New first.": "โหลดจุดเริ่มต้นสำหรับวิดีโอประเภทหนึ่งเข้าโปรไฟล์นี้ โดยแทนที่กฎของโปรไฟล์ เพื่อปรับตามต้องการ หากต้องการเก็บกฎที่แสดงอยู่ไว้ด้วย ให้สร้างโปรไฟล์ด้วยปุ่ม ใหม่ ก่อน",
+  "Loads a starting point for a kind of video into these conditions, replacing them, to adjust as needed. Save to profile keeps them.": "โหลดจุดเริ่มต้นสำหรับวิดีโอประเภทหนึ่งเข้าเงื่อนไขเหล่านี้ โดยแทนที่เงื่อนไขเดิม เพื่อปรับตามต้องการ บันทึกลงโปรไฟล์ จะเก็บไว้",
+  "This video has no scores of the metrics it uses.": "วิดีโอนี้ไม่มีคะแนนของเมตริกที่ใช้",
   "Animation": "แอนิเมชัน",
   "CGI": "CGI",
   "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "CVVDP ซึ่งจำลองจอแสดงผล HDR (โมเดลของ VMAF มีไว้สำหรับวิดีโอ SDR): ต้องให้คะแนน CVVDP แล้ว",

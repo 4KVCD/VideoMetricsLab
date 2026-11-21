@@ -19,6 +19,7 @@
 #include "worst_frame_list.h"
 #include "vml/metrics.h"
 #include "vml/results.h"
+#include "vml/segment_presets.h"
 #include "vml/segment_profiles.h"
 #include "vml/weak_frames.h"
 
@@ -98,7 +99,8 @@ public:
     // Starts with profile `in_use` of `profiles` (Settings > Weak
     // segments): its conditions on the metrics the video has, else one on
     // `metric`, from its first band of worse frames. Another profile can be
-    // picked to start from. What is changed here holds for this dialog until
+    // picked to start from, or a built-in preset's rules loaded (From
+    // preset, as in Settings). What is changed here holds for this dialog until
     // Save to profile (the profile picked) or Save as new profile. Only
     // frames within `range` (nothing: all). `dialogs` asks where to export
     // and a new profile's name.
@@ -110,7 +112,7 @@ public:
     SegmentRules rules() const;
     // What Save to profile saves: rules() without the range, and the
     // profile's conditions on metrics this video has none of, left as they
-    // were.
+    // were (a preset's, once one is loaded: it replaces them all).
     SegmentRules rules_to_save() const;
     const std::vector<WeakSegment>& segments() const { return segments_; }
 
@@ -119,6 +121,7 @@ public:
     QPushButton* save_button() const { return save_button_; }
     QPushButton* save_new_button() const { return save_new_button_; }
     QComboBox* profile_combo() const { return profile_combo_; }
+    QPushButton* preset_button() const { return preset_button_; }
     QTableWidget* table() const { return table_; }
 
 signals:
@@ -136,6 +139,8 @@ private:
     // Shows the profile picked: its rules, as saved.
     void start_from_profile(const MetricDefinition& metric);
     std::string profile_name() const;
+    // From preset: the preset's rules shown in place of these, unsaved.
+    void load_preset(const SegmentPreset& preset);
     // Save to profile enabled, and the note beside it, as the rules shown
     // differ from the profile's or not.
     void show_saved_state();
@@ -149,12 +154,16 @@ private:
     std::vector<std::string> keys_;  // the metrics the video has scores of, in the app's order
     std::vector<SegmentProfile> profiles_;  // as saved in Settings (since the dialog opened, or saved here)
     SegmentRules saved_;  // the profile picked's rules, as saved
+    // Kept by Save to profile: the conditions on metrics this video has none
+    // of, the profile's or a preset's loaded.
+    std::vector<WeakCondition> unshown_;
     std::vector<WeakSegment> segments_;
     SegmentRulesEditor* editor_ = nullptr;
     QLabel* saved_note_ = nullptr;
     QPushButton* save_button_ = nullptr;
     QPushButton* save_new_button_ = nullptr;
     QComboBox* profile_combo_ = nullptr;
+    QPushButton* preset_button_ = nullptr;
     QLabel* summary_ = nullptr;
     QTableWidget* table_ = nullptr;
 };

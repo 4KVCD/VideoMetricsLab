@@ -1116,6 +1116,8 @@
   "Save to profile": "保存到方案",
   "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "视频的分数在哪些情况下算作弱，按不同类型的视频保存在命名方案中。此处选择的方案就是正在使用的方案：指标图表 > 最差帧 > 弱片段 从它开始，弱片段报告、每次运行后的导出以及命令行的 --segments saved 也遵循它。",
   "Loads a starting point for a kind of video into this profile, replacing its rules, to adjust as needed. To keep the rules shown too, make a profile with New first.": "将适合某类视频的起点载入此方案，替换其规则，可按需调整。若也要保留当前显示的规则，请先用“新建”创建方案。",
+  "Loads a starting point for a kind of video into these conditions, replacing them, to adjust as needed. Save to profile keeps them.": "将适合某类视频的起点载入这些条件，替换它们，可按需调整。“保存到方案”会保留它们。",
+  "This video has no scores of the metrics it uses.": "此视频没有它所用指标的分数。",
   "Animation": "动画",
   "CGI": "CGI",
   "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "使用可模拟 HDR 显示器的 CVVDP（VMAF 的模型适用于 SDR 视频）：必须已对 CVVDP 评分。",
