@@ -77,9 +77,10 @@ public:
     // Folders the run reads and saves scores in (metric_cache.h's
     // recipe_directory), locked too: a file moved, renamed or copied since it
     // was scored has its scores in a folder whose context.json names its old
-    // paths until the run saves there. Added to those known; the first call
-    // unlocks the comparisons of neither. Ignored when no run is on.
-    void add_run_folders(const std::vector<std::filesystem::path>& folders);
+    // paths until the run saves there. Added to those known; `all` (the
+    // folders found at the run's start, not one a save adds) unlocks the
+    // comparisons of neither. Ignored when no run is on.
+    void add_run_folders(const std::vector<std::filesystem::path>& folders, bool all);
     // Whether Delete is locked for `saved`: a run is on, and its folders are
     // not known yet, or its reference and test video are one of the run's
     // pairs, or its folder one of the run's.

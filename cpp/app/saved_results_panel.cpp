@@ -688,14 +688,14 @@ void SavedResultsPanel::set_run_active(
     update_buttons();
 }
 
-void SavedResultsPanel::add_run_folders(const std::vector<std::filesystem::path>& folders) {
+void SavedResultsPanel::add_run_folders(const std::vector<std::filesystem::path>& folders, bool all) {
     if (!run_active_) {
         return;  // a run's, told after it ended
     }
     for (const std::filesystem::path& folder : folders) {
         run_folders_.insert(run_key(folder));
     }
-    run_folders_known_ = true;
+    run_folders_known_ = run_folders_known_ || all;
     update_buttons();
 }
 

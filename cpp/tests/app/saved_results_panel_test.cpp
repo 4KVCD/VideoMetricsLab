@@ -195,29 +195,31 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
     ASSERT_NE(remove, nullptr);
     const std::filesystem::path elsewhere = saved.parent_path() / "another";  // another comparison's folder
     panel.set_run_active(true, {{folder / "s.mp4", folder / "other.mp4"}, {folder / "s.mp4", folder / "t.mp4"}});
-    panel.add_run_folders({elsewhere});
+    panel.add_run_folders({elsewhere}, true);
     EXPECT_FALSE(remove->isEnabled());
     EXPECT_FALSE(remove->toolTip().isEmpty());
     panel.delete_selected();
     EXPECT_TRUE(std::filesystem::exists(saved));
     panel.set_run_active(true, {{folder / "s.mp4", folder / "sub" / ".." / "t.mp4"}});  // the same file
-    panel.add_run_folders({elsewhere});
+    panel.add_run_folders({elsewhere}, true);
     EXPECT_FALSE(remove->isEnabled());
 #ifdef _WIN32
     panel.set_run_active(true, {{folder / "S.MP4", folder / "T.MP4"}});  // any case
-    panel.add_run_folders({elsewhere});
+    panel.add_run_folders({elsewhere}, true);
     EXPECT_FALSE(remove->isEnabled());
 #endif
     // Its test video moved: the run's pair is another, its folder this one.
     panel.set_run_active(true, {{folder / "s.mp4", folder / "moved" / "t.mp4"}});
     EXPECT_FALSE(remove->isEnabled());  // its folders not known yet
-    panel.add_run_folders({elsewhere, saved.parent_path() / "." / saved.filename()});
+    panel.add_run_folders({elsewhere, saved.parent_path() / "." / saved.filename()}, true);
     EXPECT_FALSE(remove->isEnabled());
     // Its reference with another test video, its test video against another
     // reference: other folders, deletable once the run's are known.
     panel.set_run_active(true, {{folder / "s.mp4", folder / "other.mp4"}, {folder / "other.mp4", folder / "t.mp4"}});
     EXPECT_FALSE(remove->isEnabled());
-    panel.add_run_folders({elsewhere});
+    panel.add_run_folders({elsewhere}, false);  // a save's folder: the start's not known yet
+    EXPECT_FALSE(remove->isEnabled());
+    panel.add_run_folders({elsewhere}, true);
     EXPECT_TRUE(remove->isEnabled());
     EXPECT_TRUE(remove->toolTip().isEmpty());
     QSignalSpy deleted(&panel, &SavedResultsPanel::deleted);

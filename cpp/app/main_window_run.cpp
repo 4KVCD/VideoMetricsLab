@@ -622,7 +622,7 @@ void MainWindow::set_run_ui_active(bool active) {
                                  } catch (const std::exception&) {
                                      return;
                                  }
-                                 add_run_folders(run, std::move(folders));
+                                 add_run_folders(run, std::move(folders), true);
                              });
     }
     // A run has the disks to itself: a test stream being recorded is read
@@ -1165,8 +1165,10 @@ void MainWindow::save_job_result(std::size_t job, const RowData& row_data, const
                              // Its folder locked on Saved Results for the rest of the run,
                              // as its settings at the end may have found another than
                              // those at the start (set_run_ui_active).
-                             add_run_folders(run, {store_result(base, result.source, identity, request.recipe,
-                                                                result, label, request.metrics)});
+                             add_run_folders(run,
+                                             {store_result(base, result.source, identity, request.recipe, result,
+                                                           label, request.metrics)},
+                                             false);
                              // Its test stream, for a remux of it to keep these scores (with
                              // Settings' "Recognize test videos remuxed"): read apart from the
                              // writes, which it would hold up, and after the run.
@@ -1176,15 +1178,16 @@ void MainWindow::save_job_result(std::size_t job, const RowData& row_data, const
                          });
 }
 
-// Locks `folders` on Saved Results while run `run` is on: told from the
-// writes' thread, so queued to the window's, and dropped once another run
-// has started or none is on.
-void MainWindow::add_run_folders(int run, std::vector<std::filesystem::path> folders) {
+// Locks `folders` on Saved Results while run `run` is on (`all`: every
+// folder the run uses, found at its start): told from the writes' thread, so
+// queued to the window's, and dropped once another run has started or none
+// is on.
+void MainWindow::add_run_folders(int run, std::vector<std::filesystem::path> folders, bool all) {
     QMetaObject::invokeMethod(
         this,
-        [this, run, folders = std::move(folders)] {
+        [this, run, folders = std::move(folders), all] {
             if (run == run_number_ && run_active_) {
-                saved_results_panel_->add_run_folders(folders);
+                saved_results_panel_->add_run_folders(folders, all);
             }
         },
         Qt::QueuedConnection);

@@ -674,7 +674,7 @@ private:
     void on_vship_checked();
     void set_run_ui_active(bool active);
     // Called from the writes' thread: locks run `run`'s saved-scores folders.
-    void add_run_folders(int run, std::vector<std::filesystem::path> folders);
+    void add_run_folders(int run, std::vector<std::filesystem::path> folders, bool all);
     int parallel_jobs() const;
     void on_parallel_jobs_changed(bool on);
     void on_cancel_clicked();
