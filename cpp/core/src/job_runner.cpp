@@ -254,7 +254,7 @@ private:
     // Whether the video's frames may have been paired out of step
     // (frame_pairing.h), as it ends: seen from its result at no cost, and
     // counted (RunEvents::count_frames, which may read whole files) without
-    // mutex_ held. Nothing for a cancelled run.
+    // mutex_ held. A cancelled run checks nothing: the saved result's verdict.
     std::optional<FramesShort> check_frame_pairing();
     ComparisonResult execute_task(std::size_t task);
     PerceptualTaskOutput execute_perceptual(std::size_t task);
@@ -748,7 +748,9 @@ std::optional<FramesShort> JobRun::check_frame_pairing() {
     {
         const std::lock_guard lock(mutex_);
         if (scheduler_.cancel.cancelled()) {
-            return std::nullopt;
+            // Nothing checked: a result kept with what had finished, and
+            // saved again, keeps the saved verdict.
+            return job_.cached_result ? job_.cached_result->frames_short : std::nullopt;
         }
         const std::optional<ComparisonResult> result = merged();
         if (!result) {
@@ -764,7 +766,9 @@ std::optional<FramesShort> JobRun::check_frame_pairing() {
         if (job_.cached_result) {
             const std::optional<FramesShort>& saved = job_.cached_result->frames_short;
             if (saved && saved->counted() && saved->scored_pairs == short_of.scored_pairs) {
-                return saved;
+                short_of.source_frames = saved->source_frames;
+                short_of.test_frames = saved->test_frames;
+                return short_of;  // with the lengths, which a verdict saved before them lacks
             }
         }
     }
@@ -822,12 +826,17 @@ void JobRun::finish() {
         result = merged();
     }
     if (result) {
-        result->frames_short = frames_short;  // a saved result's own replaced
+        result->frames_short = frames_short;  // a saved result's own replaced (kept when cancelled)
         if (frames_short && !frames_short->in_step()) {
             logger.warning(name() + ": " + frames_short_text(*frames_short));
-        } else if (frames_short) {
+        } else if (frames_short && *frames_short->source_frames == *frames_short->test_frames) {
             logger.info(name() + ": the two videos have the same number of frames (" +
                         std::to_string(*frames_short->source_frames) + "): their frames are paired in step");
+        } else if (frames_short) {
+            logger.info(name() + ": the reference has " + std::to_string(*frames_short->source_frames) +
+                        " frames and the test video " + std::to_string(*frames_short->test_frames) +
+                        ", of different lengths, and the one with fewer lacks no more of its length: their frames "
+                        "are paired in step");
         }
     }
     PerceptualFailures why_failed = metric_failures;  // each metric once, as the events say it

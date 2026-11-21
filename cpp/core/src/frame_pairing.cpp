@@ -35,7 +35,67 @@ long long length_frames(const VideoInfo& video) {
     return std::llround(video.duration * video.fps);
 }
 
+// The first frame a ranged run's scores start at (their provenance's
+// range_frames, frame_range.h); nothing for scores of the whole videos.
+std::optional<long long> range_start(const FrameMetricResult& metric) {
+    const auto marked = metric.provenance.parameters.find("range_frames");
+    if (marked == metric.provenance.parameters.end()) {
+        return std::nullopt;
+    }
+    const nlohmann::json frames = nlohmann::json::parse(marked->second, nullptr, false);
+    if (!frames.is_array() || frames.empty() || !frames[0].is_number_integer()) {
+        return 0LL;  // a range, from where not known
+    }
+    return frames[0].get<long long>();
+}
+
+// The frame pairs a ranged run compared: of the frame metric whose scores
+// reach furthest, those from its range's start (a range keeps whole-video
+// frame numbers). Nothing when no frame metric's scores are of a range.
+std::optional<long long> ranged_pairs(const ComparisonResult& result) {
+    std::optional<long long> pairs;
+    long long reach = 0;
+    for (const std::string& key : result.metric_results.keys()) {
+        const FrameMetricResult* metric = result.metric_results.frame(key);
+        if (metric == nullptr || metric->frame.empty()) {
+            continue;
+        }
+        const std::optional<long long> start = range_start(*metric);
+        if (!start) {
+            continue;
+        }
+        const std::vector<int>& frames = metric->frame;
+        const long long step = frames.size() > 1 ? std::max(1, frames[1] - frames[0]) : 1;
+        const long long end = frames.back() + step;
+        if (!pairs || end > reach) {
+            reach = end;
+            pairs = std::max(0LL, end - *start);
+        }
+    }
+    return pairs;
+}
+
 }  // namespace
+
+bool FramesShort::different_lengths() const {
+    return source_length && test_length && std::llabs(*source_length - *test_length) > 1;
+}
+
+bool FramesShort::in_step() const {
+    if (!counted()) {
+        return false;
+    }
+    if (*source_frames == *test_frames) {
+        return true;
+    }
+    if (!different_lengths()) {
+        return false;
+    }
+    const bool source_fewer = *source_frames < *test_frames;
+    const long long fewer_lacks = source_fewer ? *source_length - *source_frames : *test_length - *test_frames;
+    const long long other_lacks = source_fewer ? *test_length - *test_frames : *source_length - *source_frames;
+    return other_lacks >= fewer_lacks;
+}
 
 long long scored_frame_pairs(const ComparisonResult& result) {
     long long reach = 0;
@@ -65,7 +125,7 @@ std::optional<FramesShort> frames_short_of_lengths(const ComparisonResult& resul
     if (shorter - pairs < 2) {
         return std::nullopt;
     }
-    return FramesShort{pairs, shorter};
+    return FramesShort{pairs, shorter, std::nullopt, std::nullopt, source, test};
 }
 
 FramesShort count_frames_short(const FramesShort& short_of, const VideoInfo& source, const VideoInfo& test,
@@ -102,10 +162,27 @@ std::string frames_short_text(const FramesShort& short_of) {
 }
 
 std::string frames_short_note(const FramesShort& short_of) {
-    if (short_of.in_step()) {
+    if (short_of.in_step() && *short_of.source_frames == *short_of.test_frames) {
         return "Only " + with_thousands(short_of.scored_pairs) + " frames were compared, while videos of this " +
                "length should have " + with_thousands(short_of.length_frames) + ", but both videos have " +
                with_thousands(*short_of.source_frames) + " frames, so they are in sync.";
+    }
+    if (short_of.in_step()) {
+        return "Only " + with_thousands(short_of.scored_pairs) + " frames were compared, while the shorter video's " +
+               "length should have " + with_thousands(short_of.length_frames) + ". The two videos are different " +
+               "lengths (this video has " + with_thousands(*short_of.test_frames) + " frames, the reference " +
+               with_thousands(*short_of.source_frames) + "), and the one with fewer frames is missing no more of " +
+               "its length than the other, so its missing frames can be gaps both videos share: nothing suggests "
+               "they are out of sync.";
+    }
+    if (short_of.counted() && short_of.different_lengths()) {
+        return "This video has " + with_thousands(*short_of.test_frames) + " frames for a length that should have " +
+               with_thousands(*short_of.test_length) + ", and the reference " +
+               with_thousands(*short_of.source_frames) + " for " + with_thousands(*short_of.source_length) +
+               ". The one with fewer frames is missing more of its length than the other, so it lacks frames the "
+               "other has. From the first such frame, each frame is compared with the wrong reference frame, so "
+               "every score after that point is wrong. This usually happens when frames are duplicated or dropped "
+               "during encoding; encoding with a variable frame rate that matches the source avoids it.";
     }
     if (short_of.counted()) {
         return "This video has " + with_thousands(*short_of.test_frames) + " frames, but the reference has " +
@@ -141,6 +218,15 @@ nlohmann::ordered_json frame_pairing_json(const ComparisonResult& result) {
                 {"length_frames", short_of->length_frames},
                 {"reference_frames", count(short_of->source_frames)},
                 {"test_frames", count(short_of->test_frames)}};
+    }
+    if (const std::optional<long long> ranged = ranged_pairs(result)) {
+        // Only part of the videos: whatever the pairs, nothing is checked.
+        return {{"status", "not_checked"},
+                {"note", "Not checked: only part of the videos was compared."},
+                {"compared_pairs", *ranged},
+                {"length_frames", shorter > 0 ? nlohmann::ordered_json(shorter) : nlohmann::ordered_json(nullptr)},
+                {"reference_frames", nullptr},
+                {"test_frames", nullptr}};
     }
     if (result.resample_target) {
         status = "not_checked";

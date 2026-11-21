@@ -129,6 +129,19 @@ bool sort_less(const SortKey& a, const SortKey& b) {
 // so the note names the menu's command that calculates it again.
 QString row_frames_short_note(const FramesShort& short_of) {
     const QString mark = QString::fromUtf8("\xE2\x9A\xA0 ");
+    if (short_of.counted() && short_of.different_lengths()) {
+        return mark + app::tr("This video has {test:,} frames for a length that should have {test_length:,}, and the "
+                              "reference has {source:,} for {source_length:,}. The one with fewer frames is missing "
+                              "more of its length than the other, so it lacks frames the other has. From the first "
+                              "such frame, each frame is compared with the wrong reference frame, so every score "
+                              "after that point is wrong. This usually happens when frames are duplicated or "
+                              "dropped during encoding. Encoding with a variable frame rate that matches the source "
+                              "avoids it.",
+                              {{"source", *short_of.source_frames},
+                               {"test", *short_of.test_frames},
+                               {"source_length", *short_of.source_length},
+                               {"test_length", *short_of.test_length}});
+    }
     if (short_of.counted()) {
         return mark + app::tr("This video has {test:,} frames, but the reference has {source:,}, even though both are "
                               "the same length. From the first point where they differ, each frame is compared with "

@@ -964,7 +964,9 @@ nlohmann::json frames_short_json(const std::optional<FramesShort>& short_of) {
     return {{"scored_pairs", short_of->scored_pairs},
             {"length_frames", short_of->length_frames},
             {"source_frames", count(short_of->source_frames)},
-            {"test_frames", count(short_of->test_frames)}};
+            {"test_frames", count(short_of->test_frames)},
+            {"source_length", count(short_of->source_length)},
+            {"test_length", count(short_of->test_length)}};
 }
 
 std::optional<FramesShort> frames_short_from_json(const nlohmann::json& saved) {
@@ -977,7 +979,8 @@ std::optional<FramesShort> frames_short_from_json(const nlohmann::json& saved) {
         return value.is_number_integer() ? std::optional(value.get<long long>()) : std::nullopt;
     };
     return FramesShort{saved["scored_pairs"].get<long long>(), saved["length_frames"].get<long long>(),
-                       count("source_frames"), count("test_frames")};
+                       count("source_frames"), count("test_frames"), count("source_length"),
+                       count("test_length")};
 }
 
 void loaded_model(const MetricResultSet& results, const std::vector<MetricRequestSpec>& specs, const std::string& key,

@@ -70,8 +70,8 @@ std::string frames_short_text(const FramesShort& short_of);
 // many pairs as the lengths hold) or "not_checked" (a range, a resolution
 // test, a length not known, no frame scores); a "note" in plain words that
 // says what it means and, where it may be out of step, how to tell; the pairs
-// compared, the frames the shorter length holds, and each video's count
-// (null uncounted).
+// compared (a range's from its first frame, its scores' range_frames), the
+// frames the shorter length holds, and each video's count (null uncounted).
 nlohmann::ordered_json frame_pairing_json(const ComparisonResult& result);
 
 // A FrameCounter with `ffprobe`: the count a file's container states where it

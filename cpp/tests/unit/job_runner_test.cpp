@@ -319,6 +319,38 @@ TEST(JobRunner, ACancelledRunKeepsWhatHadFinished) {
                             {"vmaf", {metric_calculated, ""}}}));
 }
 
+// A cancelled run checks no frame pairing, and the video's result, kept and
+// saved again with what had finished, keeps the saved verdict: one saved as
+// out of sync stays so.
+TEST(JobRunner, ACancelledRunKeepsTheSavedFramePairingVerdict) {
+    VmafJob job = cpu_and_gpu();
+    job.metric_keys.push_back("ssim");
+    job.cached_result = result_with({{"ssim", {0, 1}}});
+    job.cached_result->frames_short = FramesShort{235, 240, 235, 240, 240, 240};
+    job.cached_metrics = job.cached_result->metric_results;
+    CancelToken cancel;
+    Reported reported;
+    RunEvents events = reported.events();
+    events.result_updated = [&cancel](std::size_t, const ComparisonResult&) { cancel.cancel(); };
+    run_jobs(
+        {job}, 1, events,
+        [](const VmafJob&, const VmafOptions& options, const ProgressCallback&, const StatusCallback&,
+           const CancelToken& token) {
+            if (options.compute_vmaf) {
+                return result_with({{"vmaf", {0, 1}}});
+            }
+            for (int waited = 0; !token.cancelled() && waited < 60000; ++waited) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            throw Cancelled();
+        },
+        24, cancel);
+
+    ASSERT_EQ(reported.finished.size(), 1u);
+    EXPECT_TRUE(reported.finished.at(0).has_metric("vmaf"));
+    EXPECT_EQ(reported.finished.at(0).frames_short, job.cached_result->frames_short);
+}
+
 // A run's time, the clock of its CancelToken, which its tasks move on.
 class FakeClock {
 public:
@@ -643,12 +675,13 @@ TEST(JobRunner, AResultShortOfTheVideosLengthsSaysTheirFramesMayBeOutOfStep) {
         };
     };
 
-    EXPECT_EQ(finished(job_scoring(short_frames), nullptr), (FramesShort{235, 240}));
+    const FramesShort uncounted{235, 240, std::nullopt, std::nullopt, 240, 240};
+    EXPECT_EQ(finished(job_scoring(short_frames), nullptr), uncounted);
     EXPECT_EQ(finished(job_scoring(short_frames), counts(235, 240)),
-              (FramesShort{235, 240, 235, 240}));  // out of step
+              (FramesShort{235, 240, 235, 240, 240, 240}));  // out of step
     EXPECT_TRUE(finished(job_scoring(short_frames), counts(235, 235))->in_step());
     // A count far from what the length holds (an interlaced video's fields)
-    EXPECT_EQ(finished(job_scoring(short_frames), counts(470, 240)), (FramesShort{235, 240}));
+    EXPECT_EQ(finished(job_scoring(short_frames), counts(470, 240)), uncounted);
     EXPECT_EQ(counted, 6);
     EXPECT_EQ(finished(job_scoring(short_frames, 5), counts(235, 240)), std::nullopt);
     EXPECT_EQ(finished(job_scoring(every_second), counts(235, 240)), std::nullopt);
