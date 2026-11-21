@@ -286,6 +286,9 @@ TEST_F(BitratePanelTest, TimesPastTheFirstVideosEndAreTheLongerOnes) {
     EXPECT_EQ(controls.selected_frames(), (std::optional<std::pair<int, int>>{{2, 3}}));
     type_time(*controls.range_start_time, "0:00:00.500");  // the shorter one's last frame, to the longer one's
     EXPECT_EQ(controls.selected_frames(), (std::optional<std::pair<int, int>>{{1, 3}}));
+    // Its band runs from the shorter one's frame 1 to the end of the longer
+    // one's frame 3 (it stopped at the shorter one's end, 1 s).
+    EXPECT_EQ(panel->chart->highlight(), (std::optional<std::pair<double, double>>{{0.5, 2.0}}));
 }
 
 // A frame's type shows under the pointer in the frame graph; its colours only

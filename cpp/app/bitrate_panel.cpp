@@ -1246,20 +1246,36 @@ void BitratePanel::update_range_summary(BitrateEntry& entry) const {
 void BitratePanel::refresh_highlight() {
     std::optional<std::pair<double, double>> seconds;
     if (const std::optional<std::pair<int, int>> frames = frame_controls->selected_frames()) {
+        // Each end from the first line with that frame, as time_of_frame
+        // has it: a range past a shorter first video's end reaches the
+        // longer one's frames (it stopped at the shorter one's last frame).
+        const DrawnPlot* longest = nullptr;  // where no line has the last frame
+        const DrawnPlot* at_first = nullptr;
+        const DrawnPlot* at_last = nullptr;
         for (const DrawnPlot& drawn : current_plots_) {
-            const std::vector<double>& times = drawn.data->times;
-            const auto count = static_cast<long long>(times.size());
-            if (frames->second < 0 || frames->first >= count) {
-                continue;  // a shorter video, without the range's first frame
+            const long long count = drawn.data->frame_count();
+            if (count > 0 && (!longest || count > longest->data->frame_count())) {
+                longest = &drawn;
             }
+            if (!at_first && frames->first < count) {
+                at_first = &drawn;
+            }
+            if (!at_last && frames->second < count) {
+                at_last = &drawn;
+            }
+        }
+        if (at_first && frames->second >= 0) {
+            const DrawnPlot& ending = at_last ? *at_last : *longest;
+            const std::vector<double>& times = ending.data->times;
+            const auto last =
+                static_cast<std::size_t>(std::min<long long>(frames->second, ending.data->frame_count() - 1));
             const auto first = static_cast<std::size_t>(std::max(0, frames->first));
-            const auto last = static_cast<std::size_t>(std::min<long long>(frames->second, count - 1));
-            double end = times[last] + drawn.data->durations[last];
-            if (end <= times[first] && last + 1 < times.size()) {
-                end = times[last + 1];  // frames without a duration: up to the next one
+            const double start = at_first->data->times[first] - at_first->start;
+            double end = times[last] + ending.data->durations[last] - ending.start;
+            if (end <= start && last + 1 < times.size()) {
+                end = times[last + 1] - ending.start;  // frames without a duration: up to the next one
             }
-            seconds = std::pair(times[first] - drawn.start, end - drawn.start);
-            break;
+            seconds = std::pair(start, end);
         }
     }
     chart->set_highlight(seconds);
