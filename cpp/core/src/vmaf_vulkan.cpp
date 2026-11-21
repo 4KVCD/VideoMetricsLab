@@ -198,9 +198,12 @@ std::optional<VulkanDevice> chosen_vulkan_device(const std::vector<VulkanDevice>
         if (const std::optional<std::size_t> index = chosen_among(names, *chosen)) {
             return usable[*index];
         }
+        // Not another GPU: the one chosen may be kept free of it (the CPU
+        // calculates VMAF, as Vship's metrics are when their GPU cannot).
         app_log::write(app_log::Level::warning, "vml.vmaf_gpu",
-                       "The GPU chosen, " + *chosen + ", is not one Vulkan can calculate VMAF on: the GPU is picked as "
-                                                      "if none were chosen");
+                       "The GPU chosen, " + *chosen + ", is not one Vulkan can calculate VMAF on: VMAF is calculated "
+                                                      "on the CPU");
+        return std::nullopt;
     }
     return best_vulkan_device(found);
 }
@@ -590,7 +593,10 @@ VulkanProbe probe_vulkan() {
     try {
         const std::optional<VulkanDevice> device = chosen_vulkan_device(vulkan_devices());
         if (!device || !device->usable) {
-            return {false, std::nullopt, "no GPU that Vulkan can calculate VMAF on"};
+            const std::optional<std::string> chosen = chosen_gpu();
+            return {false, std::nullopt,
+                    chosen ? "the GPU chosen, " + *chosen + ", is not one Vulkan can calculate VMAF on"
+                           : std::string("no GPU that Vulkan can calculate VMAF on")};
         }
         for (std::size_t i = 0; i < probe_digests.size(); ++i) {
             const int bits = i == 0 ? 8 : 10;

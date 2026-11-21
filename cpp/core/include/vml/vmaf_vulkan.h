@@ -165,9 +165,10 @@ std::vector<VulkanDevice> vulkan_devices();
 std::optional<VulkanDevice> best_vulkan_device(const std::vector<VulkanDevice>& found);
 // The GPU VMAF and VMAF v1 run on: Vulkan's GPU numbered
 // VML_VMAF_VULKAN_DEVICE (for testing), else the chosen GPU (gpu_choice.h)
-// where Vulkan lists it, else best_vulkan_device's. A chosen GPU that Vulkan
-// does not list is said in the log, and the GPU is picked as if none were
-// chosen. Nothing when no GPU can score.
+// where Vulkan lists it, else best_vulkan_device's. Nothing when no GPU can
+// score, and when Vulkan cannot score on the chosen GPU (it does not list it,
+// or not as one it can use), which the log says: VMAF is then calculated on
+// the CPU, never on another GPU, which the choice may keep free.
 std::optional<VulkanDevice> chosen_vulkan_device(const std::vector<VulkanDevice>& found);
 
 // The buffers that a context made with vulkan_shared_flag reads each pair's
