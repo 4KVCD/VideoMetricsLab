@@ -254,7 +254,7 @@ private:
     // Whether the video's frames may have been paired out of step
     // (frame_pairing.h), as it ends: seen from its result at no cost, and
     // counted (RunEvents::count_frames, which may read whole files) without
-    // mutex_ held. Nothing for a cancelled run.
+    // mutex_ held. A cancelled run checks nothing: the saved result's verdict.
     std::optional<FramesShort> check_frame_pairing();
     ComparisonResult execute_task(std::size_t task);
     PerceptualTaskOutput execute_perceptual(std::size_t task);
@@ -748,7 +748,9 @@ std::optional<FramesShort> JobRun::check_frame_pairing() {
     {
         const std::lock_guard lock(mutex_);
         if (scheduler_.cancel.cancelled()) {
-            return std::nullopt;
+            // Nothing checked: a result kept with what had finished, and
+            // saved again, keeps the saved verdict.
+            return job_.cached_result ? job_.cached_result->frames_short : std::nullopt;
         }
         const std::optional<ComparisonResult> result = merged();
         if (!result) {
@@ -824,7 +826,7 @@ void JobRun::finish() {
         result = merged();
     }
     if (result) {
-        result->frames_short = frames_short;  // a saved result's own replaced
+        result->frames_short = frames_short;  // a saved result's own replaced (kept when cancelled)
         if (frames_short && !frames_short->in_step()) {
             logger.warning(name() + ": " + frames_short_text(*frames_short));
         } else if (frames_short && *frames_short->source_frames == *frames_short->test_frames) {
