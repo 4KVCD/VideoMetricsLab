@@ -711,6 +711,16 @@ void PlayPauseButton::changeEvent(QEvent* event) {
     }
 }
 
+bool PlayPauseButton::event(QEvent* event) {
+    // The symbol is drawn for one screen's scale: drawn again for a screen
+    // of another (the window moved to it, or its scaling changed), else it
+    // is blurred there.
+    if (event->type() == QEvent::DevicePixelRatioChange) {
+        refresh();
+    }
+    return QPushButton::event(event);
+}
+
 void PlayPauseButton::refresh() {
     setText(playing_ ? app::tr("Pause") : app::tr("Play"));
     // As tall as a capital letter of the text beside it, filled top to bottom.

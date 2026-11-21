@@ -277,6 +277,7 @@ public:
 
 protected:
     void changeEvent(QEvent* event) override;
+    bool event(QEvent* event) override;
 
 private:
     // The text and the symbol, in the colours the button has now.
