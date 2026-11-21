@@ -352,6 +352,7 @@ WeakSegmentsDialog::WeakSegmentsDialog(WeakFramesVideo video, const MetricDefini
                                      "> Weak segments."));
     connect(save_button_, &QPushButton::clicked, this, [this] {
         saved_ = rules_to_save();
+        preset_loaded_ = false;  // the profile has the preset's conditions now
         const auto profile = std::find_if(profiles_.begin(), profiles_.end(),
                                           [name = profile_name()](const SegmentProfile& p) { return p.name == name; });
         if (profile != profiles_.end()) {
@@ -376,6 +377,7 @@ WeakSegmentsDialog::WeakSegmentsDialog(WeakFramesVideo video, const MetricDefini
             return;
         }
         saved_ = rules_to_save();
+        preset_loaded_ = false;  // the new profile has the preset's conditions
         profiles_.push_back({text, saved_});
         {
             const QSignalBlocker blocker(profile_combo_);  // shown as it is, not started again
@@ -443,7 +445,14 @@ void WeakSegmentsDialog::set_profiles(std::vector<SegmentProfile> profiles, cons
                                       [name = profile_name()](const SegmentProfile& p) { return p.name == name; });
     saved_ = profile != profiles_.end() ? profile->rules : SegmentRules{};
     saved_.ranges.clear();
-    editor_->set_remembered(saved_.conditions);
+    // Save to profile keeps the profile's conditions on metrics this video
+    // lacks as Settings has them now: else it would put back one Settings
+    // removed, or keep another profile's. A preset loaded keeps its own, and
+    // its thresholds as where a metric picked starts.
+    if (!preset_loaded_) {
+        unshown_ = conditions_not_on(saved_.conditions, keys_);
+        editor_->set_remembered(saved_.conditions);
+    }
     show_saved_state();
 }
 
@@ -455,6 +464,7 @@ void WeakSegmentsDialog::start_from_profile(const MetricDefinition& metric) {
     saved_ = profile != profiles_.end() ? profile->rules : SegmentRules{};
     saved_.ranges.clear();
     unshown_ = conditions_not_on(saved_.conditions, keys_);
+    preset_loaded_ = false;
     editor_->set_remembered(saved_.conditions);
     editor_->set_rules(saved_);
     if (editor_->condition_count() == 0) {
@@ -470,6 +480,7 @@ void WeakSegmentsDialog::load_preset(const SegmentPreset& preset) {
     // conditions on metrics this video has none of too (kept for Save to
     // profile). The menu offers only presets with a condition shown here.
     unshown_ = conditions_not_on(preset.rules.conditions, keys_);
+    preset_loaded_ = true;
     editor_->set_remembered(preset.rules.conditions);
     editor_->set_rules(preset.rules);
     refresh();

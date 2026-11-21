@@ -1262,6 +1262,48 @@ TEST_F(GraphPanelTest, WeakSegmentsLoadsAPresetWithoutSavingIt) {
     EXPECT_FALSE(dialog->save_button()->isEnabled());
 }
 
+TEST_F(GraphPanelTest, WeakSegmentsSavesTheHiddenConditionsSettingsHasNow) {
+    // Save to profile keeps the profile's conditions on metrics this video
+    // has none of as Settings has them now: one removed there while the
+    // dialog is open is not put back. A preset loaded keeps its own.
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(90, 95.0F))), "a", "row:a", true});
+    Settings settings;
+    settings.weak_segment_conditions = {"ssimulacra2<60", "vmaf<70"};
+    const auto hand_back = [&] {
+        panel.set_segment_profiles(segment_profiles(settings), segment_profile_in_use(settings).name);
+    };
+    hand_back();
+    std::vector<std::pair<std::string, SegmentRules>> saved;
+    QObject::connect(&panel, &GraphPanel::weak_segment_rules_saved,
+                     [&saved](const std::string& profile, const SegmentRules& rules) {
+                         saved.emplace_back(profile, rules);
+                     });
+    page(panel, "vmaf");
+    worst_button(panel).click();
+    worst_panel(panel).segments_button()->click();
+    auto* dialog = panel.findChild<WeakSegmentsDialog*>();
+    ASSERT_NE(dialog, nullptr);
+    EXPECT_FALSE(dialog->save_button()->isEnabled());  // as saved
+
+    settings.weak_segment_conditions = {"vmaf<70"};  // in Settings: SSIMULACRA2's removed
+    hand_back();
+    EXPECT_FALSE(dialog->save_button()->isEnabled());  // still as saved: nothing to put back
+
+    for (QAction* action : dialog->preset_button()->menu()->actions()) {
+        if (action->text() == "Grainy film") {
+            action->trigger();
+        }
+    }
+    settings.weak_segment_conditions = {"vmaf<75"};  // changed in Settings again
+    hand_back();
+    ASSERT_TRUE(dialog->save_button()->isEnabled());
+    dialog->save_button()->click();
+    ASSERT_EQ(saved.size(), 1U);
+    EXPECT_EQ(condition_texts(saved[0].second.conditions), (std::vector<std::string>{"vmaf<85", "ssimulacra2<55"}));
+}
+
 TEST_F(GraphPanelTest, WorstFramesKeepsTheChosenVideoWhileItIsRecalculated) {
     // Recalculating a video takes its line away until its new scores come;
     // the list shows another video meanwhile, then the chosen one again

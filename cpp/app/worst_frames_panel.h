@@ -163,6 +163,9 @@ private:
     // Kept by Save to profile: the conditions on metrics this video has none
     // of, the profile's or a preset's loaded.
     std::vector<WeakCondition> unshown_;
+    // A preset loaded and not saved yet: unshown_ is the preset's, which
+    // Settings' changes to the profile (set_profiles) leave as they are.
+    bool preset_loaded_ = false;
     std::vector<WeakSegment> segments_;
     SegmentRulesEditor* editor_ = nullptr;
     QLabel* saved_note_ = nullptr;
