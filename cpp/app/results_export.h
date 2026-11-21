@@ -75,6 +75,14 @@ QString export_contents(const std::vector<std::string>& items);
 enum class ExportScope { this_video, all_videos, selected_videos };
 QString export_action_text(ExportScope scope, const std::vector<std::string>& items);
 
+// An export's files written into `folder` (one the user chose, or Settings'
+// after-run export's), replacing none there: where any of their names is
+// taken, by another video's export of the same file name say, they are all
+// numbered alike (unique_output_names). The paths written. Throws
+// std::runtime_error on a file that could not be written.
+std::vector<std::filesystem::path> write_loose_export(const std::filesystem::path& folder,
+                                                      const std::vector<BundleFile>& files);
+
 // CSV text as the command line writes it: CR LF on Windows.
 std::string text_lines(const std::string& text);
 

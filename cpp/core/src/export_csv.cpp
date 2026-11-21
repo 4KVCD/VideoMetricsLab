@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cmath>
 #include <fstream>
+#include <functional>
 #include <limits>
 #include <map>
 #include <stdexcept>
@@ -294,17 +295,13 @@ std::filesystem::path unique_output_path(const std::filesystem::path& folder, co
     return unique_output_paths(folder, label, {suffix}, reserved).front();
 }
 
-std::vector<std::filesystem::path> unique_output_paths(const std::filesystem::path& folder, const std::string& label,
-                                                       const std::vector<std::string>& suffixes,
-                                                       std::set<std::filesystem::path>& reserved) {
-    const std::string stem = output_stem(label);
-    const auto paths_for = [&](const std::string& name) {
-        std::vector<std::filesystem::path> paths;
-        for (const std::string& suffix : suffixes) {
-            paths.push_back(folder / platform::path_from_text(name + suffix));
-        }
-        return paths;
-    };
+namespace {
+
+// The first of `paths_for("")`, `paths_for("_2")`... of which no path is on
+// disk or in `reserved`, which they are added to.
+std::vector<std::filesystem::path> first_free(
+    const std::function<std::vector<std::filesystem::path>(const std::string&)>& paths_for,
+    std::set<std::filesystem::path>& reserved) {
     // Reserved as the system compares names: "Clip" and "clip", still to be
     // written, are one file on Windows.
     const auto as_compared = [](const std::filesystem::path& path) {
@@ -317,14 +314,47 @@ std::vector<std::filesystem::path> unique_output_paths(const std::filesystem::pa
             return reserved.contains(as_compared(path)) || std::filesystem::exists(path, error);
         });
     };
-    std::vector<std::filesystem::path> candidates = paths_for(stem);
+    std::vector<std::filesystem::path> candidates = paths_for("");
     for (int counter = 2; taken(candidates); ++counter) {
-        candidates = paths_for(stem + "_" + std::to_string(counter));
+        candidates = paths_for("_" + std::to_string(counter));
     }
     for (const std::filesystem::path& path : candidates) {
         reserved.insert(as_compared(path));
     }
     return candidates;
+}
+
+}  // namespace
+
+std::vector<std::filesystem::path> unique_output_paths(const std::filesystem::path& folder, const std::string& label,
+                                                       const std::vector<std::string>& suffixes,
+                                                       std::set<std::filesystem::path>& reserved) {
+    const std::string stem = output_stem(label);
+    return first_free(
+        [&](const std::string& number) {
+            std::vector<std::filesystem::path> paths;
+            for (const std::string& suffix : suffixes) {
+                paths.push_back(folder / platform::path_from_text(stem + number + suffix));
+            }
+            return paths;
+        },
+        reserved);
+}
+
+std::vector<std::filesystem::path> unique_output_names(const std::filesystem::path& folder,
+                                                       const std::vector<std::string>& names,
+                                                       std::set<std::filesystem::path>& reserved) {
+    return first_free(
+        [&](const std::string& number) {
+            std::vector<std::filesystem::path> paths;
+            for (const std::string& name : names) {
+                const std::filesystem::path file = platform::path_from_text(name);
+                paths.push_back(folder / (file.stem().native() + platform::path_from_text(number).native() +
+                                          file.extension().native()));
+            }
+            return paths;
+        },
+        reserved);
 }
 
 }  // namespace vml

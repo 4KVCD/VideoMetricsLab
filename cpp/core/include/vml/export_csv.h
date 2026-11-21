@@ -61,5 +61,12 @@ std::filesystem::path unique_output_path(const std::filesystem::path& folder, co
 std::vector<std::filesystem::path> unique_output_paths(const std::filesystem::path& folder, const std::string& label,
                                                        const std::vector<std::string>& suffixes,
                                                        std::set<std::filesystem::path>& reserved);
+// unique_output_paths for files of names of their own (`names`, each with its
+// extension, as they are): numbered alike before their extension where any
+// of them is taken ("clip - results_2.json" and "clip - VMAF_2.png"), so that
+// the files of one export stay together. The paths in the names' order.
+std::vector<std::filesystem::path> unique_output_names(const std::filesystem::path& folder,
+                                                       const std::vector<std::string>& names,
+                                                       std::set<std::filesystem::path>& reserved);
 
 }  // namespace vml

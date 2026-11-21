@@ -50,10 +50,29 @@ void write_bytes(const std::filesystem::path& out, const std::string& bytes) {
     }
 }
 
-// Each of `files` written into `folder` under its own name, or throws.
+// Says where an export was written where its name was taken.
+void log_numbered(const std::filesystem::path& wanted, const std::filesystem::path& written) {
+    if (written != wanted) {
+        logger.info(platform::path_text(wanted.filename()) + " is taken: exported as " +
+                    platform::path_text(written));
+    }
+}
+
+// `out`, or where it is taken, a free name beside it (unique_output_names):
+// for a .zip file the user did not name, of Settings' after-run export.
+std::filesystem::path free_path(const std::filesystem::path& out) {
+    std::set<std::filesystem::path> reserved;
+    const std::filesystem::path free =
+        unique_output_names(out.parent_path(), {platform::path_text(out.filename())}, reserved).front();
+    log_numbered(out, free);
+    return free;
+}
+
+// write_loose_export, saying where its files were written if numbered.
 void write_loose(const std::filesystem::path& folder, const std::vector<BundleFile>& files) {
-    for (const auto& [name, bytes] : files) {
-        write_bytes(folder / platform::path_from_text(name), bytes);
+    const std::vector<std::filesystem::path> written = write_loose_export(folder, files);
+    if (!written.empty()) {
+        log_numbered(folder / platform::path_from_text(files.front().first), written.front());
     }
 }
 
@@ -175,12 +194,18 @@ void MainWindow::save_export(ExportPlan plan, const std::optional<std::filesyste
             }
             destination = path_of(path);
         }
+        // The file the user named is replaced, as they were asked; the
+        // after-run export's replaces none (its name is the video's file
+        // name, which another video's may share).
         if (plan.graphs) {
-            queue_bundle({plan.videos, plan.reference, destination, std::move(plan.files), plan.several, automatic});
+            queue_bundle({plan.videos, plan.reference, destination, std::move(plan.files), plan.several, automatic,
+                          false, automatic});
             return;
         }
         file_writes_->submit(app::tr("export {name}", {{"name", name_of(destination)}}),
-                             [files = std::move(plan.files), out = destination] { write_zip(out, files); });
+                             [files = std::move(plan.files), out = destination, automatic] {
+                                 write_zip(automatic ? free_path(out) : out, files);
+                             });
         if (!automatic) {
             show_status(app::tr("Exported to {path}", {{"path", text_of(destination)}}));
         }
@@ -197,13 +222,15 @@ void MainWindow::save_export(ExportPlan plan, const std::optional<std::filesyste
         }
         destination = path_of(chosen);
     }
-    if (!plan.files.empty()) {
+    // Written at once with the graphs, if any, so that where a name is taken
+    // they are all numbered alike (write_loose_export).
+    if (plan.graphs) {
+        queue_bundle({plan.videos, plan.reference, destination, std::move(plan.files), plan.several, automatic, true});
+    } else {
         file_writes_->submit(app::tr("export {name}", {{"name", plan.name}}),
                              [files = std::move(plan.files), destination] { write_loose(destination, files); });
     }
-    if (plan.graphs) {
-        queue_bundle({plan.videos, plan.reference, destination, {}, plan.several, automatic, true});
-    } else if (!automatic) {
+    if (!plan.graphs && !automatic) {
         show_status(app::tr("Exported to {path}", {{"path", text_of(destination)}}));
     }
 }
@@ -417,7 +444,9 @@ void MainWindow::write_ready_bundles() {
                                  [files = std::move(files), out = ready.destination] { write_loose(out, files); });
         } else {
             file_writes_->submit(app::tr("export {name}", {{"name", name_of(ready.destination)}}),
-                                 [files = std::move(files), out = ready.destination] { write_zip(out, files); });
+                                 [files = std::move(files), out = ready.destination, numbered = ready.numbered] {
+                                     write_zip(numbered ? free_path(out) : out, files);
+                                 });
         }
         logger.info("Graphs exported to " + platform::path_text(ready.destination) +
                     (missing.empty() ? std::string() : " without the bitrate of " + QStringList(missing.begin(), missing.end()).join(", ").toStdString()));
