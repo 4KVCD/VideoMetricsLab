@@ -238,6 +238,23 @@ void keep_file_private(const std::filesystem::path& file) {
                                  std::filesystem::perm_options::replace, ignored);
 }
 
+// Where settings.json stops being JSON, by its line and column, for the
+// log. Not nlohmann's message: its "last read: '...'" quotes the text there,
+// and in a file cut off in a key or a webhook URL (plain text on Linux and
+// macOS) that is part of the key.
+std::string where_unreadable(const std::string& text, const Json::exception& error) {
+    const auto* parse = dynamic_cast<const Json::parse_error*>(&error);
+    if (parse == nullptr || parse->byte == 0) {
+        return "it isn't JSON";
+    }
+    // byte counts from 1, as nlohmann's own "at line L, column C" does.
+    const std::size_t end = std::min<std::size_t>(parse->byte - 1, text.size());
+    const auto before = text.begin() + static_cast<std::ptrdiff_t>(end);
+    const auto lines = static_cast<std::size_t>(std::count(text.begin(), before, '\n'));
+    const std::size_t line_start = lines == 0 ? 0 : text.rfind('\n', end - 1) + 1;
+    return "it isn't JSON at line " + std::to_string(lines + 1) + ", column " + std::to_string(end - line_start + 1);
+}
+
 }  // namespace
 
 int default_parallel_jobs(unsigned cores) { return cores > parallel_by_default_above_cores ? 2 : 1; }
@@ -261,9 +278,10 @@ Settings Settings::load_from(const std::filesystem::path& path) {
     }
     std::stringstream contents;
     contents << stream.rdbuf();
+    const std::string text = python_json_readable(contents.str());
     Json data;
     try {
-        data = Json::parse(python_json_readable(contents.str()));
+        data = Json::parse(text);
     } catch (const Json::exception& error) {
         // The defaults replace it at the next save: a copy for the user to look at.
         std::filesystem::path copy = path;
@@ -274,7 +292,7 @@ Settings Settings::load_from(const std::filesystem::path& path) {
         keep_file_private(copy);
         app_log::Logger("vml.settings")
             .warning("The settings could not be read, and the defaults are used (copy kept as " +
-                     platform::path_text(copy) + "): " + error.what());
+                     platform::path_text(copy) + "): " + where_unreadable(text, error));
         return settings;
     }
     if (!data.is_object()) {

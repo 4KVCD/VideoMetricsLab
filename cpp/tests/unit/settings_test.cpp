@@ -7,9 +7,12 @@
 #include <functional>
 #include <map>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "reference.h"
 #include "test_videos.h"
+#include "vml/app_log.h"
 #include "vml/platform/system.h"
 
 namespace vml {
@@ -235,6 +238,21 @@ TEST(Settings, KeptFromOtherUsers) {
     EXPECT_EQ(permissions(file), perms::owner_read | perms::owner_write);
     EXPECT_EQ(permissions(copy), perms::owner_read | perms::owner_write);
 #endif
+}
+
+// A settings file cut off in a key is logged by where it stops being JSON,
+// never by the text there (nlohmann's "last read: '...'"), part of the key.
+TEST(Settings, UnreadableFileLoggedWithoutItsText) {
+    const test::Folder folder;
+    std::ofstream(folder / "settings.json", std::ios::binary)
+        << "{\n  \"pushover_enabled\": true,\n  \"pushover_token\": \"made-up-token-1234";
+    std::vector<std::string> logged;
+    app_log::forward_lines([&logged](int, std::string_view, std::string_view text) { logged.emplace_back(text); });
+    Settings::load_from(folder / "settings.json");
+    app_log::forward_lines({});
+    ASSERT_EQ(logged.size(), 1u);
+    EXPECT_EQ(logged[0].find("made-up"), std::string::npos) << logged[0];
+    EXPECT_NE(logged[0].find("it isn't JSON at line 3, column "), std::string::npos) << logged[0];
 }
 
 }  // namespace
