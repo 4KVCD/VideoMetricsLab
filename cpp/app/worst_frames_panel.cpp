@@ -6,6 +6,7 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QMenu>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QTableWidget>
@@ -264,6 +265,22 @@ void WorstFramesPanel::refresh() {
 
 // ---------------------------------------------------------- the dialog
 
+namespace {
+
+// The conditions on none of the metrics `keys`.
+std::vector<WeakCondition> conditions_not_on(const std::vector<WeakCondition>& conditions,
+                                             const std::vector<std::string>& keys) {
+    std::vector<WeakCondition> left;
+    for (const WeakCondition& condition : conditions) {
+        if (std::find(keys.begin(), keys.end(), condition.key) == keys.end()) {
+            left.push_back(condition);
+        }
+    }
+    return left;
+}
+
+}  // namespace
+
 WeakSegmentsDialog::WeakSegmentsDialog(WeakFramesVideo video, const MetricDefinition& metric,
                                        std::optional<std::pair<int, int>> range,
                                        std::vector<SegmentProfile> profiles, const std::string& in_use,
@@ -290,6 +307,27 @@ WeakSegmentsDialog::WeakSegmentsDialog(WeakFramesVideo video, const MetricDefini
     const int start = profile_combo_->findData(qt_text(in_use));
     profile_combo_->setCurrentIndex(start >= 0 ? start : 0);
     profile_row->addWidget(profile_combo_);
+    // Settings' From preset, into the conditions shown here: unsaved, as an
+    // edit is.
+    preset_button_ = new QPushButton(app::tr("From preset"));
+    preset_button_->setToolTip(app::tr("Loads a starting point for a kind of video into these conditions, "
+                                       "replacing them, to adjust as needed. Save to profile keeps them."));
+    auto* presets_menu = new QMenu(preset_button_);
+    presets_menu->setToolTipsVisible(true);
+    for (const SegmentPreset& preset : segment_presets()) {
+        QAction* action = presets_menu->addAction(app::tr(preset.name));
+        // One with no condition on this video's metrics would show none.
+        const bool usable = std::ranges::any_of(preset.rules.conditions, [this](const WeakCondition& condition) {
+            return std::find(keys_.begin(), keys_.end(), condition.key) != keys_.end();
+        });
+        action->setEnabled(usable);
+        action->setToolTip(usable ? app::tr(preset.about)
+                                  : app::tr(preset.about) + " " +
+                                        app::tr("This video has no scores of the metrics it uses."));
+        connect(action, &QAction::triggered, this, [this, &preset] { load_preset(preset); });  // the registry's
+    }
+    preset_button_->setMenu(presets_menu);
+    profile_row->addWidget(preset_button_);
     profile_row->addStretch(1);
     layout->addLayout(profile_row);
 
@@ -387,6 +425,7 @@ void WeakSegmentsDialog::start_from_profile(const MetricDefinition& metric) {
                                       [name = profile_name()](const SegmentProfile& p) { return p.name == name; });
     saved_ = profile != profiles_.end() ? profile->rules : SegmentRules{};
     saved_.ranges.clear();
+    unshown_ = conditions_not_on(saved_.conditions, keys_);
     editor_->set_remembered(saved_.conditions);
     editor_->set_rules(saved_);
     if (editor_->condition_count() == 0) {
@@ -395,6 +434,16 @@ void WeakSegmentsDialog::start_from_profile(const MetricDefinition& metric) {
         start.conditions = {default_weak_condition(metric)};
         editor_->set_rules(start);
     }
+}
+
+void WeakSegmentsDialog::load_preset(const SegmentPreset& preset) {
+    // As Settings loads one into a profile: every rule replaced, the
+    // conditions on metrics this video has none of too (kept for Save to
+    // profile). The menu offers only presets with a condition shown here.
+    unshown_ = conditions_not_on(preset.rules.conditions, keys_);
+    editor_->set_remembered(preset.rules.conditions);
+    editor_->set_rules(preset.rules);
+    refresh();
 }
 
 SegmentRules WeakSegmentsDialog::rules() const {
@@ -407,11 +456,7 @@ SegmentRules WeakSegmentsDialog::rules() const {
 
 SegmentRules WeakSegmentsDialog::rules_to_save() const {
     SegmentRules saving = editor_->rules();
-    for (const WeakCondition& condition : saved_.conditions) {
-        if (std::find(keys_.begin(), keys_.end(), condition.key) == keys_.end()) {
-            saving.conditions.push_back(condition);
-        }
-    }
+    saving.conditions.insert(saving.conditions.end(), unshown_.begin(), unshown_.end());
     return saving;
 }
 

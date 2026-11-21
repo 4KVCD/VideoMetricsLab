@@ -1116,6 +1116,8 @@
   "Save to profile": "Simpan ke profil",
   "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Kapan skor video dianggap lemah, dalam profil bernama untuk berbagai jenis video. Profil yang dipilih di sini adalah yang dipakai: Grafik metrik > Bingkai terburuk > Segmen lemah dimulai darinya, dan laporan segmen lemah, ekspor setelah setiap proses, serta --segments saved di baris perintah mengikutinya.",
   "Loads a starting point for a kind of video into this profile, replacing its rules, to adjust as needed. To keep the rules shown too, make a profile with New first.": "Memuat titik awal untuk suatu jenis video ke profil ini, menggantikan aturannya, untuk disesuaikan seperlunya. Untuk menyimpan juga aturan yang ditampilkan, buat profil dengan Baru terlebih dahulu.",
+  "Loads a starting point for a kind of video into these conditions, replacing them, to adjust as needed. Save to profile keeps them.": "Memuat titik awal untuk suatu jenis video ke kondisi ini, menggantikannya, untuk disesuaikan seperlunya. Simpan ke profil menyimpannya.",
+  "This video has no scores of the metrics it uses.": "Video ini tidak memiliki skor metrik yang digunakannya.",
   "Animation": "Animasi",
   "CGI": "CGI",
   "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "CVVDP, yang memodelkan layar HDR (model VMAF untuk video SDR): CVVDP harus sudah dinilai.",

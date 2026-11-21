@@ -1116,6 +1116,8 @@
   "Save to profile": "프로필에 저장",
   "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "동영상의 점수를 약하다고 보는 조건을 동영상 종류별로 이름 있는 프로필에 정합니다. 여기서 선택한 프로필이 사용됩니다: 지표 그래프 > 가장 나쁜 프레임 > 약한 구간은 이 프로필에서 시작하며, 약한 구간 보고서, 실행할 때마다의 내보내기, 명령줄의 --segments saved도 이 프로필을 따릅니다.",
   "Loads a starting point for a kind of video into this profile, replacing its rules, to adjust as needed. To keep the rules shown too, make a profile with New first.": "동영상 종류에 맞는 시작점을 이 프로필에 불러와 규칙을 바꿉니다. 필요에 따라 조정할 수 있습니다. 표시된 규칙도 남기려면 먼저 '새로 만들기'로 프로필을 만드세요.",
+  "Loads a starting point for a kind of video into these conditions, replacing them, to adjust as needed. Save to profile keeps them.": "동영상 종류에 맞는 시작점을 이 조건에 불러와 바꿉니다. 필요에 따라 조정할 수 있습니다. '프로필에 저장'으로 저장됩니다.",
+  "This video has no scores of the metrics it uses.": "이 동영상에는 이것이 사용하는 메트릭의 점수가 없습니다.",
   "Animation": "애니메이션",
   "CGI": "CGI",
   "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "HDR 디스플레이를 모델링하는 CVVDP를 사용합니다(VMAF의 모델은 SDR 동영상용입니다): CVVDP가 채점되어 있어야 합니다.",

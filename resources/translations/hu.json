@@ -1116,6 +1116,8 @@
   "Save to profile": "Mentés profilba",
   "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Hol számítanak egy videó pontszámai gyengének, elnevezett profilokban különféle videótípusokhoz. Az itt kiválasztott profil a használatban lévő: a Metrikagrafikonok > Legrosszabb képkockák > Gyenge szakaszok ebből indul, és a gyenge szakaszok jelentése, a minden futás utáni exportok és a parancssor --segments saved kapcsolója ezt követi.",
   "Loads a starting point for a kind of video into this profile, replacing its rules, to adjust as needed. To keep the rules shown too, make a profile with New first.": "Egy videótípushoz való kiindulópontot tölt be ebbe a profilba, lecserélve a szabályait; igény szerint módosítható. A látható szabályok megtartásához előbb hozzon létre egy profilt az Új gombbal.",
+  "Loads a starting point for a kind of video into these conditions, replacing them, to adjust as needed. Save to profile keeps them.": "Egy videótípushoz való kiindulópontot tölt be ezekbe a feltételekbe, lecserélve őket; igény szerint módosítható. A Mentés profilba megtartja őket.",
+  "This video has no scores of the metrics it uses.": "Ennek a videónak nincsenek pontszámai az általa használt metrikákból.",
   "Animation": "Animáció",
   "CGI": "CGI",
   "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "CVVDP, amely HDR-kijelzőket modellez (a VMAF modelljei SDR-videóhoz valók): a CVVDP-nek pontozva kell lennie.",

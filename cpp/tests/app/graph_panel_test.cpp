@@ -1106,6 +1106,65 @@ TEST_F(GraphPanelTest, WeakSegmentsStartsFromAProfileAndSavesOnlyWhenAsked) {
     EXPECT_EQ(reports[0].merge_frames, 3);
 }
 
+TEST_F(GraphPanelTest, WeakSegmentsLoadsAPresetWithoutSavingIt) {
+    // From preset loads a built-in preset's rules in place of those shown,
+    // as Settings does into a profile: the segments follow at once, nothing
+    // is saved until Save to profile, which then keeps the preset's
+    // conditions on metrics this video has none of too.
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    std::vector<float> values(90, 95.0F);
+    for (int frame = 20; frame < 30; ++frame) {
+        values[static_cast<std::size_t>(frame)] = 80.0F;  // ten frames below 85
+    }
+    values[50] = 80.0F;  // two, shorter than Grainy film's six
+    values[51] = 80.0F;
+    panel.add_run({shared(vmaf_result("a.mkv", values)), "a", "row:a", true});
+    Settings settings;
+    settings.weak_segment_conditions = {"ssimulacra2<60", "vmaf<70"};
+    panel.set_segment_profiles(segment_profiles(settings), segment_profile_in_use(settings).name);
+    std::vector<std::pair<std::string, SegmentRules>> saved;
+    QObject::connect(&panel, &GraphPanel::weak_segment_rules_saved,
+                     [&saved](const std::string& profile, const SegmentRules& rules) {
+                         saved.emplace_back(profile, rules);
+                     });
+    page(panel, "vmaf");
+    worst_button(panel).click();
+    worst_panel(panel).segments_button()->click();
+    auto* dialog = panel.findChild<WeakSegmentsDialog*>();
+    ASSERT_NE(dialog, nullptr);
+    EXPECT_TRUE(dialog->segments().empty());  // nothing below 70
+    QMenu* menu = dialog->preset_button()->menu();
+    ASSERT_NE(menu, nullptr);
+    QAction* grainy = nullptr;
+    for (QAction* action : menu->actions()) {
+        if (action->text() == "Grainy film") {
+            grainy = action;
+        }
+        // HDR's one condition is on CVVDP, which this video has no scores of.
+        EXPECT_EQ(action->isEnabled(), action->text() != "HDR") << action->text().toStdString();
+    }
+    ASSERT_NE(grainy, nullptr);
+    grainy->trigger();
+    const SegmentRules shown = dialog->rules();
+    EXPECT_EQ(condition_texts(shown.conditions), std::vector<std::string>{"vmaf<85"});
+    EXPECT_EQ(shown.min_frames, 6);
+    EXPECT_EQ(shown.merge_frames, 12);
+    ASSERT_EQ(dialog->segments().size(), 1U);
+    EXPECT_EQ(dialog->segments()[0].first_frame, 20);
+    EXPECT_EQ(dialog->segments()[0].last_frame, 29);
+    EXPECT_EQ(dialog->profile_combo()->currentText(), "Default");
+    EXPECT_TRUE(saved.empty());  // not saved by loading it
+    ASSERT_TRUE(dialog->save_button()->isEnabled());
+
+    dialog->save_button()->click();
+    ASSERT_EQ(saved.size(), 1U);
+    EXPECT_EQ(saved[0].first, "");
+    EXPECT_EQ(condition_texts(saved[0].second.conditions), (std::vector<std::string>{"vmaf<85", "ssimulacra2<55"}));
+    EXPECT_EQ(saved[0].second.min_frames, 6);
+    EXPECT_FALSE(dialog->save_button()->isEnabled());
+}
+
 TEST_F(GraphPanelTest, WorstFramesKeepsTheChosenVideoWhileItIsRecalculated) {
     // Recalculating a video takes its line away until its new scores come;
     // the list shows another video meanwhile, then the chosen one again

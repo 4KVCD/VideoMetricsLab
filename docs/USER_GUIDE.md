@@ -74,10 +74,16 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
    `<video>.vmaf+ssimulacra2.segments.csv`). It opens with the weak segment
    profile in use (see [Weak segment profiles](#weak-segment-profiles)): its
    conditions on the metrics the video has (else one on the metric shown);
-   **Profile** picks another to start from. What you change in the dialog
-   holds for it alone, until **Save to profile** keeps it in the profile
-   picked, or **Save as new profile...** in a new one; a profile's condition
-   on a metric the video doesn't have is kept for videos that do.
+   **Profile** picks another to start from, and **From preset...** loads
+   one of the built-in presets for a kind of video (animation, grainy film,
+   HDR...; see the table under
+   [Weak segment profiles](#weak-segment-profiles)) in place of the
+   conditions shown, so you can try another on the fly; a preset with no
+   condition on the video's metrics (HDR without CVVDP scores) is greyed out.
+   What you change or load in the dialog holds for it alone, until **Save to
+   profile** keeps it in the profile picked, or **Save as new profile...** in
+   a new one; a profile's condition on a metric the video doesn't have is
+   kept for videos that do (a preset's, once you've loaded one).
    **Export all videos...** saves every scored test video's segments by the
    dialog's conditions in one file (see
    [Exporting weak segments](#exporting-weak-segments)).
@@ -806,8 +812,10 @@ follow; `--segments profile:NAME` takes another.
 **From preset...** loads a starting point for a kind of video into the
 profile in use, replacing its rules, to adjust as needed; it adds no
 profile. To keep the rules shown as well, make a profile with **New...**
-first, then load the preset into it. (The command line takes a preset as
-`--segments preset:KEY`.) Any condition makes a frame weak:
+first, then load the preset into it. Metric Graphs' **Weak segments...**
+has **From preset...** too, which loads a preset into that dialog's
+conditions only, to save from there if you keep it. (The command line takes
+a preset as `--segments preset:KEY`.) Any condition makes a frame weak:
 
 | Preset (`KEY`) | Conditions | Shortest segment | Join gap | For |
 | --- | --- | --- | --- | --- |
