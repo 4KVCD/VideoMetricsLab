@@ -110,8 +110,11 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     connect(&file_writes_, &FileWrites::became_idle, this, [this] { on_writes_idle(); });
     details_reading_ = new QFutureWatcher<ReadScores>(this);
     connect(details_reading_, &QFutureWatcher<ReadScores>::finished, this, [this] {
-        details_read_ = details_reading_->result();
-        show_details();  // if it is still the one selected
+        ReadScores read = details_reading_->result();
+        if (read.complete && read.listing == listing_) {
+            details_read_ = std::move(read);
+        }
+        show_details();  // if it is still the one selected; else read again
     });
     connect(reading_, &QFutureWatcher<std::vector<SavedComparison>>::finished, this,
             [this] { show_list(reading_->result()); });
@@ -246,6 +249,7 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
 
 SavedResultsPanel::~SavedResultsPanel() {
     reading_->waitForFinished();
+    stop_details_read();
     details_reading_->waitForFinished();
 }
 
@@ -261,6 +265,8 @@ void SavedResultsPanel::refresh() {
 void SavedResultsPanel::show_list(std::vector<SavedComparison> list) {
     list_ = std::move(list);
     details_read_ = {};  // its files may have changed since: read again
+    ++listing_;
+    stop_details_read();
     folder_label_->setText(ntr("{count} saved comparison in {directory}", "{count} saved comparisons in {directory}",
                                static_cast<long long>(list_.size()), {{"directory", text_of(base())}}));
     const QSignalBlocker blocker(table_);
@@ -465,13 +471,29 @@ void SavedResultsPanel::show_details() {
     // scores too, which for a long film takes a while. Issue #133: every
     // row clicked was read on the window's thread.
     details_grid_->addWidget(new QLabel(app::tr("Reading...")), 0, 0, 1, -1, Qt::AlignLeft | Qt::AlignTop);
-    details_reading_->setFuture(QtConcurrent::run([saved] {
-        ReadScores read{saved.folder, {}};
+    if (details_reading_->isRunning() && details_stop_ && !*details_stop_ && details_reading_folder_ == saved.folder) {
+        return;  // being read already, for this listing (show_list stops the reads of an earlier one)
+    }
+    stop_details_read();
+    details_stop_ = std::make_shared<std::atomic<bool>>(false);
+    details_reading_folder_ = saved.folder;
+    details_reading_->setFuture(QtConcurrent::run([saved, listing = listing_, stop = details_stop_] {
+        ReadScores read{saved.folder, {}, listing};
         for (const SavedScoreFile& file : saved.scores) {
+            if (*stop) {
+                return read;  // not complete: not used
+            }
             read.scores[file.file] = read_saved_score(file.file);
         }
+        read.complete = true;
         return read;
     }));
+}
+
+void SavedResultsPanel::stop_details_read() {
+    if (details_stop_) {
+        *details_stop_ = true;
+    }
 }
 
 void SavedResultsPanel::wait_for_details() {

@@ -11,6 +11,7 @@
 #include <QWidget>
 
 #include <atomic>
+#include <cstdint>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -198,9 +199,20 @@ private:
     struct ReadScores {
         std::filesystem::path folder;
         std::map<std::filesystem::path, std::optional<SavedScore>> scores;
+        std::uint64_t listing = 0;  // the listing it was read for (listing_)
+        bool complete = false;      // every file read, not stopped
     };
     QFutureWatcher<ReadScores>* details_reading_ = nullptr;
     ReadScores details_read_;
+    // Counts the listings shown (show_list): a read made for an earlier one
+    // may have missed files the new one lists, and is not used.
+    std::uint64_t listing_ = 0;
+    // Set to stop the read running: one no longer wanted (another row
+    // chosen, a new listing) stops at its next file rather than read the
+    // rest of a comparison no one will see.
+    std::shared_ptr<std::atomic<bool>> details_stop_;
+    std::filesystem::path details_reading_folder_;  // what the read running reads
+    void stop_details_read();
     void fill_details(const SavedComparison& saved);
 };
 
