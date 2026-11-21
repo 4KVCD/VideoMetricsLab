@@ -61,6 +61,20 @@ target_include_directories(vml_miniz SYSTEM PUBLIC third_party/miniz)
 target_compile_definitions(vml_miniz PUBLIC MINIZ_NO_STDIO MINIZ_NO_ZLIB_COMPATIBLE_NAMES)
 set_target_properties(vml_miniz PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# Highway, vendored (third_party/README.md): the vector code of the app's own
+# SSIMULACRA2 and Butteraugli (core's ssimulacra2_kernels.cpp and
+# butteraugli_kernels.cpp), compiled for several instruction sets and
+# chosen for the CPU when the app runs. Only its run-time target choice is
+# compiled here; the rest is headers. Without our warnings, which are not
+# ours to fix.
+add_library(vml_hwy STATIC
+    third_party/highway/hwy/abort.cc
+    third_party/highway/hwy/per_target.cc
+    third_party/highway/hwy/print.cc
+    third_party/highway/hwy/targets.cc)
+target_include_directories(vml_hwy SYSTEM PUBLIC third_party/highway)
+set_target_properties(vml_hwy PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 add_subdirectory(platform)
 add_subdirectory(core)
 add_subdirectory(cli)

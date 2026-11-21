@@ -149,8 +149,8 @@
   "lines": [
    "FFmpeg: 9.0.2",
    "CVVDP: not available (no supported GPU)",
-   "SSIMULACRA2: CPU (libjxl)",
-   "Butteraugli: CPU (libjxl)",
+   "SSIMULACRA2: CPU",
+   "Butteraugli: CPU",
    "VMAF v0.6.1, VMAF NEG: CPU (no GPU that scores VMAF here)",
    "VMAF v1: CPU (no Vulkan GPU)",
    "PSNR, SSIM, XPSNR: CPU (libvmaf-fast v1-4-g994b1814 in the app; FFmpeg beside VMAF on the CPU)"
@@ -194,8 +194,8 @@
   "lines": [
    "FFmpeg: NOT USABLE: ffmpeg.exe could not be run (not found).",
    "CVVDP: not available (no supported GPU)",
-   "SSIMULACRA2: CPU (libjxl)",
-   "Butteraugli: CPU (libjxl)",
+   "SSIMULACRA2: CPU",
+   "Butteraugli: CPU",
    "VMAF v0.6.1, VMAF NEG: CPU (no GPU)",
    "VMAF v1: CPU (no GPU)",
    "PSNR, SSIM, XPSNR: CPU (FFmpeg)"

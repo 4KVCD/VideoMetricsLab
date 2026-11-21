@@ -64,10 +64,15 @@ const app_log::Logger logger("vml.main_window");
 constexpr double rate_window_seconds = 10.0;
 constexpr double rate_min_seconds = 2.0;
 
-// The CPU's seconds per megapixel of a compared frame pair for SSIMULACRA2
-// and Butteraugli, measured with the bundled libjxl 0.12.0 tools on a
-// 3840x1608 (6.17 MP) pair: 1.1 s and 2.0 s. A rough guide, as CPUs differ.
-double cpu_seconds_per_megapixel(const std::string& key) { return (key == "ssimulacra2" ? 1.1 : 2.0) / 6.17; }
+// The seconds per megapixel of a compared frame pair for `keys` (SSIMULACRA2
+// and/or Butteraugli) on the CPU, measured with the app's engines on a 24-core
+// CPU (Core Ultra 9 285K), 48 pairs of a 3840x2160 (8.29 MP) video: 0.34 s a
+// pair with Butteraugli (16.2 s alone, 16.4 s with SSIMULACRA2 beside it),
+// 0.17 s for SSIMULACRA2 alone (8.2 s). A rough guide, as CPUs differ.
+double cpu_seconds_per_megapixel(const std::vector<std::string>& keys) {
+    const bool butteraugli = std::find(keys.begin(), keys.end(), "butteraugli") != keys.end();
+    return (butteraugli ? 0.34 : 0.17) / 8.29;
+}
 
 // "about 3 days", "about 5 hours", "about 40 minutes", rounded as Python's
 // round() rounds (halves to even, as nearbyint does).
@@ -520,9 +525,9 @@ void MainWindow::stop_waiting_for_gpu_checks() {
 
 bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<RowData>>& job_rows) {
     // Asks before SSIMULACRA2 or Butteraugli on the CPU for a video over ten
-    // minutes: where the video's Vship build can use no GPU. The CPU tools
-    // score one pair of still images at a time, 1-2 s per tool for a 4K pair,
-    // which is days for a film. Only metrics this run will calculate count.
+    // minutes: where the video's Vship build can use no GPU. A 4K pair takes
+    // about a third of a second on a 24-core CPU, many hours for a film. Only
+    // metrics this run will calculate count.
     QStringList lines;
     for (const std::shared_ptr<RowData>& row_data : job_rows) {
         if (!row_data->video_info) {
@@ -555,10 +560,7 @@ bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<R
         }
         const double frames = seconds * (info.fps > 0 ? info.fps : 24.0) / std::max(1, row_data->options.n_subsample);
         const double megapixels = static_cast<double>(info.width) * info.height / 1e6;
-        double per_megapixel = 0;
-        for (const std::string& key : cpu_keys) {
-            per_megapixel += cpu_seconds_per_megapixel(key);
-        }
+        const double per_megapixel = cpu_seconds_per_megapixel(cpu_keys);
         lines.append(app::tr("• {name}: {time}, {metrics} on CPU — {duration} of scoring",
                              {{"name", name_of(row_data->path)},
                               {"time", format_hms(seconds)},
@@ -573,10 +575,10 @@ bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<R
         app::tr("Calculating SSIMULACRA2 or Butteraugli on the CPU is not recommended for videos longer than 10 "
                 "minutes:\n\n") +
             lines.join("\n") +
-            app::tr("\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still "
-                    "image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film "
-                    "takes days (the estimates above assume a CPU like the one they were measured on). Set a range to "
-                    "score only a part of the videos.\n\nCalculate anyway?"),
+            app::tr("\n\nNo supported GPU was found, so they are calculated on the CPU: about 0.35 s per 4K frame "
+                    "for both, and half that for SSIMULACRA2 alone, on a 24-core CPU, so a film takes many hours (the "
+                    "estimates above assume a CPU like the one they were measured on). Set a range to score only a "
+                    "part of the videos.\n\nCalculate anyway?"),
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     return answer == QMessageBox::Yes;
 }

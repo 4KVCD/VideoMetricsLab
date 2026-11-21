@@ -16,20 +16,6 @@
 //                                  i modulo 251, in writes of 32 KiB as
 //                                  FFmpeg's
 //
-// With the environment variable VML_TEST_TOOL set, it stands in for
-// libjxl's tools instead, started as the app starts them (REFERENCE TEST,
-// then Butteraugli's options), and for --version prints "test tool 1.0":
-//
-//     VML_TEST_TOOL=score   prints the number of the test picture's pair
-//                           as its score (test-00000007.png scores 7); with
-//                           --rawdistmap MAP, writes a distortion map whose
-//                           3-norm is that number. It writes the pictures'
-//                           folder into a file of its own in the folder
-//                           VML_TEST_TOOL_LOG names.
-//     VML_TEST_TOOL=hang    writes a file of its own into the folder
-//                           VML_TEST_TOOL_LOG names, then sleeps for ten
-//                           minutes
-//
 // With VML_TEST_PLAYBACK set, it stands in for FFmpeg decoding a video for
 // Video Compare's playback (build_playback_command). It tells the way of
 // decoding from its arguments (interop: a CUDA device; transfer: a Vulkan
@@ -41,26 +27,16 @@
 // more; MESSAGE on standard error; and exits with EXIT. It writes "way
 // start" into a file of its own in VML_TEST_TOOL_LOG.
 //
-// With VML_TEST_FFMPEG_PICTURE set, it stands in for FFmpeg writing the CPU
-// tools' frame pairs (png_pairs_command): it writes VML_TEST_FFMPEG_PAIRS
-// pairs, each picture a copy of the picture VML_TEST_FFMPEG_PICTURE names,
-// written under a temporary name and then renamed, as -atomic_writing does.
-// On Windows it holds the first pair's second picture for
-// VML_TEST_FFMPEG_HOLD_MS milliseconds once it has its name, as FFmpeg can
-// (elsewhere, a file held open does not keep others from reading it).
-//
 // On Windows it reads its arguments as Unicode, as FFmpeg does, and writes
 // bytes as they are (no text-mode line endings added).
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <iterator>
 #include <string>
 #include <thread>
 #include <vector>
@@ -169,100 +145,9 @@ int playback(const std::vector<std::string>& arguments) {
     return std::atoi(fields[1].c_str());
 }
 
-// libjxl's tools, stood in for.
-int tool(const std::string& mode, const std::vector<std::string>& arguments) {
-    if (arguments.size() == 2 && arguments[1] == "--version") {
-        std::fputs("test tool 1.0\n", stdout);
-        return 0;
-    }
-    if (arguments.size() < 3) {
-        return 1;
-    }
-    if (mode == "hang") {
-        log_file("started", "started");
-        std::this_thread::sleep_for(std::chrono::minutes(10));
-        return 0;
-    }
-    const std::filesystem::path test = path_of(arguments[2]);
-    // "test-00000007.png" is pair 7.
-    const std::string name = test.filename().string();
-    const int number = std::atoi(name.substr(name.find('-') + 1).c_str());
-    const std::u8string folder = test.parent_path().u8string();
-    log_file("folder", std::string(folder.begin(), folder.end()));
-    for (std::size_t i = 3; i + 1 < arguments.size(); ++i) {
-        if (arguments[i] == "--rawdistmap") {
-            // One value, little-endian: its 3-norm is the value.
-            const auto value = static_cast<float>(number);
-            std::uint32_t bits = 0;
-            std::memcpy(&bits, &value, sizeof bits);
-            std::string map = "Pf\n1 1\n-1.0\n";
-            for (const int shift : {0, 8, 16, 24}) {
-                map.push_back(static_cast<char>((bits >> shift) & 0xFFu));
-            }
-            std::ofstream(path_of(arguments[i + 1]), std::ios::binary) << map;
-        }
-    }
-    std::printf("score: %d\n", number);
-    return 0;
-}
-
-// Holds the file `path` open for `milliseconds`, as FFmpeg can hold a
-// picture it has just renamed: with delete access, which keeps the readers
-// (who do not share deleting) from opening it.
-void hold(const std::filesystem::path& path, int milliseconds) {
-#ifdef _WIN32
-    const HANDLE file = CreateFileW(path.c_str(), DELETE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                                    nullptr, OPEN_EXISTING, 0, nullptr);
-    std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
-    if (file != INVALID_HANDLE_VALUE) {
-        CloseHandle(file);
-    }
-#else
-    static_cast<void>(path);
-    static_cast<void>(milliseconds);
-#endif
-}
-
-// FFmpeg writing the frame pairs, stood in for.
-int ffmpeg(const std::vector<std::string>& arguments) {
-    std::ifstream source(path_of(variable("VML_TEST_FFMPEG_PICTURE")), std::ios::binary);
-    const std::string picture{std::istreambuf_iterator<char>(source), std::istreambuf_iterator<char>()};
-    std::vector<std::string> patterns;  // the outputs, "...\test-%08d.png" and "...\reference-%08d.png"
-    for (const std::string& argument : arguments) {
-        if (argument.ends_with("%08d.png")) {
-            patterns.push_back(argument.substr(0, argument.size() - std::strlen("%08d.png")));
-        }
-    }
-    const int pairs = std::atoi(variable("VML_TEST_FFMPEG_PAIRS").c_str());
-    for (int number = 1; number <= pairs; ++number) {
-        for (const std::string& pattern : patterns) {
-            char digits[16];
-            std::snprintf(digits, sizeof digits, "%08d", number);
-            const std::filesystem::path name = path_of(pattern + digits + ".png");
-            std::filesystem::path temporary = name;
-            temporary += ".tmp";
-            std::ofstream(temporary, std::ios::binary) << picture;
-            std::filesystem::rename(temporary, name);
-            if (number == 1 && pattern == patterns.back()) {
-                hold(name, std::atoi(variable("VML_TEST_FFMPEG_HOLD_MS").c_str()));
-            }
-        }
-    }
-    return 0;
-}
-
 int run(const std::vector<std::string>& arguments) {
-    // While it stands in for FFmpeg it stands in for the tools too: FFmpeg's
-    // command is the one that writes pictures atomically.
-    if (!variable("VML_TEST_FFMPEG_PICTURE").empty() &&
-        std::find(arguments.begin(), arguments.end(), "-atomic_writing") != arguments.end()) {
-        return ffmpeg(arguments);
-    }
     if (!variable("VML_TEST_PLAYBACK").empty()) {
         return playback(arguments);
-    }
-    if (const std::string mode = variable("VML_TEST_TOOL"); !mode.empty()) {
-        return tool(mode, arguments);
     }
     if (arguments.size() >= 2 && arguments[1] == "echo") {
         for (std::size_t i = 2; i < arguments.size(); ++i) {

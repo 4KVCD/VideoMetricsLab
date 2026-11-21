@@ -26,7 +26,7 @@ namespace vml {
 // SSIMULACRA2 and Butteraugli are each set to run, the display CVVDP models,
 // and how many tasks the CPU's queue runs at once, this one included, which
 // sets the share of the cores and memory SSIMULACRA2 and Butteraugli take
-// on the CPU (scoring_workers in perceptual_cpu.h).
+// on the CPU (in_app_schedule in perceptual_cpu.h).
 struct PerceptualRequest {
     RunEnvironment environment;
     VideoInfo source;

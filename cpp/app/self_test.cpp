@@ -19,7 +19,6 @@
 #include "vml/gpu_vmaf.h"
 #include "vml/isolated.h"
 #include "vml/model_select.h"
-#include "vml/perceptual_cpu.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "vml/settings.h"
@@ -181,17 +180,6 @@ void check_frame_decoders(SelfTestReport& report) {
     }
 }
 
-// libjxl's tools for SSIMULACRA2 and Butteraugli on the CPU.
-void check_cpu_tools(SelfTestReport& report) {
-    for (const char* metric : {"ssimulacra2", "butteraugli"}) {
-        if (const std::optional<std::filesystem::path> tool = find_metric_executable(metric)) {
-            report.ok(std::string(metric) + " (" + platform::path_text(*tool) + ")");
-        } else {
-            report.warn(std::string(metric) + " tool absent");
-        }
-    }
-}
-
 void check_isolation(SelfTestReport& report) {
     // The GPU libraries run in processes of their own (isolated.h): each is
     // this program started again.
@@ -253,7 +241,6 @@ SelfTestReport self_test(const QApplication& app) {
     check_native_playback(report);
     check_qt(report, app);
     check_frame_decoders(report);
-    check_cpu_tools(report);
     check_isolation(report);
     check_gpu_metrics(report);
     return report;

@@ -515,7 +515,7 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
         "for a GPU whose Vulkan driver has problems, and all three share their saved scores. GPU's scores differ "
         "slightly and are saved apart: switching shows those saved, or calculates them on the next run. If GPU fails, "
         "Vship Vulkan calculates them instead. Without a GPU the chosen Vship can use, or if it fails too, SSIMULACRA2 "
-        "and Butteraugli are calculated on the CPU (libjxl), and CVVDP is not available."));
+        "and Butteraugli are calculated on the CPU, and CVVDP is not available."));
     connect(vship_build_combo, &QComboBox::currentIndexChanged, this, [this] { emit field_edited("vship_build"); });
     form->addRow(app::tr("Vship compute:"), vship_build_combo);
     form->setRowVisible(vship_build_combo, vship_build_bundled(VshipBuild::stock));

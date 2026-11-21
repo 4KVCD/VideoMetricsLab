@@ -39,9 +39,6 @@ const std::map<std::string, std::string, std::less<>> built_in_gpu_models{
 };
 constexpr const char* neg_model = "vmaf_v0.6.1neg";
 
-// How many frames each reader may hold ready before the feeder takes them.
-constexpr std::size_t read_ahead = 3;
-
 // A queue of frame buffers between two threads. nullptr in it says that no
 // more will come.
 using BufferQueue = Channel<std::vector<std::uint8_t>*>;
@@ -344,8 +341,12 @@ std::pair<std::vector<std::string>, std::vector<std::string>> gpu_output_args(co
 // ------------------------------------------------------------- StreamReader
 
 struct StreamReader::State {
-    State(std::string_view name, std::size_t frame_bytes)
-        : name(name), pipe(name, platform::frame_pipe_bytes), frame_bytes(frame_bytes), buffers(read_ahead + 1) {
+    State(std::string_view name, std::size_t frame_bytes, Framing framing, std::size_t buffer_count)
+        : name(name),
+          pipe(name, platform::frame_pipe_bytes),
+          frame_bytes(frame_bytes),
+          framing(framing),
+          buffers(std::max<std::size_t>(1, buffer_count)) {
         for (std::vector<std::uint8_t>& buffer : buffers) {
             buffer.resize(frame_bytes);
             free.put(&buffer);
@@ -355,6 +356,7 @@ struct StreamReader::State {
     std::string name;  // what the pipe's path ends in: "distorted", "reference"
     platform::InboundPipe pipe;
     std::size_t frame_bytes;
+    Framing framing;
     // The frame being paired and those read ahead.
     std::vector<std::vector<std::uint8_t>> buffers;
     BufferQueue free;    // buffers to read into; nullptr: stop reading frames
@@ -368,8 +370,8 @@ struct StreamReader::State {
     std::thread thread;
 };
 
-StreamReader::StreamReader(std::string_view name, std::size_t frame_bytes)
-    : state_(std::make_unique<State>(name, frame_bytes)) {}
+StreamReader::StreamReader(std::string_view name, std::size_t frame_bytes, Framing framing, std::size_t buffers)
+    : state_(std::make_unique<State>(name, frame_bytes, framing, buffers)) {}
 
 StreamReader::~StreamReader() {
     if (state_->thread.joinable()) {
@@ -384,38 +386,64 @@ int StreamReader::take_writer() { return state_->pipe.take_writer(); }
 
 void StreamReader::start() { state_->thread = std::thread([this] { read_frames(); }); }
 
+// The stream is a header line, "YUV4MPEG2 W.. H.. ...\n", then for each frame
+// a "FRAME\n" line and the frame's planes, packed.
+void StreamReader::read_yuv4mpeg_frames() {
+    State& s = *state_;
+    std::string header;
+    std::uint8_t byte = 0;
+    while (byte != '\n' && header.size() < 1024 && s.pipe.read(&byte, 1) == 1) {
+        header += static_cast<char>(byte);
+    }
+    if (!header.empty() && !header.starts_with("YUV4MPEG2 ")) {
+        throw LibvmafError("FFmpeg's frames are not a YUV4MPEG stream");
+    }
+    std::array<std::uint8_t, 6> marker{};
+    while (!header.empty() && !s.stopped) {
+        if (!read_exactly(s.pipe, marker.data(), marker.size(), s.stopped, s.writer_gone)) {
+            return;
+        }
+        if (std::memcmp(marker.data(), "FRAME\n", marker.size()) != 0) {
+            throw LibvmafError("FFmpeg's frames are not where they were expected");
+        }
+        std::vector<std::uint8_t>* buffer = s.free.get();
+        if (buffer == nullptr) {
+            return;
+        }
+        if (!read_exactly(s.pipe, buffer->data(), buffer->size(), s.stopped, s.writer_gone)) {
+            throw FramesCutError("FFmpeg's frames ended after a frame's start");
+        }
+        s.pixels.put(buffer);
+    }
+}
+
+// The stream is the frames, one after the other: it ends between two, and a
+// frame cut short is FFmpeg's failure (read_exactly).
+void StreamReader::read_raw_frames() {
+    State& s = *state_;
+    while (!s.stopped) {
+        std::vector<std::uint8_t>* buffer = s.free.get();
+        if (buffer == nullptr) {
+            return;
+        }
+        if (!read_exactly(s.pipe, buffer->data(), buffer->size(), s.stopped, s.writer_gone)) {
+            s.free.put(buffer);
+            return;
+        }
+        s.pixels.put(buffer);
+    }
+}
+
 void StreamReader::read_frames() {
     State& s = *state_;
     try {
         s.pipe.connect();
         s.connected = true;
         if (!s.stopped) {
-            // The stream is a header line, "YUV4MPEG2 W.. H.. ...\n", then
-            // for each frame a "FRAME\n" line and the frame's planes, packed.
-            std::string header;
-            std::uint8_t byte = 0;
-            while (byte != '\n' && header.size() < 1024 && s.pipe.read(&byte, 1) == 1) {
-                header += static_cast<char>(byte);
-            }
-            if (!header.empty() && !header.starts_with("YUV4MPEG2 ")) {
-                throw LibvmafError("FFmpeg's frames are not a YUV4MPEG stream");
-            }
-            std::array<std::uint8_t, 6> marker{};
-            while (!header.empty() && !s.stopped) {
-                if (!read_exactly(s.pipe, marker.data(), marker.size(), s.stopped, s.writer_gone)) {
-                    break;
-                }
-                if (std::memcmp(marker.data(), "FRAME\n", marker.size()) != 0) {
-                    throw LibvmafError("FFmpeg's frames are not where they were expected");
-                }
-                std::vector<std::uint8_t>* buffer = s.free.get();
-                if (buffer == nullptr) {
-                    break;
-                }
-                if (!read_exactly(s.pipe, buffer->data(), buffer->size(), s.stopped, s.writer_gone)) {
-                    throw FramesCutError("FFmpeg's frames ended after a frame's start");
-                }
-                s.pixels.put(buffer);
+            if (s.framing == Framing::raw) {
+                read_raw_frames();
+            } else {
+                read_yuv4mpeg_frames();
             }
             // The comparison may end before this video does: what FFmpeg
             // still writes is read and dropped, so that it can finish.

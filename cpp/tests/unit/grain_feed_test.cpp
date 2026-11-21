@@ -166,15 +166,6 @@ TEST(GrainFeed, AFedVideoTakesItsFilesPlaceInEveryCommand) {
 
     EXPECT_EQ(build_resample_command("ffmpeg", source.path, "[0:v]null", std::nullopt, {}, fed),
               with_fed_input(build_resample_command("ffmpeg", source.path, "[0:v]null", std::nullopt), source, fed));
-
-    VideoInfo plain_test = test;
-    plain_test.pix_fmt = "yuv420p";
-    const std::filesystem::path folder = std::filesystem::temp_directory_path();
-    EXPECT_EQ(png_pairs_command("ffmpeg", source, plain_test, VmafOptions{}, std::nullopt, std::nullopt, 1, folder,
-                                fed, std::nullopt),
-              with_fed_input(png_pairs_command("ffmpeg", source, plain_test, VmafOptions{}, std::nullopt, std::nullopt,
-                                               1, folder),
-                             plain_test, fed));
 }
 
 // A write into a pipe whose reader closed its end ends the feeding without

@@ -13,37 +13,8 @@ namespace {
 constexpr double infinity = std::numeric_limits<double>::infinity();
 constexpr double not_a_number = std::numeric_limits<double>::quiet_NaN();
 
-// numpy's pairwise_sum for float64 (numpy/_core/src/umath/loops_utils.h.src),
-// step for step: fewer than 8 values one by one; up to 128 in eight running
-// sums added in pairs; more split in two at a multiple of 8.
 double pairwise_sum(std::span<const double> values) {
-    const std::size_t n = values.size();
-    if (n < 8) {
-        double sum = 0.0;
-        for (const double value : values) {
-            sum += value;
-        }
-        return sum;
-    }
-    if (n <= 128) {
-        // Eight running sums, the j-th over the values at j, j + 8, j + 16...
-        std::array<double, 8> sums{};
-        std::copy_n(values.begin(), 8, sums.begin());
-        std::size_t i = 8;
-        for (; i < n - n % 8; i += 8) {
-            for (std::size_t j = 0; j < 8; ++j) {
-                sums[j] += values[i + j];
-            }
-        }
-        double sum = ((sums[0] + sums[1]) + (sums[2] + sums[3])) + ((sums[4] + sums[5]) + (sums[6] + sums[7]));
-        for (; i < n; ++i) {  // the last n % 8 values, one by one
-            sum += values[i];
-        }
-        return sum;
-    }
-    std::size_t half = n / 2;
-    half -= half % 8;
-    return pairwise_sum(values.first(half)) + pairwise_sum(values.subspan(half));
+    return detail::pairwise_sum(0, values.size(), [values](std::size_t i) { return values[i]; });
 }
 
 // np.mean.

@@ -117,7 +117,8 @@ Vship ([Vship-fast](https://github.com/4KVCD/Vship-fast)), a faster Vship whose
 metrics compute as libjxl's and the reference CVVDP's do,
 with Vulkan on any GPU (NVIDIA's, AMD's and Intel's). If no GPU can be used,
 the input format is unsupported, or GPU scoring fails, SSIMULACRA2 and
-Butteraugli are calculated with the bundled libjxl on the CPU; CVVDP runs on
+Butteraugli are calculated on the CPU, with the scores of libjxl's official
+tools; CVVDP runs on
 the GPU only. The GPU and the CPU convert the video to RGB differently, so
 their scores differ: on a PC whose GPU can calculate them, a score calculated
 on the CPU is marked "(CPU)" and the next run calculates it again on the GPU.
@@ -466,7 +467,7 @@ $run.videos[0].metrics.vmaf.score
 | `--cvvdp-display PRESET` | The display CVVDP models, by preset name. Repeat it for a CVVDP score on each display; the JSON then lists each display's name, score, display parameters and full CVVDP statistics in the video's `cvvdp_displays`. Left out: the app's default display, Automatic unless Settings name a preset: the HDR display (`30-inch 4K HDR monitor, dim room`, the official `standard_hdr_pq`) for an HDR reference (PQ or HLG), the SDR one (`30-inch 4K monitor, office`, `standard_4k`) otherwise. |
 | `--cvvdp-fill` | Scale the compared frames up to fill CVVDP's display, aspect kept, as the Options panel's **Scale the video to fill the display**. Left out: off, as the official tool (a 1080p video covers a quarter of a 4K display). These scores are saved apart. |
 | `--subsample N` | Score every N-th frame. CVVDP needs every frame. |
-| `--cpu` | Calculate on the CPU every metric that can be (CVVDP is GPU only): VMAF as with `--vmaf-on cpu`, unless `--vmaf-on` says otherwise, and SSIMULACRA2 and Butteraugli with libjxl rather than on the GPU. |
+| `--cpu` | Calculate on the CPU every metric that can be (CVVDP is GPU only): VMAF as with `--vmaf-on cpu`, unless `--vmaf-on` says otherwise, and SSIMULACRA2 and Butteraugli rather than on the GPU. |
 | `--vmaf-on` `gpu\|cpu` | Where VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated. Left out: as the app's Options panel was last set. |
 | `--vship` `vship-fast\|vship\|vship-hip\|vship-cuda` | The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU: `vship-fast`, the app's own (the window's GPU), or stock Vship: `vship` (the window's Vship Vulkan), or if Vulkan has problems `vship-hip` (AMD) or `vship-cuda` (NVIDIA). Stock Vship's three share their scores, which differ slightly from `vship-fast`'s and are saved apart. Left out: as Settings > Metrics > GPU metrics sets it. |
 | `--vship-pass one\|each` | SSIMULACRA2, Butteraugli and CVVDP in one pass per video, which decodes it once (faster only on a very powerful GPU, and needs much GPU memory), or a pass for each. The scores are the same. Left out: as Settings > Metrics > GPU metrics sets it. |

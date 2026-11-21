@@ -142,9 +142,6 @@ previous build's output undeletable. The package therefore goes to
   -Slangc <slangc.exe> -VulkanHeaders <include folder>` (MinGW-w64 g++,
   Slang 2026.10.2, Khronos Vulkan-Headers 3c65a01); not in git. The release
   needs it (`scripts/build_release.ps1` stops without it).
-- **SSIMULACRA2 and Butteraugli on the CPU**, the official libjxl 0.12.0
-  static Windows command-line tools, with their notices; users do not need
-  to install libjxl.
 - **Vship-fast's GPU library** for SSIMULACRA2, Butteraugli and CVVDP,
   `resources/tools/vship/vulkan` (any GPU with a Vulkan driver, NVIDIA, AMD
   and Intel alike): [Vship-fast](https://github.com/4KVCD/Vship-fast), this
@@ -217,8 +214,8 @@ The packaged window can check itself:
 
 It reports FFmpeg, FFmpeg's libraries for Video Compare, the GPU decoders,
 VVdeC, dav1d, the presenter, Qt and its TLS backend, each
-frame decoder for the GPU metrics, the software decoder's codecs, libjxl's
-tools, the process of its own GPU work runs in, Vship, and VMAF and VMAF v1
+frame decoder for the GPU metrics, the software decoder's codecs, the
+process of its own GPU work runs in, Vship, and VMAF and VMAF v1
 on the GPU, in a dialog and in `~\.videometricslab\self-test.txt`. `--quiet`
 skips the dialog and sets the exit code instead, which is how
 `build_release.ps1` uses it. The script also runs

@@ -194,6 +194,30 @@ std::optional<std::string> short_comparison(long long expected, long long compar
 // in its error output.
 bool refused_frame_write(int exit_code, std::string_view ffmpeg_errors);
 
+// How an FFmpeg of a run ended.
+struct FfmpegOutcome {
+    int exit_code = 0;
+    std::string errors;
+    std::size_t command = 0;  // which of the run's commands it is
+};
+
+// Runs two FFmpegs side by side, each decoding one video into a pipe of the
+// app's: the first reports the progress (none without `on_progress`), and
+// one that fails ends the other. Returns the outcome of the first to fail of
+// those whose pipe the app did not close (`closed_by_app`, by command), else
+// of the first to fail, or the first's. `take_descriptors` gives what a
+// command inherits, asked as it starts: a command that never starts leaves
+// its pipe to be closed by its owner. Throws Cancelled, platform::ProcessError
+// when one cannot start, and VideoSizeChanged when one rebuilt its filters,
+// naming its video of `videos`, the one each command decodes (both are ended
+// then).
+FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& commands,
+                              const std::vector<std::filesystem::path>& videos,
+                              const std::function<std::vector<int>(std::size_t)>& take_descriptors,
+                              const std::function<bool(std::size_t)>& closed_by_app, long long total_frames,
+                              const ProgressCallback& on_progress, const CancelToken& cancel,
+                              const std::filesystem::path& folder);
+
 // Whether the app may score PSNR, SSIM and XPSNR itself: its libvmaf is
 // bundled, and the environment variable VML_CPU_METRICS does not send them
 // to FFmpeg ("ffmpeg").

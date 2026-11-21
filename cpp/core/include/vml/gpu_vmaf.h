@@ -155,14 +155,24 @@ std::pair<std::vector<std::string>, std::vector<std::string>> gpu_output_args(co
 inline constexpr std::string_view gpu_wait_message = "Waiting for the GPU: another video's GPU pass is running…";
 
 // One video as FFmpeg's filter chain gives it: its frames as a YUV4MPEG
-// stream (FFmpeg's yuv4mpegpipe output) on a pipe this process serves. A
-// thread reads the frames ahead into a few buffers; pull() gives them in
-// order, and each is given back with release().
+// stream (FFmpeg's yuv4mpegpipe output), or as bare frames one after the
+// other (its rawvideo output), on a pipe this process serves. A thread reads
+// the frames ahead into a few buffers; pull() gives them in order, and each
+// is given back with release().
 class StreamReader {
 public:
+    // How the frames come.
+    enum class Framing {
+        yuv4mpeg,  // a header line, then a "FRAME" line before each frame
+        raw,       // nothing but the frames
+    };
+
     // A reader of frames of `frame_bytes` each, its pipe's path ending in
-    // `name`. Throws platform::PipeError.
-    StreamReader(std::string_view name, std::size_t frame_bytes);
+    // `name`, with `buffers` buffers: the frame being used and those read
+    // ahead (by default 3) before the feeder takes them. Throws
+    // platform::PipeError.
+    StreamReader(std::string_view name, std::size_t frame_bytes, Framing framing = Framing::yuv4mpeg,
+                 std::size_t buffers = 4);
     ~StreamReader();
     StreamReader(const StreamReader&) = delete;
     StreamReader& operator=(const StreamReader&) = delete;
@@ -205,6 +215,8 @@ public:
 
 private:
     void read_frames();
+    void read_yuv4mpeg_frames();
+    void read_raw_frames();
 
     struct State;
     std::unique_ptr<State> state_;

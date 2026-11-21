@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
-      # Meson for libvmaf-fast, Ninja for the app and libjxl, and FFmpeg 9
+      # Meson for libvmaf-fast, Ninja for the app, and FFmpeg 9
       # (with libvmaf) for the tests and the self-test.
       - name: Install the tools
         run: brew install meson ninja ffmpeg sevenzip

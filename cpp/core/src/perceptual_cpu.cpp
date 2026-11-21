@@ -24,20 +24,26 @@
 #include "vml/append.h"
 #include "vml/build_info.h"
 #include "vml/colour.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
+#include "vml/gpu_vmaf.h"
 #include "vml/gpu_frames.h"
 #include "vml/grain_feed.h"
+#include "vml/isolated.h"
 #include "vml/model_select.h"
 #include "vml/number_format.h"
+#include "vml/cpu_pair_scorer.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
+#include "vml/run_json.h"
 #include "vml/stats.h"
 #include "vml/score_identity.h"
 #include "vml/size_changes.h"
 #include "vml/temp_files.h"
+#include "vml/threads.h"
 
 namespace vml {
 
@@ -45,31 +51,22 @@ namespace {
 
 const app_log::Logger logger("vml.perceptual_cpu");
 
-// How many frame pairs FFmpeg may write ahead of the scoring before it is
-// suspended. FFmpeg writes the pictures far faster than the tools score them
-// (1-2 s per 4K pair), so without a limit it would write the whole video out
-// first: about 10 MB of 16-bit PNG per 4K frame, terabytes for a film, with
-// no progress shown until it finished. 24 pairs of 4K take about 0.5 GB.
-// FFmpeg resumes once half of them are scored.
-constexpr int backlog_pairs = 24;
-
-// The longest one tool may run on one frame pair. The bundled tools take
-// 1-2 s for a 4K pair.
-constexpr std::chrono::seconds tool_timeout{120};
-
-// The share of the free memory the tools may fill between them.
+// The share of the free memory the workers may fill between them.
 constexpr double memory_share = 0.6;
 
 // How often the progress is reported at most, after the first pair: small
 // pictures are scored many times a second.
 constexpr std::chrono::milliseconds progress_interval{250};
 
-// The memory one tool takes at its peak, in bytes per pixel of the pair it
-// scores, with a margin. On a 3840x2160 pair, SSIMULACRA2 takes 1.19 GB (143
-// bytes per pixel) and Butteraugli 1.85 GB (223 bytes per pixel).
-long long tool_bytes_per_pixel(const std::string& metric) { return metric == "ssimulacra2" ? 160 : 250; }
-
-std::filesystem::path libjxl_folder() { return resource_folder() / "tools" / "libjxl"; }
+// The memory of one worker of the app's engines (in_app_schedule): its copy
+// of the pair (two 16-bit RGB pictures), its Butteraugli's planes, and its
+// SSIMULACRA2, which keeps only the rows its filters still need. Measured as
+// the peak working set added by each further worker, at 3840x2160 and
+// 1920x1080: Butteraugli 133-134 bytes per pixel besides the pictures (here
+// with a margin), SSIMULACRA2 about 3 MB at either size.
+constexpr long long in_app_picture_bytes_per_pixel = 12;
+constexpr long long in_app_butteraugli_bytes_per_pixel = 160;
+constexpr long long in_app_ssimulacra2_bytes = 8LL << 20;
 
 // A program's output as Python reads it in text mode: its line endings
 // (CR LF, or a lone CR) as LF, and bytes that are not UTF-8 replaced.
@@ -139,28 +136,6 @@ std::size_t number_end(std::string_view text, std::size_t start) {
     return at;
 }
 
-// The tool's first line for --version, -version or -V, or "unknown" (the
-// Python app's _tool_version).
-std::string tool_version(const std::filesystem::path& executable) {
-    for (const char* flag : {"--version", "-version", "-V"}) {
-        const std::optional<platform::ProcessOutput> output =
-            platform::finished_program({platform::path_text(executable), flag}, std::chrono::seconds(5));
-        if (!output) {
-            return "unknown";
-        }
-        if (output->exit_code == 0) {
-            const std::string text =
-                as_text(!output->standard_output.empty() ? output->standard_output : output->standard_error);
-            const std::string_view stripped = python_strip(text);
-            if (stripped.empty()) {
-                return "unknown";
-            }
-            return first_characters(stripped.substr(0, stripped.find_first_of("\n\v\f\x1C\x1D\x1E")), 160);
-        }
-    }
-    return "unknown";
-}
-
 // ------------------------------------------------------------ the pictures
 
 // The crop filter that removes a video's black bars, if there are any.
@@ -225,431 +200,171 @@ std::vector<std::string> to_rgb(const VideoInfo& info) {
     return filters;
 }
 
-// What image_filtergraph's chains need of the two videos.
-struct GraphPlan {
-    const VideoInfo& source;
-    const VideoInfo& distorted;
-    const std::optional<CropBox>& source_crop;
-    const std::optional<CropBox>& distorted_crop;
-    std::optional<Size> source_target;     // the size the source is scaled to, if it is
-    std::optional<Size> distorted_target;  // the size the test video is scaled to, if it is
-    Size source_size;                      // the source's size after its crop
-    std::vector<std::string> sample;       // the filter keeping every step-th frame, if any
-    std::string scale_algorithm;
-};
-
-// ------------------------------------------------------------ the tools
-
-// Deletes a file when it goes, if it is there.
-class Deleted {
+// The filter chains of image_filtergraph, one per video: each from the
+// frames of its input to its lossless RGB48 pictures.
+class ImageChains {
 public:
-    explicit Deleted(std::filesystem::path path) : path_(std::move(path)) {}
-    ~Deleted() {
-        std::error_code ignored;
-        std::filesystem::remove(path_, ignored);
-    }
-    Deleted(const Deleted&) = delete;
-    Deleted& operator=(const Deleted&) = delete;
-
-private:
-    std::filesystem::path path_;
-};
-
-// Runs a still-image tool to its end, as platform::run_program does, with
-// the tool attached to the run: Pause holds it, as it holds FFmpeg, and
-// Cancel ends it at once. Without that, the tools would score the pairs
-// already written while the window says "Paused". `stop` ends it too, and
-// so does tool_timeout of running, the time paused not counted.
-platform::ProcessOutput run_tool(const std::vector<std::string>& command, const std::function<bool()>& stop,
-                                 const CancelToken& cancel) {
-    platform::ChildProcess tool = platform::ChildProcess::start(command);
-    const CancelToken::Attached attached = cancel.attach(tool);
-    // Read on a thread of its own, so that the tool is never held up by a
-    // full pipe while this one waits for it to end.
-    std::string output;
-    std::thread reader([&tool, &output] {
-        while (const std::optional<std::string> line = tool.read_line()) {
-            output += *line;
-            output += '\n';
-        }
-    });
-    platform::ProcessOutput result;
-    constexpr std::chrono::milliseconds step(100);
-    std::chrono::milliseconds running(0);
-    while (!tool.wait_for(step)) {
-        if (stop()) {
-            tool.terminate();
-            result.stopped = true;
-            break;
-        }
-        if (!cancel.paused()) {
-            running += step;
-        }
-        if (running >= tool_timeout) {
-            tool.terminate();
-            result.timed_out = true;
-            break;
-        }
-    }
-    result.exit_code = tool.wait();
-    reader.join();
-    // Ended by the run's Cancel (which ends attached programs itself), it was
-    // stopped, not failed: its exit code says only that it was ended.
-    if (!result.timed_out && cancel.cancelled()) {
-        result.stopped = true;
-    }
-    result.standard_output = std::move(output);
-    result.standard_error = tool.standard_error();
-    return result;
-}
-
-// Scores one frame pair with a still-image tool and returns the score (the
-// Python app's _run_metric). `stop` ends the tool at once: the user's
-// Cancel, or another pair's failure, which throws Cancelled here.
-double run_metric(const std::filesystem::path& executable, const std::string& metric,
-                  const std::filesystem::path& reference, const std::filesystem::path& test, bool hdr,
-                  const std::function<bool()>& stop, const CancelToken& cancel) {
-    std::vector<std::string> command{platform::path_text(executable), platform::path_text(reference),
-                                     platform::path_text(test)};
-    std::optional<std::filesystem::path> distortion_map;
-    if (metric == "butteraugli") {
-        distortion_map =
-            test.parent_path() / platform::path_from_text(platform::path_text(test.stem()) + "-distortion.pfm");
-        if (!hdr) {
-            // As Python's {:g} writes it: "203".
-            command.insert(command.end(), {"--intensity_target", format_general(butteraugli_intensity_nits)});
-        }
-        command.insert(command.end(), {"--rawdistmap", platform::path_text(*distortion_map)});
-    }
-    std::optional<Deleted> map_deleted;
-    if (distortion_map) {
-        map_deleted.emplace(*distortion_map);
-    }
-    platform::ProcessOutput output;
-    try {
-        output = run_tool(command, stop, cancel);
-    } catch (const platform::ProcessError& error) {
-        throw PerceptualRunError("Could not run " + metric + ": " + error.what());
-    }
-    if (output.stopped) {
-        throw Cancelled();
-    }
-    if (output.timed_out) {
-        throw PerceptualRunError(metric + " did not finish a frame within " + std::to_string(tool_timeout.count()) +
-                                 " s.");
-    }
-    const std::string combined = as_text(output.standard_output) + "\n" + as_text(output.standard_error);
-    if (output.exit_code != 0) {
-        throw PerceptualRunError(metric + " failed for a frame.", last_characters(combined, 2000));
-    }
-    if (distortion_map) {
-        try {
-            return butteraugli_norm3(*distortion_map);
-        } catch (const PerceptualRunError&) {
-            throw;
-        } catch (const std::exception&) {
-            throw PerceptualRunError("butteraugli wrote no readable distortion map.", last_characters(combined, 2000));
-        }
-    }
-    // The score is the last number on standard output. Standard error is
-    // only for what went wrong above: a warning's number is no score.
-    return parse_score(metric, as_text(output.standard_output));
-}
-
-// The frame pairs FFmpeg writes into a folder, handed out as they are
-// complete (the Python app's _png_pairs).
-//
-// One FFmpeg decodes both videos and writes lossless 16-bit RGB PNG files
-// (png_pairs_command). Each picture is written under a temporary name and
-// renamed when complete, so a picture that exists is whole; a pair is handed
-// out once FFmpeg has let go of both its pictures too (ready).
-//
-// FFmpeg is suspended while it has `backlog` complete pairs ready ahead of
-// the caller, and resumed when it has half as many. A thread of its own
-// checks this every 10 ms, because checking only as each pair is handed out
-// would let FFmpeg run far ahead while one slow pair is scored. Only
-// complete pairs count. The two picture sequences come from two decoders,
-// and one can run well ahead of the other (a 4K AV1 test video ran 24
-// frames ahead of its HEVC source), so suspending because of the side that
-// is ahead would stop the side that is behind too, and the pair the caller
-// waits for would never come. So while the caller waits, FFmpeg always
-// runs.
-//
-// Each output runs to its own input's end. The comparison is the frames
-// both videos have (libvmaf's shortest=1), so the pairs end when either
-// sequence does.
-class PngPairs {
-public:
-    // A pair: the source's picture, then the test video's.
-    using Pair = std::pair<std::filesystem::path, std::filesystem::path>;
-
-    // Starts FFmpeg with `command`, which writes into `folder`. `stop` makes
-    // a caller waiting for a pair give up (another pair failed). Pause holds
-    // FFmpeg as the backlog does: each of the two holds it while it wants it
-    // held (ChildProcess::suspend).
-    PngPairs(const std::vector<std::string>& command, std::filesystem::path folder, int backlog,
-             const std::atomic<bool>& stop, const CancelToken& cancel)
-        : folder_(std::move(folder)),
-          backlog_(std::max(2, backlog)),
-          stop_(stop),
-          cancel_(cancel),
-          ffmpeg_(platform::ChildProcess::start(command, watched(rebuilt_))),
-          attached_(cancel.attach(ffmpeg_)),
-          regulator_([this] { regulate(); }) {}
-
-    // Stops FFmpeg if the pairs ended early.
-    ~PngPairs() {
-        ending_ = true;
-        regulator_.join();
-        throttle(false);
-        if (!ffmpeg_.wait_for(std::chrono::milliseconds(0))) {
-            ffmpeg_.terminate();
-            ffmpeg_.wait();
-        }
-    }
-
-    PngPairs(const PngPairs&) = delete;
-    PngPairs& operator=(const PngPairs&) = delete;
-
-    // The next pair once both its pictures are whole and FFmpeg has let go
-    // of them; nothing once the shorter video has ended, or when `stop` is
-    // set. Throws Cancelled, PerceptualRunError when FFmpeg fails, and
-    // VideoSizeChanged when it rebuilt its filters (size_changes.h): its
-    // pictures from then on are not what the task scores.
-    std::optional<Pair> next() {
-        if (ended_) {
-            return std::nullopt;
-        }
-        consumed_ = index_;
-        Pair found = pair(index_);
-        while (!ready(index_)) {
-            cancel_.throw_if_cancelled();
-            if (stop_) {
-                return std::nullopt;
+    ImageChains(const VideoInfo& source_info, const VideoInfo& distorted_info, const VmafOptions& options,
+                const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop, int step)
+        // Read with the same colours as Vship reads them (with_shared_colours).
+        : videos_(with_shared_colours(source_info, distorted_info)),
+          source_crop_(source_crop),
+          distorted_crop_(distorted_crop),
+          scale_algorithm_(options.scale_algorithm),
+          seeks_(options.range_seeks),
+          // Both videos' frames are first kept to those a range decodes
+          // (counted as decoded), then numbered at the test video's frame
+          // rate, so that the frames of both are paired; then sampled, so
+          // that the frames select drops are not cropped or scaled.
+          range_(cpu_range(options, videos_.first, step)),
+          numbering_(numbering_filters(frame_rate(videos_.second))) {
+        const Size source_size = content_size(videos_.first, source_crop);
+        const Size distorted_size = content_size(videos_.second, distorted_crop);
+        if (source_size != distorted_size) {
+            if (options.scale_direction == ScaleDirection::distorted_to_source) {
+                distorted_target_ = source_size;
+            } else {
+                source_target_ = distorted_size;
             }
-            if (*rebuilt_) {
-                throw VideoSizeChanged(std::nullopt, rebuilt_->size());
-            }
-            if (ffmpeg_.wait_for(std::chrono::milliseconds(0))) {
-                if (complete(index_)) {
-                    break;  // written just before FFmpeg ended
-                }
-                // Ended by the run's Cancel since the check above, it was
-                // stopped, not failed.
-                cancel_.throw_if_cancelled();
-                static_cast<void>(ffmpeg_.standard_error());  // waits for the error output's end, and so its lines
-                if (*rebuilt_) {
-                    throw VideoSizeChanged(std::nullopt, rebuilt_->size());
-                }
-                if (ffmpeg_.wait() != 0) {
-                    throw failure("FFmpeg could not prepare lossless perceptual-metric frames.");
-                }
-                if (index_ == 1) {
-                    throw failure("FFmpeg produced no frame pairs for perceptual metrics.");
-                }
-                ended_ = true;  // the shorter input has ended
-                return std::nullopt;
-            }
-            throttle(false);  // the caller is waiting, so FFmpeg must run
-            std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
-        if (*rebuilt_) {
-            throw VideoSizeChanged(std::nullopt, rebuilt_->size());
+        if (step > 1) {
+            sample_.push_back("select=not(mod(n\\," + std::to_string(step) + "))");
         }
-        ++index_;
-        return found;
     }
 
-    // After a pair's tool failed: throws VideoSizeChanged if FFmpeg had rebuilt
-    // its filters, and so the failure was a pair of pictures of two sizes, made
-    // as FFmpeg's word of it was on its way. FFmpeg is ended first, its pictures
-    // no longer wanted, so that all it wrote has been read.
-    void throw_if_rebuilt_before_failure() {
-        ffmpeg_.terminate();
-        ffmpeg_.wait();
-        static_cast<void>(ffmpeg_.standard_error());  // waits for the error output's end, and so its lines
-        if (*rebuilt_) {
-            throw VideoSizeChanged(std::nullopt, rebuilt_->size());  // the task is made again, the video scaled first
-        }
+    // The test video's chain, from FFmpeg's stream `input` to the label
+    // `output`.
+    std::string distorted(const std::string& input, const std::string& output) const {
+        return chain(input, output, distorted_crop_, videos_.second, distorted_target_, seeks_.distorted);
+    }
+
+    // The source's chain, likewise.
+    std::string source(const std::string& input, const std::string& output) const {
+        return chain(input, output, source_crop_, videos_.first, source_target_, seeks_.source);
     }
 
 private:
-    // The options of an FFmpeg watched for rebuilding its filters, told to
-    // `rebuild`.
-    static platform::ProcessOptions watched(const std::shared_ptr<FilterRebuild>& rebuild) {
-        platform::ProcessOptions options;
-        options.on_error_line = rebuild_watcher(rebuild);
-        return options;
-    }
-
-    Pair pair(long long number) const {
-        const std::string digits = std::to_string(number);
-        const std::string name = std::string(digits.size() < 8 ? 8 - digits.size() : 0, '0') + digits + ".png";
-        return {folder_ / ("reference-" + name), folder_ / ("test-" + name)};
-    }
-
-    // Whether both pictures of pair `number` have been written.
-    bool complete(long long number) const {
-        const auto [reference, test] = pair(number);
-        std::error_code error;
-        return std::filesystem::exists(reference, error) && std::filesystem::exists(test, error);
-    }
-
-    // Whether both pictures of pair `number` have been written and can be
-    // opened, as describe_png and the tools open them. On Windows, FFmpeg
-    // can still hold a picture for a moment after giving it its name (up to
-    // 77 ms was seen), and an FFmpeg ended by Cancel until it is gone
-    // (2-4 ms). A picture opened then could not be read, so the task failed,
-    // even when it had been cancelled.
-    bool ready(long long number) const {
-        if (!complete(number)) {
-            return false;
+    std::string chain(const std::string& input, const std::string& output, const std::optional<CropBox>& crop,
+                      const VideoInfo& info, const std::optional<Size>& target,
+                      const std::optional<RangeSeek>& seek) const {
+        std::vector<std::string> filters;
+        if (const std::optional<std::string> trim = range_trim_filter(range_, seek)) {
+            filters.push_back(*trim);
         }
-        const auto [reference, test] = pair(number);
-        return std::ifstream(reference, std::ios::binary).is_open() &&
-               std::ifstream(test, std::ios::binary).is_open();
+        append(filters, numbering_);
+        append(filters, sample_);
+        append(filters, prepare(crop, info, target, scale_algorithm_));
+        append(filters, to_rgb(info));
+        return "[" + input + "]" + join(filters, ",") + "[" + output + "]";
     }
 
-    // Suspends FFmpeg (`on`) or lets it run again.
-    void throttle(bool on) {
-        const std::lock_guard lock(throttle_mutex_);
-        if (on == throttled_) {
-            return;
-        }
-        if (on) {
-            ffmpeg_.suspend();
-        } else {
-            ffmpeg_.resume();
-        }
-        throttled_ = on;
-    }
-
-    // Suspends FFmpeg when it is `backlog` pairs ahead of the caller, and
-    // lets it run again at half that.
-    void regulate() {
-        // This thread does very little, but must do it on time. At normal
-        // priority, with every core busy, it wakes late and FFmpeg writes far
-        // past the limit (a median of 70-125 pictures against 52, with 22
-        // busy processes on 24 cores). A higher priority lets it run ahead of
-        // the load.
-        platform::raise_thread_priority();
-        while (true) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            if (ending_) {
-                return;
-            }
-            const long long index = consumed_;
-            if (complete(index + backlog_)) {
-                throttle(true);
-            } else if (!complete(index + backlog_ / 2)) {
-                throttle(false);
-            }
-        }
-    }
-
-    // A PerceptualRunError with `message` and the end of FFmpeg's errors.
-    PerceptualRunError failure(const std::string& message) {
-        const std::string errors = error_lines_of(ffmpeg_.standard_error());
-        return PerceptualRunError(message, last_characters(python_strip(as_text(errors)), 2000));
-    }
-
-    std::filesystem::path folder_;
-    int backlog_;
-    const std::atomic<bool>& stop_;
-    const CancelToken& cancel_;
-    std::shared_ptr<FilterRebuild> rebuilt_ = std::make_shared<FilterRebuild>();  // before ffmpeg_
-    platform::ChildProcess ffmpeg_;
-    CancelToken::Attached attached_;  // after ffmpeg_, so that it goes first
-    long long index_ = 1;  // the number of the next pair
-    bool ended_ = false;
-    std::atomic<long long> consumed_{1};  // the number of the pair the caller is on, read by the regulator
-    std::mutex throttle_mutex_;
-    bool throttled_ = false;
-    std::atomic<bool> ending_{false};
-    std::thread regulator_;  // last, so that it starts once the rest is set up
+    std::pair<VideoInfo, VideoInfo> videos_;  // the source and the test video, with shared colours
+    std::optional<CropBox> source_crop_;
+    std::optional<CropBox> distorted_crop_;
+    std::string scale_algorithm_;
+    RangeSeeks seeks_;
+    FrameRange range_;
+    std::vector<std::string> numbering_;
+    std::optional<Size> source_target_;     // the size the source is scaled to, if it is
+    std::optional<Size> distorted_target_;  // the size the test video is scaled to, if it is
+    std::vector<std::string> sample_;       // the filter keeping every step-th frame, if any
 };
 
-// The scores of a task's pairs, gathered from the threads that score them.
-struct Scores {
-    std::mutex mutex;
-    std::vector<std::vector<double>> by_pair;  // each pair's scores, in the keys' order
-    long long finished = 0;
-    std::exception_ptr failure;  // the first, which ends the others' tools
-    std::atomic<bool> stop{false};
-    std::chrono::steady_clock::time_point reported{};
+// The scores of a task's pairs, gathered from the threads that score them,
+// and the progress they make: pairs of `step` frames each, of about
+// `total_units` frames, at `rate_of` frames a second. The first failure is
+// kept, and stops the others.
+class ScoreBook {
+public:
+    ScoreBook(int step, long long total_units, ProgressCallback on_progress, std::function<double(long long)> rate_of)
+        : step_(step), total_units_(total_units), on_progress_(std::move(on_progress)), rate_of_(std::move(rate_of)) {}
+    ScoreBook(const ScoreBook&) = delete;
+    ScoreBook& operator=(const ScoreBook&) = delete;
+
+    // Keeps pair `number`'s scores (each in the keys' order). The progress
+    // counts how many pairs are scored, in whatever order they finish. The
+    // estimated frame count can be lower than the real one, so the total
+    // grows with the work rather than going past 100%.
+    void keep(long long number, std::vector<double> values) {
+        const std::lock_guard lock(mutex_);
+        if (by_pair_.size() <= static_cast<std::size_t>(number)) {
+            by_pair_.resize(static_cast<std::size_t>(number) + 1);
+        }
+        by_pair_[static_cast<std::size_t>(number)] = std::move(values);
+        ++finished_;
+        const auto now = std::chrono::steady_clock::now();
+        if (on_progress_ && (finished_ == 1 || now - reported_ >= progress_interval)) {
+            reported_ = now;
+            const long long units = finished_ * step_;
+            on_progress_(units, std::max(total_units_, units + step_), rate_of_(units));
+        }
+    }
+
+    // Keeps the first failure, and says the scoring is to stop.
+    void fail(std::exception_ptr error) {
+        const std::lock_guard lock(mutex_);
+        if (!failure_) {
+            failure_ = std::move(error);
+        }
+        stop_ = true;
+    }
+
+    // Set once the scoring is to stop (a failure).
+    const std::atomic<bool>& stopping() const { return stop_; }
+
+    std::exception_ptr failure() const {
+        const std::lock_guard lock(mutex_);
+        return failure_;
+    }
+
+    // Each pair's scores, in the pairs' order, once every worker is done.
+    std::vector<std::vector<double>> take() { return std::move(by_pair_); }
+
+private:
+    const int step_;
+    const long long total_units_;
+    const ProgressCallback on_progress_;
+    const std::function<double(long long)> rate_of_;
+    mutable std::mutex mutex_;
+    std::vector<std::vector<double>> by_pair_;
+    long long finished_ = 0;
+    std::exception_ptr failure_;
+    std::atomic<bool> stop_{false};
+    std::chrono::steady_clock::time_point reported_{};
 };
 
 }  // namespace
 
 // ----------------------------------------------------------------- public
 
-std::optional<std::filesystem::path> find_metric_executable(std::string_view metric) {
-    if (metric != "ssimulacra2" && metric != "butteraugli") {
-        throw std::invalid_argument("not a CPU tool's metric: " + std::string(metric));
+InAppSchedule in_app_schedule(long long pixels, const std::vector<std::string>& metrics, int concurrent_tasks,
+                              unsigned cores, std::optional<unsigned long long> free_memory) {
+    const long long task_cores =
+        std::max(1LL, static_cast<long long>(std::max(1u, cores)) / std::max(1, concurrent_tasks));
+    const bool butteraugli = std::find(metrics.begin(), metrics.end(), "butteraugli") != metrics.end();
+    const bool ssimulacra2 = std::find(metrics.begin(), metrics.end(), "ssimulacra2") != metrics.end();
+    long long workers = 1;
+    if (butteraugli && ssimulacra2) {
+        workers = task_cores / 6;
+    } else if (butteraugli) {
+        workers = task_cores / 12;
+    } else {
+        workers = task_cores / 2;
     }
-    const std::string variable = metric == "ssimulacra2" ? "SSIMULACRA2_PATH" : "BUTTERAUGLI_PATH";
-    const std::string chosen(python_strip(platform::environment_variable(variable).value_or("")));
-    if (!chosen.empty()) {
-        const std::filesystem::path path = platform::path_from_text(chosen);
-        std::error_code error;
-        return std::filesystem::exists(path, error) ? std::optional(path) : std::nullopt;
-    }
-    // libjxl names the tool butteraugli_main. The short name is accepted too,
-    // for tools the user installed. Elsewhere than Windows, never the .exe
-    // files: the repository's resources folder has Windows' tools.
-#ifdef _WIN32
-    const std::vector<std::string> names =
-        metric == "ssimulacra2"
-            ? std::vector<std::string>{"ssimulacra2.exe", "ssimulacra2"}
-            : std::vector<std::string>{"butteraugli_main.exe", "butteraugli.exe", "butteraugli_main", "butteraugli"};
-#else
-    const std::vector<std::string> names = metric == "ssimulacra2"
-                                               ? std::vector<std::string>{"ssimulacra2"}
-                                               : std::vector<std::string>{"butteraugli_main", "butteraugli"};
-#endif
-    for (const std::string& name : names) {
-        const std::filesystem::path candidate = libjxl_folder() / name;
-        std::error_code error;
-        if (std::filesystem::is_regular_file(candidate, error)) {
-            return candidate;
-        }
-    }
-    for (const std::string& name : names) {
-        if (std::optional<std::filesystem::path> found = platform::find_on_path(name)) {
-            return found;
-        }
-    }
-    return std::nullopt;
-}
-
-std::string implementation_version(const std::filesystem::path& executable) {
-    const std::string version = tool_version(executable);
-    std::error_code error;
-    const std::filesystem::path bundle = std::filesystem::weakly_canonical(libjxl_folder(), error);
-    const bool bundled = !error && std::filesystem::weakly_canonical(executable, error).parent_path() == bundle && !error;
-    if (version == "unknown" && bundled) {
-        if (const std::optional<std::string> text = platform::read_file(bundle / "LIBJXL-VERSION.txt")) {
-            return std::string(python_strip(std::string_view(*text).substr(0, text->find_first_of("\r\n"))));
-        }
-    }
-    return version;
-}
-
-int scoring_workers(long long pixels, const std::vector<std::string>& metrics, int concurrent_tasks, unsigned cores,
-                    std::optional<unsigned long long> free_memory) {
-    concurrent_tasks = std::max(1, concurrent_tasks);
-    const long long by_cores = static_cast<long long>(std::max(1u, cores)) / 2 / concurrent_tasks;
-    long long bytes_per_pixel = 0;
-    for (const std::string& metric : metrics) {
-        bytes_per_pixel = std::max(bytes_per_pixel, tool_bytes_per_pixel(metric));
-    }
-    const long long per_worker = std::max(1LL, pixels) * std::max(1LL, bytes_per_pixel);
-    long long workers = by_cores;
+    workers = std::max(1LL, workers);
     if (free_memory) {
-        const auto share = static_cast<long long>(static_cast<double>(*free_memory) * memory_share / concurrent_tasks);
-        workers = std::min(workers, share / per_worker);
+        const long long per_worker =
+            std::max(1LL, pixels) *
+                (in_app_picture_bytes_per_pixel + (butteraugli ? in_app_butteraugli_bytes_per_pixel : 0)) +
+            (ssimulacra2 ? in_app_ssimulacra2_bytes : 0);
+        const auto share = static_cast<long long>(static_cast<double>(*free_memory) * memory_share /
+                                                  std::max(1, concurrent_tasks));
+        workers = std::max(1LL, std::min(workers, share / per_worker));
     }
-    return static_cast<int>(std::max(1LL, workers));
+    // With both metrics, each pair's SSIMULACRA2 runs on a thread of its own
+    // beside its Butteraugli (CpuPairScorer::score).
+    const long long threads = std::max(1LL, task_cores / workers - (butteraugli && ssimulacra2 ? 1 : 0));
+    return InAppSchedule{static_cast<int>(workers), static_cast<std::size_t>(threads)};
 }
 
 double parse_score(std::string_view metric, std::string_view output) {
@@ -680,66 +395,29 @@ double parse_score(std::string_view metric, std::string_view output) {
     return *score;
 }
 
-double butteraugli_norm3(const std::filesystem::path& distortion_map) {
-    const std::optional<std::string> read = platform::read_file(distortion_map);
-    if (!read) {
-        throw std::runtime_error("the distortion map could not be read");
-    }
-    const std::string& data = *read;
-    // Three lines, "Pf", "<width> <height>" and the scale, whose sign gives
-    // the byte order, then the values, as 32-bit floats.
-    std::array<std::string_view, 3> lines;
-    std::size_t start = 0;
-    for (std::string_view& line : lines) {
-        const std::size_t end = data.find('\n', start);
-        if (end == std::string::npos) {
-            throw std::runtime_error("the distortion map has no PFM header");
-        }
-        line = std::string_view(data).substr(start, end - start);
-        start = end + 1;
-    }
-    if (python_strip(lines[0]) != "Pf") {
-        throw PerceptualRunError("butteraugli wrote a distortion map that is not a greyscale PFM.");
-    }
-    std::vector<std::string_view> size;
-    for (std::size_t at = 0; at < lines[1].size();) {
-        const std::size_t word = lines[1].find_first_not_of(" \t\n\r\v\f", at);
-        if (word == std::string_view::npos) {
-            break;
-        }
-        const std::size_t word_end = std::min(lines[1].find_first_of(" \t\n\r\v\f", word), lines[1].size());
-        size.push_back(lines[1].substr(word, word_end - word));
-        at = word_end;
-    }
-    // -1 for a size that is not a whole number.
-    const long long width = size.size() == 2 ? python_int(size[0]).value_or(-1) : -1;
-    const long long height = size.size() == 2 ? python_int(size[1]).value_or(-1) : -1;
-    const std::optional<double> scale = python_float(lines[2]);
-    if (!scale || width < 0 || height < 0 || width > (1LL << 20) || height > (1LL << 20)) {
-        throw std::runtime_error("the distortion map's header is not a PFM's");
-    }
-    const auto count = static_cast<std::size_t>(width * height);
-    const std::string_view values = std::string_view(data).substr(start);
-    if (values.size() < count * 4) {
-        throw std::runtime_error("the distortion map is cut short");
-    }
-    const bool little_endian = *scale < 0;
-    std::vector<double> cubes(count);
+namespace {
+
+// The 3-norm of `count` values, the Ith of them in the file's order
+// value_at(I).
+template <typename ValueAt>
+double norm3_in_file_order(std::size_t count, const ValueAt& value_at) {
     // Each cube is pow's, as numpy's ** makes it: x * x * x differs from it
     // in the last bits.
-    for (std::size_t i = 0; i < count; ++i) {
-        const auto byte = [&values, i](std::size_t k) {
-            return static_cast<std::uint32_t>(static_cast<unsigned char>(values[i * 4 + k]));
-        };
-        const std::uint32_t bits = little_endian ? byte(0) | (byte(1) << 8) | (byte(2) << 16) | (byte(3) << 24)
-                                                 : (byte(0) << 24) | (byte(1) << 16) | (byte(2) << 8) | byte(3);
-        float value = 0.0f;
-        std::memcpy(&value, &bits, sizeof value);
-        cubes[i] = std::pow(std::abs(static_cast<double>(value)), 3.0);
-    }
+    const double sum = numpy_sum_of(
+        count, [&value_at](std::size_t i) { return std::pow(std::abs(static_cast<double>(value_at(i))), 3.0); });
     // numpy's mean: its pairwise sum, divided by the count (NaN for none).
-    const double mean = numpy_sum(cubes) / static_cast<double>(count);
+    const double mean = sum / static_cast<double>(count);
     return std::pow(mean, 1.0 / 3.0);
+}
+
+}  // namespace
+
+double butteraugli_norm3_top_row_first(std::span<const float> distortion_map, std::size_t width) {
+    const std::size_t rows = width == 0 ? 0 : distortion_map.size() / width;
+    // The file's Ith value is in its row I / width counted from the bottom.
+    return norm3_in_file_order(distortion_map.size(), [distortion_map, width, rows](std::size_t i) {
+        return distortion_map[(rows - 1 - i / width) * width + i % width];
+    });
 }
 
 FrameRange cpu_range(const VmafOptions& options, const VideoInfo& source, int step) {
@@ -749,106 +427,56 @@ FrameRange cpu_range(const VmafOptions& options, const VideoInfo& source, int st
 std::string image_filtergraph(const VideoInfo& source_info, const VideoInfo& distorted_info,
                               const VmafOptions& options, const std::optional<CropBox>& source_crop,
                               const std::optional<CropBox>& distorted_crop, int step) {
-    // Read with the same colours as Vship reads them (with_shared_colours).
-    const auto [source, distorted] = with_shared_colours(source_info, distorted_info);
-    GraphPlan plan{source, distorted, source_crop, distorted_crop, std::nullopt, std::nullopt,
-                   content_size(source, source_crop), {}, options.scale_algorithm};
-    const Size distorted_size = content_size(distorted, distorted_crop);
-    if (plan.source_size != distorted_size) {
-        if (options.scale_direction == ScaleDirection::distorted_to_source) {
-            plan.distorted_target = plan.source_size;
-        } else {
-            plan.source_target = distorted_size;
-        }
-    }
-    if (step > 1) {
-        plan.sample.push_back("select=not(mod(n\\," + std::to_string(step) + "))");
-    }
-    // Both videos' frames are first kept to those a range decodes (counted
-    // as decoded), then numbered at the test video's frame rate, so that the
-    // frames of both are paired; then sampled, so that the frames select
-    // drops are not cropped or scaled.
-    const FrameRange range = cpu_range(options, source, step);
-    const std::vector<std::string> numbering = numbering_filters(frame_rate(distorted));
-    const auto chain = [&plan, &range, &numbering](const std::string& input, const std::string& output,
-                                                   const std::optional<CropBox>& crop, const VideoInfo& info,
-                                                   const std::optional<Size>& target,
-                                                   const std::optional<RangeSeek>& seek) {
-        std::vector<std::string> filters;
-        if (const std::optional<std::string> trim = range_trim_filter(range, seek)) {
-            filters.push_back(*trim);
-        }
-        append(filters, numbering);
-        append(filters, plan.sample);
-        for (std::string& filter : prepare(crop, info, target, plan.scale_algorithm)) {
-            filters.push_back(std::move(filter));
-        }
-        for (std::string& filter : to_rgb(info)) {
-            filters.push_back(std::move(filter));
-        }
-        return "[" + input + "]" + join(filters, ",") + "[" + output + "]";
-    };
-    return chain("0:" + std::string(video_stream), "distorted", distorted_crop, distorted, plan.distorted_target,
-                 options.range_seeks.distorted) +
-           ";" +
-           chain("1:" + std::string(video_stream), "reference", source_crop, source, plan.source_target,
-                 options.range_seeks.source);
-}
-
-std::vector<std::string> png_pairs_command(const std::string& ffmpeg, const VideoInfo& source,
-                                           const VideoInfo& distorted, const VmafOptions& options,
-                                           const std::optional<CropBox>& source_crop,
-                                           const std::optional<CropBox>& distorted_crop, int step,
-                                           const std::filesystem::path& folder,
-                                           const std::optional<std::vector<std::string>>& distorted_fed,
-                                           const std::optional<std::vector<std::string>>& source_fed) {
-    // At watched_log_level: PngPairs reads FFmpeg's word that it rebuilt its filters.
-    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-loglevel", watched_log_level,
-                                     "-nostats", "-y"};
-    struct Input {
-        const VideoInfo* video;
-        const std::optional<std::vector<std::string>>* fed;
-        const std::optional<RangeSeek>* seek;
-    };
-    for (const auto& [video, fed, seek] : {Input{&distorted, &distorted_fed, &options.range_seeks.distorted},
-                                           Input{&source, &source_fed, &options.range_seeks.source}}) {
-        if (*fed) {
-            command.insert(command.end(), (*fed)->begin(), (*fed)->end());
-            continue;
-        }
-        const std::vector<std::string> input = with_seek(video->decode_options(), *seek);
-        append(command, input);
-        command.insert(command.end(), {as_stored, "-i", input_path(video->path)});
-    }
-    command.insert(command.end(), {"-filter_complex", image_filtergraph(source, distorted, options, source_crop,
-                                                                        distorted_crop, step)});
-    const std::vector<std::string> output_args{"-fps_mode", "passthrough", "-pix_fmt",
-                                               "rgb48le",    "-atomic_writing", "1"};
-    for (const auto& [label, pattern] : {std::pair{"[distorted]", "test-%08d.png"},
-                                         std::pair{"[reference]", "reference-%08d.png"}}) {
-        command.insert(command.end(), {"-map", label});
-        append(command, output_args);
-        command.push_back(platform::path_text(folder / pattern));
-    }
-    return command;
+    const ImageChains chains(source_info, distorted_info, options, source_crop, distorted_crop, step);
+    return chains.distorted("0:" + std::string(video_stream), "distorted") + ";" +
+           chains.source("1:" + std::string(video_stream), "reference");
 }
 
 namespace {
 
-// The reference executables of `keys`' metrics; throws, naming the first
-// one not installed.
-std::vector<std::filesystem::path> metric_executables(const std::vector<std::string>& keys) {
-    std::vector<std::filesystem::path> executables;
-    for (const std::string& key : keys) {
-        std::optional<std::filesystem::path> executable = find_metric_executable(key);
-        if (!executable) {
-            throw PerceptualRunError(key + " is not installed. Install the reference " + key + " executable or set " +
-                                     (key == "ssimulacra2" ? "SSIMULACRA2" : "BUTTERAUGLI") + "_PATH.");
-        }
-        executables.push_back(std::move(*executable));
+// FFmpeg's options for reading `video`: its feed's input where the app feeds
+// its pictures (grain_feed.h), else its file's, from `seek`.
+std::vector<std::string> input_options(const VideoInfo& video, const std::optional<std::vector<std::string>>& fed,
+                                       const std::optional<RangeSeek>& seek) {
+    if (fed) {
+        return *fed;
     }
-    return executables;
+    std::vector<std::string> input = with_seek(video.decode_options(), seek);
+    input.insert(input.end(), {as_stored, "-i", input_path(video.path)});
+    return input;
 }
+
+// The start of every FFmpeg command of these metrics. At watched_log_level:
+// the app reads FFmpeg's word that it rebuilt its filters.
+std::vector<std::string> command_start(const std::string& ffmpeg) {
+    return {ffmpeg, "-nostdin", "-hide_banner", "-loglevel", watched_log_level, "-nostats", "-y"};
+}
+
+}  // namespace
+
+std::vector<std::vector<std::string>> rgb_stream_commands(
+    const std::string& ffmpeg, const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options,
+    const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop, int step,
+    const std::string& test_pipe, const std::string& source_pipe,
+    const std::optional<std::vector<std::string>>& distorted_fed,
+    const std::optional<std::vector<std::string>>& source_fed) {
+    const ImageChains chains(source, distorted, options, source_crop, distorted_crop, step);
+    const std::string input = "0:" + std::string(video_stream);  // each command's only input
+    const auto command = [&ffmpeg](std::vector<std::string> reading, const std::string& graph,
+                                   const std::string& pipe) {
+        std::vector<std::string> made = command_start(ffmpeg);
+        append(made, reading);
+        made.insert(made.end(), {"-filter_complex", graph, "-map", "[frames]", "-fps_mode", "passthrough",
+                                 "-flush_packets", "1", "-f", "rawvideo", "-pix_fmt", "rgb48le", pipe});
+        return made;
+    };
+    return {command(input_options(distorted, distorted_fed, options.range_seeks.distorted),
+                    chains.distorted(input, "frames"), test_pipe),
+            command(input_options(source, source_fed, options.range_seeks.source), chains.source(input, "frames"),
+                    source_pipe)};
+}
+
+namespace {
 
 // The one frame coverage (every how many frames) `keys`' metrics share;
 // throws when they differ.
@@ -870,174 +498,287 @@ long long expected_frames(const VideoInfo& source, const VideoInfo& distorted, c
     return std::max(1LL, std::min(frames, range.decode_end.value_or(frames)) - range.decode_start);
 }
 
-// The frame pairs of one CPU perceptual task, scored `workers` pairs at a
-// time (the calling thread among them): each pair by every chosen tool in
-// turn. The first failure stops the others' tools, and is thrown.
-class CpuScoringPool {
-public:
-    CpuScoringPool(const std::vector<std::string>& keys, const std::vector<std::filesystem::path>& executables,
-                   const VideoInfo& source, const VideoInfo& distorted, const CancelToken& cancel)
-        : keys_(keys),
-          executables_(executables),
-          source_colour_(colour_of(source)),
-          distorted_colour_(colour_of(distorted)),
-          hdr_((source_colour_ && source_colour_->hdr()) || (distorted_colour_ && distorted_colour_->hdr())),
-          cancel_(cancel) {}
-    CpuScoringPool(const CpuScoringPool&) = delete;
-    CpuScoringPool& operator=(const CpuScoringPool&) = delete;
+// A video's colour tags as a refusal names them.
+std::string colour_tags_text(const VideoInfo& video) {
+    const auto tag = [](const std::string& value) { return value.empty() ? std::string("untagged") : value; };
+    return "matrix " + tag(video.color_space) + ", transfer " + tag(video.color_transfer) + ", primaries " +
+           tag(video.color_primaries) + ", range " + tag(video.color_range);
+}
 
-    // Whether either video is HDR: the tools score it so.
-    bool hdr() const { return hdr_; }
-    // Set when the scoring is to stop (a failure, or Cancel): FFmpeg's
-    // extraction stops with it.
-    const std::atomic<bool>& stopping() const { return scores_.stop; }
-    // Scores every pair `pairs` gives, `workers` at a time, reporting how
-    // many are done (`step` frames each, of about `total_units`) to
-    // `on_progress`, at `rate_of` frames a second. Returns each pair's
-    // scores, in the order FFmpeg gave the pairs.
-    std::vector<std::vector<double>> score_all(PngPairs& pairs, int workers, int step, long long total_units,
-                                               const ProgressCallback& on_progress,
-                                               const std::function<double(long long)>& rate_of);
+// The colours the source's and the test's pictures are scored with, each
+// read with its own tags, or with the other's where it has none
+// (with_shared_colours). Throws PerceptualRunError for tags the app cannot
+// read, as the GPU's Vship refuses them, naming each video read with such
+// tags (both where one took the other's: the command line lends them before
+// the request is made, so which video they came from is not known here).
+std::pair<VideoColour, VideoColour> scored_colours(const VideoInfo& source, const VideoInfo& distorted) {
+    const auto [source_read, distorted_read] = with_shared_colours(source, distorted);
+    const std::optional<VideoColour> source_colour = colour_of(source_read);
+    const std::optional<VideoColour> distorted_colour = colour_of(distorted_read);
+    if (source_colour && distorted_colour) {
+        return {*source_colour, *distorted_colour};
+    }
+    const auto named = [](const VideoInfo& video, const VideoInfo& read) {
+        return platform::path_text(video.path.filename()) + " (" + colour_tags_text(read) + ")";
+    };
+    std::string refused;
+    if (!source_colour) refused = named(source, source_read);
+    if (!distorted_colour) refused += (refused.empty() ? "" : " and ") + named(distorted, distorted_read);
+    throw PerceptualRunError("SSIMULACRA2 and Butteraugli do not support the colours of " + refused + ".");
+}
 
-private:
-    std::vector<double> score(const PngPairs::Pair& pair);
-    void work(PngPairs& pairs);
-    void keep(long long number, std::vector<double> values);
-    void fail(std::exception_ptr error);
+// ------------------------------------------------- scored in this process
 
-    const std::vector<std::string>& keys_;
-    const std::vector<std::filesystem::path>& executables_;
-    // Each picture is tagged so that the tools read its values as Vship
-    // reads the video's (describe_png). FFmpeg would tag a BT.709 picture
-    // with H.273's BT.709 curve, the camera's, where Vship and a display use
-    // a 2.4 gamma, and an untagged picture not at all (sRGB). A tagged BT.709
-    // film then scored 40.4 SSIMULACRA2 here against 55.1 on the GPU.
-    const std::optional<VideoColour> source_colour_;
-    const std::optional<VideoColour> distorted_colour_;
-    const bool hdr_;
-    const CancelToken& cancel_;
-    Scores scores_;
-    const std::function<bool()> stopped_ = [this] { return scores_.stop || cancel_.cancelled(); };
-    std::mutex pairs_mutex_;
-    long long handed_ = 0;  // how many pairs workers have taken
-    // How score_all reports.
-    int step_ = 1;
-    long long total_units_ = 0;
-    ProgressCallback on_progress_;
-    std::function<double(long long)> rate_of_;
+// How many frames each video's pipe holds: the one a worker copies and two
+// read ahead. FFmpeg waits once they are full, which holds it to the
+// scoring's pace.
+constexpr std::size_t pipe_frames = 3;
+
+// The bytes of one 16-bit RGB picture of `width` x `height`.
+std::size_t rgb48_bytes(int width, int height) {
+    return static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 6;
+}
+
+// What a task's pairs are scored with in this process.
+struct InAppScoring {
+    const std::vector<std::string>& keys;
+    VideoColour source_colour;
+    VideoColour distorted_colour;
+    int width;
+    int height;
+    InAppSchedule schedule;
 };
 
-std::vector<std::vector<double>> CpuScoringPool::score_all(PngPairs& pairs, int workers, int step,
-                                                           long long total_units, const ProgressCallback& on_progress,
-                                                           const std::function<double(long long)>& rate_of) {
-    step_ = step;
-    total_units_ = total_units;
-    on_progress_ = on_progress;
-    rate_of_ = rate_of;
-    std::vector<std::thread> threads;
-    try {
-        for (int worker = 1; worker < workers; ++worker) {
-            threads.emplace_back([this, &pairs] { work(pairs); });
-        }
-    } catch (...) {
-        fail(std::current_exception());  // no thread for another worker: the others stop
-    }
-    work(pairs);
-    // The tools end before FFmpeg and the folder go: a tool still reading
-    // its pair would hold the folder.
-    for (std::thread& thread : threads) {
-        thread.join();
-    }
-    if (scores_.failure) {
-        pairs.throw_if_rebuilt_before_failure();
-        std::rethrow_exception(scores_.failure);
-    }
-    return std::move(scores_.by_pair);
-}
-
-// One pair's scores, one tool after the other, in the keys' order. Each pair
-// is deleted once every chosen tool has scored it; as FFmpeg is held to a
-// small backlog, the folder never holds more than the backlog and the pairs
-// being scored.
-std::vector<double> CpuScoringPool::score(const PngPairs::Pair& pair) {
-    const auto& [reference, test] = pair;
-    const Deleted reference_deleted(reference);
-    const Deleted test_deleted(test);
-    if (source_colour_) {
-        describe_png(reference, *source_colour_);
-    }
-    if (distorted_colour_) {
-        describe_png(test, *distorted_colour_);
-    }
-    std::vector<double> values;
-    for (std::size_t position = 0; position < keys_.size(); ++position) {
-        values.push_back(run_metric(executables_[position], keys_[position], reference, test, hdr_, stopped_, cancel_));
-    }
-    return values;
-}
-
-// One worker: takes a pair from FFmpeg only when free for it, so that the
-// pairs not yet started count in FFmpeg's backlog, which holds it back.
-void CpuScoringPool::work(PngPairs& pairs) {
-    while (!scores_.stop) {
-        std::optional<PngPairs::Pair> pair;
-        long long number = 0;
+// The frame pairs of one CPU perceptual task, scored in this process by
+// the app's engines (cpu_pair_scorer.h), `scoring.schedule.workers` pairs at
+// a time. Two FFmpegs, one per video, write its pictures as raw 16-bit RGB
+// into pipes of the app's (rgb_stream_commands). Frame N of the test video
+// is paired with frame N of the source until either ends. Each worker takes
+// the next pair from the pipes, copies it into its own scorer, gives the
+// buffers back for FFmpeg's next frames, and scores it. A failure stops the
+// pipes, which ends both FFmpegs.
+class InAppPairs {
+public:
+    // Opens the pipes and starts the workers, who wait for FFmpeg's frames.
+    InAppPairs(const InAppScoring& scoring, ScoreBook& book)
+        : scoring_(scoring),
+          book_(book),
+          frame_bytes_(rgb48_bytes(scoring.width, scoring.height)),
+          test_("perceptual-test", frame_bytes_, StreamReader::Framing::raw, pipe_frames),
+          source_("perceptual-source", frame_bytes_, StreamReader::Framing::raw, pipe_frames) {
+        test_.start();
+        source_.start();
         try {
-            const std::lock_guard lock(pairs_mutex_);
-            cancel_.throw_if_cancelled();
-            pair = pairs.next();
-            if (!pair) {
+            for (int worker = 0; worker < std::max(1, scoring.schedule.workers); ++worker) {
+                workers_.emplace_back([this] { work(); });
+            }
+        } catch (...) {
+            fail(std::current_exception());  // no thread for another worker: the others stop
+        }
+    }
+
+    // Stops what still runs: a run that threw before finish().
+    ~InAppPairs() {
+        stop_pipes();
+        join_workers();
+    }
+
+    InAppPairs(const InAppPairs&) = delete;
+    InAppPairs& operator=(const InAppPairs&) = delete;
+
+    // What the test video's FFmpeg (command 0) and the source's (1) write to.
+    const std::string& test_pipe() const { return test_.path(); }
+    const std::string& source_pipe() const { return source_.path(); }
+
+    // What command `command` inherits (run_ffmpeg_pair's take_descriptors).
+    std::vector<int> take_descriptors(std::size_t command) {
+        const int writer = reader(command).take_writer();
+        return writer >= 0 ? std::vector<int>{writer} : std::vector<int>{};
+    }
+
+    // Whether the app closed command `command`'s pipe while it still wrote.
+    bool closed_by_app(std::size_t command) { return reader(command).stopped_while_reading(); }
+
+    // Once the FFmpegs have ended: waits for the workers, and returns the
+    // error of a pipe whose stream was not what FFmpeg writes (a frame cut
+    // short), if any.
+    std::exception_ptr finish(bool ffmpeg_succeeded) {
+        if (ffmpeg_succeeded) {
+            test_.ffmpeg_ended();
+            source_.ffmpeg_ended();
+        } else {
+            stop_pipes();
+        }
+        join_workers();
+        std::exception_ptr error;
+        for (StreamReader* stream : {&test_, &source_}) {
+            try {
+                stream->join();
+            } catch (...) {
+                if (!error) {
+                    error = std::current_exception();
+                }
+            }
+        }
+        return error;
+    }
+
+    // How many pairs the workers took.
+    long long pairs() const { return handed_; }
+
+private:
+    StreamReader& reader(std::size_t command) { return command == 0 ? test_ : source_; }
+
+    void work() {
+        std::optional<CpuPairScorer> scorer;
+        try {
+            scorer.emplace(scoring_.keys, scoring_.source_colour, scoring_.distorted_colour, scoring_.width,
+                           scoring_.height, scoring_.schedule.butteraugli_threads);
+        } catch (...) {
+            fail(std::current_exception());
+            return;
+        }
+        while (!book_.stopping()) {
+            std::vector<std::uint8_t>* test_frame = nullptr;
+            std::vector<std::uint8_t>* source_frame = nullptr;
+            long long number = 0;
+            {
+                const std::lock_guard lock(pairs_mutex_);
+                if (ended_ || !take_pair(test_frame, source_frame)) {
+                    return;
+                }
+                number = handed_++;
+            }
+            // Copied outside the lock, so that the next worker can take its
+            // pair meanwhile; the buffers go back at once for FFmpeg's next
+            // frames.
+            std::memcpy(scorer->test_samples(), test_frame->data(), frame_bytes_);
+            std::memcpy(scorer->source_samples(), source_frame->data(), frame_bytes_);
+            test_.release(test_frame);
+            source_.release(source_frame);
+            try {
+                book_.keep(number, scorer->score());
+            } catch (...) {
+                fail(std::current_exception());
                 return;
             }
-            number = handed_++;
-        } catch (...) {
-            fail(std::current_exception());
-            return;
         }
+    }
+
+    // The next pair, or false at the end of either video's frames, where
+    // the comparison ends: what FFmpeg still writes is dropped. A stream
+    // that is not what FFmpeg writes ends it too; finish() reports it.
+    // Called under pairs_mutex_.
+    bool take_pair(std::vector<std::uint8_t>*& test_frame, std::vector<std::uint8_t>*& source_frame) {
         try {
-            keep(number, score(*pair));
-        } catch (...) {
-            fail(std::current_exception());
-            return;
+            test_frame = test_.pull();
+            source_frame = test_frame != nullptr ? source_.pull() : nullptr;
+        } catch (const std::exception&) {
+            source_frame = nullptr;
+        }
+        if (source_frame == nullptr) {
+            if (test_frame != nullptr) {
+                test_.release(test_frame);
+            }
+            ended_ = true;
+            test_.drop_rest();
+            source_.drop_rest();
+            return false;
+        }
+        return true;
+    }
+
+    // Keeps the first failure and closes the pipes, which ends both FFmpegs
+    // and every worker's wait for a frame.
+    void fail(std::exception_ptr error) {
+        book_.fail(std::move(error));
+        stop_pipes();
+    }
+
+    void stop_pipes() {
+        test_.stop();
+        source_.stop();
+    }
+
+    void join_workers() {
+        for (std::thread& worker : workers_) {
+            if (worker.joinable()) {
+                worker.join();
+            }
         }
     }
+
+    const InAppScoring& scoring_;
+    ScoreBook& book_;
+    const std::size_t frame_bytes_;
+    StreamReader test_;
+    StreamReader source_;
+    std::mutex pairs_mutex_;
+    bool ended_ = false;              // either video's frames have ended
+    std::atomic<long long> handed_{0};  // how many pairs workers have taken
+    std::vector<std::thread> workers_;  // last: they use the rest
+};
+
+// The scores of every pair of `commands` (the test video's FFmpeg and the
+// source's, made by `make_commands` for the pipes' paths), scored in this
+// process, as FFmpeg writes them. A write into the app's pipe that Windows
+// refused (refused_frame_write) is made again once. Throws Cancelled,
+// VideoSizeChanged and PerceptualRunError.
+std::vector<std::vector<double>> score_in_app(
+    const InAppScoring& scoring,
+    const std::function<std::vector<std::vector<std::string>>(const std::string&, const std::string&)>& make_commands,
+    const std::vector<std::filesystem::path>& videos, const std::function<std::unique_ptr<ScoreBook>()>& new_book,
+    const std::filesystem::path& folder, const CancelToken& cancel) {
+    for (bool retried = false;; retried = true) {
+        const std::unique_ptr<ScoreBook> book = new_book();  // a new progress for an attempt made again
+        InAppPairs pairs(scoring, *book);
+        FfmpegOutcome outcome;
+        try {
+            const std::vector<std::vector<std::string>> commands =
+                make_commands(pairs.test_pipe(), pairs.source_pipe());
+            for (const std::vector<std::string>& command : commands) {
+                logger.info("FFmpeg: " + python_list2cmdline(command));
+            }
+            outcome = run_ffmpeg_pair(
+                commands, videos, [&pairs](std::size_t command) { return pairs.take_descriptors(command); },
+                [&pairs](std::size_t command) { return pairs.closed_by_app(command); }, 0, nullptr, cancel, folder);
+        } catch (const platform::ProcessError& error) {
+            throw PerceptualRunError(std::string("FFmpeg could not be started: ") + error.what());
+        }
+        const bool succeeded = outcome.exit_code == 0;
+        const std::exception_ptr stream_error = pairs.finish(succeeded);
+        const auto ffmpeg_errors = [&outcome] {
+            return last_characters(python_strip(as_text(error_lines_of(outcome.errors))), 2000);
+        };
+        // A scoring that failed closed the pipes, and so ended the FFmpegs:
+        // its failure is the cause.
+        if (const std::exception_ptr failure = book->failure()) {
+            std::rethrow_exception(failure);
+        }
+        if (!succeeded) {
+            if (!retried && refused_frame_write(outcome.exit_code, outcome.errors)) {
+                logger.warning("FFmpeg's write into the app's pipe was refused; the frames are made again");
+                continue;
+            }
+            // A frame cut short where FFmpeg failed is that failure.
+            throw PerceptualRunError("FFmpeg could not prepare lossless perceptual-metric frames.", ffmpeg_errors());
+        }
+        if (stream_error) {
+            throw PerceptualRunError("FFmpeg's frames could not be read: " + message_of(stream_error),
+                                     ffmpeg_errors());
+        }
+        if (pairs.pairs() == 0) {
+            throw PerceptualRunError("FFmpeg produced no frame pairs for perceptual metrics.", ffmpeg_errors());
+        }
+        return book->take();
+    }
 }
 
-// Keeps pair `number`'s scores. The progress counts how many pairs are
-// scored, in whatever order they finish. The estimated frame count can be
-// lower than the real one, so the total grows with the work rather than
-// going past 100%.
-void CpuScoringPool::keep(long long number, std::vector<double> values) {
-    const std::lock_guard lock(scores_.mutex);
-    if (scores_.by_pair.size() <= static_cast<std::size_t>(number)) {
-        scores_.by_pair.resize(static_cast<std::size_t>(number) + 1);
-    }
-    scores_.by_pair[static_cast<std::size_t>(number)] = std::move(values);
-    ++scores_.finished;
-    const auto now = std::chrono::steady_clock::now();
-    if (on_progress_ && (scores_.finished == 1 || now - scores_.reported >= progress_interval)) {
-        scores_.reported = now;
-        const long long units = scores_.finished * step_;
-        on_progress_(units, std::max(total_units_, units + step_), rate_of_(units));
-    }
-}
-
-// Keeps the first failure, and ends the tools of every pair in progress.
-void CpuScoringPool::fail(std::exception_ptr error) {
-    const std::lock_guard lock(scores_.mutex);
-    if (!scores_.failure) {
-        scores_.failure = std::move(error);
-    }
-    scores_.stop = true;
-}
-
-// The scores `by_pair` (each pair's, in `keys`' order, scored by
-// `executables`) as the task's results: frames `step` apart from
-// range.decode_start, those in range kept, timed at `fps`, with how they
-// were made.
-MetricResultSet cpu_results(const std::vector<std::string>& keys, const std::vector<std::filesystem::path>& executables,
-                            const std::vector<std::vector<double>>& by_pair, int step, double fps, bool hdr,
-                            const FrameRange& range) {
+// The scores `by_pair` (each pair's, in `keys`' order) as the task's
+// results: frames `step` apart from range.decode_start, those in range kept,
+// timed at `fps`, with how they were made.
+MetricResultSet cpu_results(const std::vector<std::string>& keys, const std::vector<std::vector<double>>& by_pair,
+                            int step, double fps, bool hdr, const FrameRange& range) {
     const auto total = static_cast<long long>(by_pair.size());
     std::vector<int> frames;
     std::vector<double> times;
@@ -1070,7 +811,7 @@ MetricResultSet cpu_results(const std::vector<std::string>& keys, const std::vec
             parameters["intensity_target"] =
                 hdr ? nlohmann::json("picture's own").dump() : nlohmann::json(butteraugli_intensity_nits).dump();
         }
-        MetricProvenance provenance{key, implementation_version(executables[position]), "cpu",
+        MetricProvenance provenance{key, std::string(in_app_scoring_version), "cpu",
                                     score_identity::libjxl_cpu(key), std::move(parameters), build_stamp()};
         mark_range(provenance, range);
         results.add(FrameMetricResult{key, frames, times, std::move(values), std::move(provenance)});
@@ -1078,23 +819,15 @@ MetricResultSet cpu_results(const std::vector<std::string>& keys, const std::vec
     return results;
 }
 
-}  // namespace
-
-PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, const std::vector<std::string>& keys,
-                                             const std::optional<CropPair>& crops,
-                                             const ProgressCallback& on_progress, const StatusCallback& on_status,
-                                             const CancelToken& cancel) {
-    if (keys.empty() || std::any_of(keys.begin(), keys.end(), [](const std::string& key) {
-            return key != "ssimulacra2" && key != "butteraugli";
-        })) {
-        throw std::invalid_argument("a CPU perceptual task takes SSIMULACRA2 and Butteraugli only");
-    }
+// run_cpu_perceptual_task's work in this process, with the black bars
+// `crops` found.
+PerceptualTaskOutput score_cpu_task(const PerceptualRequest& request, const std::vector<std::string>& keys,
+                                    const CropPair& crops, const ProgressCallback& on_progress,
+                                    const StatusCallback& on_status, const CancelToken& cancel) {
     const VideoInfo& source = request.source;
     VmafOptions options = request.options;
-    validate_pair(source, request.distorted, options);
-    const std::vector<std::filesystem::path> executables = metric_executables(keys);
     const int step = common_step(request, keys);
-    const auto [source_crop, distorted_crop] = crops ? *crops : perceptual_crops(request, on_status, cancel);
+    const auto& [source_crop, distorted_crop] = crops;
     const VideoInfo distorted = with_resample_test_video(request, source_crop).distorted;
     const FrameRange range = cpu_range(options, source, step);
     for (const auto& [video, seek] : {std::pair{&source, &options.range_seeks.source},
@@ -1113,23 +846,36 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
         const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
         return static_cast<double>(units) / std::max(seconds, 1e-6);
     };
-    // Tagged with the colours the pictures are read with (with_shared_colours).
-    const auto [source_read, distorted_read] = with_shared_colours(source, distorted);
     const auto [width, height] =
         compared_dimensions(source, distorted, options.scale_direction, source_crop, distorted_crop);
-    const int workers = scoring_workers(static_cast<long long>(width) * height, keys, request.concurrent_cpu_tasks,
-                                        platform::logical_cores(), platform::available_memory());
-    logger.info(join(keys, " and ") + " on the CPU: " + std::to_string(workers) + " frame pair" + (workers == 1 ? "" : "s") +
-                " at a time");
+    // The pipes' frames take their memory beside the workers'.
+    std::optional<unsigned long long> free_memory = platform::available_memory();
+    const unsigned long long pipes = 2 * pipe_frames * rgb48_bytes(width, height);
+    if (free_memory) {
+        *free_memory = *free_memory > pipes ? *free_memory - pipes : 0;
+    }
+    const long long pixels = static_cast<long long>(width) * height;
+    const InAppSchedule schedule =
+        in_app_schedule(pixels, keys, request.concurrent_cpu_tasks, platform::logical_cores(), free_memory);
+    const bool with_butteraugli = std::find(keys.begin(), keys.end(), "butteraugli") != keys.end();
+    logger.info(join(keys, " and ") + ": " + std::to_string(schedule.workers) + " frame pair" +
+                (schedule.workers == 1 ? "" : "s") + " at a time" +
+                (with_butteraugli
+                     ? ", Butteraugli on " + std::to_string(schedule.butteraugli_threads) + " threads each"
+                     : std::string()));
+    const auto [source_colour, distorted_colour] = scored_colours(source, distorted);
+    const InAppScoring scoring{keys, source_colour, distorted_colour, width, height, schedule};
+    const bool hdr = scoring.source_colour.hdr() || scoring.distorted_colour.hdr();
+    const auto new_book = [&] {
+        started = std::chrono::steady_clock::now();
+        return std::make_unique<ScoreBook>(step, total_units, on_progress, rate_of);
+    };
 
-    std::optional<CpuScoringPool> pool;
     std::vector<std::vector<double>> by_pair;
-    // Made again, with a new pool, pictures and progress, where a feeding's pictures from vvdec-vulkan failed
+    // Made again, with new pictures and progress, where a feeding's pictures from vvdec-vulkan failed
     // (VvdecFeedFailed: vvdec-vulkan off then, so once)
     for (bool again = true; again;) {
         again = false;
-        pool.emplace(keys, executables, source_read, distorted_read, cancel);
-        started = std::chrono::steady_clock::now();
         try {
             // Before FFmpeg, which it outlives.
             PairFeeds feeds(&source, &distorted, request.environment.ffmpeg, request.environment.ffprobe, cancel,
@@ -1138,15 +884,17 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
                 return feed != nullptr ? std::optional(feed->input_arguments()) : std::nullopt;
             };
             try {
-                // A folder of its own for the task's pictures, deleted with them.
+                // A folder of its own for the task's FFmpegs and pictures, deleted with them.
                 const TempFolder folder = TempFolder::make<PerceptualRunError>(
                     "videometricslab-perceptual-", "A folder for the frame pictures could not be made.");
-                // Room for every worker's next pair while FFmpeg wakes up.
-                PngPairs pairs(png_pairs_command(request.environment.ffmpeg, source, distorted, options, source_crop,
-                                                 distorted_crop, step, folder.path(), fed_input(feeds.distorted()),
-                                                 fed_input(feeds.source())),
-                               folder.path(), std::max(backlog_pairs, 2 * workers), pool->stopping(), cancel);
-                by_pair = pool->score_all(pairs, workers, step, total_units, on_progress, rate_of);
+                by_pair = score_in_app(
+                    scoring,
+                    [&](const std::string& test_pipe, const std::string& source_pipe) {
+                        return rgb_stream_commands(request.environment.ffmpeg, source, distorted, options,
+                                                   source_crop, distorted_crop, step, test_pipe, source_pipe,
+                                                   fed_input(feeds.distorted()), fed_input(feeds.source()));
+                    },
+                    {distorted.path, source.path}, new_book, folder.path(), cancel);
             } catch (const Cancelled&) {
                 throw;
             } catch (...) {
@@ -1165,16 +913,134 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
         if (options.range_seeks.source || options.range_seeks.distorted) {
             // A video really cut short, or a seek that gave less than it promised: from the start, to tell
             turn_off_range_seek(*short_reason);
-            return run_cpu_perceptual_task(request, keys, crops, on_progress, on_status, cancel);
+            return score_cpu_task(request, keys, crops, on_progress, on_status, cancel);
         }
         throw ComparisonCutShortError(*short_reason);
     }
     if (on_progress) {
         on_progress(total * step, total * step, rate_of(total * step));
     }
-    MetricResultSet results = cpu_results(keys, executables, by_pair, step, source.fps, pool->hdr(), range);
+    MetricResultSet results = cpu_results(keys, by_pair, step, source.fps, hdr, range);
     const long long compared = static_cast<long long>(results.frame(keys.front())->frame.size()) * step;
     return PerceptualTaskOutput{std::move(results), source_crop, distorted_crop, compared, {}};
+}
+
+// What a "cpu-perceptual" task's process is given.
+nlohmann::json cpu_task_request(const PerceptualRequest& request, const std::vector<std::string>& keys,
+                                const CropPair& crops) {
+    return {{"ffmpeg", request.environment.ffmpeg},
+            {"ffprobe", request.environment.ffprobe},
+            {"source", video_json(request.source)},
+            {"distorted", video_json(request.distorted)},
+            {"options", options_json(child_options(request.options))},
+            {"backends", request.backends},
+            {"concurrent_cpu_tasks", request.concurrent_cpu_tasks},
+            {"keys", keys},
+            {"source_crop", crop_json(crops.first)},
+            {"distorted_crop", crop_json(crops.second)}};
+}
+
+// score_cpu_task in this program's own process (isolated.h), in the app:
+// a crash in the engines then ends only that process, failing the task;
+// Pause holds that process and its FFmpegs at once, and Cancel ends them.
+PerceptualTaskOutput score_cpu_task_apart(const PerceptualRequest& request, const std::vector<std::string>& keys,
+                                          const CropPair& crops, const ProgressCallback& on_progress,
+                                          const StatusCallback& on_status, const CancelToken& cancel) {
+    PerceptualTaskOutput output;
+    std::optional<std::string> cut_short;
+    std::optional<PerceptualRunError> failed;
+    // The process deals with a failure of vvdec-vulkan's pictures itself (VvdecFeedFailed).
+    bool vvdec_used = false;
+    try {
+        run_isolated(
+            "cpu-perceptual", "SSIMULACRA2/Butteraugli", cpu_task_request(request, keys, crops),
+            [&](const nlohmann::json& message) {
+                if (message.contains("progress") && on_progress) {
+                    const nlohmann::json& counts = message["progress"];
+                    on_progress(counts.at(0).get<long long>(), counts.at(1).get<long long>(),
+                                counts.at(2).get<double>());
+                } else if (message.contains("status")) {
+                    take_child_status(status_from_json(message["status"]), on_status, vvdec_used);
+                }
+            },
+            cancel, [&](const nlohmann::json& result, const std::filesystem::path& folder) {
+                if (result.contains("cut_short")) {
+                    cut_short = result.at("cut_short").get<std::string>();
+                } else if (result.contains("failed")) {
+                    failed.emplace(result.at("failed").get<std::string>(), result.value("stderr_tail", ""));
+                } else {
+                    output = perceptual_output_from(result, folder);
+                }
+            });
+    } catch (const Cancelled&) {
+        throw;
+    } catch (const VideoSizeChanged&) {
+        throw;  // the process's, kept by run_isolated: the task is made again
+    } catch (const FilmGrainRefusal&) {
+        throw;
+    } catch (const IsolatedCrashError& error) {
+        logger.error(join(keys, " and ") + " on the CPU failed: " + error.what());
+        throw PerceptualRunError(error.what());
+    } catch (const std::runtime_error& error) {
+        throw PerceptualRunError(error.what());  // the process's own error, as its message
+    }
+    if (cut_short) {
+        throw ComparisonCutShortError(*cut_short);
+    }
+    if (failed) {
+        throw *failed;
+    }
+    return output;
+}
+
+}  // namespace
+
+PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, const std::vector<std::string>& keys,
+                                             const std::optional<CropPair>& crops,
+                                             const ProgressCallback& on_progress, const StatusCallback& on_status,
+                                             const CancelToken& cancel) {
+    if (keys.empty() || std::any_of(keys.begin(), keys.end(), [](const std::string& key) {
+            return key != "ssimulacra2" && key != "butteraugli";
+        })) {
+        throw std::invalid_argument("a CPU perceptual task takes SSIMULACRA2 and Butteraugli only");
+    }
+    validate_pair(request.source, request.distorted, request.options);
+    common_step(request, keys);  // before the black bars are looked for: one coverage for the task
+    // Colours the engines cannot read are refused before the black bars are
+    // looked for or a process is started (resampling keeps the tags).
+    scored_colours(request.source, request.distorted);
+    const CropPair found = crops ? *crops : perceptual_crops(request, on_status, cancel);
+    if (isolation_program()) {
+        return score_cpu_task_apart(request, keys, found, on_progress, on_status, cancel);
+    }
+    return score_cpu_task(request, keys, found, on_progress, on_status, cancel);
+}
+
+nlohmann::json cpu_perceptual_task(const nlohmann::json& request, const std::filesystem::path& folder) {
+    PerceptualRequest perceptual;
+    perceptual.environment.ffmpeg = request.at("ffmpeg").get<std::string>();
+    perceptual.environment.ffprobe = request.at("ffprobe").get<std::string>();
+    perceptual.source = video_from(request.at("source"));
+    perceptual.distorted = video_from(request.at("distorted"));
+    perceptual.options = options_from(request.at("options"));
+    request.at("backends").get_to(perceptual.backends);
+    request.at("concurrent_cpu_tasks").get_to(perceptual.concurrent_cpu_tasks);
+    const auto keys = request.at("keys").get<std::vector<std::string>>();
+    const CropPair crops{crop_from(request.at("source_crop")), crop_from(request.at("distorted_crop"))};
+    try {
+        const PerceptualTaskOutput output = score_cpu_task(
+            perceptual, keys, crops,
+            [](long long done, long long whole, double fps) {
+                send_isolated_message({{"progress", {done, whole, fps}}});
+            },
+            [](const RunStatus& status) { send_isolated_message({{"status", status_json(status)}}); },
+            CancelToken());  // the parent cancels by ending this process
+        return perceptual_output_json(output, folder);
+    } catch (const ComparisonCutShortError& error) {
+        return {{"cut_short", error.what()}};
+    } catch (const PerceptualRunError& error) {
+        return {{"failed", error.what()}, {"stderr_tail", error.stderr_tail()}};
+    }
 }
 
 }  // namespace vml

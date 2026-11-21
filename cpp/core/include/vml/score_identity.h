@@ -32,7 +32,8 @@ inline constexpr std::string_view cvvdp = "cvvdp-vship-gpu-v2";
 inline constexpr std::string_view vship51_cvvdp = "cvvdp-vship-gpu-v1";
 
 // SSIMULACRA2 or Butteraugli (`key`): calculated by Vship on the GPU, by
-// libjxl's tools on the CPU, and the requests that take a score from either,
+// the app's engines on the CPU (libjxl 0.12.0's tools' scores, so they keep
+// the tools' "libjxl-cpu" ids), and the requests that take a score from either,
 // one per Vship build. Vship 5.1's GPU ids are "<key>-vship-gpu-v1", and
 // before that had its version inside ("<key>-vship-5.1.0-gpu-v1").
 inline std::string vship_gpu(std::string_view key) { return std::string(key) + "-vship-gpu-v2"; }

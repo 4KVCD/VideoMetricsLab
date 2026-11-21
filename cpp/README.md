@@ -84,11 +84,12 @@ window's "GPU") or, with `--vship vship` or Settings > Metrics > GPU metrics' ch
 stock Vship's ("Vship Vulkan", "Vship HIP", "Vship CUDA"), in a pass each or (Settings > Metrics > GPU metrics) in
 one, CVVDP on the display Settings chooses (Automatic unless it names a
 preset: the HDR display for an HDR reference, the SDR one otherwise) or on
-each `--cvvdp-display`; and scores SSIMULACRA2 and Butteraugli on the CPU with
-libjxl's tools with `--cpu`, or where the GPU cannot: without a GPU
-Vship can use, or after their GPU pass failed in a comparison up to ten
-minutes long. FFmpeg writes each frame pair as 16-bit PNG pictures, held a
-few pairs ahead of the tools, which score several pairs at once.
+each `--cvvdp-display`; and scores SSIMULACRA2 and Butteraugli on the CPU,
+with the app's own engines (libjxl 0.12.0's tools' scores to the last bit),
+with `--cpu`, or where the GPU cannot: without a GPU Vship can use, or after
+their GPU pass failed in a comparison up to ten minutes long. Two FFmpegs
+write each video's frames into pipes as 16-bit RGB, and the engines score
+several pairs at once, Butteraugli's work split between threads.
 With VMAF on the GPU, PSNR, SSIM and XPSNR are a task of their own on the
 CPU, and the two run at once, as the Python app runs a video's tasks; so
 are Vship's metrics, in the GPU's queue after VMAF, and SSIMULACRA2 and
@@ -112,8 +113,8 @@ FFmpeg knows no AV2.) That work runs in a process of its
 own (the
 program again, with `--vml-isolated`), so that a crash in libvmaf, Vship
 or the GPU's driver ends that process and not the run: FFmpeg's filters
-then calculate VMAF and the others on the CPU, and libjxl's tools
-SSIMULACRA2 and Butteraugli, as in the Python app. For a run it cannot do
+then calculate VMAF and the others on the CPU, and the app's engines
+SSIMULACRA2 and Butteraugli. For a run it cannot do
 yet (FFmpeg pairing the frames with `VML_VMAF_PIPES=canvas`), it says what it
 cannot do and exits with code 2, rather than giving other answers than the
 Python app. It reads and saves the app's saved scores, in the same files as
@@ -208,11 +209,10 @@ Windows the build puts Qt's libraries beside the window and its tests
 of its own dialogs where they are installed with Qt (qttranslations), which
 the package needs. On macOS the window is an app bundle,
 `build/macos/app/Release/VideoMetricsLab.app`, which runs from the build
-folder with Qt's libraries where Qt is installed. The bundled tools for
-macOS are built from their pinned releases' source and are not committed:
-`scripts/build_libvmaf_fast_macos.sh` (libvmaf.dylib, needs meson) and
-`scripts/build_libjxl_macos.sh` (ssimulacra2 and butteraugli_main), and
-`scripts/build_release_macos.sh` runs both and packages the app.
+folder with Qt's libraries where Qt is installed. The bundled libvmaf for
+macOS is built from its pinned release's source and is not committed:
+`scripts/build_libvmaf_fast_macos.sh` (libvmaf.dylib, needs meson), which
+`scripts/build_release_macos.sh` runs before it packages the app.
 
 GitHub builds and tests the app when asked (`.github/workflows/ci.yml`:
 Actions > CI > Run workflow), at the end of each phase of the work and

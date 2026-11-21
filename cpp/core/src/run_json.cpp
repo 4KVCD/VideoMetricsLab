@@ -1,9 +1,119 @@
 #include "vml/run_json.h"
 
+#include <fstream>
+
 #include "vml/film_grain_detect.h"
 #include "vml/platform/system.h"
 
 namespace vml {
+
+namespace {
+
+constexpr const char* perceptual_scores_file = "perceptual.bin";
+
+nlohmann::json provenance_json(const MetricProvenance& provenance) {
+    return {{"implementation", provenance.implementation},
+            {"implementation_version", provenance.implementation_version},
+            {"compute_backend", provenance.compute_backend},
+            {"implementation_compatibility_id", provenance.implementation_compatibility_id},
+            {"parameters", provenance.parameters},
+            {"made_by", provenance.made_by}};
+}
+
+MetricProvenance provenance_from(const nlohmann::json& text) {
+    MetricProvenance provenance;
+    text.at("implementation").get_to(provenance.implementation);
+    text.at("implementation_version").get_to(provenance.implementation_version);
+    text.at("compute_backend").get_to(provenance.compute_backend);
+    text.at("implementation_compatibility_id").get_to(provenance.implementation_compatibility_id);
+    text.at("parameters").get_to(provenance.parameters);
+    text.at("made_by").get_to(provenance.made_by);
+    return provenance;
+}
+
+// A metric's frames, times and values into the scores file.
+void write_numbers(std::ofstream& file, const std::vector<int>& frame, const std::vector<double>& time,
+                   const std::vector<float>& values) {
+    file.write(reinterpret_cast<const char*>(frame.data()), static_cast<std::streamsize>(frame.size() * sizeof(int)));
+    file.write(reinterpret_cast<const char*>(time.data()), static_cast<std::streamsize>(time.size() * sizeof(double)));
+    file.write(reinterpret_cast<const char*>(values.data()),
+               static_cast<std::streamsize>(values.size() * sizeof(float)));
+}
+
+// `count` frames, times and values back from the scores file.
+void read_numbers(std::ifstream& file, std::size_t count, std::vector<int>& frame, std::vector<double>& time,
+                  std::vector<float>& values) {
+    frame.resize(count);
+    time.resize(count);
+    values.resize(count);
+    file.read(reinterpret_cast<char*>(frame.data()), static_cast<std::streamsize>(count * sizeof(int)));
+    file.read(reinterpret_cast<char*>(time.data()), static_cast<std::streamsize>(count * sizeof(double)));
+    file.read(reinterpret_cast<char*>(values.data()), static_cast<std::streamsize>(count * sizeof(float)));
+}
+
+}  // namespace
+
+// The pass's output, with its metrics' numbers in `folder`'s
+// perceptual_scores_file (too many for a message): each frame metric's, and
+// CVVDP's timeline followed by its score (8 bytes: exact, and a NaN
+// survives, which JSON's numbers would not).
+nlohmann::json perceptual_output_json(const PerceptualTaskOutput& output, const std::filesystem::path& folder) {
+    nlohmann::json metrics = nlohmann::json::array();
+    std::ofstream file(folder / perceptual_scores_file, std::ios::binary);
+    for (const std::string& key : output.metrics.keys()) {
+        if (const FrameMetricResult* result = output.metrics.frame(key)) {
+            metrics.push_back(
+                {{"key", key}, {"count", result->frame.size()}, {"provenance", provenance_json(result->provenance)}});
+            write_numbers(file, result->frame, result->time, result->values);
+            continue;
+        }
+        const SequenceMetricResult& result = *output.metrics.sequence(key);
+        metrics.push_back({{"key", key},
+                           {"count", result.values.size()},
+                           {"sequence", true},
+                           {"provenance", provenance_json(result.provenance)}});
+        write_numbers(file, result.frame, result.time, result.values);
+        file.write(reinterpret_cast<const char*>(&result.score), sizeof result.score);
+    }
+    if (!file) {
+        throw std::runtime_error("The scores could not be written.");
+    }
+    return {{"metrics", metrics},
+            {"source_crop", crop_json(output.source_crop)},
+            {"distorted_crop", crop_json(output.distorted_crop)},
+            {"compared_frame_count", output.compared_frame_count},
+            {"failures", output.failures}};
+}
+
+PerceptualTaskOutput perceptual_output_from(const nlohmann::json& result, const std::filesystem::path& folder) {
+    PerceptualTaskOutput output;
+    std::ifstream file(folder / perceptual_scores_file, std::ios::binary);
+    for (const nlohmann::json& metric : result.at("metrics")) {
+        const auto count = metric.at("count").get<std::size_t>();
+        if (metric.value("sequence", false)) {
+            SequenceMetricResult found;
+            found.key = metric.at("key").get<std::string>();
+            found.provenance = provenance_from(metric.at("provenance"));
+            read_numbers(file, count, found.frame, found.time, found.values);
+            file.read(reinterpret_cast<char*>(&found.score), sizeof found.score);
+            output.metrics.add(std::move(found));
+            continue;
+        }
+        FrameMetricResult found;
+        found.key = metric.at("key").get<std::string>();
+        found.provenance = provenance_from(metric.at("provenance"));
+        read_numbers(file, count, found.frame, found.time, found.values);
+        output.metrics.add(std::move(found));
+    }
+    if (!file) {
+        throw std::runtime_error("The scores could not be read back from the process that made them.");
+    }
+    output.source_crop = crop_from(result.at("source_crop"));
+    output.distorted_crop = crop_from(result.at("distorted_crop"));
+    result.at("compared_frame_count").get_to(output.compared_frame_count);
+    result.at("failures").get_to(output.failures);
+    return output;
+}
 
 nlohmann::json video_json(const VideoInfo& info) {
     nlohmann::json text = {{"path", platform::path_text(info.path)},

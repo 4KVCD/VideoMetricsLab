@@ -170,7 +170,7 @@ Copy-Item (Join-Path $appFiles 'translations/*.json') (Join-Path $resources 'tra
 $tools = Join-Path $resources 'tools'
 New-Item -ItemType Directory -Path $tools -Force | Out-Null
 # FFmpeg's libraries come with dav1d (scripts/build_dav1d.ps1).
-foreach ($tool in @('ffmpeg', 'libjxl', 'libvmaf', 'vmaf_vulkan', 'vship')) {
+foreach ($tool in @('ffmpeg', 'libvmaf', 'vmaf_vulkan', 'vship')) {
     Copy-Item (Join-Path $appFiles "tools/$tool") (Join-Path $tools $tool) -Recurse
 }
 if (-not (Test-Path (Join-Path $tools 'ffmpeg/dav1d.dll'))) {
@@ -206,13 +206,15 @@ Copy-Item $vvdecVulkan $native
 Copy-Item (Join-Path $projectDirectory 'resources/tools/ffmpeg/licenses/COPYING.vvdec.txt') (Join-Path $native 'licenses')
 
 # The project's terms, the notices of what it bundles, the licence of Qt's
-# libraries (the LGPL 3, with the GPL 3 it adds to), and the MIT notices of
-# nlohmann/json and miniz, which are compiled into both programs.
+# libraries (the LGPL 3, with the GPL 3 it adds to), and the notices of
+# nlohmann/json, miniz and Highway, which are compiled into both programs.
 Copy-Item (Join-Path $projectDirectory 'LICENSE') (Join-Path $output 'LICENSE.txt')
 Copy-Item (Join-Path $projectDirectory 'docs/THIRD_PARTY.md') (Join-Path $output 'THIRD_PARTY.md')
 Copy-Item (Join-Path $cppDirectory 'packaging/licenses') (Join-Path $output 'licenses') -Recurse
 Copy-Item (Join-Path $cppDirectory 'third_party/nlohmann/LICENSE.MIT') (Join-Path $output 'licenses/LICENSE.nlohmann-json.txt')
 Copy-Item (Join-Path $cppDirectory 'third_party/miniz/LICENSE') (Join-Path $output 'licenses/LICENSE.miniz.txt')
+Copy-Item (Join-Path $cppDirectory 'third_party/highway/LICENSE') (Join-Path $output 'licenses/LICENSE.highway.txt')
+Copy-Item (Join-Path $cppDirectory 'third_party/highway/LICENSE-BSD3') (Join-Path $output 'licenses/LICENSE.highway-bsd3.txt')
 
 # Microsoft's C++ runtime, beside the programs (Windows looks there first,
 # for the libraries in resources\ too): whichever of its DLLs anything in

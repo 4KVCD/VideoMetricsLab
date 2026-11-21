@@ -40,7 +40,7 @@ std::vector<std::string> device_lines(const DeviceFindings& found) {
     } else {
         lines.push_back("CVVDP: not available (" + found.no_vship + ")");
         for (const std::string key : {"ssimulacra2", "butteraugli"}) {
-            lines.push_back(std::string(metric_definition(key).label) + ": CPU (libjxl)");
+            lines.push_back(std::string(metric_definition(key).label) + ": CPU");
         }
     }
     if (found.other_vship) {

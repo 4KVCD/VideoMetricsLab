@@ -2,7 +2,10 @@
 
 Vendored, so that a build needs no download. GoogleTest, nlohmann/json and
 miniz were downloaded once, with Brian's OK, and checked against the SHA-256
-their projects publish. libvmaf-fast's headers are copied from that
+their projects publish. Highway, whose project publishes a PGP signature
+instead, was checked against that: a good signature by its maintainer's key
+(Jan Wassenberg, 14D8 27B2 2124 EB2F E748 C3B6 EE0F 9065 BCB8 B678, since
+expired). libvmaf-fast's headers are copied from that
 project's own repository at the commit of the release the app ships.
 
 | Library | Version | Used for | Licence | Source | SHA-256 of the download |
@@ -10,6 +13,7 @@ project's own repository at the commit of the release the app ships.
 | [GoogleTest](https://github.com/google/googletest) | 1.18.0 | The tests (not shipped) | BSD 3-Clause (`googletest/LICENSE`) | `googletest-1.18.0.tar.gz` from the v1.18.0 release | `6e3191c1455468b3fc35a417fb565c1c5071aee1b7e7f85e30cf48a98d37d8b5` |
 | [nlohmann/json](https://github.com/nlohmann/json) | 3.12.0 | Reading and writing JSON | MIT (`nlohmann/LICENSE.MIT`) | `json.hpp` from the v3.12.0 release | `aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de63` |
 | [libvmaf-fast](https://github.com/4KVCD/libvmaf-fast) | v1.3 | Calling the libvmaf the app ships (`resources/tools/libvmaf`): its functions and structures | BSD-2-Clause-Patent (`libvmaf-fast/LICENSE`) | `libvmaf/include/libvmaf/*.h` and `LICENSE` at commit `28776652` (tag `libvmaf-fast-v1.3`), the same files as v1's (`867efb83`), v1.1's (`994b1814`) and v1.2's (`71b7b9be`) | Not downloaded; each file's is below |
+| [Highway](https://github.com/google/highway) | 1.2.0 | The SIMD code of the app's SSIMULACRA2 and Butteraugli engines (`core/src/ssimulacra2_kernels.cpp`, `core/src/butteraugli_kernels.cpp`), one build per CPU type, chosen when the app runs | Apache 2.0 or BSD 3-Clause (`highway/LICENSE`, `highway/LICENSE-BSD3`) | `highway-1.2.0.tar.gz` (2,233,645 bytes) from the 1.2.0 release, the version libjxl 0.12.0 builds with | `58e9d5d41d6573ad15245ad76aec53a69499ca7480c092d899c4424812ed906f` |
 | [miniz](https://github.com/richgel999/miniz) | 3.1.2 | The saved scores' .npz files: zip archives of deflated numpy arrays (`core/npz.h`) | MIT (`miniz/LICENSE`) | `miniz-3.1.2.zip` (101,958 bytes) from the 3.1.2 release | `f0446d863f9c19926ad9483c523fdc42e42b8d4a6a431d27e09d49c79a140d9a` |
 
 Only what a build needs is kept: of GoogleTest, the `googletest` folder's
@@ -18,7 +22,10 @@ tests or docs); of nlohmann/json, the single header and its licence; of
 libvmaf-fast, the five headers that declare its functions and its licence
 (not `version.h.in` or `meson.build`, which only its own build uses); of
 miniz, the release's single source file, its header and its licence (not
-its examples, change log or readme). miniz is built without its file
+its examples, change log or readme); of Highway, its two licences and the
+41 files of `hwy`: its headers and the four sources the build compiles
+(`abort.cc`, `per_target.cc`, `print.cc`, `targets.cc`), each identical to the file in `highway-1.2.0.tar.gz` (no contrib, tests,
+docs or build files). miniz is built without its file
 functions (`MINIZ_NO_STDIO`): the app reads and writes the files itself, so
 that a path with any characters works on Windows. In a Release build with
 MSVC, what the app uses of it (reading and writing zip files, deflate both
@@ -50,6 +57,6 @@ has the same headers as long as the fork has not changed them since:
 `git diff 28776652 HEAD -- libvmaf/include` in the fork shows whether it
 has.
 
-nlohmann/json and miniz are compiled into the app, so they belong in the
+nlohmann/json, miniz and Highway are compiled into the app, so they belong in the
 app's `docs/THIRD_PARTY.md` once the C++ app ships. GoogleTest is only in the
 tests. libvmaf itself already ships with the app and is listed there.

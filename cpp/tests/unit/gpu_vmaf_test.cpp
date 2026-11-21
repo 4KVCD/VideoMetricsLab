@@ -134,6 +134,37 @@ TEST(GpuVmaf, AStreamThatIsNotFfmpegsIsAnError) {
     }
 }
 
+// Raw frames (FFmpeg's rawvideo) come out in order, each whole, then the
+// end; a frame cut short is an error, as in a YUV4MPEG stream.
+TEST(GpuVmaf, ReadsRawFramesFromAPipe) {
+    std::string frames;
+    for (int n = 0; n < 4; ++n) {
+        frames += static_cast<char>(n);
+        frames += std::string(11, '\x7f');
+    }
+    StreamReader reader("raw", 12, StreamReader::Framing::raw, 2);
+    reader.start();
+    std::thread writer = write_to(reader, frames);
+    for (int n = 0; n < 4; ++n) {
+        std::vector<std::uint8_t>* frame = reader.pull();
+        ASSERT_NE(frame, nullptr) << "frame " << n;
+        EXPECT_EQ((*frame)[0], n);
+        EXPECT_EQ((*frame)[11], 0x7f);
+        reader.release(frame);
+    }
+    writer.join();
+    reader.ffmpeg_ended();
+    EXPECT_EQ(reader.pull(), nullptr);
+    EXPECT_NO_THROW(reader.join());
+
+    StreamReader cut("cut", 12, StreamReader::Framing::raw, 2);
+    cut.start();
+    write_to(cut, frames.substr(0, 12 + 5)).join();
+    cut.ffmpeg_ended();
+    EXPECT_EQ(read_error(cut), "FFmpeg's frames ended inside one (5 of 12 bytes)");
+    cut.stop();
+}
+
 // A pipe stopped while FFmpeg could still write into it was closed by the
 // app, whose closing then fails that FFmpeg; one whose FFmpeg had finished
 // was not (run_ffmpeg_pair takes the cause of a failure by it).

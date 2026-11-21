@@ -15,8 +15,6 @@ resources/native/*.dylib
 resources/native/*.source
 # macOS's tools, built by scripts/build_*_macos.sh (the release script runs them)
 resources/tools/libvmaf/libvmaf.dylib
-resources/tools/libjxl/ssimulacra2
-resources/tools/libjxl/butteraugli_main
 resources/tools/ffmpeg/*.dylib
 resources/tools/vulkan/
 resources/tools/vship/vulkan/libvship.dylib

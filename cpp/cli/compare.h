@@ -6,8 +6,8 @@
 // libvmaf's CUDA code, and PSNR, SSIM and XPSNR in the app or with FFmpeg's
 // filters, a video's VMAF on the GPU beside its other metrics on the CPU;
 // SSIMULACRA2, Butteraugli and CVVDP (on each --cvvdp-display) on the GPU
-// with Vship; and SSIMULACRA2 and Butteraugli on the CPU with libjxl's
-// tools. What it cannot do yet (FFmpeg pairing the frames, with
+// with Vship; and SSIMULACRA2 and Butteraugli on the CPU with the app's own
+// engines. What it cannot do yet (FFmpeg pairing the frames, with
 // VML_VMAF_PIPES=canvas) it says, and exits with code 2, rather than giving
 // other answers than the Python app would.
 // Scores are read from and saved to the app's saved scores (metric_cache.h),

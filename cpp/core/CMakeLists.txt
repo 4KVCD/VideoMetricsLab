@@ -11,8 +11,11 @@ add_library(vml_core
     src/bitrate_store.cpp
     src/black_bars_rule.cpp
     src/build_info.cpp
+    src/butteraugli.cpp
+    src/butteraugli_kernels.cpp
     src/cancel.cpp
     src/colour.cpp
+    src/cpu_pair_scorer.cpp
     src/crop_detect.cpp
     src/csv_rows.cpp
     src/cvvdp.cpp
@@ -41,6 +44,7 @@ add_library(vml_core
     src/host_frames.cpp
     src/isolated.cpp
     src/job_runner.cpp
+    src/jxl_linear.cpp
     src/libvmaf.cpp
     src/libvmaf_cpu.cpp
     src/metric_cache.cpp
@@ -62,6 +66,7 @@ add_library(vml_core
     src/result_json.cpp
     src/results.cpp
     src/results_summary.cpp
+    src/row_pool.cpp
     src/run_file.cpp
     src/run_json.cpp
     src/run_line.cpp
@@ -74,6 +79,8 @@ add_library(vml_core
     src/sha256.cpp
     src/size_changes.cpp
     src/soundtrack_clock.cpp
+    src/ssimulacra2.cpp
+    src/ssimulacra2_kernels.cpp
     src/stats.cpp
     src/temp_files.cpp
     src/time_format.cpp
@@ -89,6 +96,9 @@ add_library(vml_core
     src/zip_archive.cpp
 )
 target_include_directories(vml_core PUBLIC include)
+# The engines' vector code includes itself once per instruction set through
+# Highway's foreach_target.h, by its name alone (HWY_TARGET_INCLUDE).
+target_include_directories(vml_core PRIVATE src)
 # The app's version, for every part of it: shown, compared by the update
 # check with GitHub's latest release, and written into what the app saves
 # (vml/build_info.h).
@@ -115,7 +125,7 @@ target_include_directories(vml_core PRIVATE ../../native)
 # libvmaf-fast's public headers, at the commit of the library the app ships
 # (third_party/README.md). SYSTEM: their warnings are not ours to fix.
 target_include_directories(vml_core SYSTEM PUBLIC ../third_party/libvmaf-fast/include)
-target_link_libraries(vml_core PUBLIC vml_platform nlohmann_json PRIVATE vml_compile_options vml_miniz)
+target_link_libraries(vml_core PUBLIC vml_platform nlohmann_json PRIVATE vml_compile_options vml_miniz vml_hwy)
 if(APPLE)
     # Which codecs the Mac's GPU decodes (hardware_decoding.cpp).
     target_link_libraries(vml_core PUBLIC "-framework VideoToolbox" "-framework CoreMedia")

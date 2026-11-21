@@ -98,12 +98,13 @@ CVVDP runs, on the CPU.
   video needs to be shown in SDR; the self-test warns of it). An app opened
   from the Finder does not have Homebrew on its PATH, so the app also looks
   in Homebrew's and MacPorts' folders, ffmpeg-full's (keg-only) first.
-- **The bundled tools** are built from their pinned releases' source,
-  because neither project publishes macOS builds: libvmaf-fast v1.3's
-  `libvmaf.dylib` and libjxl 0.12.0's `ssimulacra2` and `butteraugli_main`,
-  linked statically (`scripts/build_libvmaf_fast_macos.sh`,
-  `scripts/build_libjxl_macos.sh`). They link only the system's libraries,
-  and building them twice gives the same bytes. They are not committed.
+- **The bundled libvmaf** is built from its pinned release's source,
+  because the project publishes no macOS builds: libvmaf-fast v1.3's
+  `libvmaf.dylib`, linked statically (`scripts/build_libvmaf_fast_macos.sh`).
+  It links only the system's libraries, and building it twice gives the same
+  bytes. It is not committed. (Until the app's own SSIMULACRA2 and
+  Butteraugli engines, libjxl 0.12.0's `ssimulacra2` and `butteraugli_main`
+  were built the same way.)
 - **Processes and signals.** A cancelled or ended program's process group
   is now signalled until the program is reaped, not only while it runs, so
   what it started ends with it. The command line ignores SIGPIPE, as
@@ -330,12 +331,11 @@ commit it pins), on the same loader and MoltenVK as Vship:
 ### For the Linux port
 
 - Do the same: look for FFmpeg in the distribution's folders as well as on
-  the PATH; build libvmaf-fast and libjxl's tools from their pinned source,
-  linked statically; never pick a `.exe` file; ignore SIGPIPE in the command
-  line; decide, library by library, whether to fuse multiply-adds (GCC
-  does by default, on ARM and on x86 with FMA): as the distribution's
-  FFmpeg is built, for libvmaf-fast, and not, for libjxl's tools; set the
-  tests' profile folder with HOME.
+  the PATH; build libvmaf-fast from its pinned source, linked statically;
+  never pick a `.exe` file; ignore SIGPIPE in the command line; decide
+  whether libvmaf-fast fuses multiply-adds (GCC does by default, on ARM and
+  on x86 with FMA) as the distribution's FFmpeg is built; set the tests'
+  profile folder with HOME.
 - Do differently: the resources are beside the programs, as on Windows,
   and `libvulkan.so.1` is the Vulkan loader, so Vship's and VMAF's Vulkan
   code may run there.

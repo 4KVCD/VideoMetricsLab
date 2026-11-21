@@ -38,7 +38,7 @@
    release saved. Every case must be the same, or differ only where a
    change made on purpose says why.
 6. Test every metric, including SSIMULACRA2 and Butteraugli through both the
-   Vship-fast GPU path and the libjxl CPU fallback. After updating
+   Vship-fast GPU path and the CPU engines. After updating
    Vship-fast, compare its SSIMULACRA2, Butteraugli and CVVDP against the
    build it replaces and against libjxl, on an NVIDIA and an Intel GPU: a
    build that scores one wrongly is not bundled. Check saved-result round-trip,
@@ -65,7 +65,9 @@
    applicable source and relinking obligations ([THIRD_PARTY.md](THIRD_PARTY.md)):
    Qt 6.12.0 under the LGPL 3 and its translations under the BSD 3-Clause
    licence (`licenses/`), Microsoft's C++ runtime, FFmpeg's libraries with
-   VVdeC, dav1d, libvmaf-fast, Vship and libjxl's tools.
+   VVdeC, dav1d, libvmaf-fast and Vship, and the notices of the code
+   compiled into the programs (nlohmann/json, miniz, Highway, and libjxl's
+   and skcms's for the CPU engines).
 10. Update the changelog, choose a version/tag, and write release notes with
     known issues, requirements and tested hardware. Do not invent a release
     version from the development commit count. List under bug fixes only

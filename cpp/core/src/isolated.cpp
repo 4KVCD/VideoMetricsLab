@@ -16,6 +16,7 @@
 #include "vml/film_grain_scoring.h"
 #include "vml/gpu_frames.h"
 #include "vml/grain_feed.h"
+#include "vml/perceptual_cpu.h"
 #include "vml/platform/console.h"
 #include "vml/platform/pipe.h"
 #include "vml/platform/process.h"
@@ -388,6 +389,8 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
         } else if (task == "cuda-probe") {
             const CudaProbe probe = probe_cuda();
             result = {{"available", probe.available}, {"text", probe.text}};
+        } else if (task == "cpu-perceptual") {
+            result = cpu_perceptual_task(request, request_file.parent_path());
         } else if (task == "vship-pass") {
             result = vship_pass_task(request, request_file.parent_path());
         } else if (task == "av2-probe") {

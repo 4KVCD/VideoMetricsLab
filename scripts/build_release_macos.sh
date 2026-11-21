@@ -54,7 +54,7 @@ if [[ -z "$ffmpeg" ]] || { [[ ! -x "$(dirname "$ffmpeg")/ffprobe" ]] && ! comman
 fi
 
 # 1. The bundled tools, from their pinned releases' source: libvmaf-fast's
-#    libvmaf.dylib, libjxl's two tools, Video Compare's FFmpeg libraries,
+#    libvmaf.dylib, Video Compare's FFmpeg libraries,
 #    dav1d and dav2d (a pinned commit: dav2d has no release yet), and the
 #    software decoder the GPU metrics decode with in the app (not in git).
 if $allow_local_libvmaf; then
@@ -63,8 +63,6 @@ else
     step "Building libvmaf-fast"
     "$project/scripts/build_libvmaf_fast_macos.sh" | sed 's/^/    /'
 fi
-step "Building libjxl's ssimulacra2 and butteraugli_main"
-"$project/scripts/build_libjxl_macos.sh" | sed 's/^/    /'
 step "Building FFmpeg's libraries for Video Compare"
 "$project/scripts/build_ffmpeg_decoders_macos.sh" | sed 's/^/    /'
 step "Building dav1d"
@@ -160,12 +158,10 @@ EOF
 # The app's files: the models, the window's catalogs, and macOS's tools
 # (not Windows' .exe and .dll files, which share the folders).
 resources="$contents/Resources/resources"
-mkdir -p "$resources/translations" "$resources/tools/libjxl" "$resources/tools/libvmaf" "$resources/tools/ffmpeg" \
+mkdir -p "$resources/translations" "$resources/tools/libvmaf" "$resources/tools/ffmpeg" \
     "$resources/tools/vship/vulkan" "$resources/tools/vship/vship51" "$resources/tools/vmaf_vulkan" "$resources/native"
 ditto "$app_files/models" "$resources/models"
 cp "$app_files"/translations/*.json "$resources/translations/"
-cp "$app_files/tools/libjxl/ssimulacra2" "$app_files/tools/libjxl/butteraugli_main" \
-    "$app_files/tools/libjxl/LIBJXL-VERSION.txt" "$app_files"/tools/libjxl/LICENSE.*.txt "$resources/tools/libjxl/"
 cp "$app_files/tools/libvmaf/libvmaf.dylib" "$app_files/tools/libvmaf/libvmaf-fast.json" "$resources/tools/libvmaf/"
 ditto "$app_files/tools/libvmaf/licenses" "$resources/tools/libvmaf/licenses"
 cp "$app_files"/tools/ffmpeg/*.dylib "$resources/tools/ffmpeg/"
@@ -196,12 +192,14 @@ if otool -l "$contents/MacOS/VideoMetricsLab" | grep -A2 LC_RPATH | grep -q "$HO
 fi
 
 # The project's terms, the notices of what it bundles, Qt's licence, and the
-# MIT notices of nlohmann/json and miniz, compiled into both programs.
+# notices of nlohmann/json, miniz and Highway, compiled into both programs.
 cp "$project/LICENSE" "$contents/Resources/LICENSE.txt"
 cp "$project/docs/THIRD_PARTY.md" "$contents/Resources/THIRD_PARTY.md"
 ditto "$cpp/packaging/licenses" "$contents/Resources/licenses"
 cp "$cpp/third_party/nlohmann/LICENSE.MIT" "$contents/Resources/licenses/LICENSE.nlohmann-json.txt"
 cp "$cpp/third_party/miniz/LICENSE" "$contents/Resources/licenses/LICENSE.miniz.txt"
+cp "$cpp/third_party/highway/LICENSE" "$contents/Resources/licenses/LICENSE.highway.txt"
+cp "$cpp/third_party/highway/LICENSE-BSD3" "$contents/Resources/licenses/LICENSE.highway-bsd3.txt"
 
 # Everything each Mach-O file links must be in the bundle or be the
 # system's. (A library's list starts with its own name, otool -D's.)

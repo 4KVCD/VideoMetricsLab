@@ -12,6 +12,7 @@ add_executable(vml_tests
     unit/cancel_test.cpp
     unit/cli_notify_test.cpp
     unit/cli_test.cpp
+    unit/cpu_pair_scorer_test.cpp
     unit/cvvdp_test.cpp
     unit/decisions_test.cpp
     unit/difference_test.cpp

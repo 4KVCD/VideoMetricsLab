@@ -32,7 +32,7 @@ libvmaf, Vship and FFmpeg's libraries are loaded the same way, from
 | A range late in a video | `range_seek.cpp`, `plan_range_seek` in `gpu_frames.cpp`: seeks only where the file proves its frames' numbers (`VML_RANGE_SEEK=0` turns it off) |
 | Film grain | `film_grain_detect.cpp` (what a stream describes), `film_grain_scoring.cpp` (scored with or without it), `grain_feed.cpp` (a video's pictures decoded by the app and fed to FFmpeg); `native/grain/grain_decoding.h` (which decoder adds it) |
 | Metrics calculated in the app | `libvmaf.cpp` (the bundled libvmaf), `libvmaf_cpu.cpp` (PSNR, SSIM, XPSNR), `gpu_vmaf.cpp`, `vmaf_cuda.cpp`, `vmaf_vulkan.cpp`, `vmaf_v1_gpu.cpp` (VMAF on the GPU), `gpu_frames.cpp` (decoding), `isolated.cpp` (the process of its own they run in) |
-| SSIMULACRA2, Butteraugli, CVVDP | `vship.cpp`, `vship_run.cpp` (on the GPU), `perceptual_cpu.cpp` (libjxl's tools), `perceptual.cpp`, `cvvdp.cpp` |
+| SSIMULACRA2, Butteraugli, CVVDP | `vship.cpp`, `vship_run.cpp` (on the GPU), `perceptual_cpu.cpp`, `cpu_pair_scorer.cpp`, `ssimulacra2.cpp`, `butteraugli.cpp` (on the CPU, the app's own engines), `perceptual.cpp`, `cvvdp.cpp` |
 | Metric registry | `metrics.cpp` |
 | Results and persistence | `results.cpp`, `metric_cache.cpp`, `run_file.cpp`, `result_json.cpp`, `export_csv.cpp`, `settings.cpp` |
 | Statistics and graphs | `stats.cpp`; `app/graph_panel.cpp`, `app/chart.cpp`, `app/export_image.cpp` (Export graph as PNG) |
@@ -53,7 +53,7 @@ libvmaf, Vship and FFmpeg's libraries are loaded the same way, from
    video's metrics one program calculates in one place: FFmpeg's metrics on
    the CPU (PSNR, SSIM and XPSNR in the app where it decodes the videos
    itself), VMAF, NEG and v1 on the GPU, Vship's metrics on the GPU, and
-   SSIMULACRA2 and Butteraugli set to the CPU, with libjxl's tools. Where
+   SSIMULACRA2 and Butteraugli set to the CPU, by the app's engines. Where
    the app decodes a video on the CPU, or both on a GPU whose pictures reach
    them as in their own run (`pass_feeds_cpu_metrics`), PSNR, SSIM and XPSNR
    join the GPU's VMAF task (`MetricTask::cpu_beside`) and are scored from
@@ -66,7 +66,7 @@ libvmaf, Vship and FFmpeg's libraries are loaded the same way, from
    setting), the GPU's one. GPU work runs in a process of its own
    (`isolated.h`): a crash in libvmaf, Vship or the GPU's driver ends that
    process, not the run, and FFmpeg's filters then calculate VMAF and the
-   others on the CPU, and libjxl's tools SSIMULACRA2 and Butteraugli.
+   others on the CPU, and the app's engines SSIMULACRA2 and Butteraugli.
 5. Each task's scores come back as a `MetricResultSet` (`results.h`): each
    metric's frame or sequence result, with its provenance.
 6. The window shows each result as it arrives, saves its scores off its

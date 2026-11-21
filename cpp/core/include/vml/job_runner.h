@@ -5,7 +5,7 @@
 //   one place: FFmpeg's metrics on the CPU (PSNR, SSIM and XPSNR in the app
 //   among them), VMAF on the GPU, Vship's metrics (SSIMULACRA2,
 //   Butteraugli, CVVDP) on the GPU in one or more passes, or SSIMULACRA2
-//   and Butteraugli set to the CPU, with libjxl's tools;
+//   and Butteraugli set to the CPU, by the app's own engines;
 // - a lane is a thread that runs one task at a time. The CPU's queue has two
 //   lanes (one if it holds a single task), and the "parallel jobs" setting
 //   says how many of them may work at once. The GPU's queue has one lane.

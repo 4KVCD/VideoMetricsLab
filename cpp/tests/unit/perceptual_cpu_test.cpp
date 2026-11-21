@@ -1,23 +1,20 @@
 // SSIMULACRA2 and Butteraugli on the CPU (perceptual_cpu.h), held to the
-// Python app's (perceptual_cpu.json, from perceptual_cpu.py and colour.py):
-// the filter graphs and FFmpeg commands that make the pictures, the scores
-// read from the tools' output, how many pairs are scored at once,
-// Butteraugli's 3-norm, and the pictures' colour chunks. Where FFmpeg runs:
-// the pictures are each video's frame N, a task scores every pair with
-// stand-ins for the tools, and Cancel ends the tools at once. And each
-// metric goes where the Python app sends it (run_perceptual_task).
+// Python app's (perceptual_cpu.json, from perceptual_cpu.py): the filter
+// graphs that make the pictures, the scores read from the tools' output, and
+// Butteraugli's 3-norm. Where FFmpeg runs: the pictures are each video's
+// frame N. And each metric goes where the Python app sends it
+// (run_perceptual_task).
 #include "vml/perceptual_cpu.h"
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <array>
-#include <chrono>
 #include <cmath>
-#include <fstream>
+#include <cstring>
 #include <functional>
-#include <iterator>
-#include <thread>
+#include <optional>
+#include <sstream>
+#include <utility>
 
 #include "reference.h"
 #include "test_videos.h"
@@ -74,25 +71,6 @@ std::string bytes_from_hex(const std::string& hex) {
     return bytes;
 }
 
-std::string hex_of(const std::string& bytes) {
-    static const char digits[] = "0123456789abcdef";
-    std::string hex;
-    for (const char byte : bytes) {
-        hex.push_back(digits[static_cast<unsigned char>(byte) >> 4]);
-        hex.push_back(digits[static_cast<unsigned char>(byte) & 0xF]);
-    }
-    return hex;
-}
-
-void write_file(const std::filesystem::path& path, const std::string& bytes) {
-    std::ofstream(path, std::ios::binary) << bytes;
-}
-
-std::string read_file(const std::filesystem::path& path) {
-    std::ifstream file(path, std::ios::binary);
-    return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
-}
-
 // A video as the Python app's reference cases make one by default.
 VideoInfo plain_video(const std::filesystem::path& path) {
     VideoInfo video;
@@ -107,7 +85,7 @@ VideoInfo plain_video(const std::filesystem::path& path) {
     return video;
 }
 
-// The filter graph and the command FFmpeg is given.
+// The filter graph FFmpeg is given.
 TEST(PerceptualCpu, MakesThePicturesAsThePythonApp) {
     for (const Json& expected : reference()["graphs"]) {
         SCOPED_TRACE(expected["name"].get<std::string>());
@@ -120,30 +98,57 @@ TEST(PerceptualCpu, MakesThePicturesAsThePythonApp) {
                                     expected["step"].get<int>()),
                   expected["graph"].get<std::string>());
     }
-    const std::filesystem::path folder = std::filesystem::temp_directory_path() / "pictures";
-    const std::string separator(1, static_cast<char>(std::filesystem::path::preferred_separator));
-    for (const Json& expected : reference()["commands"]) {
-        SCOPED_TRACE(expected.dump());
-        VmafOptions options;
-        options.range_end = expected["range_end"].get<long long>();
-        std::vector<std::string> command;
-        for (std::string argument : expected["command"].get<std::vector<std::string>>()) {
-            if (argument == "<source>" || argument == "<test>") {
-                argument = input_path(argument == "<source>" ? "source.mkv" : "test.mkv");
-            } else if (argument.starts_with("<folder>/")) {
-                argument = platform::path_text(folder) + separator + argument.substr(9);
-            }
-            command.push_back(argument);
-        }
-        EXPECT_EQ(png_pairs_command("ffmpeg", plain_video("source.mkv"), plain_video("test.mkv"), options,
-                                    std::nullopt, std::nullopt, expected["step"].get<int>(), folder),
-                  command);
-    }
 }
 
-// The score a tool printed, or the same refusal; and how many pairs are
-// scored at once for a size, the metrics, the CPU's tasks, cores and memory.
-TEST(PerceptualCpu, ReadsScoresAndSharesTheCpuAsThePythonApp) {
+// The app writes each video's chain of image_filtergraph into a pipe of its
+// own, as raw 16-bit RGB: the same pictures.
+TEST(PerceptualCpu, WritesEachVideosPicturesIntoItsPipe) {
+    VmafOptions options;
+    options.range_end = 48;
+    const VideoInfo source = plain_video("source.mkv");
+    VideoInfo test = plain_video("test.mkv");
+    test.width = 1280;
+    test.height = 720;
+    const CropBox crop{1920, 800, 0, 140};
+    const std::string graph = image_filtergraph(source, test, options, crop, std::nullopt, 2);
+    const std::size_t split = graph.find(";[1:");
+    ASSERT_NE(split, std::string::npos);
+    std::string test_chain = graph.substr(0, split);
+    std::string source_chain = graph.substr(split + 1);
+    test_chain.replace(test_chain.rfind("[distorted]"), 11, "[frames]");
+    source_chain.replace(0, 3, "[0:");  // each command's only input
+    source_chain.replace(source_chain.rfind("[reference]"), 11, "[frames]");
+
+    const std::vector<std::vector<std::string>> commands =
+        rgb_stream_commands("ffmpeg", source, test, options, crop, std::nullopt, 2, "test-pipe", "source-pipe");
+    ASSERT_EQ(commands.size(), 2u);
+    // FFmpeg's usual start, the video's file as the one input, then its chain
+    // into its pipe.
+    const auto check = [](const std::vector<std::string>& command, const std::string& path, const std::string& chain,
+                          const std::string& pipe) {
+        const std::vector<std::string> start{"ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "level+info",
+                                             "-nostats", "-y"};
+        const std::vector<std::string> end{"-filter_complex", chain, "-map", "[frames]", "-fps_mode", "passthrough",
+                                           "-flush_packets", "1", "-f", "rawvideo", "-pix_fmt", "rgb48le", pipe};
+        ASSERT_GT(command.size(), start.size() + 2 + end.size());
+        EXPECT_EQ(std::vector<std::string>(command.begin(), command.begin() + 7), start);
+        EXPECT_EQ(std::vector<std::string>(command.end() - 13, command.end()), end);
+        EXPECT_EQ(*(command.end() - 15), "-i");
+        EXPECT_EQ(*(command.end() - 14), input_path(path));
+        EXPECT_EQ(std::count(command.begin(), command.end(), "-i"), 1);
+    };
+    check(commands[0], "test.mkv", test_chain, "test-pipe");
+    check(commands[1], "source.mkv", source_chain, "source-pipe");
+
+    // A fed video's feed in its file's place.
+    const std::vector<std::string> fed{"-f", "rawvideo", "-i", "feed-pipe"};
+    const std::vector<std::vector<std::string>> with_feed = rgb_stream_commands(
+        "ffmpeg", source, test, options, crop, std::nullopt, 2, "test-pipe", "source-pipe", fed, std::nullopt);
+    EXPECT_EQ(std::vector<std::string>(with_feed[0].begin() + 7, with_feed[0].begin() + 11), fed);
+}
+
+// The score a tool printed, or the same refusal.
+TEST(PerceptualCpu, ReadsScoresAsThePythonApp) {
     for (const Json& expected : reference()["scores"]) {
         const std::string text = expected["text"].get<std::string>();
         SCOPED_TRACE(text);
@@ -161,102 +166,49 @@ TEST(PerceptualCpu, ReadsScoresAndSharesTheCpuAsThePythonApp) {
         EXPECT_EQ(score, wanted);
         EXPECT_EQ(std::signbit(score), std::signbit(wanted));
     }
-    for (const Json& expected : reference()["workers"]) {
-        SCOPED_TRACE(expected.dump());
-        EXPECT_EQ(scoring_workers(expected["pixels"].get<long long>(),
-                                  expected["metrics"].get<std::vector<std::string>>(),
-                                  expected["concurrent"].get<int>(), expected["cores"].get<unsigned>(),
-                                  expected["free_memory"].get<unsigned long long>()),
-                  expected["workers"].get<int>());
+}
+
+// The values of a little-endian greyscale PFM file of the Python app's
+// cases, top row first, and its width; nothing for a file of another kind
+// (the app reads no such file now).
+std::optional<std::pair<std::vector<float>, std::size_t>> top_row_first_map(const std::string& pfm) {
+    std::istringstream header(pfm);
+    std::string kind;
+    std::size_t width = 0;
+    std::size_t height = 0;
+    double scale = 0;
+    if (!(header >> kind >> width >> height >> scale) || kind != "Pf" || scale >= 0) {
+        return std::nullopt;
     }
+    // The header ends with one line end, "\n" or Windows' "\r\n".
+    const auto end = static_cast<std::size_t>(header.tellg());
+    const std::size_t data = end + (pfm.compare(end, 2, "\r\n") == 0 ? 2 : 1);
+    if (pfm.size() < data + width * height * sizeof(float)) {
+        return std::nullopt;
+    }
+    std::vector<float> values(width * height);
+    for (std::size_t row = 0; row < height; ++row) {  // the file's bottom row first
+        std::memcpy(values.data() + (height - 1 - row) * width, pfm.data() + data + row * width * sizeof(float),
+                    width * sizeof(float));
+    }
+    return std::pair(std::move(values), width);
 }
 
 // Butteraugli's 3-norm of a distortion map is numpy's, to the last digit on
-// Windows; a colour map and a file that is not a map are refused as the
-// Python app refuses them.
+// Windows.
 TEST(PerceptualCpu, TakesButteraugli3NormAsNumpy) {
-    const test::Folder folder;
+    int maps = 0;
     for (const Json& expected : reference()["norms"]) {
         SCOPED_TRACE(expected["name"].get<std::string>());
-        const std::filesystem::path map = folder / "map.pfm";
-        write_file(map, bytes_from_hex(expected["bytes"].get<std::string>()));
-        if (expected.contains("norm")) {
-            EXPECT_TRUE(test::same_number(*test::reference_number(expected["norm"]), butteraugli_norm3(map)));
+        const auto map = top_row_first_map(bytes_from_hex(expected["bytes"].get<std::string>()));
+        if (!map || !expected.contains("norm")) {
             continue;
         }
-        const std::string error = expected["error"].get<std::string>();
-        try {
-            butteraugli_norm3(map);
-            ADD_FAILURE() << "no error";
-        } catch (const PerceptualRunError& refused) {
-            EXPECT_EQ(std::string(refused.what()), error);
-        } catch (const std::runtime_error&) {
-            EXPECT_EQ(error, "unreadable");
-        }
+        ++maps;
+        EXPECT_TRUE(test::same_number(*test::reference_number(expected["norm"]),
+                                      butteraugli_norm3_top_row_first(map->first, map->second)));
     }
-}
-
-// A PNG's chunks, whole, in order.
-std::vector<std::string> png_chunks(const std::string& png) {
-    std::vector<std::string> chunks;
-    std::size_t position = 8;
-    while (position + 12 <= png.size()) {
-        std::size_t length = 0;
-        for (std::size_t i = 0; i < 4; ++i) {
-            length = (length << 8) | static_cast<unsigned char>(png[position + i]);
-        }
-        chunks.push_back(png.substr(position, 12 + length));
-        position += 12 + length;
-    }
-    return chunks;
-}
-
-// The chunks that tell libjxl's tools how to read a picture's values, and
-// FFmpeg's pictures with them in place of their own, as the Python app
-// writes them. A picture as FFmpeg writes one, its colour chunks before its
-// data, is described in place: the same picture but for a padding chunk
-// ("vmPd") where FFmpeg's chunks took more room, and as long as before.
-TEST(PerceptualCpu, DescribesThePicturesColoursAsThePythonApp) {
-    for (const Json& expected : reference()["chunks"]) {
-        const VideoColour colour{1, expected["transfer"].get<int>(), expected["primaries"].get<int>(), false};
-        EXPECT_EQ(hex_of(png_colour_chunks(colour)), expected["chunks"].get<std::string>()) << expected.dump();
-    }
-    const test::Folder folder;
-    const std::filesystem::path picture = folder / "picture.png";
-    int in_place = 0;
-    for (const Json& expected : reference()["pictures"]) {
-        SCOPED_TRACE(expected["name"].get<std::string>());
-        const VideoColour colour{1, expected["transfer"].get<int>(), expected["primaries"].get<int>(), false};
-        const std::string written = bytes_from_hex(expected["bytes"].get<std::string>());
-        write_file(picture, written);
-        describe_png(picture, colour);
-        EXPECT_EQ(hex_of(read_file(picture)), expected["described"].get<std::string>());
-
-        // The same picture less any colour chunk after its data, which
-        // FFmpeg does not write: the Python app's picture, padded.
-        std::string as_ffmpeg = written.substr(0, std::min<std::size_t>(written.size(), 8));
-        bool data_seen = false;
-        for (const std::string& chunk : png_chunks(written)) {
-            const std::string kind = chunk.substr(4, 4);
-            data_seen = data_seen || kind == "IDAT";
-            if (!(data_seen && (kind == "cICP" || kind == "gAMA" || kind == "cHRM"))) {
-                as_ffmpeg += chunk;
-            }
-        }
-        write_file(picture, as_ffmpeg);
-        describe_png(picture, colour);
-        const std::string described = read_file(picture);
-        std::string unpadded = described.substr(0, std::min<std::size_t>(described.size(), 8));
-        for (const std::string& chunk : png_chunks(described)) {
-            if (chunk.substr(4, 4) == "vmPd") {
-                ++in_place;
-            } else {
-                unpadded += chunk;
-            }
-        }
-        EXPECT_EQ(hex_of(unpadded), expected["described"].get<std::string>());
-    }
-    EXPECT_EQ(in_place, 1);  // FFmpeg's chunks replaced; the others have none, or no picture
+    EXPECT_EQ(maps, 7);
 }
 
 // ---------------------------------------------------------------- with FFmpeg
@@ -748,25 +700,6 @@ TEST(PerceptualRouting, PicturesOfDifferentShapesAreRefused) {
     VideoInfo rounded = plain_video("test.mkv");
     rounded.width = 1918;
     EXPECT_NO_THROW(resolve_crops("ffmpeg", source, rounded, CropChoice(CropMode::none), "bicubic", CancelToken(), nullptr));
-}
-
-// The bundled tool is the one built for this system: the repository's
-// resources have Windows' ssimulacra2.exe, which macOS found first and could
-// not run ("Permission denied").
-TEST(PerceptualCpu, TheBundledToolIsTheOneForThisSystem) {
-    const test::Folder resources;
-    std::filesystem::create_directories(resources / "tools/libjxl");
-    const test::ScopedVariable named("VML_RESOURCES", platform::path_text(resources / ""));
-    const test::ScopedVariable chosen("SSIMULACRA2_PATH", "");
-    const test::ScopedVariable path("PATH", platform::path_text(resources / "tools"));
-    std::ofstream(resources / "tools/libjxl/ssimulacra2.exe") << "";
-#ifdef _WIN32
-    EXPECT_EQ(find_metric_executable("ssimulacra2"), resources / "tools/libjxl/ssimulacra2.exe");
-#else
-    EXPECT_EQ(find_metric_executable("ssimulacra2"), std::nullopt);
-    std::ofstream(resources / "tools/libjxl/ssimulacra2") << "";
-    EXPECT_EQ(find_metric_executable("ssimulacra2"), resources / "tools/libjxl/ssimulacra2");
-#endif
 }
 
 }  // namespace

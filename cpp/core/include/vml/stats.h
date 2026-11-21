@@ -47,6 +47,54 @@ struct ScoreStats {
 // error grows with log2(n) rather than n, in numpy's exact order.
 double numpy_sum(std::span<const double> values);
 
+namespace detail {
+
+// numpy's pairwise_sum for float64 (numpy/_core/src/umath/loops_utils.h.src),
+// step for step, over the values value(begin) to value(end - 1): fewer than
+// 8 values one by one; up to 128 in eight running sums added in pairs; more
+// split in two at a multiple of 8. Each value is asked for once, in order.
+template <typename Value>
+double pairwise_sum(std::size_t begin, std::size_t end, const Value& value) {
+    const std::size_t n = end - begin;
+    if (n < 8) {
+        double sum = 0.0;
+        for (std::size_t i = begin; i < end; ++i) {
+            sum += value(i);
+        }
+        return sum;
+    }
+    if (n <= 128) {
+        // Eight running sums, the j-th over the values at j, j + 8, j + 16...
+        double sums[8];
+        for (std::size_t j = 0; j < 8; ++j) {
+            sums[j] = value(begin + j);
+        }
+        std::size_t i = 8;
+        for (; i < n - n % 8; i += 8) {
+            for (std::size_t j = 0; j < 8; ++j) {
+                sums[j] += value(begin + i + j);
+            }
+        }
+        double sum = ((sums[0] + sums[1]) + (sums[2] + sums[3])) + ((sums[4] + sums[5]) + (sums[6] + sums[7]));
+        for (; i < n; ++i) {  // the last n % 8 values, one by one
+            sum += value(begin + i);
+        }
+        return sum;
+    }
+    std::size_t half = n / 2;
+    half -= half % 8;
+    return pairwise_sum(begin, begin + half, value) + pairwise_sum(begin + half, end, value);
+}
+
+}  // namespace detail
+
+// numpy_sum of the `count` values value(0) to value(count - 1), made as
+// they are asked for (once each, in order), so that they need no array.
+template <typename Value>
+double numpy_sum_of(std::size_t count, const Value& value) {
+    return 0.0 + detail::pairwise_sum(0, count, value);  // numpy starts from addition's identity, 0.0
+}
+
 // np.median of sorted values: the middle one, or the mean of the middle two.
 double numpy_median(std::span<const double> ordered);
 

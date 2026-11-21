@@ -1,17 +1,20 @@
-// SSIMULACRA2 and Butteraugli calculated on the CPU with libjxl's
-// command-line tools, as the Python app calculates them. A port of
-// vmaf_app/core/perceptual_cpu.py.
+// SSIMULACRA2 and Butteraugli calculated on the CPU by the app's own
+// engines, with the scores of libjxl 0.12's command-line tools to the last
+// bit.
 //
-// The tools compare still images, not videos. One FFmpeg writes each frame
-// pair of a comparison as lossless 16-bit RGB PNG files, into a folder that
-// exists only while the task runs, and each pair is scored as soon as it is
-// written, several pairs at a time (scoring_workers), then deleted. FFmpeg
-// is held a few pairs ahead of the scoring: it is suspended while that many
-// wait, so that it does not write a whole film out first.
+// These metrics compare still images, not videos. Each frame pair of a
+// comparison is made as lossless 16-bit RGB pictures and scored as soon as
+// it is made: two FFmpegs, one per video, write the pictures into pipes of
+// the app's (rgb_stream_commands), and the engines (cpu_pair_scorer.h) score
+// them in memory, in a process of the app's own, a few pairs at a time with
+// Butteraugli's work split between threads (in_app_schedule).
 #pragma once
+
+#include <nlohmann/json.hpp>
 
 #include <filesystem>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -22,60 +25,51 @@
 
 namespace vml {
 
-// The program for `metric` ("ssimulacra2" or "butteraugli"): the one the
-// environment variable SSIMULACRA2_PATH or BUTTERAUGLI_PATH names (nothing
-// when that does not exist), else the bundled one (libjxl's official static
-// tools, in tools/libjxl), else one on the PATH; nothing when there is none.
-// The variables keep this choice out of Settings, and let tests use fake
-// tools. Throws std::invalid_argument for another metric.
-std::optional<std::filesystem::path> find_metric_executable(std::string_view metric);
-
-// The tool's version, for the scores' provenance: the first line it prints
-// for --version, -version or -V, or, for a bundled tool that prints none
-// (libjxl's do not), the first line of the bundle's LIBJXL-VERSION.txt;
-// else "unknown".
-std::string implementation_version(const std::filesystem::path& executable);
-
 // The display brightness Butteraugli assumes for SDR pictures, in nits. It
 // is Vship's default, which the GPU is given too; the tool's own is 80. An
 // HDR picture's brightness is its own, because PQ and HLG are absolute, so
-// for HDR the tool takes it from the picture, as Vship does. Its scores
+// for HDR it is taken from the picture (butteraugli_intensity_of), as Vship
+// does. Its scores
 // then agree with Vship's: 2.892 against 2.881 on a PQ film, where 203 nits
 // gave 0.815.
 inline constexpr double butteraugli_intensity_nits = 203.0;
 
-// How many frame pairs are scored at a time, at least 1.
-//
-// The tools score one still image on one core: 1.6 s (SSIMULACRA2) and
-// 2.7 s (Butteraugli) for a 4K pair. One pair at a time, a 10-second 4K
-// clip took 13 minutes with 1 core of 24 busy. Each pair's score is its
-// own, so scoring several at once changes how soon the scores arrive, never
-// what they are.
-//
-// The number is half the logical `cores`, shared with the other tasks the
-// CPU's queue runs at the same time (`concurrent_tasks`, as libvmaf's
-// threads are shared). On 24 cores (8 fast, 16 slow), 12 at once scored
-// 6.5 times as many pairs a second as 1, and 24 only 7.4 times as many, for
-// twice the memory: the cores share the memory's speed, and FFmpeg needs
-// some of them to write the pairs. It is also no more than fits in 60% of
-// `free_memory` (none: the cores alone decide), at the peak memory of the
-// larger of `metrics`' tools for a pair of `pixels`, because a worker runs
-// its tools one after the other.
-int scoring_workers(long long pixels, const std::vector<std::string>& metrics, int concurrent_tasks, unsigned cores,
-                    std::optional<unsigned long long> free_memory);
+// How the app's engines (cpu_pair_scorer.h) share the CPU: how many frame
+// pairs are scored at a time, and how many threads each pair's Butteraugli
+// takes.
+struct InAppSchedule {
+    int workers = 1;
+    std::size_t butteraugli_threads = 1;
+};
 
-// The score a tool printed: the last number in its output. Throws
+// The schedule for a task of `metrics` on pairs of `pixels`, given the
+// logical `cores` shared with the other tasks the CPU's queue runs at the
+// same time (`concurrent_tasks`): with both metrics, a sixth of the task's
+// cores pairs at a time, each Butteraugli on the rest of its share less one
+// core for its SSIMULACRA2; Butteraugli alone, a twelfth, on its share;
+// SSIMULACRA2 alone, half, on one thread each. Every split of 24 cores
+// (8 fast, 16 slow) gave nearly the same speed, the CPU being full (4K pairs,
+// both metrics: 16.4 s for 4 x 5 threads, 16.7 to 19.7 s for 2 x 11 to
+// 12 x 1), so these are the fastest or within 3% of it with the fewest pairs
+// in memory: 1 pair x 24 threads was 17% slower, the threads of one picture
+// waiting on each other. Workers are also no more than fit in 60% of
+// `free_memory`, at a worker's measured peak memory.
+InAppSchedule in_app_schedule(long long pixels, const std::vector<std::string>& metrics, int concurrent_tasks,
+                              unsigned cores, std::optional<unsigned long long> free_memory);
+
+// The score in a tool's printed output (as the engines' SSIMULACRA2 score
+// is printed, to round it as the tool does): its last number. Throws
 // PerceptualRunError when there is none.
 double parse_score(std::string_view metric, std::string_view output);
 
-// The 3-norm of a Butteraugli distortion map (the tool's --rawdistmap, a
-// greyscale PFM file): the cube root of the mean of the cubes, as Vship
-// reports it, worked out as numpy works it out in the Python app. The tool
-// prints its own "3-norm", the mean of the 3-, 6- and 12-norms, which reads
-// about 1.8 times Vship's on the same frames. Throws PerceptualRunError for
-// a map that is not greyscale, and std::runtime_error for a file that is
-// not a map at all.
-double butteraugli_norm3(const std::filesystem::path& distortion_map);
+// The 3-norm of a Butteraugli distortion map held top row first, in rows of
+// `width` values (as the app's engine makes it): the cube root of the mean
+// of the cubes, as Vship reports it, worked out as numpy works it out on the
+// tool's --rawdistmap PFM file, in that file's order (its bottom row first;
+// the order sets the sum's last bits), so that it is the tool's map's to the
+// last bit. The tool prints its own "3-norm", the mean of the 3-, 6- and
+// 12-norms, which reads about 1.8 times Vship's on the same frames.
+double butteraugli_norm3_top_row_first(std::span<const float> distortion_map, std::size_t width);
 
 // The frames a CPU SSIMULACRA2/Butteraugli run of `options` compares and
 // decodes (frame_range.h), every `step`-th: these metrics look at no frame
@@ -88,25 +82,24 @@ FrameRange cpu_range(const VmafOptions& options, const VideoInfo& source, int st
 // video's frame N, as every metric pairs them (frame_sync.h), every
 // `step`-th, those of the range (cpu_range: counted from its decode_start).
 // Each video is converted to RGB with the matrix and range Vship
-// reads it with, after any crop and scaling, so that the tools see what
+// reads it with, after any crop and scaling, so that the engines see what
 // Vship sees.
 std::string image_filtergraph(const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options,
                               const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
                               int step);
 
-// The FFmpeg command that writes the pictures of image_filtergraph into
-// `folder` as test-%08d.png and reference-%08d.png, each output to its own
-// input's end or the range's, each picture under a temporary name
-// until it is whole (-atomic_writing). A video whose pictures the app feeds
-// (grain_feed.h) has its feed's input (`distorted_fed`, `source_fed`) in its
-// file's place.
-std::vector<std::string> png_pairs_command(const std::string& ffmpeg, const VideoInfo& source,
-                                           const VideoInfo& distorted, const VmafOptions& options,
-                                           const std::optional<CropBox>& source_crop,
-                                           const std::optional<CropBox>& distorted_crop, int step,
-                                           const std::filesystem::path& folder,
-                                           const std::optional<std::vector<std::string>>& distorted_fed = {},
-                                           const std::optional<std::vector<std::string>>& source_fed = {});
+// The two FFmpeg commands that write the pictures of image_filtergraph's
+// two chains into pipes, one video each, as raw rgb48le with nothing
+// between the frames: the test video's into `test_pipe`, then the source's
+// into `source_pipe`. Each runs to its own input's end or the range's. A
+// video whose pictures the app feeds (grain_feed.h) has its feed's input
+// (`distorted_fed`, `source_fed`) in its file's place.
+std::vector<std::vector<std::string>> rgb_stream_commands(
+    const std::string& ffmpeg, const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options,
+    const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop, int step,
+    const std::string& test_pipe, const std::string& source_pipe,
+    const std::optional<std::vector<std::string>>& distorted_fed = {},
+    const std::optional<std::vector<std::string>>& source_fed = {});
 
 // Calculates `keys` (SSIMULACRA2 and Butteraugli) on the CPU and returns
 // each frame's scores (the Python app's run_perceptual_task): with the black
@@ -117,5 +110,11 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
                                              const std::optional<CropPair>& crops,
                                              const ProgressCallback& on_progress, const StatusCallback& on_status,
                                              const CancelToken& cancel);
+
+// The isolated "cpu-perceptual" task's work (isolated.cpp): a task scored
+// in the app, in this process, its scores' numbers left in `folder`
+// (perceptual_output_json); a video cut short as {"cut_short": reason}, and
+// a PerceptualRunError as {"failed": message, "stderr_tail": tail}.
+nlohmann::json cpu_perceptual_task(const nlohmann::json& request, const std::filesystem::path& folder);
 
 }  // namespace vml

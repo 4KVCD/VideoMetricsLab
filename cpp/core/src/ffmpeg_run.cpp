@@ -81,12 +81,6 @@ std::vector<HardwareDecoding> fallback_ladder(const HardwareDecoding& plan) {
     return ladder;
 }
 
-struct FfmpegOutcome {
-    int exit_code = 0;
-    std::string errors;
-    std::size_t command = 0;  // which of the run's commands it is
-};
-
 // FFmpeg's -progress output, which writes each update as key=value lines:
 // the latest fps is reported with every frame= line.
 class ProgressLines {
@@ -145,15 +139,8 @@ FfmpegOutcome run_ffmpeg(const std::vector<std::string>& command, long long tota
     return FfmpegOutcome{code, std::move(errors)};
 }
 
-// Runs the two FFmpegs of VMAF on the GPU side by side, as run_ffmpeg runs
-// one: the first reports the progress, and one that fails ends the other.
-// Returns the outcome of the first to fail of those whose pipe the app did
-// not close (`closed_by_app`, by command), else of the first to fail, or the
-// first's. `take_descriptors` gives what a command inherits, asked as it
-// starts: a command that never starts leaves its pipe to be closed by its
-// owner. Throws Cancelled, platform::ProcessError when one cannot start, and
-// VideoSizeChanged when one rebuilt its filters, naming its video of `videos`,
-// the one each command decodes (both are ended then).
+}  // namespace
+
 FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& commands,
                               const std::vector<std::filesystem::path>& videos,
                               const std::function<std::vector<int>(std::size_t)>& take_descriptors,
@@ -238,6 +225,8 @@ FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& comma
                                     [&closed_by_app](std::size_t index) { return !closed_by_app(index); });
     return outcomes[cause != failed.end() ? *cause : failed.empty() ? 0 : failed.front()];
 }
+
+namespace {
 
 // The last `count` lines of `text`.
 std::string last_lines(const std::string& text, std::size_t count) {
