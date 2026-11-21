@@ -630,19 +630,70 @@ SegmentRules SavedResultsPanel::segment_rules() const {
     return segment_profile_in_use(settings_).rules;
 }
 
-void SavedResultsPanel::set_run_active(bool active) {
+namespace {
+
+// A path as locked_by_run compares them: made normal by its text alone,
+// with the system's separators, in one case on Windows (as same_path
+// compares). No disk is asked: a selection of many comparisons, some on a
+// share, is checked at each click.
+QString run_key(const std::filesystem::path& path) {
+    QString text = text_of(path.lexically_normal().make_preferred());
+#ifdef _WIN32
+    text = text.toCaseFolded();
+#endif
+    return text;
+}
+
+// A pair as locked_by_run compares them: its reference's key, then its
+// test video's.
+QString pair_key(const std::filesystem::path& reference, const std::filesystem::path& test) {
+    return run_key(reference) + QLatin1Char('\n') + run_key(test);
+}
+
+}  // namespace
+
+void SavedResultsPanel::set_run_active(
+    bool active, const std::vector<std::pair<std::filesystem::path, std::filesystem::path>>& pairs) {
     run_active_ = active;
+    run_pairs_.clear();
+    run_folders_.clear();
+    run_folders_known_ = false;
+    if (active) {
+        for (const auto& [reference, test] : pairs) {
+            run_pairs_.insert(pair_key(reference, test));
+        }
+    }
     update_buttons();
 }
 
+void SavedResultsPanel::add_run_folders(const std::vector<std::filesystem::path>& folders) {
+    if (!run_active_) {
+        return;  // a run's, told after it ended
+    }
+    for (const std::filesystem::path& folder : folders) {
+        run_folders_.insert(run_key(folder));
+    }
+    run_folders_known_ = true;
+    update_buttons();
+}
+
+bool SavedResultsPanel::locked_by_run(const SavedComparison& saved) const {
+    return run_active_ && (!run_folders_known_ || run_pairs_.contains(pair_key(saved.source, saved.distorted)) ||
+                           run_folders_.contains(run_key(saved.folder)));
+}
+
 void SavedResultsPanel::update_buttons() {
-    const std::size_t count = selected().size();
-    open_button_->setEnabled(count > 0);
-    export_button_->setEnabled(count > 0);
-    delete_button_->setEnabled(count > 0 && !run_active_ && !deleting_);
-    delete_button_->setToolTip(run_active_ ? app::tr("Locked while metrics are calculated: the run saves its "
-                                                     "scores there.")
-                                           : QString());
+    const std::vector<const SavedComparison*> chosen = selected();
+    open_button_->setEnabled(!chosen.empty());
+    export_button_->setEnabled(!chosen.empty());
+    // Locked where any selected comparison is one the run uses (the others
+    // can be deleted while it runs), and while a Delete is queued.
+    const bool locked = std::any_of(chosen.begin(), chosen.end(),
+                                    [this](const SavedComparison* saved) { return locked_by_run(*saved); });
+    delete_button_->setEnabled(!chosen.empty() && !locked && !deleting_);
+    delete_button_->setToolTip(locked ? app::tr("Locked while metrics are calculated: the run saves its "
+                                                "scores there.")
+                                      : QString());
 }
 
 void SavedResultsPanel::fill_export_menu(QMenu& menu) {
@@ -735,7 +786,12 @@ void SavedResultsPanel::delete_selected() {
     for (const SavedComparison* saved : selected()) {
         chosen.push_back(*saved);
     }
-    if (chosen.empty() || run_active_ || deleting_) {
+    // Asked again after the question: a run may have started meanwhile.
+    const auto locked = [this, &chosen] {
+        return deleting_ || std::any_of(chosen.begin(), chosen.end(),
+                                        [this](const SavedComparison& saved) { return locked_by_run(saved); });
+    };
+    if (chosen.empty() || locked()) {
         return;
     }
     QString question =
@@ -748,7 +804,7 @@ void SavedResultsPanel::delete_selected() {
         question += "\n\n" + app::tr("Some of them could not be scored again: their reference video is no longer "
                                       "where it was (marked \"not found\").");
     }
-    if (!dialogs_.ask_no_default(app::tr("Delete saved results"), question) || run_active_ || deleting_) {
+    if (!dialogs_.ask_no_default(app::tr("Delete saved results"), question) || locked()) {
         return;
     }
     // Through the window's queue of writes, after what is queued there, as

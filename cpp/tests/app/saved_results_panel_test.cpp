@@ -181,7 +181,11 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
     panel.fill_export_menu(menu);  // made again as it opens: the same entries, no menu left behind
     EXPECT_EQ(menu.findChildren<QMenu*>(Qt::FindDirectChildrenOnly).size(), 3);
 
-    // Delete: locked during a run; else, asked and done.
+    // Delete: locked during a run of its pair, or of files the run finds in
+    // its folder (moved, renamed or copied since), as the run reads and saves
+    // its scores there, and of any until the run's folders are known; open
+    // during a run of other pairs, of its reference or its test video with
+    // another too; else, asked and done.
     QPushButton* remove = nullptr;
     for (QPushButton* button : panel.findChildren<QPushButton*>()) {
         if (button->text() == "Delete...") {
@@ -189,20 +193,42 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
         }
     }
     ASSERT_NE(remove, nullptr);
-    panel.set_run_active(true);
+    const std::filesystem::path elsewhere = saved.parent_path() / "another";  // another comparison's folder
+    panel.set_run_active(true, {{folder / "s.mp4", folder / "other.mp4"}, {folder / "s.mp4", folder / "t.mp4"}});
+    panel.add_run_folders({elsewhere});
     EXPECT_FALSE(remove->isEnabled());
+    EXPECT_FALSE(remove->toolTip().isEmpty());
     panel.delete_selected();
     EXPECT_TRUE(std::filesystem::exists(saved));
-    panel.set_run_active(false);
+    panel.set_run_active(true, {{folder / "s.mp4", folder / "sub" / ".." / "t.mp4"}});  // the same file
+    panel.add_run_folders({elsewhere});
+    EXPECT_FALSE(remove->isEnabled());
+#ifdef _WIN32
+    panel.set_run_active(true, {{folder / "S.MP4", folder / "T.MP4"}});  // any case
+    panel.add_run_folders({elsewhere});
+    EXPECT_FALSE(remove->isEnabled());
+#endif
+    // Its test video moved: the run's pair is another, its folder this one.
+    panel.set_run_active(true, {{folder / "s.mp4", folder / "moved" / "t.mp4"}});
+    EXPECT_FALSE(remove->isEnabled());  // its folders not known yet
+    panel.add_run_folders({elsewhere, saved.parent_path() / "." / saved.filename()});
+    EXPECT_FALSE(remove->isEnabled());
+    // Its reference with another test video, its test video against another
+    // reference: other folders, deletable once the run's are known.
+    panel.set_run_active(true, {{folder / "s.mp4", folder / "other.mp4"}, {folder / "other.mp4", folder / "t.mp4"}});
+    EXPECT_FALSE(remove->isEnabled());
+    panel.add_run_folders({elsewhere});
     EXPECT_TRUE(remove->isEnabled());
+    EXPECT_TRUE(remove->toolTip().isEmpty());
     QSignalSpy deleted(&panel, &SavedResultsPanel::deleted);
-    panel.delete_selected();
+    panel.delete_selected();  // during a run, of other videos
     EXPECT_FALSE(remove->isEnabled());  // until the queue has run it
     // Said once the queue says it is idle, just after it is.
     EXPECT_TRUE(deleted.count() == 1 || deleted.wait(30000));
     EXPECT_EQ(deleted.count(), 1);
     EXPECT_TRUE(remove->isEnabled() || table.rowCount() == 0);  // the listing after it may be done
     EXPECT_FALSE(std::filesystem::exists(saved));
+    panel.set_run_active(false);
 }
 
 // Issue #133: the tab took each metric's newest saved score without the

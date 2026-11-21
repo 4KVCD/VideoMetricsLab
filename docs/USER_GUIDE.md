@@ -757,8 +757,11 @@ videos again:
     segments are not saved with the scores; they are found from them as they
     are exported.
 - **Delete...** removes their saved scores, after asking: the videos are
-  scored again the next time they are compared. It is locked while metrics
-  are calculated.
+  scored again the next time they are compared. While metrics are
+  calculated, it is locked for the comparisons the run is calculating (its
+  reference with each of its test videos, also where one was saved under a
+  file's old name or folder), whose scores the run reads and saves; others
+  can still be deleted, those of the same reference too.
 
 Drag the line between two column headings to make a column wider or
 narrower (double-click it to fit the column to its text); the last column
