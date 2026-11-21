@@ -9,6 +9,7 @@
 #include <QString>
 #include <QWidget>
 
+#include <atomic>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -17,6 +18,8 @@
 #include <vector>
 
 #include "dialogs.h"
+#include "file_writes.h"
+#include "vml/metric_cache.h"
 #include "vml/results.h"
 #include "vml/saved_results.h"
 #include "vml/settings.h"
@@ -51,8 +54,10 @@ public:
     enum class Export { contents, results_json, results_csv, frames_json, frames_csv, graphs, segments };
 
     // `settings` are the window's (the saved results' folder, the weak
-    // segment profiles); `dialogs` the window's, which outlive the panel.
-    SavedResultsPanel(const Settings& settings, const Dialogs& dialogs, QWidget* parent = nullptr);
+    // segment profiles); `dialogs` the window's, which outlive the panel;
+    // `file_writes` the window's queue of writes, which Delete goes through.
+    SavedResultsPanel(const Settings& settings, const Dialogs& dialogs, FileWrites& file_writes,
+                      QWidget* parent = nullptr);
     ~SavedResultsPanel() override;
 
     // Lists the saved comparisons again, read on a thread of their own.
@@ -80,6 +85,8 @@ public:
     QLineEdit* filter() const { return filter_; }
     // The list a metric's saved score is picked from: none where it has one.
     QComboBox* score_choice(const std::string& key) const;
+    // Waits for the selected comparison's scores to be read, and shows them.
+    void wait_for_details();
     // The Export button's menu, made as it opens: the right-click menu's
     // export, then results, per-frame scores, graphs and weak segments each
     // on its own.
@@ -128,6 +135,7 @@ private:
 
     const Settings& settings_;
     const Dialogs& dialogs_;
+    FileWrites& file_writes_;
     std::vector<SavedComparison> list_;
     // The score picked for a metric of a comparison (its folder): else its newest.
     std::map<std::filesystem::path, std::map<std::string, std::filesystem::path>> picked_;
@@ -154,6 +162,24 @@ private:
     QPushButton* export_button_ = nullptr;
     QMenu* export_menu_ = nullptr;
     QPushButton* delete_button_ = nullptr;
+    // A Delete queued on file_writes_: set by it as it ends (done last),
+    // read once the queue says it is idle (on_writes_idle).
+    struct Deleting {
+        std::atomic<bool> done = false;
+        int failed = 0;
+    };
+    std::shared_ptr<Deleting> deleting_;
+    void on_writes_idle();
+    // The score files of the comparison the box shows, as read on a thread
+    // of their own (show_details): none where one can't be read. Open and
+    // the exports take them from here rather than read them again.
+    struct ReadScores {
+        std::filesystem::path folder;
+        std::map<std::filesystem::path, std::optional<SavedScore>> scores;
+    };
+    QFutureWatcher<ReadScores>* details_reading_ = nullptr;
+    ReadScores details_read_;
+    void fill_details(const SavedComparison& saved);
 };
 
 }  // namespace vml::app

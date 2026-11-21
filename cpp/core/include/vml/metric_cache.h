@@ -241,11 +241,19 @@ std::string lookup_token(const std::filesystem::path& source, const std::filesys
                          const AnalysisRequest& request);
 
 // A saved score as its file holds it, whatever request it answers: its
-// metric (the result's key), samples and provenance; nothing for a file that
-// cannot be read or is of another format. For browsing the saved results
-// (saved_results.h), which need no request to read them by.
-std::optional<std::variant<FrameMetricResult, SequenceMetricResult>> read_saved_score(
-    const std::filesystem::path& file);
+// metric (the result's key), samples and provenance; and whether the Videos
+// tab's lookup refuses it for its comparison (the context.json beside it)
+// whatever it asks, and scores the videos again: one made from other
+// pictures than the pair is decoded to now (its decoding marks: exact
+// decoding, AV1 grain), or known to be wrong (FFmpeg's XPSNR above 8 bits,
+// Vship 5.1's old colour mappings, a stale CPU score). Nothing for a file
+// that cannot be read or is of another format. For browsing the saved
+// results (saved_results.h), which need no request to read them by.
+struct SavedScore {
+    std::variant<FrameMetricResult, SequenceMetricResult> metric;
+    bool outdated = false;
+};
+std::optional<SavedScore> read_saved_score(const std::filesystem::path& file);
 
 // The comparison a saved folder's context.json describes: its result,
 // without scores, and its label; nothing where there is no context.json, or

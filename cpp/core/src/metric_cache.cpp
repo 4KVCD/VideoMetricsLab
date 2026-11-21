@@ -890,8 +890,7 @@ void merge_legacy(const std::filesystem::path& legacy, const std::filesystem::pa
 
 }  // namespace
 
-std::optional<std::variant<FrameMetricResult, SequenceMetricResult>> read_saved_score(
-    const std::filesystem::path& file) {
+std::optional<SavedScore> read_saved_score(const std::filesystem::path& file) {
     try {
         const auto score = read_score(file);
         if (!score) {
@@ -906,6 +905,12 @@ std::optional<std::variant<FrameMetricResult, SequenceMetricResult>> read_saved_
         if (!provenance) {
             return std::nullopt;
         }
+        // The checks load_metric makes of any score, whatever is asked.
+        // Issue #133: without them, the tab showed, opened and exported
+        // scores the Videos tab calculates again.
+        const nlohmann::json context = read_json(file.parent_path() / "context.json").value_or(nlohmann::json());
+        const bool outdated = !decoded_as_now(metadata, decoding_marks(context)) ||
+                              stale_score(*provenance, context_colour_tags(context));
         const bool marked = metadata.value(av1_grain_dav1d, nlohmann::json()) == av1_grain_dav1d_version;
         const nlohmann::json kind = metadata.at("kind");
         if (kind == "frame") {
@@ -914,8 +919,9 @@ std::optional<std::variant<FrameMetricResult, SequenceMetricResult>> read_saved_
                 return std::nullopt;
             }
             auto& [frame, time, values] = *frames;
-            return FrameMetricResult{key.get<std::string>(), std::move(frame), std::move(time), std::move(values),
-                                     *provenance, marked};
+            return SavedScore{FrameMetricResult{key.get<std::string>(), std::move(frame), std::move(time),
+                                                std::move(values), *provenance, marked},
+                              outdated};
         }
         if (kind == "sequence" && arrays.contains("score")) {
             const std::optional<std::vector<double>> value = npy_numbers(arrays.at("score"));
@@ -930,7 +936,7 @@ std::optional<std::variant<FrameMetricResult, SequenceMetricResult>> read_saved_
                 }
                 std::tie(result.frame, result.time, result.values) = std::move(*frames);
             }
-            return result;
+            return SavedScore{std::move(result), outdated};
         }
     } catch (const nlohmann::json::exception&) {
     } catch (const std::exception&) {

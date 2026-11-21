@@ -3,6 +3,7 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QEvent>
 #include <QFont>
@@ -19,6 +20,7 @@
 #include <QPushButton>
 #include <QScopedValueRollback>
 #include <QScrollArea>
+#include <QStandardItemModel>
 #include <QStyle>
 #include <QTableWidget>
 #include <QVBoxLayout>
@@ -98,11 +100,19 @@ public:
 
 }  // namespace
 
-SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& dialogs, QWidget* parent)
+SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& dialogs, FileWrites& file_writes,
+                                     QWidget* parent)
     : QWidget(parent),
       settings_(settings),
       dialogs_(dialogs),
+      file_writes_(file_writes),
       reading_(new QFutureWatcher<std::vector<SavedComparison>>(this)) {
+    connect(&file_writes_, &FileWrites::became_idle, this, [this] { on_writes_idle(); });
+    details_reading_ = new QFutureWatcher<ReadScores>(this);
+    connect(details_reading_, &QFutureWatcher<ReadScores>::finished, this, [this] {
+        details_read_ = details_reading_->result();
+        show_details();  // if it is still the one selected
+    });
     connect(reading_, &QFutureWatcher<std::vector<SavedComparison>>::finished, this,
             [this] { show_list(reading_->result()); });
     auto* layout = new QVBoxLayout(this);
@@ -236,6 +246,7 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
 
 SavedResultsPanel::~SavedResultsPanel() {
     reading_->waitForFinished();
+    details_reading_->waitForFinished();
 }
 
 std::filesystem::path SavedResultsPanel::base() const {
@@ -249,6 +260,7 @@ void SavedResultsPanel::refresh() {
 
 void SavedResultsPanel::show_list(std::vector<SavedComparison> list) {
     list_ = std::move(list);
+    details_read_ = {};  // its files may have changed since: read again
     folder_label_->setText(ntr("{count} saved comparison in {directory}", "{count} saved comparisons in {directory}",
                                static_cast<long long>(list_.size()), {{"directory", text_of(base())}}));
     const QSignalBlocker blocker(table_);
@@ -443,6 +455,31 @@ void SavedResultsPanel::show_details() {
                                  0, 0, 1, -1, Qt::AlignLeft | Qt::AlignTop);
         return;
     }
+    const SavedComparison& saved = *chosen.front();
+    details_->setTitle(app::tr("Saved scores of {name}", {{"name", qt_text(saved.label)}}));
+    if (details_read_.folder == saved.folder) {
+        fill_details(saved);
+        return;
+    }
+    // Read on a thread of their own: each file is read whole, its per-frame
+    // scores too, which for a long film takes a while. Issue #133: every
+    // row clicked was read on the window's thread.
+    details_grid_->addWidget(new QLabel(app::tr("Reading...")), 0, 0, 1, -1, Qt::AlignLeft | Qt::AlignTop);
+    details_reading_->setFuture(QtConcurrent::run([saved] {
+        ReadScores read{saved.folder, {}};
+        for (const SavedScoreFile& file : saved.scores) {
+            read.scores[file.file] = read_saved_score(file.file);
+        }
+        return read;
+    }));
+}
+
+void SavedResultsPanel::wait_for_details() {
+    details_reading_->waitForFinished();
+    QCoreApplication::sendPostedEvents(details_reading_);
+}
+
+void SavedResultsPanel::fill_details(const SavedComparison& saved) {
     // Two metrics a row: a metric's label, then its score or the list to pick
     // one from.
     int placed = 0;
@@ -453,21 +490,24 @@ void SavedResultsPanel::show_details() {
         details_grid_->addWidget(field, row, column + 1, Qt::AlignLeft);
         ++placed;
     };
-    const SavedComparison& saved = *chosen.front();
-    details_->setTitle(app::tr("Saved scores of {name}", {{"name", qt_text(saved.label)}}));
     for (const std::string& key : saved.keys()) {
         auto* combo = new QComboBox;
+        int first_usable = -1;  // the score used unless another is picked
         for (const SavedScoreFile& file : saved.scores) {
             if (file.key != key) {
                 continue;
             }
+            bool usable = true;
             // The score, as Metric Graphs' table shows it, then how it was
             // made, as its file records it.
             QStringList made{time_text(file.saved)};
-            if (auto score = read_saved_score(file.file)) {
-                const MetricProvenance& provenance =
-                    std::visit([](const auto& metric) -> const MetricProvenance& { return metric.provenance; }, *score);
-                made.prepend(score_text(key, *score));
+            const auto read = details_read_.scores.find(file.file);
+            const SavedScore* score =
+                read != details_read_.scores.end() && read->second ? &*read->second : nullptr;
+            if (score != nullptr) {
+                const MetricProvenance& provenance = std::visit(
+                    [](const auto& metric) -> const MetricProvenance& { return metric.provenance; }, score->metric);
+                made.prepend(score_text(key, score->metric));
                 made.append(provenance.compute_backend == "gpu" ? QStringLiteral("GPU") : QStringLiteral("CPU"));
                 made.append(qt_text(provenance.implementation + " " + provenance.implementation_version).trimmed());
                 if (const auto model = provenance.parameters.find("model"); model != provenance.parameters.end()) {
@@ -475,21 +515,37 @@ void SavedResultsPanel::show_details() {
                     // path ("path=C:/.../vmaf_v1.0.16_3d0h.json").
                     made.append(qt_text(model_shown(qt_text(model->second).remove(QLatin1Char('"')).toStdString())));
                 }
-                if (const auto* cvvdp = std::get_if<SequenceMetricResult>(&*score)) {
+                if (const auto* cvvdp = std::get_if<SequenceMetricResult>(&score->metric)) {
                     if (const std::optional<CvvdpSettings> display = cvvdp_display_of(*cvvdp)) {
                         const std::optional<CvvdpPreset> preset =
                             matching_cvvdp_preset(*display, settings_.cvvdp_presets_json, "");
                         made.append(preset ? app::tr(qt_text(preset->name)) : app::tr("a display of its own"));
                     }
                 }
+                if (score->outdated) {
+                    // As the Videos tab has it: not used, but scored again.
+                    made.append(app::tr("out of date: scored again when compared"));
+                    usable = false;
+                }
             } else {
                 made.append(app::tr("can't be read"));
+                usable = false;
             }
             combo->addItem(made.join(QStringLiteral(" · ")), text_of(file.file));
+            if (!usable) {
+                if (auto* items = qobject_cast<QStandardItemModel*>(combo->model())) {
+                    items->item(combo->count() - 1)->setEnabled(false);
+                }
+            } else if (first_usable < 0) {
+                first_usable = combo->count() - 1;
+            }
         }
+        combo->setCurrentIndex(std::max(first_usable, 0));
         if (const auto picked = picked_.find(saved.folder); picked != picked_.end()) {
             if (const auto file = picked->second.find(key); file != picked->second.end()) {
-                combo->setCurrentIndex(std::max(combo->findData(text_of(file->second)), 0));
+                if (const int index = combo->findData(text_of(file->second)); index >= 0) {
+                    combo->setCurrentIndex(index);
+                }
             }
         }
         if (combo->count() == 1) {
@@ -517,8 +573,18 @@ std::vector<LoadedSavedResult> SavedResultsPanel::selected_results() const {
     std::vector<LoadedSavedResult> results;
     for (const SavedComparison* saved : selected()) {
         const auto picked = picked_.find(saved->folder);
+        // The scores the box has read, where it has: not read again.
+        const auto read = [this, saved](const std::filesystem::path& file) -> std::optional<SavedScore> {
+            if (details_read_.folder == saved->folder) {
+                if (const auto found = details_read_.scores.find(file); found != details_read_.scores.end()) {
+                    return found->second;
+                }
+            }
+            return read_saved_score(file);
+        };
         const std::optional<std::pair<ComparisonResult, std::string>> loaded = load_saved_comparison(
-            *saved, picked != picked_.end() ? picked->second : std::map<std::string, std::filesystem::path>{});
+            *saved, picked != picked_.end() ? picked->second : std::map<std::string, std::filesystem::path>{},
+            read);
         if (loaded) {
             results.push_back({std::make_shared<const ComparisonResult>(loaded->first), qt_text(loaded->second),
                                saved->folder});
@@ -573,7 +639,7 @@ void SavedResultsPanel::update_buttons() {
     const std::size_t count = selected().size();
     open_button_->setEnabled(count > 0);
     export_button_->setEnabled(count > 0);
-    delete_button_->setEnabled(count > 0 && !run_active_);
+    delete_button_->setEnabled(count > 0 && !run_active_ && !deleting_);
     delete_button_->setToolTip(run_active_ ? app::tr("Locked while metrics are calculated: the run saves its "
                                                      "scores there.")
                                            : QString());
@@ -663,8 +729,13 @@ void SavedResultsPanel::fill_context_menu(QMenu& menu) {
 }
 
 void SavedResultsPanel::delete_selected() {
-    const std::vector<const SavedComparison*> chosen = selected();
-    if (chosen.empty() || run_active_) {
+    // Copies: the question waits in an event loop of its own, in which a
+    // listing that finishes replaces list_ (show_list).
+    std::vector<SavedComparison> chosen;
+    for (const SavedComparison* saved : selected()) {
+        chosen.push_back(*saved);
+    }
+    if (chosen.empty() || run_active_ || deleting_) {
         return;
     }
     QString question =
@@ -673,19 +744,39 @@ void SavedResultsPanel::delete_selected() {
             "Delete the saved scores of {count} comparisons? They can't be brought back: the videos are scored "
             "again the next time they are compared.",
             static_cast<long long>(chosen.size()));
-    if (std::any_of(chosen.begin(), chosen.end(), [](const SavedComparison* saved) { return !saved->reference_found; })) {
+    if (std::any_of(chosen.begin(), chosen.end(), [](const SavedComparison& saved) { return !saved.reference_found; })) {
         question += "\n\n" + app::tr("Some of them could not be scored again: their reference video is no longer "
                                       "where it was (marked \"not found\").");
     }
-    if (!dialogs_.ask_no_default(app::tr("Delete saved results"), question)) {
+    if (!dialogs_.ask_no_default(app::tr("Delete saved results"), question) || run_active_ || deleting_) {
         return;
     }
-    int failed = 0;
-    for (const SavedComparison* saved : chosen) {
-        if (!delete_saved_comparison(base(), *saved)) {
-            ++failed;
-        }
+    // Through the window's queue of writes, after what is queued there, as
+    // Settings' Clear: a run's saves still queued would otherwise bring a
+    // folder deleted back, or leave one without its context.json, which the
+    // tab can neither list nor delete (issue #133).
+    deleting_ = std::make_shared<Deleting>();
+    update_buttons();
+    file_writes_.submit(app::tr("delete saved results"),
+                        [folder = base(), chosen = std::move(chosen), deleting = deleting_] {
+                            for (const SavedComparison& saved : chosen) {
+                                if (!delete_saved_comparison(folder, saved)) {
+                                    ++deleting->failed;
+                                }
+                            }
+                            deleting->done = true;
+                        });
+}
+
+void SavedResultsPanel::on_writes_idle() {
+    // Once the Delete has run: a write queued before it, finished as it was
+    // queued, says the queue is idle too, too early.
+    if (!deleting_ || !deleting_->done) {
+        return;
     }
+    const int failed = deleting_->failed;
+    deleting_.reset();
+    update_buttons();
     if (failed > 0) {
         dialogs_.alert(app::tr("Not all deleted"),
                        ntr("{count} comparison's saved scores could not be deleted: a file of theirs may be open.",

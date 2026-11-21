@@ -8,12 +8,14 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "vml/metric_cache.h"
 #include "vml/results.h"
 
 namespace vml {
@@ -49,11 +51,14 @@ struct SavedComparison {
 std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path& base);
 
 // The comparison's result and label with one score per metric: the file
-// `chosen` gives for it, else its newest. A file that cannot be read is
+// `chosen` gives for it, else its newest. A file that cannot be read, or
+// whose score the Videos tab refuses (read_saved_score's `outdated`), is
 // left out (the next newest of its metric stands in). Nothing when the
-// context cannot be read.
+// context cannot be read. Each file is read by `read`: read_saved_score, or
+// what was read of it already.
 std::optional<std::pair<ComparisonResult, std::string>> load_saved_comparison(
-    const SavedComparison& comparison, const std::map<std::string, std::filesystem::path>& chosen = {});
+    const SavedComparison& comparison, const std::map<std::string, std::filesystem::path>& chosen = {},
+    const std::function<std::optional<SavedScore>(const std::filesystem::path&)>& read = read_saved_score);
 
 // Deletes the comparison's folder, which must be one under `base`'s v2
 // folder: whether it is gone.
