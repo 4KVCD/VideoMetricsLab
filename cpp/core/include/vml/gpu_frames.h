@@ -311,6 +311,14 @@ std::filesystem::path dav2d_library_path();
 // several threads, the decoder would on one).
 std::pair<bool, std::string> decoder_supports(int device, const DecodePlan& plan, std::string_view backend);
 
+// The GPU `backend`'s library is given, for `device`: for AMD's decoders (AMF
+// and Windows' own), DirectX's number of the adapter FFmpeg's D3D11VA decodes
+// on (d3d11va_adapter_used: the GPU chosen where it is an AMD one, else the
+// first AMD GPU), -1 for the first AMD GPU where none is named; `device` for
+// the others. So the app's AMD decoder decodes on the GPU that scores, hands
+// its pictures over to it, and checks its codecs there.
+int decoder_device(std::string_view backend, int device);
+
 // Whether NVIDIA's decoder (CUDA device 0, the one FFmpeg's cuda and the
 // app's own NVIDIA decoder use) decodes H.264 at 10 bits: the RTX 50 series'
 // H.264 decoder does, earlier ones decode 8 bits only. The isolated task

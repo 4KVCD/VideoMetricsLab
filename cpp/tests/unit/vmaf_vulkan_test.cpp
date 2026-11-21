@@ -43,8 +43,9 @@ TEST(VmafVulkan, ProbeFramesAreThePythonApps) {
 }
 
 // The GPU chosen (gpu_choice.h) is found by its whole name or a part of one,
-// in any case, a whole name first; VMAF runs on it, and on the GPU it would
-// have had when Vulkan lists none of that name.
+// in any case, a whole name first; VMAF runs on it, and on no GPU (the CPU)
+// when Vulkan lists none of that name or cannot use it: not on another GPU,
+// which the choice may keep free.
 TEST(VmafVulkan, VmafRunsOnTheGpuChosen) {
     EXPECT_EQ(chosen_among({"AMD Radeon(TM) Graphics", "NVIDIA GeForce RTX 5090"}, "nvidia geforce rtx 5090"), 1u);
     EXPECT_EQ(chosen_among({"AMD Radeon(TM) Graphics", "NVIDIA GeForce RTX 5090"}, " radeon "), 0u);
@@ -55,7 +56,8 @@ TEST(VmafVulkan, VmafRunsOnTheGpuChosen) {
 
     const std::vector<VulkanDevice> found{{0, "NVIDIA GeForce RTX 5090", 0x10DE, 2, true, true},
                                           {1, "AMD Radeon(TM) Graphics", 0x1002, 1, true, true},
-                                          {2, "llvmpipe", 0x10005, 4, true, true}};
+                                          {2, "llvmpipe", 0x10005, 4, true, true},
+                                          {3, "Intel(R) UHD Graphics 770", 0x8086, 1, false, true}};
     const auto index_of = [&found] {
         const std::optional<VulkanDevice> device = chosen_vulkan_device(found);
         return device ? device->index : -1;
@@ -66,8 +68,57 @@ TEST(VmafVulkan, VmafRunsOnTheGpuChosen) {
     choose_gpu("Radeon");
     EXPECT_EQ(index_of(), 1);
     choose_gpu("titan");
-    EXPECT_EQ(index_of(), 0);  // none of that name: as if none were chosen
+    EXPECT_EQ(index_of(), -1);  // none of that name: the CPU
+    choose_gpu("Intel(R) UHD Graphics 770");
+    EXPECT_EQ(index_of(), -1);  // one Vulkan cannot use (no 64-bit integers): the CPU
     choose_gpu(before);
+}
+
+// A part of a name that two GPUs have names neither: each API lists the GPUs
+// in its own order (DirectX's, Vulkan's, Vship's discrete-first), and the
+// first of each that has it could be a different GPU (D3D11VA decoding on the
+// Radeon iGPU while VMAF scores on the Radeon card). A whole name still names
+// its GPU.
+TEST(VmafVulkan, APartOfTwoGpusNamesNamesNeither) {
+    const std::vector<std::string> directx{"AMD Radeon RX 7900 XTX", "AMD Radeon(TM) Graphics"};
+    EXPECT_EQ(gpus_named(directx, "radeon"), (std::vector<std::size_t>{0, 1}));
+    EXPECT_EQ(chosen_among(directx, "radeon"), std::nullopt);
+    EXPECT_EQ(chosen_among(directx, "amd radeon(tm) graphics"), 1u);
+    EXPECT_EQ(chosen_among(directx, "7900"), 0u);
+
+    const std::vector<VulkanDevice> found{{0, "AMD Radeon(TM) Graphics", 0x1002, 1, true, true},
+                                          {1, "AMD Radeon RX 7900 XTX", 0x1002, 2, true, true}};
+    const std::optional<std::string> before = chosen_gpu();
+    choose_gpu("radeon");
+    const std::optional<VulkanDevice> device = chosen_vulkan_device(found);
+    choose_gpu(before);
+    EXPECT_FALSE(device.has_value()) << device->name;
+}
+
+// Of two GPUs of one name (two RTX 3070s), the second can be chosen: the
+// choice saved is the name and its place among them, which every API matches
+// in its own list. A name alone is the first of that name, as it was.
+TEST(VmafVulkan, TheSecondOfTwoGpusOfOneNameCanBeChosen) {
+    const std::vector<std::string> directx{"NVIDIA GeForce RTX 3070", "AMD Radeon(TM) Graphics",
+                                           "NVIDIA GeForce RTX 3070"};
+    EXPECT_EQ(gpu_choice_texts(directx), (std::vector<std::string>{"NVIDIA GeForce RTX 3070 #1",
+                                                                   "AMD Radeon(TM) Graphics",
+                                                                   "NVIDIA GeForce RTX 3070 #2"}));
+    EXPECT_EQ(chosen_among(directx, "nvidia geforce rtx 3070 #2"), 2u);
+    EXPECT_EQ(chosen_among(directx, "NVIDIA GeForce RTX 3070 #1"), 0u);
+    EXPECT_EQ(chosen_among(directx, "NVIDIA GeForce RTX 3070"), 0u);
+    EXPECT_EQ(chosen_among(directx, "NVIDIA GeForce RTX 3070 #3"), std::nullopt);
+    EXPECT_EQ(chosen_among(directx, "rtx 3070"), std::nullopt);  // a part of two names
+    EXPECT_EQ(chosen_among({"NVIDIA GeForce RTX 3070"}, "NVIDIA GeForce RTX 3070 #1"), 0u);
+
+    const std::vector<VulkanDevice> found{{0, "NVIDIA GeForce RTX 3070", 0x10DE, 2, true, true},
+                                          {1, "NVIDIA GeForce RTX 3070", 0x10DE, 2, true, true}};
+    const std::optional<std::string> before = chosen_gpu();
+    choose_gpu("NVIDIA GeForce RTX 3070 #2");
+    const std::optional<VulkanDevice> device = chosen_vulkan_device(found);
+    choose_gpu(before);
+    ASSERT_TRUE(device.has_value());
+    EXPECT_EQ(device->index, 1);
 }
 
 }  // namespace

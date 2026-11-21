@@ -137,8 +137,9 @@ CudaProbe probe_cuda_apart(bool& crashed, const CancelToken& cancel) {
     }
 }
 
-// The GPU chosen (gpu_choice.h), when DirectX lists it as another maker's
-// than NVIDIA: CUDA would score on an NVIDIA GPU the choice keeps free.
+// The GPU chosen (gpu_choice.h), unless it names one NVIDIA GPU DirectX
+// lists: CUDA would score on an NVIDIA GPU the choice keeps free. (Where the
+// system lists no GPUs, nothing: CUDA is left to find its own.)
 std::optional<std::string> chosen_gpu_not_nvidia() {
     const std::optional<std::string> chosen = chosen_gpu();
     if (!chosen) {
@@ -149,8 +150,11 @@ std::optional<std::string> chosen_gpu_not_nvidia() {
     for (const platform::GpuAdapter& adapter : adapters) {
         names.push_back(adapter.name);
     }
+    if (adapters.empty()) {
+        return std::nullopt;
+    }
     const std::optional<std::size_t> index = chosen_among(names, *chosen);
-    return index && adapters[*index].vendor_id != platform::nvidia_pci_vendor ? chosen : std::nullopt;
+    return index && adapters[*index].vendor_id == platform::nvidia_pci_vendor ? std::nullopt : chosen;
 }
 
 GpuVmafBackend probe_backends(const CancelToken& cancel) {
@@ -170,7 +174,7 @@ GpuVmafBackend probe_backends(const CancelToken& cancel) {
                     continue;
                 }
                 if (const std::optional<std::string> other = chosen_gpu_not_nvidia()) {
-                    add_reason("CUDA: the GPU chosen, " + *other + ", is not NVIDIA's");
+                    add_reason("CUDA: the GPU chosen, " + *other + ", is not an NVIDIA GPU here");
                     continue;
                 }
                 const CudaProbe probe = probe_cuda_apart(failed, cancel);

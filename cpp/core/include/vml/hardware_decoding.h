@@ -213,5 +213,8 @@ std::vector<std::string> hwaccel_device_args(const std::string& hwaccel);
 // begin, before any FFmpeg command is made, and again by the command line once
 // it knows its --gpu. Not set (tests), FFmpeg's default adapter is used.
 void use_d3d11va_adapter(std::optional<unsigned> adapter);
+// The adapter use_d3d11va_adapter named, if any: AMD's own decoders decode on
+// it too (gpu_frames.h's decoder_device).
+std::optional<unsigned> d3d11va_adapter_used();
 
 }  // namespace vml

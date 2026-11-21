@@ -966,10 +966,18 @@ std::optional<std::string> gpu_refusal(const std::optional<std::string>& gpu,
     for (const platform::GpuAdapter& adapter : adapters) {
         names.push_back(adapter.name);
     }
-    if (chosen_among(names, *gpu)) {
+    const std::vector<std::size_t> found = gpus_named(names, *gpu);
+    if (found.size() == 1) {
         return std::nullopt;
     }
     std::string listed;
+    for (const std::size_t index : found) {
+        listed += (listed.empty() ? "" : ", ") + names[index];
+    }
+    if (!found.empty()) {
+        return "--gpu " + *gpu + ": more than one GPU here has that in its name: " + listed +
+               ". Give more of the name.";
+    }
     for (const std::string& name : names) {
         listed += (listed.empty() ? "" : ", ") + name;
     }

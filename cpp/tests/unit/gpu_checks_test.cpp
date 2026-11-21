@@ -47,6 +47,25 @@ TEST(GpuChecks, OnlyPassesAreSavedAndEachIsFoundOnlyUnderItsKey) {
     EXPECT_FALSE(saved_gpu_check(file, {{"other", 15}}));
 }
 
+// Vship's probe that crashed on one GPU's check runs again without it (its
+// request's "skip"); that answer is saved under the first request too, which
+// would otherwise never be answered from the file (its process crashes), so
+// that every later start crashed a check process before the retry found its
+// saved answer.
+TEST(GpuChecks, AnAnswerFoundWithoutACrashingGpuAnswersTheFirstRequest) {
+    const test::Folder folder;
+    const std::filesystem::path file = folder / "gpu_checks.json";
+    const nlohmann::json pc = {{"gpus", {"Radeon 1002:13C0 driver 32.0.21045.29003"}}};
+    const nlohmann::json first = {{"vship_build", "vship-fast"}};
+    nlohmann::json retry = first;
+    retry["skip"] = {{1, "Vulkan GPU 1 (Radeon): its check crashed"}};
+    const nlohmann::json pass = {{"device", {{"name", "RTX"}}}, {"reason", ""}};
+    save_gpu_check(file, gpu_check_key(pc, "vship-probe", retry), pass);
+    EXPECT_EQ(saved_gpu_check(file, gpu_check_key(pc, "vship-probe", first)), pass);
+    EXPECT_FALSE(saved_gpu_check(file, gpu_check_key(pc, "vship-probe", {{"vship_build", "vship-hip"}})));
+    EXPECT_FALSE(saved_gpu_check(file, gpu_check_key(pc, "vulkan-probe", first)));
+}
+
 // A Vulkan driver updated without a new driver version (its library
 // replaced) changes the key; a library named without a folder, which the
 // system finds, is known by its name.

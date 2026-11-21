@@ -50,6 +50,7 @@
 #include "vml/app_log.h"
 #include "vml/crop_detect.h"
 #include "vml/cvvdp.h"
+#include "vml/gpu_choice.h"
 #include "vml/gpu_frames.h"
 #include "vml/metric_cache.h"
 #include "vml/platform/system.h"
@@ -667,7 +668,8 @@ QGroupBox* SettingsPanel::build_gpu_box() {
     auto* gpu_box = new QGroupBox(app::tr("GPU metrics"));
     auto* gpu_layout = new QVBoxLayout(gpu_box);
     // The GPU to score on, where there is a choice (Settings::gpu): the
-    // entries' data is the name saved, empty for automatic.
+    // entries' data is the text saved (gpu_choice_texts: the name, with its
+    // place where two GPUs have it), empty for automatic.
     const std::vector<platform::GpuAdapter> adapters = platform::gpu_adapters();
     if (adapters.size() > 1 || !settings_.gpu.empty()) {
         auto* choice_row = new QHBoxLayout;
@@ -675,12 +677,16 @@ QGroupBox* SettingsPanel::build_gpu_box() {
         gpu_choice = new QComboBox;
         gpu_choice->setSizeAdjustPolicy(QComboBox::AdjustToContents);
         gpu_choice->addItem(app::tr("Automatic (a discrete GPU first)"), QString());
+        std::vector<std::string> names;
         for (const platform::GpuAdapter& adapter : adapters) {
-            const QString name = QString::fromStdString(adapter.name);
-            gpu_choice->addItem(name, name);
+            names.push_back(adapter.name);
+        }
+        for (const std::string& text : gpu_choice_texts(names)) {
+            gpu_choice->addItem(QString::fromStdString(text), QString::fromStdString(text));
         }
         const QString saved = QString::fromStdString(settings_.gpu);
-        int shown = saved.isEmpty() ? 0 : gpu_choice->findData(saved);
+        const std::optional<std::size_t> found = saved.isEmpty() ? std::nullopt : chosen_among(names, settings_.gpu);
+        int shown = saved.isEmpty() ? 0 : found ? static_cast<int>(*found) + 1 : -1;
         if (shown < 0) {
             gpu_choice->addItem(app::tr("{name} (not found)", {{"name", saved}}), saved);
             shown = gpu_choice->count() - 1;

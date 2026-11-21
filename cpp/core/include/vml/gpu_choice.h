@@ -5,9 +5,9 @@
 // decoding tries its maker's decoder first.
 //
 // The choice travels in an environment variable, VML_GPU, which the app and
-// the command line set as they start: the processes they start for their GPU
-// work (isolated.h) inherit it, and a GPU check's saved answer is kept for
-// each choice (gpu_checks.h).
+// the command line set as they start (resolve_chosen_gpu): the processes they
+// start for their GPU work (isolated.h) inherit it, and a GPU check's saved
+// answer is kept for each choice (gpu_checks.h).
 #pragma once
 
 #include <cstddef>
@@ -27,9 +27,32 @@ std::optional<std::string> chosen_gpu();
 // nothing or an empty name.
 void choose_gpu(const std::optional<std::string>& name);
 
-// Which of `names` (GPUs as a driver or DirectX names them) `chosen` names:
-// the first that is `chosen` itself, ignoring case, else the first that has it
-// in its name ("radeon" for "AMD Radeon(TM) Graphics"). Nothing when none does.
+// The text that chooses each of `names` (GPUs as a driver or DirectX names
+// them, in its order), as Settings saves it: its name, or, where more than one
+// GPU has that name (two of one card), the name and its place among them,
+// from 1: "NVIDIA GeForce RTX 3070 #2".
+std::vector<std::string> gpu_choice_texts(const std::vector<std::string>& names);
+
+// Which of `names` (GPUs as a driver or DirectX names them) `chosen` can
+// name, ignoring case: the first that is `chosen` itself; else, for a name
+// and a place ("... #2", gpu_choice_texts), that one of the GPUs of that
+// name, or none where there are fewer; else every one that has it in its name
+// ("radeon" for "AMD Radeon(TM) Graphics"). None for an empty `chosen`.
+std::vector<std::size_t> gpus_named(const std::vector<std::string>& names, std::string_view chosen);
+
+// The one of `names` that `chosen` names (gpus_named), or nothing: also when a
+// part of a name is in more than one, as each API lists the GPUs in an order
+// of its own (DirectX's, Vulkan's, Vship's discrete-first), so that the first
+// of each would not be the same GPU.
 std::optional<std::size_t> chosen_among(const std::vector<std::string>& names, std::string_view chosen);
+
+// Makes the GPU chosen in this process (VML_GPU) the choice text
+// (gpu_choice_texts) of the one DirectX lists that it names (chosen_among),
+// once, as the app and the
+// command line start: a part of a name ("radeon") is then matched in every
+// API's list as that GPU's name. Left as it is where it names no GPU
+// DirectX lists, or more than one (each API then finds none: the CPU), and
+// where the system lists none (a Mac).
+void resolve_chosen_gpu();
 
 }  // namespace vml

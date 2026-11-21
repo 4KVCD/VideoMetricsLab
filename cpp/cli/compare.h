@@ -104,7 +104,9 @@ std::vector<std::filesystem::path> expand_videos(const std::vector<std::string>&
 std::optional<std::string> found_nothing(const std::filesystem::path& path);
 
 // Why --gpu cannot be used: it names none of `adapters`, the GPUs DirectX
-// lists (gpu_choice.h's chosen_among: a whole name or a part of one). Nothing
+// lists (gpu_choice.h's chosen_among: a whole name or a part of one), or a
+// part of a name that more than one has (which would leave each API to take
+// a GPU of its own). Nothing
 // when it can, for auto, and where the system lists no GPUs (Vulkan's names
 // are then matched as the metrics start).
 std::optional<std::string> gpu_refusal(const std::optional<std::string>& gpu,

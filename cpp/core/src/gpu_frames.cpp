@@ -1447,9 +1447,17 @@ std::pair<bool, std::string> decoder_supports(int device, const DecodePlan& plan
         return {false, error.what()};
     }
     std::array<char, 512> error{};
-    const int ok = library->supports(device, find_codec(plan.codec)->number, plan.bit_depth, plan.width, plan.height,
-                                     error.data(), static_cast<int>(error.size()));
+    const int ok = library->supports(decoder_device(backend, device), find_codec(plan.codec)->number, plan.bit_depth,
+                                     plan.width, plan.height, error.data(), static_cast<int>(error.size()));
     return {ok != 0, buffer_text(error.data(), error.size())};
+}
+
+int decoder_device(std::string_view backend, int device) {
+    if (backend == amd_decoder || backend == media_foundation_decoder) {
+        const std::optional<unsigned> adapter = d3d11va_adapter_used();
+        return adapter ? static_cast<int>(*adapter) : -1;
+    }
+    return device;
 }
 
 bool nvidia_decodes_10bit_h264() {
@@ -2217,6 +2225,8 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
         throw GpuDecodeUnavailableError(*refusal);
     }
     state.library = &load_decoder(backend);
+    // Windows' decoder below is tried for the AMD backend: both take the same adapter.
+    device = decoder_device(backend, device);
     state.lends_planes = can_lend_planes(plan, backend);
     state.frame_bytes = plan.frame_bytes();
     state.untimed = plan.untimed;

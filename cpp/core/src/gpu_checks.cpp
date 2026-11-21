@@ -216,13 +216,20 @@ void save_gpu_check(const std::filesystem::path& file, const nlohmann::json& key
     }
 }
 
+nlohmann::json gpu_check_key(nlohmann::json pc, std::string_view task, nlohmann::json request) {
+    if (request.is_object()) {
+        request.erase("skip");
+    }
+    pc["check"] = {{"task", task}, {"request", std::move(request)}};
+    return pc;
+}
+
 nlohmann::json run_gpu_check(std::string_view task, std::string_view what, const nlohmann::json& request,
                              const CancelToken& cancel, const std::function<void(const nlohmann::json&)>& on_message) {
     cancel.throw_if_cancelled();
     std::optional<nlohmann::json> key;
     if (const std::optional<nlohmann::json>& pc = this_pc()) {
-        key = *pc;
-        (*key)["check"] = {{"task", task}, {"request", request}};
+        key = gpu_check_key(*pc, task, request);
         if (std::optional<nlohmann::json> saved = saved_gpu_check(gpu_checks_file(), *key)) {
             app_log::write(app_log::Level::info, "vml.gpu_checks",
                            std::string(what) + ": the answer of an earlier start, on this GPU and driver");

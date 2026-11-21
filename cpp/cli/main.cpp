@@ -66,6 +66,7 @@ int main(int argc, char** argv) {
                 choose_gpu(settings.gpu.empty() ? std::nullopt : std::optional(settings.gpu));
             }
         }
+        resolve_chosen_gpu();
         use_d3d11va_adapter(d3d11va_adapter());
         // The app's log on standard error: its failures always, everything
         // with --verbose.

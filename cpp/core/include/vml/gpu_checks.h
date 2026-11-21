@@ -31,6 +31,14 @@ nlohmann::json run_gpu_check(std::string_view task, std::string_view what, const
                              const CancelToken& cancel,
                              const std::function<void(const nlohmann::json&)>& on_message = {});
 
+// The key a check's answer is saved under: `pc` (what the answers depend on in
+// this process: the app, its GPU files, the GPUs, their drivers, the
+// environment), the check `task` and its `request`, but for the GPUs the
+// request skips (Vship's probe run again without a GPU whose check crashed).
+// The first request, which crashed, is then answered at the next start by the
+// answer the retry found, rather than crashing a check process at every start.
+nlohmann::json gpu_check_key(nlohmann::json pc, std::string_view task, nlohmann::json request);
+
 // Deletes every saved answer, so that the checks run again at the next start:
 // after a GPU fault in a run (the saved answer may be wrong now), and for
 // the checks a user asks for (the window's self-test, vml-cli devices).

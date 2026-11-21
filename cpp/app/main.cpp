@@ -190,6 +190,9 @@ int main(int argc, char** argv) {
         const Settings settings = Settings::load();
         choose_gpu(settings.gpu.empty() ? std::nullopt : std::optional(settings.gpu));
     }
+    if (!isolated_task) {
+        resolve_chosen_gpu();  // the tasks inherit the whole name
+    }
     use_d3d11va_adapter(d3d11va_adapter());
     if (isolated_task) {
         return run_isolated_task(words[1], platform::path_from_text(words[2]));
