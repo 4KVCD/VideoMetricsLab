@@ -10,7 +10,10 @@
 #include <QCoreApplication>
 #include <QDeadlineTimer>
 #include <QDoubleSpinBox>
+#include <QFont>
 #include <QGuiApplication>
+#include <QIcon>
+#include <QImage>
 #include <QLabel>
 #include <QLayout>
 #include <QLineEdit>
@@ -521,6 +524,36 @@ TEST_F(FramePanelTest, TheBlackBarsFoundAgainstOneReferenceAreNotUsedWithAnother
 
     panel->set_runs({pair});
     EXPECT_EQ(crops(), std::pair(found.source, found.distorted));
+}
+
+// Play / Pause: its text in the button's own font (Segoe UI Symbol, which
+// has no bold, chipped the triangle in VML Modern's semibold primary button)
+// and its symbol drawn beside it, in the text's colour; another symbol for
+// each state, greyed when it is disabled.
+TEST(FrameCompare, PlayPauseDrawsItsSymbolInTheButtonsFont) {
+    PlayPauseButton button;
+    QFont semibold = button.font();
+    semibold.setWeight(QFont::DemiBold);
+    button.setFont(semibold);
+    EXPECT_EQ(button.text(), "Play");
+    EXPECT_NE(button.font().family(), "Segoe UI Symbol");
+    EXPECT_EQ(button.font().weight(), QFont::DemiBold);
+    ASSERT_FALSE(button.icon().isNull());
+    const QSize size = button.iconSize();
+    EXPECT_GE(size.height(), 8);
+    const QImage play = button.icon().pixmap(size).toImage();
+    button.set_playing(true);
+    EXPECT_EQ(button.text(), "Pause");
+    EXPECT_TRUE(button.playing());
+    const QImage pause = button.icon().pixmap(size).toImage();
+    EXPECT_NE(play, pause);
+    // The colour of the text, at the middle of the first bar.
+    const QColor text = button.palette().color(QPalette::Active, QPalette::ButtonText);
+    const QColor drawn = pause.pixelColor(pause.width() * 25 / 100, pause.height() / 2);
+    EXPECT_EQ(drawn.rgb(), text.rgb());
+    const QImage disabled = button.icon().pixmap(size, QIcon::Disabled).toImage();
+    EXPECT_EQ(disabled.pixelColor(disabled.width() * 25 / 100, disabled.height() / 2).rgb(),
+              button.palette().color(QPalette::Disabled, QPalette::ButtonText).rgb());
 }
 
 }  // namespace vml::app

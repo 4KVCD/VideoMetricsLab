@@ -7,6 +7,7 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QList>
+#include <QPushButton>
 #include <QMap>
 #include <QScrollArea>
 #include <QSize>
@@ -253,12 +254,36 @@ private:
     void show_focus(QWidget* old, QWidget* now);
 };
 
-// The font for text with a symbol the window's font lacks (Video Compare's
-// "▶ Play" and "❚❚ Pause", Metric Graphs' "✕"): on Windows Segoe UI Symbol,
-// which has them, at `font`'s size; elsewhere `font`. A character Segoe UI
-// lacks makes Qt load its fallback fonts, Chinese, Japanese and Korean ones
-// among them: some 22 MB, for as long as the app runs.
+// The font for text with a symbol the window's font lacks (Metric Graphs'
+// "✕"): on Windows Segoe UI Symbol, which has them, at `font`'s size;
+// elsewhere `font`. A character Segoe UI lacks makes Qt load its fallback
+// fonts, Chinese, Japanese and Korean ones among them: some 22 MB, for as long
+// as the app runs.
 QFont symbol_font(const QFont& font);
+
+// Video Compare's Play / Pause: "Play" or "Pause" in the button's own font,
+// beside its symbol drawn (a triangle, two bars) in the button's text colour,
+// and greyed as the text is when it is disabled. Text symbols ("▶ Play",
+// "❚❚ Pause") needed Segoe UI Symbol, which has no bold: VML Modern's primary
+// buttons are semibold, and drawn bold the triangle came out chipped; and the
+// two bars were two letters, set apart as letters are.
+class PlayPauseButton : public QPushButton {
+public:
+    explicit PlayPauseButton(QWidget* parent = nullptr);
+
+    // Shows Pause while playing, Play otherwise.
+    void set_playing(bool playing);
+    bool playing() const { return playing_; }
+
+protected:
+    void changeEvent(QEvent* event) override;
+
+private:
+    // The text and the symbol, in the colours the button has now.
+    void refresh();
+
+    bool playing_ = false;
+};
 
 // Turns the mouse wheel's value changes off in the spin boxes and combo boxes
 // on `page` (the Settings tab): the wheel scrolls the page under them
