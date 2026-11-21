@@ -218,6 +218,26 @@ void carry_over_result_formats(Settings& settings) {
     settings.export_items = items;
 }
 
+// Settings > Notifications' keys are kept as plain text where they cannot
+// be encrypted (secrets_can_be_encrypted: on Linux and macOS), so the
+// settings folder is the user's alone (0700) and so is each file written in
+// it (0600), whatever the umask: other users of the system cannot read the
+// keys. The folder is closed first, so a file is never open to others while
+// it is being written. On Windows the profile folder's ACL already keeps
+// them to the user; there std::filesystem::permissions only sets or clears
+// the read-only attribute, and both leave it off.
+void keep_folder_private(const std::filesystem::path& folder) {
+    std::error_code ignored;
+    std::filesystem::permissions(folder, std::filesystem::perms::group_all | std::filesystem::perms::others_all,
+                                 std::filesystem::perm_options::remove, ignored);
+}
+
+void keep_file_private(const std::filesystem::path& file) {
+    std::error_code ignored;
+    std::filesystem::permissions(file, std::filesystem::perms::owner_read | std::filesystem::perms::owner_write,
+                                 std::filesystem::perm_options::replace, ignored);
+}
+
 }  // namespace
 
 int default_parallel_jobs(unsigned cores) { return cores > parallel_by_default_above_cores ? 2 : 1; }
@@ -228,6 +248,7 @@ Settings Settings::load() {
     const std::filesystem::path path = file();
     std::error_code ignored;
     std::filesystem::create_directories(path.parent_path(), ignored);
+    keep_folder_private(path.parent_path());
     return load_from(path);
 }
 
@@ -248,7 +269,9 @@ Settings Settings::load_from(const std::filesystem::path& path) {
         std::filesystem::path copy = path;
         copy += ".unreadable";
         std::error_code ignored;
+        keep_folder_private(path.parent_path());
         std::filesystem::copy_file(path, copy, std::filesystem::copy_options::overwrite_existing, ignored);
+        keep_file_private(copy);
         app_log::Logger("vml.settings")
             .warning("The settings could not be read, and the defaults are used (copy kept as " +
                      platform::path_text(copy) + "): " + error.what());
@@ -423,12 +446,14 @@ std::optional<std::string> Settings::save() const { return save_to(file()); }
 std::optional<std::string> Settings::save_to(const std::filesystem::path& path) const {
     std::error_code error;
     std::filesystem::create_directories(path.parent_path(), error);
+    keep_folder_private(path.parent_path());
     std::random_device random;
     const std::filesystem::path temporary =
         path.parent_path() /
         platform::path_from_text(platform::path_text(path.filename()) + "." + std::to_string(random()) + ".tmp");
     {
         std::ofstream stream(temporary, std::ios::binary);
+        keep_file_private(temporary);  // before anything is in it
         const std::string contents = text();
         stream.write(contents.data(), static_cast<std::streamsize>(contents.size()));
         stream.close();

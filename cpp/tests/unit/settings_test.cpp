@@ -206,5 +206,36 @@ TEST(Settings, SavesSettingsJsonAsThePythonAppDoes) {
     EXPECT_GT(saved, 0);
 }
 
+// The settings can hold Settings > Notifications' keys as plain text (on
+// Linux and macOS, where they cannot be encrypted), so they are the user's
+// alone, whatever the umask: the folder 0700, the file and the copy kept of
+// one that could not be read 0600. On Windows (where the profile folder's
+// ACL does this) neither is left read-only, which would stop the next save.
+TEST(Settings, KeptFromOtherUsers) {
+    const test::Folder folder;
+    const std::filesystem::path profile = folder / "profile";
+    const std::filesystem::path file = profile / "settings.json";
+    ASSERT_EQ(Settings().save_to(file), std::nullopt);
+    std::filesystem::remove(file);
+    std::ofstream(file, std::ios::binary) << R"({"discord_webhook": "https://discord.com/api/webh)";
+    Settings::load_from(file);
+    const std::filesystem::path copy = profile / "settings.json.unreadable";
+    ASSERT_TRUE(std::filesystem::exists(copy));
+    ASSERT_EQ(Settings().save_to(file), std::nullopt);
+    ASSERT_EQ(Settings().save_to(file), std::nullopt);  // replaces it
+    using std::filesystem::perms;
+    const auto permissions = [](const std::filesystem::path& path) {
+        return std::filesystem::status(path).permissions() & perms::all;
+    };
+#ifdef _WIN32
+    EXPECT_NE(permissions(file) & perms::owner_write, perms::none);
+    EXPECT_NE(permissions(copy) & perms::owner_write, perms::none);
+#else
+    EXPECT_EQ(permissions(profile), perms::owner_all);
+    EXPECT_EQ(permissions(file), perms::owner_read | perms::owner_write);
+    EXPECT_EQ(permissions(copy), perms::owner_read | perms::owner_write);
+#endif
+}
+
 }  // namespace
 }  // namespace vml
