@@ -497,6 +497,8 @@ void MetricPage::set_timeline_curve(int series_id, const SeriesEntry& entry) {
 void MetricPage::remove_curves(const std::vector<int>& series_ids) {
     if (erase_curves(series_ids)) {
         hover_label_->set_text(placeholder_);  // it may be saying a gone line's numbers
+        hover_text_.clear();
+        readout_of_ = std::monostate();
         refresh_difference();
         refresh_highlight();
     }
@@ -914,6 +916,27 @@ std::optional<QString> MetricPage::delta_row(const ReadoutPick& first, const Rea
 }
 
 void MetricPage::on_hover(double x, double y, const std::map<int, SeriesEntry>& entries) {
+    readout_of_ = HoverAt{x, y};
+    hover_readout(x, y, entries, true);
+}
+
+bool MetricPage::show_frame(int frame, const std::map<int, SeriesEntry>& entries) {
+    readout_of_ = FrameAt{frame};
+    return frame_readout(frame, entries, true);
+}
+
+void MetricPage::refresh_readout(const std::map<int, SeriesEntry>& entries) {
+    // The readout's height is fitted to the lines shown (fit_hover_label):
+    // its text, left listing the lines shown before, would be cut off, or
+    // leave room under it, until the pointer came back to the chart.
+    if (const auto* hover = std::get_if<HoverAt>(&readout_of_)) {
+        hover_readout(hover->x, hover->y, entries, false);
+    } else if (const auto* frame = std::get_if<FrameAt>(&readout_of_)) {
+        frame_readout(frame->frame, entries, false);
+    }
+}
+
+void MetricPage::hover_readout(double x, double y, const std::map<int, SeriesEntry>& entries, bool place_cursor) {
     const double x_per_pixel = chart_->seconds_per_pixel();
     std::vector<std::pair<const SeriesEntry*, const MetricCurve*>> shown;
     for (const auto& [id, curve] : curves_) {
@@ -924,7 +947,9 @@ void MetricPage::on_hover(double x, double y, const std::map<int, SeriesEntry>& 
     }
     const QString time_line = app::tr("Time: {time}", {{"time", qt_text(format_hms(x, 2))}});
     if (shown.empty()) {
-        chart_->set_cursor_time(x);
+        if (place_cursor) {
+            chart_->set_cursor_time(x);
+        }
         set_hover_text(time_line);
         return;
     }
@@ -977,12 +1002,14 @@ void MetricPage::on_hover(double x, double y, const std::map<int, SeriesEntry>& 
             lines.append(*delta);
         }
     }
-    const auto& [entry, curve, index] = picks.front();
-    chart_->set_cursor_time(cursor_time.value_or(curve->times[index]));
+    if (place_cursor) {
+        const auto& [entry, curve, index] = picks.front();
+        chart_->set_cursor_time(cursor_time.value_or(curve->times[index]));
+    }
     set_hover_text(lines.join('\n'));
 }
 
-bool MetricPage::show_frame(int frame, const std::map<int, SeriesEntry>& entries) {
+bool MetricPage::frame_readout(int frame, const std::map<int, SeriesEntry>& entries, bool place_cursor) {
     // Every shown line at exactly `frame`: unlike hovering, which snaps to a
     // dip nearby, this is the frame asked for, so that two runs can be
     // compared at one moment.
@@ -1040,7 +1067,7 @@ bool MetricPage::show_frame(int frame, const std::map<int, SeriesEntry>& entries
             lines.append(*delta);
         }
     }
-    if (cursor_time) {
+    if (cursor_time && place_cursor) {
         chart_->bring_into_view(*cursor_time);  // a zoomed graph moves to the frame (issue #16)
         chart_->set_cursor_time(*cursor_time);
     }
@@ -1855,6 +1882,7 @@ void GraphPanel::set_visible(int series_id, bool visible) {
     found->second.visible = visible;
     for (const auto& [key, page] : pages_) {
         page->set_visible(series_id, visible);
+        page->refresh_readout(entries_);
     }
 }
 
