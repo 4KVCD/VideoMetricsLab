@@ -197,6 +197,45 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
     EXPECT_FALSE(std::filesystem::exists(saved));
 }
 
+// Issue #133: the tab took each metric's newest saved score without the
+// checks the Videos tab's lookup makes of any: one it refuses and scores
+// again (here FFmpeg's XPSNR of a pair compared at 10 bits) was shown,
+// opened and exported as valid. It is marked, and left out.
+TEST(SavedResultsPanel, ScoresTheVideosTabRefusesAreMarkedAndLeftOut) {
+    const test::Folder folder;
+    std::ofstream(folder / "s.mkv") << "s";
+    std::ofstream(folder / "t.mkv") << "t";
+    Settings settings;
+    settings.cache_dir = (folder / "cache").string();
+    ComparisonResult result;
+    result.source = folder / "s.mkv";
+    result.distorted = folder / "t.mkv";
+    result.source_info.pix_fmt = "yuv420p10le";
+    result.distorted_info.pix_fmt = "yuv420p10le";
+    result.fps = 24.0;
+    result.metric_results.add(frame_metric("vmaf", {95.0F, 60.0F, 95.0F}));
+    result.metric_results.add(frame_metric("xpsnr", {40.0F, 30.0F, 40.0F}));
+    const AnalysisRequest request =
+        analysis_request(VmafOptions{}, {"vmaf", "xpsnr"}, {}, CvvdpSettings{}, VideoInfo{}, VideoInfo{});
+    store_result(folder / "cache", result.source, result.distorted, request.recipe, result, "t", request.metrics);
+
+    const Dialogs dialogs = standard_dialogs(nullptr);
+    SavedResultsPanel panel(settings, dialogs);
+    panel.show_list(list_saved_comparisons(folder / "cache"));
+    ASSERT_EQ(panel.table()->rowCount(), 1);
+    ASSERT_TRUE(panel.table()->item(0, 3)->text().contains("XPSNR"));  // saved
+    panel.table()->selectRow(0);
+    int marked = 0;
+    for (const QLabel* label : panel.findChildren<QLabel*>()) {
+        marked += label->text().contains("out of date") ? 1 : 0;
+    }
+    EXPECT_EQ(marked, 1);
+    const std::vector<LoadedSavedResult> read = panel.selected_results();
+    ASSERT_EQ(read.size(), 1U);
+    EXPECT_TRUE(read[0].result->metric_results.frame("vmaf"));
+    EXPECT_FALSE(read[0].result->metric_results.frame("xpsnr"));
+}
+
 // Issue #133: Delete kept pointers into the list across its question, whose
 // event loop a listing finishing in the meantime replaces it in: the folders
 // deleted were read from freed memory (a crash, or the wrong folder).

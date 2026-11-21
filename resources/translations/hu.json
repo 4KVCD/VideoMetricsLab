@@ -1162,6 +1162,7 @@
   "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "A szabályok, amelyek alapján a gyenge szakaszok meghatározhatók: nem a pontszámokkal együtt vannak mentve, hanem most kerülnek alkalmazásra rajtuk.",
   "a display of its own": "saját kijelző",
   "can't be read": "nem olvasható",
+  "out of date: scored again when compared": "elavult: összehasonlításkor újra kiszámítódik",
   "{name} (saved)": "{name} (mentett)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",

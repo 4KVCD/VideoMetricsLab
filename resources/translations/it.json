@@ -1162,6 +1162,7 @@
   "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "Le regole con cui si trovano i segmenti deboli: non sono salvate con i punteggi, ma applicate ora a questi.",
   "a display of its own": "un display tutto suo",
   "can't be read": "illeggibile",
+  "out of date: scored again when compared": "obsoleto: ricalcolato al confronto",
   "{name} (saved)": "{name} (salvato)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",

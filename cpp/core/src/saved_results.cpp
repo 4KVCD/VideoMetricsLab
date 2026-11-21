@@ -102,9 +102,9 @@ std::optional<std::pair<ComparisonResult, std::string>> load_saved_comparison(
             }
         }
         for (const std::filesystem::path& file : files) {
-            if (auto score = read_saved_score(file)) {
+            if (auto score = read_saved_score(file); score && !score->outdated) {
                 std::visit([&loaded](auto&& metric) { loaded->first.metric_results.add(std::move(metric)); },
-                           std::move(*score));
+                           std::move(score->metric));
                 break;
             }
         }

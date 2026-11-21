@@ -49,7 +49,8 @@ struct SavedComparison {
 std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path& base);
 
 // The comparison's result and label with one score per metric: the file
-// `chosen` gives for it, else its newest. A file that cannot be read is
+// `chosen` gives for it, else its newest. A file that cannot be read, or
+// whose score the Videos tab refuses (read_saved_score's `outdated`), is
 // left out (the next newest of its metric stands in). Nothing when the
 // context cannot be read.
 std::optional<std::pair<ComparisonResult, std::string>> load_saved_comparison(

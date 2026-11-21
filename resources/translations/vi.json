@@ -1162,6 +1162,7 @@
   "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "Các quy tắc dùng để tìm đoạn yếu: chúng không được lưu cùng điểm mà được áp dụng lên điểm ngay bây giờ.",
   "a display of its own": "màn hình riêng",
   "can't be read": "không đọc được",
+  "out of date: scored again when compared": "đã lỗi thời: được tính lại khi so sánh",
   "{name} (saved)": "{name} (đã lưu)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",

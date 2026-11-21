@@ -16,6 +16,7 @@
 #include <QMenu>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QStandardItemModel>
 #include <QStyle>
 #include <QTableWidget>
 #include <QVBoxLayout>
@@ -310,17 +311,19 @@ void SavedResultsPanel::show_details() {
     details_->setTitle(app::tr("Saved scores of {name}", {{"name", qt_text(saved.label)}}));
     for (const std::string& key : saved.keys()) {
         auto* combo = new QComboBox;
+        int first_usable = -1;  // the score used unless another is picked
         for (const SavedScoreFile& file : saved.scores) {
             if (file.key != key) {
                 continue;
             }
+            bool usable = true;
             // The score, as Metric Graphs' table shows it, then how it was
             // made, as its file records it.
             QStringList made{time_text(file.saved)};
             if (auto score = read_saved_score(file.file)) {
-                const MetricProvenance& provenance =
-                    std::visit([](const auto& metric) -> const MetricProvenance& { return metric.provenance; }, *score);
-                made.prepend(score_text(key, *score));
+                const MetricProvenance& provenance = std::visit(
+                    [](const auto& metric) -> const MetricProvenance& { return metric.provenance; }, score->metric);
+                made.prepend(score_text(key, score->metric));
                 made.append(provenance.compute_backend == "gpu" ? QStringLiteral("GPU") : QStringLiteral("CPU"));
                 made.append(qt_text(provenance.implementation + " " + provenance.implementation_version).trimmed());
                 if (const auto model = provenance.parameters.find("model"); model != provenance.parameters.end()) {
@@ -328,21 +331,37 @@ void SavedResultsPanel::show_details() {
                     // path ("path=C:/.../vmaf_v1.0.16_3d0h.json").
                     made.append(qt_text(model_shown(qt_text(model->second).remove(QLatin1Char('"')).toStdString())));
                 }
-                if (const auto* cvvdp = std::get_if<SequenceMetricResult>(&*score)) {
+                if (const auto* cvvdp = std::get_if<SequenceMetricResult>(&score->metric)) {
                     if (const std::optional<CvvdpSettings> display = cvvdp_display_of(*cvvdp)) {
                         const std::optional<CvvdpPreset> preset =
                             matching_cvvdp_preset(*display, settings_.cvvdp_presets_json, "");
                         made.append(preset ? app::tr(qt_text(preset->name)) : app::tr("a display of its own"));
                     }
                 }
+                if (score->outdated) {
+                    // As the Videos tab has it: not used, but scored again.
+                    made.append(app::tr("out of date: scored again when compared"));
+                    usable = false;
+                }
             } else {
                 made.append(app::tr("can't be read"));
+                usable = false;
             }
             combo->addItem(made.join(QStringLiteral(" · ")), text_of(file.file));
+            if (!usable) {
+                if (auto* items = qobject_cast<QStandardItemModel*>(combo->model())) {
+                    items->item(combo->count() - 1)->setEnabled(false);
+                }
+            } else if (first_usable < 0) {
+                first_usable = combo->count() - 1;
+            }
         }
+        combo->setCurrentIndex(std::max(first_usable, 0));
         if (const auto picked = picked_.find(saved.folder); picked != picked_.end()) {
             if (const auto file = picked->second.find(key); file != picked->second.end()) {
-                combo->setCurrentIndex(std::max(combo->findData(text_of(file->second)), 0));
+                if (const int index = combo->findData(text_of(file->second)); index >= 0) {
+                    combo->setCurrentIndex(index);
+                }
             }
         }
         if (combo->count() == 1) {

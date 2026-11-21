@@ -1162,6 +1162,7 @@
   "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "القواعد التي تُحدَّد بها المقاطع الضعيفة: لا تُحفظ مع الدرجات، بل تُطبَّق عليها الآن.",
   "a display of its own": "شاشة خاصة به",
   "can't be read": "تتعذر قراءته",
+  "out of date: scored again when compared": "قديمة: يُعاد حسابها عند المقارنة",
   "{name} (saved)": "{name} (محفوظ)",
   "{size:.0f} KB": "{size:.0f} كيلوبايت",
   "{size:.1f} MB": "{size:.1f} ميغابايت",

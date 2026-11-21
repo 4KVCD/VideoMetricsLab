@@ -715,7 +715,10 @@ for the whole video, as Metric Graphs' table shows it, then when and how it
 was made (GPU or CPU, the program, the VMAF model by its version, the CVVDP
 display).
 Where a metric has more than one (CVVDP for two displays; SSIMULACRA2 on the
-GPU and the CPU), the newest is used unless another is picked there.
+GPU and the CPU), the newest is used unless another is picked there. A score
+the Videos tab would not use, and would calculate again (one made by an
+older version that read these videos wrongly, say), is marked "out of date"
+and is not used: not opened, exported or offered to pick.
 
 ### Exporting graphs
 

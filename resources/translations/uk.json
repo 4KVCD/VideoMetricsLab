@@ -1162,6 +1162,7 @@
   "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "Правила, за якими знаходяться слабкі ділянки: вони не зберігаються разом з оцінками, а застосовуються до них зараз.",
   "a display of its own": "власний дисплей",
   "can't be read": "не читається",
+  "out of date: scored again when compared": "застаріла: перераховується під час порівняння",
   "{name} (saved)": "{name} (збережено)",
   "{size:.0f} KB": "{size:.0f} КБ",
   "{size:.1f} MB": "{size:.1f} МБ",
