@@ -17,6 +17,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
 #include "vml/results_summary.h"
+#include "vml/temp_files.h"
 #include "vml/weak_frames.h"
 
 namespace vml::app {
@@ -172,6 +173,22 @@ QString export_action_text(ExportScope scope, const std::vector<std::string>& it
         return app::tr("Export the selected videos' {contents}...", {{"contents", contents}});
     }
     return contents;
+}
+
+std::vector<std::filesystem::path> write_loose_export(const std::filesystem::path& folder,
+                                                      const std::vector<BundleFile>& files) {
+    std::vector<std::string> names;
+    for (const BundleFile& file : files) {
+        names.push_back(file.first);
+    }
+    // Looked at as it is written: the writes run one after another, so an
+    // export written before this one is on disk by now.
+    std::set<std::filesystem::path> reserved;
+    const std::vector<std::filesystem::path> paths = unique_output_names(folder, names, reserved);
+    for (std::size_t i = 0; i < files.size(); ++i) {
+        write_file_whole(paths[i], [&bytes = files[i].second](std::ostream& out) { out << bytes; });
+    }
+    return paths;
 }
 
 std::string text_lines(const std::string& text) {

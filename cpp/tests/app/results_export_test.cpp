@@ -2,11 +2,17 @@
 // the entry of the video they were scored for, not as videos of their own.
 #include <gtest/gtest.h>
 
+#include <QTemporaryDir>
+
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <string>
 
 #include "results_export.h"
 #include "vml/cvvdp.h"
+#include "vml/platform/system.h"
 #include "vml/segment_profiles.h"
 #include "vml/settings.h"
 #include "vml/weak_frames.h"
@@ -145,6 +151,30 @@ TEST(ResultsExport, FilesAreWrittenInTheFormatsTicked) {
     settings.export_formats.clear();
     EXPECT_EQ(names(one, false), Names{});
     EXPECT_EQ(exported_items(settings), Names{"graphs"});
+}
+
+// Issue #131: the after-run export names its files after the test video's
+// file name, which another test video's may share (x265\movie.mkv and
+// svt\movie.mkv, or clip.mkv and clip.mp4): the second replaced the first's
+// files. Now an export replaces none, and its files are numbered alike.
+TEST(ResultsExport, AnExportIntoAFolderReplacesNoneOfAnothersFiles) {
+    QTemporaryDir temporary;
+    ASSERT_TRUE(temporary.isValid());
+    const std::filesystem::path folder = platform::path_from_text(temporary.path().toStdString());
+    const auto read = [](const std::filesystem::path& path) {
+        std::ifstream file(path, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    };
+    const std::vector<BundleFile> first{{"movie - results.json", "x265"}, {"movie - VMAF.png", "x265 graph"}};
+    EXPECT_EQ(write_loose_export(folder, first),
+              (std::vector<std::filesystem::path>{folder / "movie - results.json", folder / "movie - VMAF.png"}));
+    // Only one of the second's names is taken: both are numbered.
+    const std::vector<BundleFile> second{{"movie - results.json", "svt"}, {"movie - frames.csv", "svt frames"}};
+    EXPECT_EQ(write_loose_export(folder, second),
+              (std::vector<std::filesystem::path>{folder / "movie - results_2.json", folder / "movie - frames_2.csv"}));
+    EXPECT_EQ(read(folder / "movie - results.json"), "x265");
+    EXPECT_EQ(read(folder / "movie - results_2.json"), "svt");
+    EXPECT_FALSE(std::filesystem::exists(folder / "movie - frames.csv"));
 }
 
 }  // namespace

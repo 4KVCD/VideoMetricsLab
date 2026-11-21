@@ -525,8 +525,12 @@ private:
         std::vector<BundleFile> extra;
         bool together = true;
         bool automatic = false;
-        // Each file written into `destination`, a folder, rather than a .zip.
+        // Each file written into `destination`, a folder, rather than a .zip,
+        // replacing none there (write_loose_export).
         bool loose = false;
+        // The .zip replaces no file at `destination`: it takes a free name
+        // beside it (Settings' after-run export, named after the video).
+        bool numbered = false;
     };
     // The scored test videos of the reference the Videos tab compares with,
     // in its order; a row's, when it is one of them.
