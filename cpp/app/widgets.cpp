@@ -13,6 +13,8 @@
 #include <QDropEvent>
 #include <QFileInfo>
 #include <QFrame>
+#include <QIcon>
+#include <QImage>
 #include <QItemSelectionModel>
 #include <QKeyEvent>
 #include <QMimeData>
@@ -647,6 +649,50 @@ void ScrollingPage::show_focus(QWidget* /*old*/, QWidget* now) {
         const QPoint centre = now->mapTo(page, now->rect().center());
         ensureVisible(centre.x(), centre.y(), now->width() / 2, now->height() / 2);
     }
+}
+
+void MarkedCellDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const {
+    // A colour or a brush, as the table was given it; a clear one is none.
+    const QVariant background = index.data(Qt::BackgroundRole);
+    const QBrush brush = background.value<QBrush>();
+    const QColor mark = background.typeId() == QMetaType::QColor ? background.value<QColor>()
+                        : brush.style() == Qt::NoBrush             ? QColor(0, 0, 0, 0)
+                                                                   : brush.color();
+    if (!(option.state & QStyle::State_Selected) || mark.alpha() == 0) {
+        QStyledItemDelegate::paint(painter, option, index);
+        return;
+    }
+    // The cell as unselected (its own background and text colours), its mark
+    // untouched, then the selection's colour as a band along its top and
+    // bottom edges, which runs on into the row's other selected cells. A tint
+    // over the whole cell turned green grey and red purple.
+    QStyleOptionViewItem unselected(option);
+    unselected.state &= ~QStyle::State_Selected;
+    QStyledItemDelegate::paint(painter, unselected, index);
+    // The selection's colour as the row's other selected cells show it: a
+    // blank selected item painted by the table's own style over its
+    // background, as the view paints a cell (the row's panel, then the
+    // item), a few pixels of it. VML Modern's style sheet lays a
+    // translucent accent tint in each, which over the mark itself would
+    // blend with the green or red.
+    QStyleOptionViewItem blank(option);
+    blank.text.clear();
+    blank.icon = QIcon();
+    blank.features = QStyleOptionViewItem::None;
+    blank.backgroundBrush = QBrush();
+    blank.rect = QRect(0, 0, 8, 8);
+    QImage probe(8, 8, QImage::Format_ARGB32_Premultiplied);
+    probe.fill(option.palette.color(QPalette::Active, QPalette::Base));
+    {
+        QPainter probe_painter(&probe);
+        const QStyle* style = option.widget != nullptr ? option.widget->style() : QApplication::style();
+        style->drawPrimitive(QStyle::PE_PanelItemViewRow, &blank, &probe_painter, option.widget);
+        style->drawControl(QStyle::CE_ItemViewItem, &blank, &probe_painter, option.widget);
+    }
+    const QColor band = probe.pixelColor(4, 4);
+    const int thick = std::max(2, option.rect.height() / 8);
+    painter->fillRect(QRect(option.rect.left(), option.rect.top(), option.rect.width(), thick), band);
+    painter->fillRect(QRect(option.rect.left(), option.rect.bottom() - thick + 1, option.rect.width(), thick), band);
 }
 
 QFont symbol_font(const QFont& font) {

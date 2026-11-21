@@ -89,7 +89,8 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
    [Exporting weak segments](#exporting-weak-segments)).
 
 **Highlight best/worst results**, under the video table, colours each metric's
-best score green and its worst red among the test videos that have one.
+best score green and its worst red among the test videos that have one; a
+selected row keeps them, with the selection drawn along their edges.
 
 **Also score CVVDP on...**, under the Options panel's display presets, scores
 CVVDP on further displays in the same run: pick a display, and each selected

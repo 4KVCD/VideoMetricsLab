@@ -12,6 +12,7 @@
 #include <QScrollArea>
 #include <QSize>
 #include <QStringList>
+#include <QStyledItemDelegate>
 #include <QTabWidget>
 #include <QTableWidget>
 
@@ -55,6 +56,20 @@ private:
     QRect indicator_rect(const QRect& rect) const;
 
     QMap<int, bool> checked_;
+};
+
+// Draws a selected cell that has a background of its own (the Videos tab's
+// best and worst scores, green and red) in that background, with the
+// selection as bands along its edges; any other cell as Qt does. VML
+// Modern's style sheet gives tables a selection-background-color, which a
+// style sheet paints over the cell's own background: with Highlight
+// best/worst results ticked, the selected video's best and worst could not
+// be seen. In VML Classic the mark showed with no sign of the selection.
+class MarkedCellDelegate : public QStyledItemDelegate {
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override;
 };
 
 // A QTableWidget where one column (`fill_column`) always grows to fill the

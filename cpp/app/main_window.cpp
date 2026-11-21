@@ -821,6 +821,8 @@ void MainWindow::build_test_table() {
             [this](const QPoint& position) { show_metrics_menu(metric_header_->mapToGlobal(position)); });
     apply_metric_visibility();
 
+    // A selected row's best and worst scores keep their green and red (Highlight best/worst results).
+    distorted_table_->setItemDelegate(new MarkedCellDelegate(distorted_table_));
     distorted_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     distorted_table_->setSelectionMode(QAbstractItemView::ExtendedSelection);
     distorted_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
