@@ -74,15 +74,27 @@ typedef struct VmafPicture {
     unsigned w[3], h[3];
     ptrdiff_t stride[3];
     void *data[3];
-    VmafColor color;
     VmafRef *ref;
     void *priv;
+    VmafColor color;
 } VmafPicture;
 
 int vmaf_picture_alloc(VmafPicture *pic, enum VmafPixelFormat pix_fmt,
                        unsigned bpc, unsigned w, unsigned h);
 
 int vmaf_picture_unref(VmafPicture *pic);
+
+typedef struct VmafPictureWrapped {
+    enum VmafPixelFormat pix_fmt;
+    unsigned bpc;
+    unsigned w, h;
+    void *data[3];
+    ptrdiff_t stride[3];
+    void *cookie;
+    int (*release_picture)(VmafPicture *pic, void *cookie);
+} VmafPictureWrapped;
+
+int vmaf_picture_wrap(VmafPicture *pic, VmafPictureWrapped pic_wrapped);
 
 enum VmafResampleFilter {
     VMAF_RESAMPLE_DEFAULT,
