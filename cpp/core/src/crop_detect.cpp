@@ -28,6 +28,7 @@
 #include "vml/app_log.h"
 #include "vml/append.h"
 #include "vml/black_bars_rule.h"
+#include "vml/colour.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
@@ -378,10 +379,11 @@ std::vector<double> preview_times(double duration) {
 // What comes before the luma is taken: hwdownload where the frames are
 // decoded on the GPU, which gives the surface's own format (`download_format`);
 // then the scale of a video whose size changes (size_changes.h), as the run
-// scales its frames before it crops them.
+// scales its frames before it crops them; and whether the frames are RGB.
 struct BeforeSampling {
     std::string download_format;
     std::optional<std::string> scale;
+    bool rgb = false;
 
     // The filters for frames decoded with `hwaccel`, each followed by a
     // comma; nothing for a video decoded in software at one size.
@@ -391,10 +393,12 @@ struct BeforeSampling {
 
     // Those filters and the luma alone at 16 bits (black_bars_rule.h's
     // Y4mLumaReader: the high byte is the luma at 8 bits, whatever its own
-    // depth). extractplanes leaves the samples as they are; FFmpeg converts
-    // a format it cannot take (RGB) to YUV before it.
+    // depth). extractplanes leaves YUV's samples as they are, and has no luma
+    // to take from RGB, which is first made YUV as FFmpeg makes it
+    // (limited range: black is 16 at 8 bits, as in the YUV videos the rule's
+    // thresholds are for).
     std::string luma(const std::optional<std::string>& hwaccel) const {
-        return filters(hwaccel) + "extractplanes=y,format=gray16le";
+        return filters(hwaccel) + (rgb ? "format=yuv444p16le," : "") + "extractplanes=y,format=gray16le";
     }
 };
 
@@ -1029,7 +1033,8 @@ CropBox detect_uncached(BarFindings& findings, const std::string& ffmpeg, const 
                         const CancelToken& cancel, const std::optional<std::string>& gpu_decoder,
                         const std::string& scale_algorithm) {
     const std::string path = platform::path_text(info.path);
-    const BeforeSampling before{hw_native_format(info.pix_fmt), size_change_scale(info, scale_algorithm)};
+    const BeforeSampling before{hw_native_format(info.pix_fmt), size_change_scale(info, scale_algorithm),
+                                is_rgb_format(info.pix_fmt)};
     const std::vector<double> times = preview_times(sampled_duration);
     std::optional<std::string> hwaccel = preview_decoder(gpu_decoder, info);  // dropped for the rest once it fails
     cancel.throw_if_cancelled();
@@ -1383,7 +1388,8 @@ std::vector<LumaPicture> content_pictures(const std::string& ffmpeg, const Video
                                           const std::vector<double>& times, const CancelToken& cancel,
                                           const std::optional<std::string>& gpu_decoder,
                                           const std::string& scale_algorithm) {
-    const BeforeSampling before{hw_native_format(info.pix_fmt), size_change_scale(info, scale_algorithm)};
+    const BeforeSampling before{hw_native_format(info.pix_fmt), size_change_scale(info, scale_algorithm),
+                                is_rgb_format(info.pix_fmt)};
     std::optional<std::string> hwaccel = preview_decoder(gpu_decoder, info);
     const bool through_the_app = samples_through_the_app(info);
     const DecoderSlot slot(cancel);
