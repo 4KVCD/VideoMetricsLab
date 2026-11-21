@@ -138,11 +138,16 @@ TEST(FrameRange, ARangeOfMillisecondsIsTheFramesInIt) {
     EXPECT_EQ(compared_frames(ComparedRange{2510, 0, false, true}, 24.0),
               std::pair(61LL, std::optional<long long>()));
     // At 24000/1001 fps, frame 1438 is at 59.9766 s, 1439 at 60.0183 s and
-    // 1440 at 60.06 s: 59.977 to 60.018 s has no frame.
+    // 1440 at 60.06 s, shown as 59.977, 60.018 and 60.060 s (Metric Graphs):
+    // a time names the frame within half a millisecond of it, so 59.977 is
+    // frame 1438 and 60.018 frame 1439, and 59.978 to 60.018 s has no frame.
     const double film = 24000.0 / 1001.0;
     EXPECT_EQ(compared_frames(ComparedRange{60000, 60020, false, true}, film), std::pair(1439LL, std::optional(1440LL)));
     EXPECT_EQ(compared_frames(ComparedRange{59976, 60019, false, true}, film), std::pair(1438LL, std::optional(1440LL)));
-    EXPECT_EQ(compared_frames(ComparedRange{59977, 60018, false, true}, film), std::pair(1439LL, std::optional(1439LL)));
+    EXPECT_EQ(compared_frames(ComparedRange{59977, 60018, false, true}, film), std::pair(1438LL, std::optional(1439LL)));
+    EXPECT_EQ(compared_frames(ComparedRange{59978, 60018, false, true}, film), std::pair(1439LL, std::optional(1439LL)));
+    // At 24 fps frame 100 is at 4.1667 s, shown as 4.167: typed, it is frame 100.
+    EXPECT_EQ(compared_frames(ComparedRange{4167, 0, false, true}, 24.0), std::pair(100LL, std::optional<long long>()));
     // Whole seconds in milliseconds are the seconds' frames.
     for (const double fps : {24.0, film, 25.0, 30000.0 / 1001.0, 50.0, 60000.0 / 1001.0}) {
         EXPECT_EQ(compared_frames(ComparedRange{7000, 93000, false, true}, fps),
@@ -229,7 +234,7 @@ TEST(FrameRange, SwitchingTheRangeUnitKeepsTheRange) {
         }
     }
     // To the end stays to the end; the whole videos stay whole; a unit's own range is itself.
-    EXPECT_EQ(range_in_unit(ComparedRange{100, 0, true}, false, 24.0), (ComparedRange{4166, 0, false, true}));
+    EXPECT_EQ(range_in_unit(ComparedRange{100, 0, true}, false, 24.0), (ComparedRange{4167, 0, false, true}));
     EXPECT_EQ(range_in_unit(ComparedRange{}, true, film), (ComparedRange{0, 0, true}));
     EXPECT_EQ(range_in_unit(ComparedRange{0, 0, true}, false, film), ComparedRange{});
     EXPECT_EQ(range_in_unit(ComparedRange{2500, 4000, false, true}, false, 0.0),

@@ -93,8 +93,8 @@ std::optional<std::pair<long long, long long>> scored_seconds(const MetricProven
 std::optional<ComparedRange> scored_frames(const MetricProvenance& provenance, double fps);
 
 // `range` in frames (`frames`) or in time, at the reference's `fps`: the same
-// frames. A time is a frame's to the millisecond, rounded so that it is that
-// frame's (in whole seconds where both ends are). The whole videos stay the
+// frames. A time is a frame's to the nearest millisecond, as Metric Graphs
+// shows it (in whole seconds where both ends are). The whole videos stay the
 // whole videos, and a range already in the unit is itself; nothing where the
 // frame rate is not known.
 std::optional<ComparedRange> range_in_unit(const ComparedRange& range, bool frames, double fps);

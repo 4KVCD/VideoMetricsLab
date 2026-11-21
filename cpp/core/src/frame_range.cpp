@@ -47,22 +47,30 @@ long long end_second_of(long long frames, double fps) {
 
 namespace {
 
-// The first frame shown at `milliseconds` or after: the first whose time,
-// frame i's i / fps, is not before it (as first_frame_of_second for a
-// second's). Counted in whole numbers at the exact rate (24000/1001, which
-// `fps` is the nearest double to): in doubles, a frame exactly at a
-// millisecond (frame 120 at 5.005 s) can come out a hair before it.
+// A frame's time to the millisecond, as Metric Graphs shows it: frame i's
+// i / fps rounded to the nearest (half a millisecond up); and the frames a
+// time typed to the millisecond names, those within half a millisecond of
+// it, as Metric Graphs reads it. At under 1000 fps a millisecond names one
+// frame at most, so a frame's time typed back is the frame. Counted in
+// whole numbers at the exact rate (24000/1001, which `fps` is the nearest
+// double to): in doubles, a frame exactly at a millisecond (frame 120 at
+// 5.005 s) can come out a hair before it.
+Rational exact_rate(double fps) {
+    return fps > 0 ? limit_denominator(fps) : Rational{0, 1};
+}
+
+// The first frame shown at `milliseconds` or after: the first whose time
+// is not before it, to the half millisecond (as first_frame_of_second for a
+// second's, which is CVVDP's and exact).
 long long first_frame_at(long long milliseconds, double fps) {
-    if (milliseconds <= 0 || fps <= 0) {
+    const Rational rate = exact_rate(fps);
+    if (milliseconds <= 0 || rate.numerator <= 0 || rate.denominator <= 0) {
         return 0;
     }
-    const Rational rate = limit_denominator(fps);
-    if (rate.numerator <= 0 || rate.denominator <= 0) {
-        return 0;
-    }
-    // The least i with i * 1000 * denominator >= milliseconds * numerator.
-    const long long per_frame = 1000 * rate.denominator;
-    return (milliseconds * rate.numerator + per_frame - 1) / per_frame;
+    // The least i with i / fps >= milliseconds - 0.5 ms:
+    // i * 2000 * denominator >= (2 * milliseconds - 1) * numerator.
+    const long long per_frame = 2000 * rate.denominator;
+    return ((2 * milliseconds - 1) * rate.numerator + per_frame - 1) / per_frame;
 }
 
 }  // namespace
@@ -200,22 +208,16 @@ std::optional<std::pair<long long, long long>> scored_seconds(const MetricProven
 
 namespace {
 
-// The time of `frame` to the millisecond, as first_frame_at reads it back:
-// the frame itself. The nearest millisecond where that is the frame's (30.030
-// s for frame 720 at 24000/1001), else the one before (4.166 s for frame 100
-// at 24 fps, whose 4.167 s would be frame 101's).
+// The time of `frame` to the millisecond, as Metric Graphs shows it (30.030
+// s for frame 720 at 24000/1001, 4.167 s for frame 100 at 24 fps), which
+// first_frame_at reads back as the frame itself.
 long long millisecond_of_frame(long long frame, double fps) {
-    if (frame <= 0) {
+    const Rational rate = exact_rate(fps);
+    if (frame <= 0 || rate.numerator <= 0) {
         return 0;
     }
-    auto ms = std::llround(static_cast<double>(frame) * 1000.0 / fps);
-    while (ms > 0 && first_frame_at(ms, fps) > frame) {
-        --ms;
-    }
-    while (first_frame_at(ms, fps) < frame) {
-        ++ms;
-    }
-    return ms;
+    // frame * 1000 * denominator / numerator, rounded half up.
+    return (frame * 2000 * rate.denominator + rate.numerator) / (2 * rate.numerator);
 }
 
 // A range of time in milliseconds, either way it is held.
