@@ -209,19 +209,17 @@ void MainWindow::end_stream_status() {
 }
 
 void MainWindow::use_stream_fingerprinter(const std::string& ffmpeg, const std::string& ffprobe) {
+    stream_reader_ = stream_fingerprinter_using(ffmpeg, ffprobe);
     sync_remux_setting();
-    StreamFingerprinter read = stream_fingerprinter_using(ffmpeg, ffprobe);
-    set_stream_fingerprinter([on = recognise_remuxes_, read = std::move(read)](
-                                 const std::filesystem::path& file, int packets,
-                                 const CancelToken& cancel) -> std::optional<std::string> {
-        if (!on->load()) {
-            return std::nullopt;  // Settings: test videos are known by their files only
-        }
-        return read(file, packets, cancel);
-    });
 }
 
-void MainWindow::sync_remux_setting() { recognise_remuxes_->store(settings_.recognise_test_remuxes); }
+void MainWindow::sync_remux_setting() {
+    recognise_remuxes_->store(settings_.recognise_test_remuxes);
+    // Off: no fingerprinter, so test videos are known by their files only,
+    // and nothing is remembered of a file looked up meanwhile (a reader
+    // that answered nothing would have its nothing kept until a restart).
+    set_stream_fingerprinter(settings_.recognise_test_remuxes ? stream_reader_ : StreamFingerprinter());
+}
 
 void MainWindow::reload_saved_scores(const std::vector<int>& rows) {
     // Looks the rows' saved scores up again after a change to what they ask

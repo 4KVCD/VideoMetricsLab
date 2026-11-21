@@ -1261,6 +1261,8 @@ thread_local ThreadStreamReads lookup_reads;
 
 // The stream fingerprint of `file`'s first `packets` packets (0: all), read
 // once (a read cancelled is not kept). Not `read`: only one read before.
+// Nothing without a stream fingerprinter (the setting off), not even one
+// read before, and nothing kept for when one is set.
 std::optional<std::string> stream_of(const std::filesystem::path& file, int packets, bool read = true,
                                      const CancelToken& cancel = lookup_reads.cancel.value_or(CancelToken())) {
     const std::pair<std::string, int> key{file_identity(file), packets};
@@ -1268,12 +1270,15 @@ std::optional<std::string> stream_of(const std::filesystem::path& file, int pack
     StreamFingerprinter fingerprinter;
     {
         const std::lock_guard lock(known.mutex);
+        fingerprinter = known.stream_fingerprinter;
+        if (!fingerprinter) {
+            return std::nullopt;
+        }
         if (const auto found = known.stream.find(key); found != known.stream.end()) {
             return found->second;
         }
-        fingerprinter = known.stream_fingerprinter;
     }
-    if (!fingerprinter || !read || cancel.cancelled()) {
+    if (!read || cancel.cancelled()) {
         return std::nullopt;
     }
     std::optional<std::string> fingerprint = fingerprinter(file, packets, cancel);

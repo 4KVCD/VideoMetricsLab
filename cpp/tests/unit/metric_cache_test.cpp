@@ -1122,6 +1122,45 @@ TEST(MetricCache, AStreamRecordedInAnotherFormIsReadAgainAndNotMatched) {
     set_stream_fingerprinter(nullptr);
 }
 
+// "Recognize test videos remuxed" off is no stream fingerprinter: a remux is
+// then not matched, even by a stream read while it was on, and a file looked
+// up while it is off is read once it is on again, not left unread until a
+// restart.
+TEST(MetricCache, TestVideosAreReadOnlyWhileRecognisingRemuxesIsOn) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mkv", std::string(5000, 's'));
+    touch(folder / "t.mkv", "A/a|" + std::string(4000, 'k'));
+    touch(folder / "t.mp4", "A/a|" + std::string(4100, 'p'));
+    AnalysisRequest request = request_from(stored);
+    request.recipe.test_rate = 24.0;
+    ComparisonResult result = test::result_from(stored.at("result"));
+    result.source = folder / "s.mkv";
+    result.distorted = folder / "t.mkv";
+    const StreamFingerprinter reader = [](const std::filesystem::path& file, int packets,
+                                          const CancelToken&) -> std::optional<std::string> {
+        std::ifstream in(file, std::ios::binary);
+        std::string stream;
+        std::getline(in, stream, '|');
+        return packets > 0 ? stream.substr(0, stream.find('/')) : stream;
+    };
+    const std::filesystem::path cache = folder / "cache";
+    store_result(cache, folder / "s.mkv", folder / "t.mkv", request.recipe, result, "t", request.metrics);
+    const auto load = [&] {
+        const StreamReads whole(CancelToken(), true);
+        return load_result(cache, folder / "s.mkv", folder / "t.mp4", request.recipe, request.metrics,
+                           request.perceptual_backends)
+            .has_value();
+    };
+    set_stream_fingerprinter(nullptr);  // off
+    EXPECT_FALSE(record_test_stream(cache, folder / "t.mkv"));
+    set_stream_fingerprinter(reader);  // turned on
+    EXPECT_TRUE(record_test_stream(cache, folder / "t.mkv"));
+    EXPECT_TRUE(load());
+    set_stream_fingerprinter(nullptr);  // off again: the remux's stream, read, is not used
+    EXPECT_FALSE(load());
+}
+
 // A stream re-tagged (h264_metadata from BT.601 to BT.709, or muxed into a
 // container that states other tags) is read with another YUV->RGB matrix,
 // which SSIMULACRA2, Butteraugli and CVVDP score: another stream. A range
