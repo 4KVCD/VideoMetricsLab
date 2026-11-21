@@ -18,6 +18,8 @@
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
+#include <QPixmap>
 #include <QPen>
 #include <QResizeEvent>
 #include <QShowEvent>
@@ -31,6 +33,8 @@
 #include <algorithm>
 #include <numeric>
 #include <utility>
+
+#include "i18n.h"
 
 namespace vml::app {
 
@@ -646,6 +650,67 @@ QFont symbol_font(const QFont& font) {
 #else
     return font;
 #endif
+}
+
+namespace {
+
+// The play triangle or the pause bars, `size` pixels square, in `colour`, at
+// the screen's pixel ratio.
+QPixmap media_symbol(bool pause, int size, qreal ratio, const QColor& colour) {
+    QPixmap pixmap(QSize(size, size) * ratio);
+    pixmap.setDevicePixelRatio(ratio);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(colour);
+    const qreal s = size;
+    if (pause) {
+        const qreal bar = s * 0.3;  // two bars, a bar's width apart, as the glyph is drawn
+        painter.drawRoundedRect(QRectF(s * 0.12, 0, bar, s), s * 0.06, s * 0.06);
+        painter.drawRoundedRect(QRectF(s * 0.88 - bar, 0, bar, s), s * 0.06, s * 0.06);
+    } else {
+        QPainterPath triangle;
+        triangle.moveTo(s * 0.1, 0);
+        triangle.lineTo(s * 0.98, s * 0.5);
+        triangle.lineTo(s * 0.1, s);
+        triangle.closeSubpath();
+        painter.drawPath(triangle);
+    }
+    return pixmap;
+}
+
+}  // namespace
+
+PlayPauseButton::PlayPauseButton(QWidget* parent) : QPushButton(parent) { refresh(); }
+
+void PlayPauseButton::set_playing(bool playing) {
+    playing_ = playing;
+    refresh();
+}
+
+void PlayPauseButton::changeEvent(QEvent* event) {
+    QPushButton::changeEvent(event);
+    // The colours come from the palette, which the theme and a style sheet
+    // (a role's text colour) set; and the font sets the size.
+    if (event->type() == QEvent::PaletteChange || event->type() == QEvent::StyleChange ||
+        event->type() == QEvent::FontChange) {
+        refresh();
+    }
+}
+
+void PlayPauseButton::refresh() {
+    setText(playing_ ? app::tr("Pause") : app::tr("Play"));
+    // As tall as a capital letter of the text beside it, filled top to bottom.
+    const int size = std::max(8, fontMetrics().capHeight() + 1);
+    const qreal ratio = devicePixelRatioF();
+    QIcon icon;
+    icon.addPixmap(media_symbol(playing_, size, ratio, palette().color(QPalette::Active, QPalette::ButtonText)),
+                   QIcon::Normal);
+    icon.addPixmap(media_symbol(playing_, size, ratio, palette().color(QPalette::Disabled, QPalette::ButtonText)),
+                   QIcon::Disabled);
+    setIcon(icon);
+    setIconSize(QSize(size, size));
 }
 
 namespace {

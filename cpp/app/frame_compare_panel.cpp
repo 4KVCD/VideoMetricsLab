@@ -520,8 +520,7 @@ void FrameComparePanel::add_view(QVBoxLayout* root) {
 // Play, the audio, the frame and timestamp steps, and the timeline.
 void FrameComparePanel::add_seek_rows(QVBoxLayout* root) {
     auto* seek = new QHBoxLayout;
-    play_button = new QPushButton(app::tr("\xE2\x96\xB6 Play"));
-    play_button->setFont(symbol_font(play_button->font()));
+    play_button = new PlayPauseButton;
     connect(play_button, &QPushButton::clicked, this, [this] { on_play_clicked(); });
     audio_checkbox = new QCheckBox(app::tr("Audio"));
     audio_checkbox->setToolTip(app::tr(
@@ -1014,7 +1013,7 @@ void FrameComparePanel::load_current_video(std::optional<bool> playing) {
     }
     if (!view.load(entry->comparison, position_ms, play, color_settings(), series,
                    source_resolution_combo->currentData().toBool())) {
-        play_button->setText(app::tr("\xE2\x96\xB6 Play"));
+        play_button->set_playing(false);
     } else if (!play && fps > 0 && std::abs(view.position() - position_ms) * fps > 500) {
         // Still on the frame it was left at: another test video of the series
         // goes on from there, while still frames moved on (more than half a
@@ -1078,7 +1077,7 @@ void FrameComparePanel::show_video_position() {
 }
 
 void FrameComparePanel::on_video_playing_changed(bool playing) {
-    play_button->setText(playing ? app::tr("\xE2\x9D\x9A\xE2\x9D\x9A Pause") : app::tr("\xE2\x96\xB6 Play"));
+    play_button->set_playing(playing);
     // Said before the frame line is drawn: drawn first, it would go on
     // saying "Playing" once playback had stopped.
     video_status_ = playing ? QStringLiteral("Playing") : QStringLiteral("Paused");

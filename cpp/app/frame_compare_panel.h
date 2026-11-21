@@ -51,6 +51,7 @@ namespace vml::app {
 
 class ElidedLabel;
 class KeyGuide;
+class PlayPauseButton;
 
 // One video pair to choose from. `scores` are its run's, if it has one:
 // the frames of a pair are worth comparing whether or not anyone has
@@ -289,7 +290,7 @@ public:
     QPushButton* advanced_info_button = nullptr;
     QLabel* showing_label = nullptr;
     FrameView* viewer = nullptr;
-    QPushButton* play_button = nullptr;
+    PlayPauseButton* play_button = nullptr;
     QCheckBox* audio_checkbox = nullptr;
     QPushButton* previous_frame_button = nullptr;
     QSpinBox* frame_spin = nullptr;
