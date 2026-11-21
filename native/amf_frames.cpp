@@ -66,6 +66,7 @@
 #include <string>
 #include <vector>
 
+#include "amd_device.h"
 #include "amf_handover.h"
 #include "d3d11_scale.h"
 #include "gpu_frames.h"
@@ -122,34 +123,6 @@ const wchar_t *amf_codec(int codec) {
 
 std::string result_text(AMF_RESULT result) {
     return "AMF result " + std::to_string(static_cast<int>(result));
-}
-
-// A Direct3D 11 device on the first AMD GPU, for AMF's decoder.
-ID3D11Device *amd_device(std::string &error) {
-    IDXGIFactory1 *factory = nullptr;
-    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void **>(&factory)))) {
-        error = "DirectX could not list the GPUs";
-        return nullptr;
-    }
-    ID3D11Device *device = nullptr;
-    IDXGIAdapter1 *adapter = nullptr;
-    for (UINT index = 0; factory->EnumAdapters1(index, &adapter) != DXGI_ERROR_NOT_FOUND; index++) {
-        DXGI_ADAPTER_DESC1 desc;
-        bool amd = SUCCEEDED(adapter->GetDesc1(&desc)) && desc.VendorId == 0x1002;
-        if (amd) {
-            D3D_FEATURE_LEVEL level;
-            ID3D11DeviceContext *context = nullptr;
-            HRESULT hr = D3D11CreateDevice(adapter, D3D_DRIVER_TYPE_UNKNOWN, nullptr, D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
-                                           nullptr, 0, D3D11_SDK_VERSION, &device, &level, &context);
-            if (context) context->Release();
-            if (FAILED(hr)) device = nullptr;
-        }
-        adapter->Release();
-        if (device) break;
-    }
-    factory->Release();
-    if (!device) error = "no AMD GPU with a Direct3D 11 video device";
-    return device;
 }
 
 // Each step of a decoder's shutdown, appended to the file VML_AMF_TRACE
@@ -233,10 +206,11 @@ bool decodes(amf::AMFComponent *decoder, int codec, int bit_depth, int width, in
     return format && size;
 }
 
-// AMF's decoder for `codec` at this format and size on the AMD GPU, or the reason there is none.
-bool open_session(int codec, int bit_depth, int width, int height, const std::vector<unsigned char> &extradata,
-                  bool read_on_cpu, Session &s, std::string &error) {
-    s.device = amd_device(error);
+// AMF's decoder for `codec` at this format and size on the AMD GPU DirectX numbers `adapter` (amd_device.h), or
+// the reason there is none.
+bool open_session(int adapter, int codec, int bit_depth, int width, int height,
+                  const std::vector<unsigned char> &extradata, bool read_on_cpu, Session &s, std::string &error) {
+    s.device = amd_video_device(adapter, error);
     if (!s.device) return false;
     AMF_RESULT result = g_factory->CreateContext(&s.context);
     if (result == AMF_OK) result = s.context->InitDX11(s.device, amf::AMF_DX11_0);
@@ -1003,7 +977,7 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
     }
     d->handing_over = params->handover != 0;
     std::string text;
-    if (!open_session(params->codec, params->bit_depth, params->width, params->height, d->extradata,
+    if (!open_session(params->device, params->codec, params->bit_depth, params->width, params->height, d->extradata,
                       !d->buffered && !d->handing_over, d->session, text)
         || (d->handing_over && !start_handover(d, text))) {
         copy_text(error, error_size, text);
@@ -1274,7 +1248,7 @@ NVF_API int nvf_scale_test(int vendor, const Params *params, const unsigned char
 }
 
 // Whether AMD's GPU decoder decodes `codec` 4:2:0 at `bit_depth` and this size.
-NVF_API int nvf_supports(int, int codec, int bit_depth, int width, int height, char *error, int error_size) {
+NVF_API int nvf_supports(int device, int codec, int bit_depth, int width, int height, char *error, int error_size) {
     if (!load_amf()) {
         copy_text(error, error_size, g_amf_error);
         return 0;
@@ -1285,7 +1259,7 @@ NVF_API int nvf_supports(int, int codec, int bit_depth, int width, int height, c
     }
     Session session;
     std::string text;
-    bool ok = open_session(codec, bit_depth, width, height, {}, true, session, text);
+    bool ok = open_session(device, codec, bit_depth, width, height, {}, true, session, text);
     session.close();
     if (!ok) copy_text(error, error_size, text);
     return ok ? 1 : 0;

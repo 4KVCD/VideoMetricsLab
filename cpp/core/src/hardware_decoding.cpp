@@ -605,6 +605,8 @@ std::vector<std::string> hwaccel_args(const std::optional<std::string>& hwaccel)
 
 void use_d3d11va_adapter(std::optional<unsigned> adapter) { d3d11va_device = adapter; }
 
+std::optional<unsigned> d3d11va_adapter_used() { return d3d11va_device; }
+
 std::vector<std::string> hwaccel_device_args(const std::string& hwaccel) {
     if (hwaccel != "d3d11va" || !d3d11va_device) {
         return {};

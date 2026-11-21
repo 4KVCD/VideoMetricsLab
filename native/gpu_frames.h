@@ -40,7 +40,8 @@ enum Codec {
 };
 
 struct Params {
-    int device;          // GPU: CUDA device ordinal (NVIDIA); unused elsewhere
+    int device;          // GPU: CUDA device ordinal (NVIDIA); DirectX's adapter number (AMD: amd_device.h,
+                         // -1 for the first AMD GPU); unused elsewhere
     int codec;           // Codec
     int bit_depth;       // 8 or 10: what the stream must have
     int width, height;   // the displayed size the stream must have

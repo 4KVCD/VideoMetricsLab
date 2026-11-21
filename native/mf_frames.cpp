@@ -39,6 +39,7 @@
 #include <thread>
 #include <vector>
 
+#include "amd_device.h"
 #include "amf_handover.h"
 #include "gpu_frames.h"
 
@@ -76,33 +77,6 @@ std::string hr_text(const char *what, HRESULT hr) {
 template <class T> void release(T *&p) {
     if (p) p->Release();
     p = nullptr;
-}
-
-// A Direct3D 11 video device on the first AMD GPU (amf_frames.cpp's).
-ID3D11Device *video_device(std::string &error) {
-    IDXGIFactory1 *factory = nullptr;
-    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void **>(&factory)))) {
-        error = "DirectX could not list the GPUs";
-        return nullptr;
-    }
-    ID3D11Device *device = nullptr;
-    IDXGIAdapter1 *adapter = nullptr;
-    for (UINT index = 0; factory->EnumAdapters1(index, &adapter) != DXGI_ERROR_NOT_FOUND; index++) {
-        DXGI_ADAPTER_DESC1 desc;
-        if (SUCCEEDED(adapter->GetDesc1(&desc)) && desc.VendorId == 0x1002) {
-            D3D_FEATURE_LEVEL level;
-            ID3D11DeviceContext *context = nullptr;
-            HRESULT hr = D3D11CreateDevice(adapter, D3D_DRIVER_TYPE_UNKNOWN, nullptr, D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
-                                           nullptr, 0, D3D11_SDK_VERSION, &device, &level, &context);
-            if (context) context->Release();
-            if (FAILED(hr)) device = nullptr;
-        }
-        adapter->Release();
-        if (device) break;
-    }
-    factory->Release();
-    if (!device) error = "no AMD GPU with a Direct3D 11 video device";
-    return device;
 }
 
 struct Ready {
@@ -743,7 +717,7 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
     d->info.chroma_format = 1;
     d->info.display_right = params->width;
     d->info.display_bottom = params->height;
-    d->device = video_device(text);
+    d->device = amd_video_device(params->device, text);
     bool ok = d->device != nullptr;
     if (ok) {
         d->device->GetImmediateContext(&d->immediate);

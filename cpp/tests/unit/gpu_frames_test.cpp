@@ -121,6 +121,23 @@ TEST(GpuFrames, OnlyTheSoftwareDecoderLendsThePicturesItWouldOnlyCopy) {
     EXPECT_FALSE(can_lend_planes(eight, software_decoder));
 }
 
+// AMD's decoders (AMF, and Windows' own) decode on the adapter D3D11VA does
+// (the GPU chosen where it is an AMD one): given none, they would open the
+// first AMD GPU DirectX lists, which on a PC with two may be the one the
+// choice keeps free. The others keep the GPU they are given (NVIDIA's CUDA
+// device).
+TEST(GpuFrames, AmdsDecodersDecodeOnTheAdapterD3d11vaDoes) {
+    use_d3d11va_adapter(2);
+    const int amf = decoder_device(amd_decoder, 0);
+    const int windows = decoder_device(media_foundation_decoder, 0);
+    const int nvidia = decoder_device(nvidia_decoder, 1);
+    use_d3d11va_adapter(std::nullopt);
+    EXPECT_EQ(amf, 2);
+    EXPECT_EQ(windows, 2);
+    EXPECT_EQ(nvidia, 1);
+    EXPECT_EQ(decoder_device(amd_decoder, 0), -1);  // none named: the first AMD GPU
+}
+
 // vvdec-vulkan takes a VVC video it can hand over as it is: not another codec,
 // not scaled or widened, and with no grain added but H.274's, which its
 // hand-over adds (AFGS1's it cannot).
