@@ -74,5 +74,26 @@ TEST(VmafVulkan, VmafRunsOnTheGpuChosen) {
     choose_gpu(before);
 }
 
+// A part of a name that two GPUs have names neither: each API lists the GPUs
+// in its own order (DirectX's, Vulkan's, Vship's discrete-first), and the
+// first of each that has it could be a different GPU (D3D11VA decoding on the
+// Radeon iGPU while VMAF scores on the Radeon card). A whole name still names
+// its GPU.
+TEST(VmafVulkan, APartOfTwoGpusNamesNamesNeither) {
+    const std::vector<std::string> directx{"AMD Radeon RX 7900 XTX", "AMD Radeon(TM) Graphics"};
+    EXPECT_EQ(gpus_named(directx, "radeon"), (std::vector<std::size_t>{0, 1}));
+    EXPECT_EQ(chosen_among(directx, "radeon"), std::nullopt);
+    EXPECT_EQ(chosen_among(directx, "amd radeon(tm) graphics"), 1u);
+    EXPECT_EQ(chosen_among(directx, "7900"), 0u);
+
+    const std::vector<VulkanDevice> found{{0, "AMD Radeon(TM) Graphics", 0x1002, 1, true, true},
+                                          {1, "AMD Radeon RX 7900 XTX", 0x1002, 2, true, true}};
+    const std::optional<std::string> before = chosen_gpu();
+    choose_gpu("radeon");
+    const std::optional<VulkanDevice> device = chosen_vulkan_device(found);
+    choose_gpu(before);
+    EXPECT_FALSE(device.has_value()) << device->name;
+}
+
 }  // namespace
 }  // namespace vml

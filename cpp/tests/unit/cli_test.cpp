@@ -902,8 +902,9 @@ TEST(CommandLine, SegmentsChangeAProfileOrPresetFromTheCommandLine) {
 }
 
 // --gpu names a GPU DirectX lists, by its whole name or a part of one, or
-// auto; another name is refused with the GPUs there are. Where the system
-// lists none (a Mac), the name is left to Vulkan's.
+// auto; another name is refused with the GPUs there are, and a part of more
+// than one GPU's name with those GPUs. Where the system lists none (a Mac),
+// the name is left to Vulkan's.
 TEST(CommandLine, GpuNamesAGpuThePcHas) {
     EXPECT_EQ(parse_arguments({"compare", "ref.mkv", "a.mkv", "--gpu", "radeon"}).compare.gpu, "radeon");
     const std::vector<platform::GpuAdapter> adapters{{0, 0x10DE, "NVIDIA GeForce RTX 5090"},
@@ -915,6 +916,12 @@ TEST(CommandLine, GpuNamesAGpuThePcHas) {
     EXPECT_EQ(gpu_refusal(std::string("titan"), adapters),
               "--gpu titan: no GPU here has that name. The GPUs here: NVIDIA GeForce RTX 5090, AMD Radeon(TM) "
               "Graphics; or auto.");
+    const std::vector<platform::GpuAdapter> radeons{{0, 0x1002, "AMD Radeon RX 7900 XTX"},
+                                                    {1, 0x1002, "AMD Radeon(TM) Graphics"}};
+    EXPECT_EQ(gpu_refusal(std::string("radeon"), radeons),
+              "--gpu radeon: more than one GPU here has that in its name: AMD Radeon RX 7900 XTX, AMD Radeon(TM) "
+              "Graphics. Give more of the name.");
+    EXPECT_EQ(gpu_refusal(std::string("radeon(tm)"), radeons), std::nullopt);
 }
 
 }  // namespace
