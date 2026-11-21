@@ -164,7 +164,32 @@ constexpr StreamFilter stream_filters[] = {
     {"av1", "filter_units=pass_types=3|4|6"},
 };
 
+// The packets an MP4's edit list leaves out, before the first picture
+// shown: FFmpeg's MP4 reader gives them times before 0 (and marks them to be
+// discarded), and copies them; MKV and raw streams have none. A packet with
+// no time (a raw stream's) is kept.
+constexpr const char* not_shown_dropped = "noise=drop=lt(pts\\,0)*gt(pts\\,nopts)";
+
 }  // namespace
+
+std::vector<std::string> stream_fingerprint_command(const std::filesystem::path& file, const std::string& codec,
+                                                    const std::string& ffmpeg, int packets) {
+    const std::string name = ascii_lower(codec);
+    std::vector<std::string> command{ffmpeg, "-nostdin", "-v", "error", "-i", platform::path_text(file),
+                                     "-map", "0:v:0", "-c", "copy"};
+    std::string filters = not_shown_dropped;
+    for (const StreamFilter& filter : stream_filters) {
+        if (name == filter.codec) {
+            filters += std::string(",") + filter.filters;
+        }
+    }
+    command.insert(command.end(), {"-bsf:v", filters});
+    if (packets > 0) {
+        command.insert(command.end(), {"-frames:v", std::to_string(packets)});
+    }
+    command.insert(command.end(), {"-f", "hash", "-hash", "sha256", "-"});
+    return command;
+}
 
 std::optional<std::string> stream_fingerprint(const std::filesystem::path& file, const std::string& codec,
                                               const std::string& ffmpeg, int packets, const CancelToken& cancel) {
@@ -175,17 +200,7 @@ std::optional<std::string> stream_fingerprint(const std::filesystem::path& file,
     if (name == "rawvideo") {
         return std::nullopt;  // raw pictures (a .yuv file), whose scores are not saved: nothing to read
     }
-    std::vector<std::string> command{ffmpeg, "-nostdin", "-v", "error", "-i", platform::path_text(file),
-                                     "-map", "0:v:0", "-c", "copy"};
-    for (const StreamFilter& filter : stream_filters) {
-        if (name == filter.codec) {
-            command.insert(command.end(), {"-bsf:v", filter.filters});
-        }
-    }
-    if (packets > 0) {
-        command.insert(command.end(), {"-frames:v", std::to_string(packets)});
-    }
-    command.insert(command.end(), {"-f", "hash", "-hash", "sha256", "-"});
+    const std::vector<std::string> command = stream_fingerprint_command(file, codec, ffmpeg, packets);
     platform::ProcessOutput out;
     try {
         // A whole feature-length stream read over a network share takes
@@ -205,7 +220,7 @@ std::optional<std::string> stream_fingerprint(const std::filesystem::path& file,
         return std::nullopt;
     }
     Sha256 hash;
-    add_text(hash, "vml-stream-1");
+    add_text(hash, "vml-stream-" + std::to_string(stream_fingerprint_format));
     add_text(hash, name);
     add_text(hash, std::to_string(packets));
     add_text(hash, digest);

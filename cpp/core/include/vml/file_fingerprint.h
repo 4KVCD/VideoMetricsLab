@@ -18,9 +18,12 @@
 //   or MP4. Only the units that carry pictures are hashed (H.264, HEVC and
 //   VVC's VCL NAL units, in Annex B form; AV1's frame, frame header and
 //   tile group OBUs), so that the parameter sets, SEI and temporal
-//   delimiters a container moves, rewrites or drops change nothing. Any
-//   re-encode, of any part, makes another. It reads the whole stream; its
-//   first packets alone make a cheap first check.
+//   delimiters a container moves, rewrites or drops change nothing. Only
+//   the pictures shown are hashed: an MP4 cut with an edit list keeps the
+//   packets before its first picture shown, which a remux to MKV or a raw
+//   stream shows, so the two are different videos. Any re-encode, of any
+//   part, makes another. It reads the whole stream; its first packets alone
+//   make a cheap first check.
 #pragma once
 
 #include <filesystem>
@@ -59,6 +62,15 @@ std::optional<std::string> video_fingerprint(const std::filesystem::path& file, 
 std::optional<std::string> stream_fingerprint(const std::filesystem::path& file, const std::string& codec,
                                               const std::string& ffmpeg, int packets = 0,
                                               const CancelToken& cancel = {});
+
+// What stream_fingerprint hashes, in which form: a stream recorded with
+// another (a saved comparison's identity.json) is read again, and never
+// matched. 2: the packets an edit list leaves out are left out.
+constexpr int stream_fingerprint_format = 2;
+
+// FFmpeg's command that stream_fingerprint runs.
+std::vector<std::string> stream_fingerprint_command(const std::filesystem::path& file, const std::string& codec,
+                                                    const std::string& ffmpeg, int packets);
 
 // A stream fingerprinter for the saved scores (set_stream_fingerprinter):
 // each file probed by `ffprobe` and read with `ffmpeg`; nothing for one that

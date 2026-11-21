@@ -866,7 +866,8 @@ remuxed (its raw stream, `.264`, `.265`, `.266` or `.obu`, muxed into MKV or
 MP4 with its audio, an MKV remuxed to MP4, a tag edited) keeps its scores
 too, with the same reference and settings, read at the same frame rate. It
 is recognised by its coded pictures, byte for byte: any re-encode, even of
-one scene, is another video. That takes reading each test video once more
+one scene, is another video, and so is an MP4 cut with an edit list that hides
+its first pictures, against a remux that shows them. That takes reading each test video once more
 after its scores are saved, as long as reading the file takes (about 45 s
 for a 4 GB film on a network share):
 - the app reads it in the background, saying so on the status line, and
