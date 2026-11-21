@@ -77,6 +77,8 @@ const std::map<std::string, std::function<Json(const Settings&)>>& settings_by_k
         {"hidden_metrics", [](const Settings& s) { return Json(s.hidden_metrics); }},
         {"cvvdp_presets", [](const Settings& s) { return Json(s.cvvdp_presets_json); }},
         {"cvvdp_default_preset", [](const Settings& s) { return Json(s.cvvdp_default_preset); }},
+        {"saved_results_column_widths", [](const Settings& s) { return Json(s.saved_results_column_widths); }},
+        {"saved_results_hidden_columns", [](const Settings& s) { return Json(s.saved_results_hidden_columns); }},
     };
     return by_key;
 }

@@ -759,6 +759,15 @@ videos again:
   scored again the next time they are compared. It is locked while metrics
   are calculated.
 
+Drag the line between two column headings to make a column wider or
+narrower (double-click it to fit the column to its text); the last column
+shown fills what is left. Until a column is resized, the columns fit the
+tab as the window grows and shrinks. Right-click a heading for the list of
+columns: untick one to hide it, tick it to show it again (the test video's
+is always shown). **Reset column widths**, under the list, fits them to the
+tab again. The widths and the hidden columns are kept for the next time the
+app opens.
+
 A comparison whose reference video is no longer where its scores were saved
 from (deleted, moved, unreachable, or another file there now) shows its
 reference as "*name* (not found)", in italics: its saved scores are the only

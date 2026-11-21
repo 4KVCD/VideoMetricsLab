@@ -226,6 +226,13 @@ struct Settings {
     bool webhook_enabled = false;
     std::string webhook_url;
     std::string webhook_header;
+    // The Saved Results table's columns (saved_results_panel.h): their
+    // widths in pixels, one a column in its order (Test video, Reference,
+    // Saved, Metrics, Size), or none for widths fitted to the tab; and the
+    // columns hidden by their key ("reference", "saved", "metrics", "size";
+    // the test video's is always shown).
+    std::vector<int> saved_results_column_widths;
+    std::vector<std::string> saved_results_hidden_columns;
 
     // The saved settings: defaults for a missing or unreadable file, and
     // for each value of the wrong type (that setting alone); unknown keys

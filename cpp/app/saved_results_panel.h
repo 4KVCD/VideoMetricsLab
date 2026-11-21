@@ -1,7 +1,9 @@
 // The Saved results tab: the comparisons saved in the results cache
 // (saved_results.h), listed, opened in Metric Graphs, exported (results,
 // per-frame scores, graphs, weak segments) and deleted. Where a metric has
-// several saved scores, the newest is used unless another is picked.
+// several saved scores, the newest is used unless another is picked. The
+// table's columns are resized by dragging and hidden from the header's
+// right-click menu; both are kept in Settings.
 #pragma once
 
 #include <QString>
@@ -92,6 +94,14 @@ public:
     // The table's right-click menu, made as it opens: Open in Metric Graphs,
     // then fill_menu's export; nothing with nothing selected.
     void fill_context_menu(QMenu& menu);
+    // The header's right-click menu: every column with a tick, unticked
+    // hiding it (the test video's always shown), then Reset column widths.
+    void fill_column_menu(QMenu& menu);
+    // The columns as Settings keeps them: their widths, one a column, or
+    // none while they are fitted to the tab (never resized, or reset); and
+    // the hidden ones by their key ("reference", "saved", "metrics", "size").
+    std::vector<int> column_widths() const;
+    std::vector<std::string> hidden_columns() const;
 
 signals:
     void open_requested(const std::vector<vml::app::LoadedSavedResult>& results);
@@ -99,9 +109,18 @@ signals:
                           const std::vector<vml::app::LoadedSavedResult>& results);
     // Saved results were deleted: Settings' count is out of date.
     void deleted();
+    // A column was hidden, shown or resized (once a drag ends):
+    // column_widths and hidden_columns are to be saved.
+    void columns_changed();
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     std::filesystem::path base() const;
+    void fit_columns();
+    void keep_widths();
+    void show_column(int column, bool shown);
     void apply_filter();
     void show_details();
     std::vector<const SavedComparison*> selected() const;
@@ -117,6 +136,16 @@ private:
     QLabel* folder_label_ = nullptr;
     QLineEdit* filter_ = nullptr;
     QTableWidget* table_ = nullptr;
+    // The columns' widths, a hidden one's as it was before it was hidden;
+    // whether they are the user's (else fitted to the tab, as the table
+    // grows and shrinks); whether the header is pressed, and a column was
+    // resized while it was (saved as it is let go); whether the columns are
+    // being fitted.
+    std::vector<int> widths_;
+    bool own_widths_ = false;
+    bool header_pressed_ = false;
+    bool resized_by_hand_ = false;
+    bool fitting_ = false;
     QGroupBox* details_ = nullptr;
     QGridLayout* details_grid_ = nullptr;
     std::map<std::string, QComboBox*> score_combos_;

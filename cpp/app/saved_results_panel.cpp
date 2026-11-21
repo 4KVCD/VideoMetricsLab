@@ -4,6 +4,7 @@
 #include <QActionGroup>
 #include <QComboBox>
 #include <QDateTime>
+#include <QEvent>
 #include <QFont>
 #include <QFrame>
 #include <QFutureWatcher>
@@ -14,7 +15,9 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QPushButton>
+#include <QScopedValueRollback>
 #include <QScrollArea>
 #include <QStyle>
 #include <QTableWidget>
@@ -30,6 +33,7 @@
 
 #include "i18n.h"
 #include "results_export.h"
+#include "stay_open_menu.h"
 #include "theme.h"
 #include "window_helpers.h"
 #include "vml/cvvdp.h"
@@ -45,6 +49,9 @@ namespace vml::app {
 namespace {
 
 enum Column : int { col_test, col_reference, col_saved, col_metrics, col_size, column_count };
+
+// The columns' keys in Settings, in their order.
+constexpr const char* column_keys[column_count] = {"test", "reference", "saved", "metrics", "size"};
 
 QString time_text(std::chrono::system_clock::time_point when) {
     const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(when.time_since_epoch()).count();
@@ -126,11 +133,38 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setSelectionMode(QAbstractItemView::ExtendedSelection);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    table_->horizontalHeader()->setSectionResizeMode(col_test, QHeaderView::Stretch);
-    table_->horizontalHeader()->setSectionResizeMode(col_reference, QHeaderView::Stretch);
-    for (const int column : {int(col_saved), int(col_metrics), int(col_size)}) {
-        table_->horizontalHeader()->setSectionResizeMode(column, QHeaderView::ResizeToContents);
+    // Every column resized by dragging, the last one shown filling the rest.
+    // Until one is, they are fitted to the tab as it grows and shrinks: the
+    // saved time, metrics and size as wide as their text, the test video and
+    // reference sharing what is left.
+    QHeaderView* header = table_->horizontalHeader();
+    header->setSectionResizeMode(QHeaderView::Interactive);
+    header->setStretchLastSection(true);
+    widths_.assign(column_count, 0);
+    const std::vector<int>& widths = settings.saved_results_column_widths;
+    if (widths.size() == static_cast<std::size_t>(column_count) &&
+        std::all_of(widths.begin(), widths.end(), [](int width) { return width > 0; })) {
+        widths_ = widths;
+        own_widths_ = true;
+        for (int column = 0; column < column_count; ++column) {
+            header->resizeSection(column, widths_[static_cast<std::size_t>(column)]);
+        }
     }
+    const std::vector<std::string>& hidden = settings.saved_results_hidden_columns;
+    for (int column = col_reference; column < column_count; ++column) {
+        table_->setColumnHidden(column, std::find(hidden.begin(), hidden.end(), column_keys[column]) != hidden.end());
+    }
+    header->viewport()->installEventFilter(this);
+    table_->viewport()->installEventFilter(this);
+    connect(header, &QHeaderView::sectionResized, this,
+            [this] { resized_by_hand_ = resized_by_hand_ || (header_pressed_ && !fitting_); });
+    header->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(header, &QWidget::customContextMenuRequested, this, [this, header](const QPoint& position) {
+        auto* menu = new StayOpenMenu(this);
+        menu->setAttribute(Qt::WA_DeleteOnClose);
+        fill_column_menu(*menu);
+        menu->popup(header->viewport()->mapToGlobal(position));
+    });
     table_->setMinimumHeight(260);
     connect(table_, &QTableWidget::itemSelectionChanged, this, [this] {
         show_details();
@@ -251,9 +285,122 @@ void SavedResultsPanel::show_list(std::vector<SavedComparison> list) {
         table_->setItem(row, col_size, new SortItem(size_text(saved.bytes), static_cast<double>(saved.bytes)));
     }
     table_->setSortingEnabled(true);
+    fit_columns();
     apply_filter();
     show_details();
     update_buttons();
+}
+
+bool SavedResultsPanel::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == table_->horizontalHeader()->viewport()) {
+        // A column dragged wider or narrower, or double-clicked to fit its
+        // text: the widths are the user's from now on, saved as the header
+        // is let go (not at each step of the drag).
+        // The left button only: a right-click's release goes to its menu.
+        if ((event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonDblClick) &&
+            static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
+            header_pressed_ = true;
+        } else if (event->type() == QEvent::MouseButtonRelease) {
+            header_pressed_ = false;
+            if (std::exchange(resized_by_hand_, false)) {
+                own_widths_ = true;
+                keep_widths();
+                emit columns_changed();
+            }
+        }
+    } else if (watched == table_->viewport() && event->type() == QEvent::Resize) {
+        fit_columns();
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
+void SavedResultsPanel::fit_columns() {
+    if (own_widths_ || fitting_) {
+        return;
+    }
+    const QScopedValueRollback<bool> fitting(fitting_, true);
+    QHeaderView* header = table_->horizontalHeader();
+    const QAbstractItemView* view = table_;  // its sizeHintForColumn is public, QTableView's protected
+    int used = 0;
+    for (const int column : {int(col_saved), int(col_metrics), int(col_size)}) {
+        if (!table_->isColumnHidden(column)) {
+            const int width = std::max(header->sectionSizeHint(column), view->sizeHintForColumn(column));
+            header->resizeSection(column, width);
+            used += width;
+        }
+    }
+    const int names = table_->isColumnHidden(col_reference) ? 1 : 2;
+    const int width = std::max((table_->viewport()->width() - used) / names, header->sectionSizeHint(col_reference));
+    header->resizeSection(col_test, width);
+    header->resizeSection(col_reference, width);
+}
+
+void SavedResultsPanel::keep_widths() {
+    const QHeaderView* header = table_->horizontalHeader();
+    for (int column = 0; column < column_count; ++column) {
+        int& width = widths_[static_cast<std::size_t>(column)];
+        if (!table_->isColumnHidden(column)) {
+            width = header->sectionSize(column);
+        } else if (width <= 0) {
+            // Hidden since before the widths were the user's.
+            width = std::max(header->sectionSizeHint(column), header->defaultSectionSize());
+        }
+    }
+}
+
+std::vector<int> SavedResultsPanel::column_widths() const {
+    return own_widths_ ? widths_ : std::vector<int>{};
+}
+
+std::vector<std::string> SavedResultsPanel::hidden_columns() const {
+    std::vector<std::string> hidden;
+    for (int column = col_reference; column < column_count; ++column) {
+        if (table_->isColumnHidden(column)) {
+            hidden.emplace_back(column_keys[column]);
+        }
+    }
+    return hidden;
+}
+
+void SavedResultsPanel::show_column(int column, bool shown) {
+    if (column == col_test || table_->isColumnHidden(column) != shown) {
+        return;
+    }
+    if (own_widths_) {
+        keep_widths();  // the column's width, for when it is shown again
+    }
+    table_->setColumnHidden(column, !shown);
+    if (shown && own_widths_) {
+        table_->horizontalHeader()->resizeSection(column, widths_[static_cast<std::size_t>(column)]);
+    }
+    fit_columns();
+    emit columns_changed();
+}
+
+void SavedResultsPanel::fill_column_menu(QMenu& menu) {
+    menu.setToolTipsVisible(true);
+    for (int column = 0; column < column_count; ++column) {
+        QAction* action = menu.addAction(table_->horizontalHeaderItem(column)->text());
+        action->setCheckable(true);
+        action->setChecked(!table_->isColumnHidden(column));
+        if (column == col_test) {
+            // A row is its test video: without it, the rows could not be told apart.
+            action->setEnabled(false);
+            action->setToolTip(app::tr("The test video's column is always shown."));
+            continue;
+        }
+        connect(action, &QAction::toggled, this, [this, column](bool checked) { show_column(column, checked); });
+    }
+    menu.addSeparator();
+    QAction* reset = menu.addAction(app::tr("Reset column widths"));
+    reset->setToolTip(app::tr("Fit the columns to the tab again, as they grow and shrink with it."));
+    reset->setEnabled(own_widths_);
+    connect(reset, &QAction::triggered, this, [this] {
+        own_widths_ = false;
+        widths_.assign(column_count, 0);
+        fit_columns();
+        emit columns_changed();
+    });
 }
 
 void SavedResultsPanel::apply_filter() {
