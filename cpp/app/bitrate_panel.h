@@ -132,9 +132,6 @@ public:
     // Adds videos read already, and reads their packets (a finished run's:
     // the first is its reference).
     void add_and_analyze(const std::vector<VideoInfo>& infos);
-    // Adds a file's bitrate read before (bitrate_store.h), as complete: for a
-    // file no longer there, whose graphs are still wanted.
-    void add_saved(const SavedBitrate& saved);
     // The scan running now, if any.
     std::vector<QThread*> live_workers() const;
     // Stops the analysis, keeping finished results.
@@ -151,8 +148,10 @@ public:
     // Lists `paths` as `from` has read them (their packets, details and
     // colours; the first as the reference), reading nothing: the panel an
     // export draws apart from the tab (graph_bundle.h). Those `from` has not
-    // read are left out.
-    void adopt_read(const BitratePanel& from, const std::vector<std::filesystem::path>& paths);
+    // read are left out. A path of `saved` is listed as its saved bitrate
+    // instead, or left out where it has none.
+    void adopt_read(const BitratePanel& from, const std::vector<std::filesystem::path>& paths,
+                    const std::map<std::filesystem::path, std::optional<SavedBitrate>>& saved = {});
 
     // Its questions and messages; the tests answer them.
     Dialogs dialogs;

@@ -257,6 +257,12 @@ std::optional<std::pair<ComparisonResult, std::string>> saved_comparison(const s
 // saved bitrate (bitrate_store.h). Empty where none is recorded.
 std::string saved_content_hash(const std::filesystem::path& folder, bool reference);
 
+// Whether the file at `path` is the reference (`reference`) or the test
+// video of the comparison saved in `folder` as its identity.json recorded it
+// (its path, size and time); true where it recorded none (saved before it
+// was recorded), false where no file is there.
+bool saved_file_at(const std::filesystem::path& folder, bool reference, const std::filesystem::path& path);
+
 // How many comparisons are saved under `base`, and the bytes their files
 // and the saved bitrate (bitrate_store.h) take, for Settings.
 struct CacheSummary {
@@ -284,7 +290,7 @@ struct ClearedResults {
 // bitrate (its bitrate folder; nothing else there): every comparison, or
 // with `keep_without_reference` every one whose reference is still where it
 // was (reference_where_saved), keeping those whose scores could not be
-// calculated again.
+// calculated again, and the bitrate of their files.
 ClearedResults clear_saved_results(const std::filesystem::path& base, bool keep_without_reference);
 
 }  // namespace vml

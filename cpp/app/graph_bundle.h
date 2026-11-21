@@ -11,12 +11,15 @@
 #include <QString>
 
 #include <filesystem>
+#include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "theme.h"
+#include "vml/bitrate_store.h"
 #include "vml/results.h"
 
 namespace vml::app {
@@ -33,6 +36,13 @@ struct BundleVideo {
 
 // A file for the archive: its name there and its bytes.
 using BundleFile = std::pair<std::string, std::string>;
+
+// The bitrate an export draws for a file in place of what the Bitrate tab
+// reads at its path: a saved comparison's file as its bitrate was saved
+// (bitrate_store.h), where the file is gone or another is there now (a new
+// encode under the same name). None where none was saved: nothing is drawn
+// for the file then. The tab, which knows a file by its path, is not asked.
+using SavedBitrates = std::map<std::filesystem::path, std::optional<SavedBitrate>>;
 
 // How the graphs are drawn: the session's video colours, the chart colours
 // (Settings' Exported graphs) and the chart's size.
@@ -61,16 +71,19 @@ std::vector<BundleFile> metric_graph_files(const std::vector<BundleVideo>& video
 // reference, then each video with a file of its own (not a resolution
 // test's). Each is its result's file as probed, at the export's `reference`
 // and the video's `path`: where the file is now, not where it was when its
-// saved scores were made (a file moved, renamed or copied since).
-std::vector<VideoInfo> bitrate_files(const std::filesystem::path& reference, const std::vector<BundleVideo>& videos);
+// saved scores were made (a file moved, renamed or copied since). Those of
+// `saved` are not read: their saved bitrate is drawn.
+std::vector<VideoInfo> bitrate_files(const std::filesystem::path& reference, const std::vector<BundleVideo>& videos,
+                                     const SavedBitrates& saved = {});
 
 // The bitrate PNG files, from what `read` (the Bitrate tab) has read: with
 // more than one video, the reference with all of them ("All test videos -
 // Bitrate.png") and each with the reference ("<name> - Bitrate.png"); with
-// one, that one. A file `read` has not read is left out of the graphs, and
+// one, that one. A file of `saved` is drawn as saved instead. A file `read`
+// has not read (or `saved` has no bitrate of) is left out of the graphs, and
 // its name added to `missing`.
 std::vector<BundleFile> bitrate_graph_files(const BitratePanel& read, const std::filesystem::path& reference,
                                             const std::vector<BundleVideo>& videos, const BundleStyle& style,
-                                            std::vector<QString>& missing);
+                                            std::vector<QString>& missing, const SavedBitrates& saved = {});
 
 }  // namespace vml::app

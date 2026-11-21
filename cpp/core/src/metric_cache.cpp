@@ -1984,18 +1984,51 @@ bool reference_where_saved(const std::filesystem::path& folder) {
     return recorded.empty() || recorded == file_identity(source);
 }
 
+namespace {
+
+// Deletes the bitrate saved beside the scores (bitrate_store.h), but that of
+// the files of the comparisons in `kept` (by their identity.json's sampled
+// hashes). The rest is read again from a file still there; a kept
+// comparison's graphs have nothing else to draw it from (issue #134).
+void clear_saved_bitrate(const std::filesystem::path& base, const std::vector<std::filesystem::path>& kept) {
+    const std::filesystem::path folder = bitrate_store_folder(base);
+    std::error_code error;
+    if (kept.empty()) {
+        std::filesystem::remove_all(folder, error);
+        return;
+    }
+    std::set<std::string> wanted;
+    for (const std::filesystem::path& comparison : kept) {
+        for (const bool reference : {true, false}) {
+            if (std::string hash = saved_content_hash(comparison, reference); !hash.empty()) {
+                wanted.insert(std::move(hash));
+            }
+        }
+    }
+    std::vector<std::filesystem::path> unwanted;
+    for (std::filesystem::directory_iterator entry(folder, error);
+         !error && entry != std::filesystem::directory_iterator(); entry.increment(error)) {
+        if (!wanted.contains(platform::path_text(entry->path().stem()))) {
+            unwanted.push_back(entry->path());
+        }
+    }
+    for (const std::filesystem::path& path : unwanted) {
+        std::error_code ignored;
+        std::filesystem::remove_all(path, ignored);
+    }
+}
+
+}  // namespace
+
 ClearedResults clear_saved_results(const std::filesystem::path& base, bool keep_without_reference) {
     const std::filesystem::path root = base / format_folder;
     ClearedResults cleared;
-    // The bitrate saved beside the scores (bitrate_store.h), all of it: it is
-    // read again from a file still there, and none of it is listed where
-    // what is kept can be deleted later (the Saved results tab).
-    std::error_code bitrate_error;
-    std::filesystem::remove_all(bitrate_store_folder(base), bitrate_error);
     std::error_code error;
     if (!std::filesystem::exists(root, error)) {
+        clear_saved_bitrate(base, {});
         return cleared;
     }
+    std::vector<std::filesystem::path> kept;
     std::vector<std::filesystem::path> deleted;
     // increment(error), not a range-for: its ++ throws if reading fails.
     for (std::filesystem::directory_iterator entry(root, error);
@@ -2006,10 +2039,12 @@ ClearedResults clear_saved_results(const std::filesystem::path& base, bool keep_
         }
         if (keep_without_reference && !reference_where_saved(entry->path())) {
             ++cleared.kept;
+            kept.push_back(entry->path());
         } else {
             deleted.push_back(entry->path());
         }
     }
+    clear_saved_bitrate(base, kept);
     if (cleared.kept == 0) {
         std::filesystem::remove_all(root, error);  // everything, as before
         cleared.removed = error ? 0 : static_cast<int>(deleted.size());
@@ -2023,6 +2058,18 @@ ClearedResults clear_saved_results(const std::filesystem::path& base, bool keep_
     }
     cleared.removed = all ? static_cast<int>(deleted.size()) : 0;
     return cleared;
+}
+
+bool saved_file_at(const std::filesystem::path& folder, bool reference, const std::filesystem::path& path) {
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(path, error)) {
+        return false;
+    }
+    const std::optional<nlohmann::json> identity = read_json(folder / "identity.json");
+    const std::string recorded =
+        identity && identity->is_object() ? text_at(*identity, reference ? "source" : "distorted", "path")
+                                          : std::string();
+    return recorded.empty() || recorded == file_identity(path);
 }
 
 std::string saved_content_hash(const std::filesystem::path& folder, bool reference) {

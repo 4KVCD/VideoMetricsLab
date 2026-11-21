@@ -695,8 +695,9 @@ videos again:
     scores as JSON](RESULTS_JSON.md#per-frame-scores-as-json));
   - **Graphs as ZIP...**: the graphs Export all graphs saves, for
     comparisons of one reference. The bitrate graphs of a video no longer on
-    disk come from its saved bitrate, where the Bitrate Viewer or the
-    command line read it before it went;
+    disk, or replaced since by another file of the same name (a new
+    encode), come from its saved bitrate, where the Bitrate Viewer or the
+    command line read it before;
   - **Weak segments**: **Export weak segments...** saves the weak segments
     report by the rules ticked below it: the profile in use, any profile or
     a preset. The first entry's weak segments use the same rules. Weak
@@ -711,7 +712,8 @@ from (deleted, moved, unreachable, or another file there now) shows its
 reference as "*name* (not found)", in italics: its saved scores are the only
 ones there are, and could not be calculated again without it. **Delete...**
 says so when it would delete any such, and **Settings > Storage > Clear saved
-results** keeps them, saying how many it kept; delete them here.
+results** keeps them, with their videos' saved bitrate, saying how many it
+kept; delete them here.
 
 **Saved scores** lists the selected comparison's scores: each metric's score
 for the whole video, as Metric Graphs' table shows it, then when and how it

@@ -721,15 +721,6 @@ void BitratePanel::on_analyzed(const BitrateAnalyzed& analyzed) {
     refresh_plot();
 }
 
-void BitratePanel::add_saved(const SavedBitrate& saved) {
-    add_files({saved.info.path}, {{saved.info.path, saved.info}}, false);
-    on_analyzed({qt_text(platform::path_text(saved.info.path)), saved.info,
-                 std::make_shared<const BitrateData>(saved.data),
-                 std::make_shared<const std::vector<std::uint8_t>>(
-                     saved.frame_types.value_or(std::vector<std::uint8_t>())),
-                 file_identity(saved.info.path)});
-}
-
 void BitratePanel::on_failed(const QString& path, const QString& error) {
     BitrateEntry* entry = entry_for(path);
     if (entry == nullptr) {
@@ -1336,25 +1327,41 @@ std::optional<BitrateState> BitratePanel::state_of(const std::filesystem::path& 
     return std::nullopt;
 }
 
-void BitratePanel::adopt_read(const BitratePanel& from, const std::vector<std::filesystem::path>& paths) {
+void BitratePanel::adopt_read(const BitratePanel& from, const std::vector<std::filesystem::path>& paths,
+                              const std::map<std::filesystem::path, std::optional<SavedBitrate>>& saved) {
     bool first = true;
     for (const std::filesystem::path& path : paths) {
         const QString key = path_key(path);
-        const auto found = std::find_if(from.entries_.begin(), from.entries_.end(),
-                                        [&key](const auto& item) { return item.first == key; });
         const bool reference = std::exchange(first, false);
-        if (found == from.entries_.end() || !found->second.data ||
-            std::any_of(entries_.begin(), entries_.end(), [&key](const auto& item) { return item.first == key; })) {
+        if (std::any_of(entries_.begin(), entries_.end(), [&key](const auto& item) { return item.first == key; })) {
             continue;
         }
         BitrateEntry entry;
-        entry.path = found->second.path;
-        entry.color = found->second.color;
+        if (const auto as_saved = saved.find(path); as_saved != saved.end()) {
+            if (!as_saved->second) {
+                continue;
+            }
+            const SavedBitrate& bitrate = *as_saved->second;
+            entry.path = path;
+            entry.color = colors_->for_path(path);
+            entry.info = bitrate.info;
+            entry.data = std::make_shared<const BitrateData>(bitrate.data);
+            entry.frame_types = std::make_shared<const std::vector<std::uint8_t>>(
+                bitrate.frame_types.value_or(std::vector<std::uint8_t>()));
+        } else {
+            const auto found = std::find_if(from.entries_.begin(), from.entries_.end(),
+                                            [&key](const auto& item) { return item.first == key; });
+            if (found == from.entries_.end() || !found->second.data) {
+                continue;
+            }
+            entry.path = found->second.path;
+            entry.color = found->second.color;
+            entry.info = found->second.info;
+            entry.data = found->second.data;
+            entry.frame_types = found->second.frame_types;
+            entry.read_as = found->second.read_as;
+        }
         entry.series = next_series_++;
-        entry.info = found->second.info;
-        entry.data = found->second.data;
-        entry.frame_types = found->second.frame_types;
-        entry.read_as = found->second.read_as;
         entry.reference = reference;
         entry.state = BitrateState::complete;
         entries_.emplace_back(key, std::move(entry));

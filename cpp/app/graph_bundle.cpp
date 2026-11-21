@@ -105,17 +105,22 @@ std::vector<BundleFile> metric_graph_files(const std::vector<BundleVideo>& video
     return files;
 }
 
-std::vector<VideoInfo> bitrate_files(const std::filesystem::path& reference, const std::vector<BundleVideo>& videos) {
+std::vector<VideoInfo> bitrate_files(const std::filesystem::path& reference, const std::vector<BundleVideo>& videos,
+                                     const SavedBitrates& saved) {
     std::vector<VideoInfo> files;
     if (videos.empty()) {
         return files;
     }
-    files.push_back(videos.front().result->source_info);
-    files.back().path = reference;
+    const auto add = [&files, &saved](const VideoInfo& info, const std::filesystem::path& path) {
+        if (!saved.contains(path)) {
+            files.push_back(info);
+            files.back().path = path;
+        }
+    };
+    add(videos.front().result->source_info, reference);
     for (const BundleVideo& video : videos) {
         if (!video.result->resample_target) {
-            files.push_back(video.result->distorted_info);
-            files.back().path = video.path;
+            add(video.result->distorted_info, video.path);
         }
     }
     return files;
@@ -123,13 +128,16 @@ std::vector<VideoInfo> bitrate_files(const std::filesystem::path& reference, con
 
 std::vector<BundleFile> bitrate_graph_files(const BitratePanel& read, const std::filesystem::path& reference,
                                             const std::vector<BundleVideo>& videos, const BundleStyle& style,
-                                            std::vector<QString>& missing) {
+                                            std::vector<QString>& missing, const SavedBitrates& saved) {
     std::vector<BundleFile> files;
     if (videos.empty()) {
         return files;
     }
     const std::vector<QString> names = bundle_names(videos);
-    const auto is_read = [&read](const std::filesystem::path& path) {
+    const auto is_read = [&read, &saved](const std::filesystem::path& path) {
+        if (const auto found = saved.find(path); found != saved.end()) {
+            return found->second.has_value();
+        }
         return read.state_of(path) == BitrateState::complete;
     };
     if (!is_read(reference)) {
@@ -144,7 +152,7 @@ std::vector<BundleFile> bitrate_graph_files(const BitratePanel& read, const std:
     const auto drawn = [&](const std::vector<std::filesystem::path>& paths) -> std::optional<std::string> {
         BitratePanel panel([] { return std::string(); }, style.colors);
         panel.export_colours = [colours = style.colours] { return colours; };
-        panel.adopt_read(read, paths);
+        panel.adopt_read(read, paths, saved);
         if (std::none_of(paths.begin(), paths.end(), is_read)) {
             return std::nullopt;
         }

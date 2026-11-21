@@ -381,6 +381,33 @@ TEST_F(BitratePanelTest, AFileChangedSinceItWasReadIsNotShownAsItWas) {
     EXPECT_EQ(cell(*panel, 0, col_average).toStdString(), "");
 }
 
+// Issue #134: a saved comparison's graph export drew whatever the tab had
+// read at its file's path, a newer encode under the same name say. The
+// export's panel takes the comparison's saved bitrate for such a file, and
+// draws nothing for one with none saved.
+TEST_F(BitratePanelTest, AnExportDrawsTheSavedBitrateOfAFileReplacedSince) {
+    VideoColors colors;
+    const auto tab = make_panel(colors);
+    const std::filesystem::path reference("ref.mkv");
+    const std::filesystem::path encode("encode.mkv");
+    const std::filesystem::path other("other.mkv");
+    tab->add_files({reference, encode, other});
+    analyzed(*tab, reference, two_seconds(reference));
+    analyzed(*tab, encode, two_seconds(encode));  // the new encode's
+    analyzed(*tab, other, two_seconds(other));
+    SavedBitrate saved;
+    saved.info.path = encode;
+    saved.data = bitrate_data(encode, {0.0, 0.5}, {0.5, 0.5}, {7000, 3000}, {true, false});
+    const auto exported = make_panel(colors);
+    exported->adopt_read(*tab, {reference, encode, other}, {{encode, saved}, {other, std::nullopt}});
+    ASSERT_EQ(cell(*exported, 1, col_file).toStdString(), "encode.mkv");
+    EXPECT_TRUE(entry(*exported, 0).reference);
+    EXPECT_EQ(entry(*exported, 0).data, entry(*tab, 0).data);
+    EXPECT_EQ(entry(*exported, 1).data->sizes, saved.data.sizes);
+    EXPECT_FALSE(entry(*exported, 1).reference);
+    EXPECT_EQ(exported->table->rowCount(), 2);  // none for the one without saved bitrate
+}
+
 // A video has the session's colour, whatever order the tabs met it in; a
 // colour picked repaints its square and its line, the graph's zoom kept.
 TEST_F(BitratePanelTest, ALinesColourIsTheSessionsForItsVideo) {
