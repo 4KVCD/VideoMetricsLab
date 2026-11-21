@@ -16,6 +16,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <functional>
 #include <map>
 #include <optional>
@@ -928,6 +929,53 @@ TEST(MetricCache, ScoresFollowRenamedAndRemuxedFiles) {
     std::filesystem::remove_all(saved);
     EXPECT_NE(recipe_directory(cache, folder / "s copy.mkv", folder / "t renamed.mkv", request.recipe), saved);
     set_video_fingerprinter(nullptr);
+}
+
+// Issue #136: a lookup whose own folder is missing looked up the times of
+// every saved comparison's identity.json and context.json, each time. A
+// comparison is read again only where its folder's time changed: a file
+// rewritten in place, which leaves it as it was, is not looked at. A
+// comparison saved by another process since is found, and one deleted is
+// not.
+TEST(MetricCache, ComparisonsAreReadAgainOnlyWhereTheirFolderChanged) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mkv", std::string(5000, 's'));
+    touch(folder / "t.mkv", std::string(4000, 't'));
+    touch(folder / "u.mkv", std::string(4200, 'u'));
+    const AnalysisRequest request = request_from(stored);
+    ComparisonResult result = test::result_from(stored.at("result"));
+    result.source = folder / "s.mkv";
+    result.distorted = folder / "t.mkv";
+    const std::filesystem::path cache = folder / "cache";
+    const std::filesystem::path saved =
+        store_result(cache, result.source, result.distorted, request.recipe, result, "t", request.metrics);
+    std::filesystem::copy_file(folder / "t.mkv", folder / "t renamed.mkv");
+    std::filesystem::copy_file(folder / "u.mkv", folder / "u renamed.mkv");
+    const auto folder_of = [&](const std::string& distorted) {
+        return recipe_directory(cache, folder / "s.mkv", folder / distorted, request.recipe);
+    };
+    ASSERT_EQ(folder_of("t renamed.mkv"), saved);
+
+    // Rewritten in place: not read again, so still found.
+    const std::uintmax_t size = std::filesystem::file_size(saved / "identity.json");
+    {
+        std::fstream file(saved / "identity.json", std::ios::binary | std::ios::in | std::ios::out);
+        file << std::string(size, ' ');  // the same size, nothing recorded
+    }
+    EXPECT_EQ(folder_of("t renamed.mkv"), saved);
+
+    // Saved by another process (the command line, another window): found.
+    result.distorted = folder / "u.mkv";
+    const std::filesystem::path elsewhere = store_result(folder / "other process", result.source, result.distorted,
+                                                         request.recipe, result, "u", request.metrics);
+    EXPECT_NE(folder_of("u renamed.mkv"), cache / "v2" / elsewhere.filename());
+    std::filesystem::copy(elsewhere, cache / "v2" / elsewhere.filename());
+    EXPECT_EQ(folder_of("u renamed.mkv"), cache / "v2" / elsewhere.filename());
+
+    // Deleted: no longer found.
+    std::filesystem::remove_all(saved);
+    EXPECT_NE(folder_of("t renamed.mkv"), saved);
 }
 
 // A test video remuxed (raw <-> MKV <-> MP4) keeps its scores by its stream
