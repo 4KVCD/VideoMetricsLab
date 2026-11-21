@@ -25,6 +25,7 @@
 #include <string>
 #include <tuple>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "dialogs.h"
@@ -127,6 +128,10 @@ public:
     void on_hover(double x, double y, const std::map<int, SeriesEntry>& entries);
     // Every shown line at exactly `frame`; whether any has it.
     bool show_frame(int frame, const std::map<int, SeriesEntry>& entries);
+    // The readout written again for the point it shows (the last hover or
+    // Go to frame), for the lines shown now: after a line is shown or
+    // hidden. The crosshair and the view stay where they are.
+    void refresh_readout(const std::map<int, SeriesEntry>& entries);
     // The frame numbers the shown lines span, for the Go to frame box.
     std::pair<int, int> frame_range() const;
 
@@ -176,6 +181,8 @@ private:
                                                                       std::size_t index);
     QString readout_missing_frame(const QString& label, int frame) const;
     void set_hover_text(const QString& text);
+    void hover_readout(double x, double y, const std::map<int, SeriesEntry>& entries, bool place_cursor);
+    bool frame_readout(int frame, const std::map<int, SeriesEntry>& entries, bool place_cursor);
     std::size_t find_hover_index(const MetricCurve& curve, double x, double y, double half_window) const;
     // A line's point.
     struct HoverPoint {
@@ -197,6 +204,16 @@ private:
     bool difference_on_ = false;
     std::optional<std::pair<int, int>> selected_frames_;
     QString hover_text_;
+    // What the readout shows, for refresh_readout: nothing (the hint), the
+    // pointer's place, or a frame asked for.
+    struct HoverAt {
+        double x = 0;
+        double y = 0;
+    };
+    struct FrameAt {
+        int frame = 0;
+    };
+    std::variant<std::monostate, HoverAt, FrameAt> readout_of_;
     // The readout's monospaced font, which the label takes from the first
     // hover on; the placeholder before it is in the window's.
     QFont readout_font_;

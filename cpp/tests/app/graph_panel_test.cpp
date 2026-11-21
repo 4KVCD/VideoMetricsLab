@@ -135,6 +135,8 @@ protected:
         return *panel.pages_.at(key);
     }
     static QString readout(const MetricPage& page) { return page.hover_label_->text(); }
+    static const QFont& readout_font(const MetricPage& page) { return page.readout_font_; }
+    static int readout_height(const MetricPage& page) { return page.hover_label_->maximumHeight(); }
     // The crosshair's pixel column on a page's chart, if shown.
     static std::optional<int> cursor_x(MetricPage& page) { return page.chart_->cursor_pixel(); }
     // A page's chart zoomed to `span` seconds from `start`, and the seconds in view.
@@ -474,6 +476,41 @@ TEST_F(GraphPanelTest, TheReadoutPairsTheLinesByFrame) {
     panel.add_run({shared(vmaf_result("c.mkv", unscored)), "c", {}, true});
     vmaf.on_hover(5 / 30.0, 60.0, entries(panel));
     EXPECT_FALSE(readout(vmaf).contains(QStringLiteral("Δ"))) << readout(vmaf).toStdString();
+}
+
+// Lines ticked off or on after a hover: the readout's text is of the lines
+// shown, and fits the height the readout is given for them, whatever the
+// order (it kept the hidden lines' rows, cut off at the bottom).
+TEST_F(GraphPanelTest, TheReadoutFollowsTheLinesShown) {
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    panel.add_runs({{shared(vmaf_result("a.mkv", std::vector<float>(10, 90.0F))), "a", {}, true},
+                    {shared(vmaf_result("b.mkv", std::vector<float>(10, 80.0F))), "b", {}, true},
+                    {shared(vmaf_result("c.mkv", std::vector<float>(10, 70.0F))), "c", {}, true}});
+    MetricPage& vmaf = page(panel, "vmaf");
+    vmaf.chart().resize(800, 400);
+    const auto lines_fit = [&vmaf] {
+        // fit_hover_label's height: a line spacing a line, and 28 px of padding.
+        const qsizetype lines = readout(vmaf).count(QLatin1Char('\n')) + 1;
+        return lines * QFontMetrics(readout_font(vmaf)).lineSpacing() + 28 <= readout_height(vmaf);
+    };
+    vmaf.on_hover(5 / 30.0, 1000.0, entries(panel));
+    EXPECT_TRUE(readout(vmaf).contains(QStringLiteral("[c]"))) << readout(vmaf).toStdString();
+    for (const auto& [label, shown] : std::vector<std::pair<QString, bool>>{
+             {"c", false}, {"b", false}, {"c", true}, {"b", true}, {"a", false}, {"c", false}}) {
+        tick_row(panel, id_of(panel, label), shown);
+        const QString text = readout(vmaf);
+        EXPECT_EQ(text.contains("[" + label + "]"), shown) << text.toStdString();
+        EXPECT_TRUE(lines_fit()) << text.toStdString();
+    }
+    // Go to frame's readout too: b alone, then a and b with their Δ, then b
+    // alone again, without it.
+    vmaf.show_frame(3, entries(panel));
+    tick_row(panel, id_of(panel, "a"), true);
+    EXPECT_TRUE(readout(vmaf).contains(QStringLiteral("Δ (a − b)"))) << readout(vmaf).toStdString();
+    tick_row(panel, id_of(panel, "a"), false);
+    EXPECT_FALSE(readout(vmaf).contains(QStringLiteral("Δ"))) << readout(vmaf).toStdString();
+    EXPECT_TRUE(lines_fit()) << readout(vmaf).toStdString();
 }
 
 // XPSNR's infinity in the readout's Δ, as in the band: in both, no
