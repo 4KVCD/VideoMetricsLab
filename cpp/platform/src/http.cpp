@@ -47,4 +47,6 @@ std::string curl_config(std::string_view url, std::string_view content_type, std
     return config;
 }
 
+std::vector<std::string> curl_command(int config) { return {"curl", "-q", "-K", "/dev/fd/" + std::to_string(config)}; }
+
 }  // namespace vml::platform

@@ -36,7 +36,8 @@ std::vector<std::string> texts(const std::vector<NotifyLine>& lines) {
 // Sent where Settings > Notifications ask for it, to each service on, and
 // said; not sent, and said why, with no service on, for an outcome or a run
 // length it is off for, or with keys another user saved; a service's
-// refusal is said with its answer, and a webhook URL (its key) never is.
+// refusal is said with its answer, and a webhook URL (its key), or its path
+// with the token in it, never is.
 TEST(CliNotify, SentAsTheSettingsSayAndSaid) {
     Settings settings;
     std::vector<NotificationRequest> posted;
@@ -82,6 +83,12 @@ TEST(CliNotify, SentAsTheSettingsSayAndSaid) {
     EXPECT_EQ(texts(notify_run_end(settings, finished_run(), post, "")),
               std::vector<std::string>{
                   "! The notification to Discord could not be sent: Could not connect to Discord"});
+    // curl's request line (its --verbose) has the webhook's path, token and all.
+    settings.discord_webhook = "https://discord.com/api/webhooks/1/secret?wait=true";
+    answer = {0, "", "> POST /api/webhooks/1/secret?wait=true HTTP/2\n[:path: /api/webhooks/1/secret]"};
+    EXPECT_EQ(texts(notify_run_end(settings, finished_run(), post, "")),
+              std::vector<std::string>{
+                  "! The notification to Discord could not be sent: > POST Discord HTTP/2\n[:path: Discord]"});
 
     settings.discord_webhook = "dpapi:AAAA";  // another user's
     EXPECT_EQ(texts(notify_run_end(settings, finished_run(), post, "")),
@@ -137,6 +144,13 @@ TEST(CliNotify, CurlReadsTheRequestAsSent) {
     EXPECT_NE(config.find("data-binary = \"message=a \\\"b\\\" \\\\ c\\nd\"\n"), std::string::npos);
     EXPECT_NE(config.find("max-time = 20\n"), std::string::npos);
     EXPECT_NE(config.find("write-out = \"\\n%{http_code}\"\n"), std::string::npos);
+}
+
+// curl reads only that request: -q, as its first argument (the only place
+// curl takes it), keeps the user's ~/.curlrc (`insecure`, `location`,
+// `verbose`) out of it.
+TEST(CliNotify, CurlReadsNoCurlrc) {
+    EXPECT_EQ(platform::curl_command(7), (std::vector<std::string>{"curl", "-q", "-K", "/dev/fd/7"}));
 }
 
 }  // namespace

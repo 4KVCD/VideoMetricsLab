@@ -353,6 +353,32 @@ NotificationRequest pushover_request(std::string_view user, std::string_view tok
     return {"Pushover", "https://api.pushover.net/1/messages.json", "application/x-www-form-urlencoded", body};
 }
 
+namespace {
+
+// `text` with each `secret` in it replaced by `name`.
+std::string replaced(std::string text, const std::string& secret, const std::string& name) {
+    if (secret.empty()) {
+        return text;
+    }
+    for (std::size_t at = text.find(secret); at != std::string::npos; at = text.find(secret, at + name.size())) {
+        text.replace(at, secret.size(), name);
+    }
+    return text;
+}
+
+}  // namespace
+
+std::string without_secret_url(std::string text, const std::string& url, const std::string& name) {
+    text = replaced(std::move(text), url, name);
+    const std::size_t scheme = url.find("://");
+    const std::size_t path = url.find('/', scheme == std::string::npos ? 0 : scheme + 3);
+    if (path == std::string::npos || path + 1 >= url.size()) {
+        return text;  // no path: nothing more to hide
+    }
+    text = replaced(std::move(text), url.substr(path), name);
+    return replaced(std::move(text), url.substr(path, url.find('?', path) - path), name);
+}
+
 bool is_discord_webhook(std::string_view url) {
     for (const std::string_view host :
          {"discord.com", "discordapp.com", "ptb.discord.com", "canary.discord.com"}) {

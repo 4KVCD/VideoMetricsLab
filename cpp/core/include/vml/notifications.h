@@ -100,6 +100,12 @@ std::string cut_to_characters(std::string_view text, std::size_t limit);
 NotificationRequest pushover_request(std::string_view user, std::string_view token, int priority,
                                      std::string_view title, std::string_view message, std::string_view fallback);
 
+// `text` (an error's, curl's or Qt's) with `url`, a webhook's URL and so
+// its key, replaced by `name`, and its path too, with or without its query:
+// what an error shows of it when it shows the request (`POST
+// /api/webhooks/<id>/<token>`) rather than the whole URL.
+std::string without_secret_url(std::string text, const std::string& url, const std::string& name);
+
 // Whether `url` is a Discord webhook's (https, on discord.com or
 // discordapp.com, under /api/webhooks/): nothing is sent anywhere else.
 bool is_discord_webhook(std::string_view url);

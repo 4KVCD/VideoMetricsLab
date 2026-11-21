@@ -37,17 +37,6 @@ std::string service_answer(const std::string& body) {
     return start;
 }
 
-// `text` with `secret` (a webhook's URL) replaced by `name`.
-std::string without(std::string text, const std::string& secret, const std::string& name) {
-    if (secret.empty()) {
-        return text;
-    }
-    for (std::size_t at = text.find(secret); at != std::string::npos; at = text.find(secret, at + name.size())) {
-        text.replace(at, secret.size(), name);
-    }
-    return text;
-}
-
 }  // namespace
 
 NotifiedVideo notified_video(const TestVideo& video, bool cancelled) {
@@ -113,7 +102,7 @@ std::vector<NotifyLine> notify_run_end(const Settings& settings, const NotifiedR
                                : "HTTP " + std::to_string(answer.status) +
                                      (answer.body.empty() ? std::string() : ": " + service_answer(answer.body));
         lines.push_back({true, "The notification to " + request.service +
-                                   " could not be sent: " + without(why, request.url, request.service)});
+                                   " could not be sent: " + without_secret_url(why, request.url, request.service)});
     }
     return lines;
 }
