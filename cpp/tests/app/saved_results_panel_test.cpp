@@ -197,6 +197,36 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
     EXPECT_FALSE(std::filesystem::exists(saved));
 }
 
+// Issue #133: Delete kept pointers into the list across its question, whose
+// event loop a listing finishing in the meantime replaces it in: the folders
+// deleted were read from freed memory (a crash, or the wrong folder).
+TEST(SavedResultsPanel, DeleteDeletesWhatWasSelectedWhenTheListChangesUnderItsQuestion) {
+    const test::Folder folder;
+    Settings settings;
+    settings.cache_dir = (folder / "cache").string();
+    const std::filesystem::path v2 = folder / "cache" / "v2";
+    std::vector<SavedComparison> list(2);
+    for (std::size_t i = 0; i < list.size(); ++i) {
+        list[i].folder = v2 / ("comparison" + std::to_string(i));
+        list[i].label = "t" + std::to_string(i);
+        std::filesystem::create_directories(list[i].folder);
+        std::ofstream(list[i].folder / "context.json") << "{}";
+    }
+    Dialogs dialogs = standard_dialogs(nullptr);
+    SavedResultsPanel* shown = nullptr;
+    dialogs.ask_no_default = [&shown, &list](const QString&, const QString&) {
+        shown->show_list({list[1], list[0]});  // the listing done while asked
+        return true;
+    };
+    SavedResultsPanel panel(settings, dialogs);
+    shown = &panel;
+    panel.show_list({list[0]});
+    panel.table()->selectRow(0);
+    panel.delete_selected();
+    EXPECT_FALSE(std::filesystem::exists(list[0].folder));
+    EXPECT_TRUE(std::filesystem::exists(list[1].folder));
+}
+
 TEST(SavedResultsPanel, ClickingARowKeepsTheListWhereItWas) {
     // A long list scrolled to its end: clicking one of its last rows shows
     // its scores without the table shrinking under the pointer and

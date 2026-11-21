@@ -516,7 +516,12 @@ void SavedResultsPanel::fill_context_menu(QMenu& menu) {
 }
 
 void SavedResultsPanel::delete_selected() {
-    const std::vector<const SavedComparison*> chosen = selected();
+    // Copies: the question waits in an event loop of its own, in which a
+    // listing that finishes replaces list_ (show_list).
+    std::vector<SavedComparison> chosen;
+    for (const SavedComparison* saved : selected()) {
+        chosen.push_back(*saved);
+    }
     if (chosen.empty() || run_active_) {
         return;
     }
@@ -526,7 +531,7 @@ void SavedResultsPanel::delete_selected() {
             "Delete the saved scores of {count} comparisons? They can't be brought back: the videos are scored "
             "again the next time they are compared.",
             static_cast<long long>(chosen.size()));
-    if (std::any_of(chosen.begin(), chosen.end(), [](const SavedComparison* saved) { return !saved->reference_found; })) {
+    if (std::any_of(chosen.begin(), chosen.end(), [](const SavedComparison& saved) { return !saved.reference_found; })) {
         question += "\n\n" + app::tr("Some of them could not be scored again: their reference video is no longer "
                                       "where it was (marked \"not found\").");
     }
@@ -534,8 +539,8 @@ void SavedResultsPanel::delete_selected() {
         return;
     }
     int failed = 0;
-    for (const SavedComparison* saved : chosen) {
-        if (!delete_saved_comparison(base(), *saved)) {
+    for (const SavedComparison& saved : chosen) {
+        if (!delete_saved_comparison(base(), saved)) {
             ++failed;
         }
     }
