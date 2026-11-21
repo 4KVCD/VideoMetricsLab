@@ -187,10 +187,24 @@ std::string text_lines(const std::string& text) {
 #endif
 }
 
+std::vector<BundleFile> made_files(std::vector<BundleFile> files, const std::vector<FrameFiles>& frames) {
+    for (const FrameFiles& video : frames) {
+        PerFrameTexts texts = per_frame_texts(*video.result, video.csv, video.json);
+        if (video.json) {
+            files.emplace_back(video.stem + ".json", std::move(texts.json));
+        }
+        if (video.csv) {
+            files.emplace_back(video.stem + ".csv", std::move(texts.csv));
+        }
+    }
+    return files;
+}
+
 std::vector<BundleFile> export_files(const Settings& settings, const std::vector<BundleVideo>& videos,
                                      const std::filesystem::path& reference,
                                      const std::function<Json()>& document, const SegmentRules& rules,
-                                     bool several, const QString& name, bool& segments_skipped) {
+                                     bool several, const QString& name, std::vector<FrameFiles>& frames,
+                                     bool& segments_skipped) {
     const std::vector<std::string> items = exported_items(settings);
     const auto wanted = [&items](std::string_view key) {
         return std::find(items.begin(), items.end(), key) != items.end();
@@ -200,6 +214,7 @@ std::vector<BundleFile> export_files(const Settings& settings, const std::vector
     const bool json = std::find(formats.begin(), formats.end(), "json") != formats.end();
     const bool csv = std::find(formats.begin(), formats.end(), "csv") != formats.end();
     std::vector<BundleFile> files;
+    frames.clear();
     segments_skipped = false;
     if (wanted("results")) {
         const Json made = document();
@@ -211,17 +226,12 @@ std::vector<BundleFile> export_files(const Settings& settings, const std::vector
             files.push_back({stem + ".csv", results_csv(made)});
         }
     }
-    if (wanted("frames")) {
+    if (wanted("frames") && (json || csv)) {
         // A file for each video, named as its graphs are.
         const std::vector<QString> names = bundle_names(videos);
         for (std::size_t i = 0; i < videos.size(); ++i) {
-            const std::string stem = file_safe(names[i] + QStringLiteral(" - frames")).toStdString();
-            if (json) {
-                files.push_back({stem + ".json", per_frame_json(*videos[i].result)});
-            }
-            if (csv) {
-                files.push_back({stem + ".csv", per_frame_csv(*videos[i].result)});
-            }
+            frames.push_back(
+                {videos[i].result, file_safe(names[i] + QStringLiteral(" - frames")).toStdString(), json, csv});
         }
     }
     if (!wanted("weak_segments") || videos.empty()) {

@@ -7,6 +7,7 @@
 
 #include "results_export.h"
 #include "vml/cvvdp.h"
+#include "vml/export_csv.h"
 #include "vml/segment_profiles.h"
 #include "vml/settings.h"
 #include "vml/weak_frames.h"
@@ -117,11 +118,12 @@ TEST(ResultsExport, FilesAreWrittenInTheFormatsTicked) {
     settings.weak_segment_conditions = {"vmaf<90"};
     const SegmentRules rules = segment_profile_in_use(settings).rules;
     ASSERT_FALSE(rules.conditions.empty());
+    std::vector<FrameFiles> frames;
     const auto names = [&](const std::vector<BundleVideo>& videos, bool several) {
         bool skipped = true;
         std::vector<std::string> found;
         for (const BundleFile& file : export_files(settings, videos, "r.mkv", [&document] { return document; }, rules,
-                                                   several, QStringLiteral("a"), skipped)) {
+                                                   several, QStringLiteral("a"), frames, skipped)) {
             found.push_back(file.first);
         }
         EXPECT_FALSE(skipped);
@@ -137,10 +139,20 @@ TEST(ResultsExport, FilesAreWrittenInTheFormatsTicked) {
     settings.export_items = {"weak_segments"};
     EXPECT_EQ(names({one[0], {result, QStringLiteral("b"), "b.mkv"}}, true),
               (Names{"a - weak segments." + suffix + ".json", "a - weak segments." + suffix + ".csv"}));
-    // Per-frame scores: a file for each video, named as its graphs are.
+    // Per-frame scores: a file for each video, named as its graphs are. Issue
+    // #140: made only as they are written (made_files, in the file-write
+    // job), not on the window's thread as the export is planned.
     settings.export_items = {"frames"};
-    EXPECT_EQ(names({one[0], {result, QStringLiteral("b"), "b.mkv"}}, true),
-              (Names{"a - frames.json", "a - frames.csv", "b - frames.json", "b - frames.csv"}));
+    EXPECT_EQ(names({one[0], {result, QStringLiteral("b"), "b.mkv"}}, true), Names{});
+    ASSERT_EQ(frames.size(), 2U);
+    const std::vector<BundleFile> made = made_files({{"x.json", "x"}}, frames);
+    Names made_names;
+    for (const BundleFile& file : made) {
+        made_names.push_back(file.first);
+    }
+    EXPECT_EQ(made_names, (Names{"x.json", "a - frames.json", "a - frames.csv", "b - frames.json", "b - frames.csv"}));
+    EXPECT_EQ(made[1].second, per_frame_json(*result));
+    EXPECT_EQ(made[2].second, per_frame_csv(*result));
     settings.export_items = export_item_keys();
     settings.export_formats.clear();
     EXPECT_EQ(names(one, false), Names{});

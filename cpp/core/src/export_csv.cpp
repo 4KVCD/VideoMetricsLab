@@ -173,16 +173,13 @@ void export_csv(const ComparisonResult& result, const std::filesystem::path& pat
     write_csv_table(csv_table(portable_metric_results(result)), path);
 }
 
-std::string per_frame_csv(const ComparisonResult& result) {
-    return csv_text(csv_table(portable_metric_results(result)));
-}
+namespace {
 
-std::string per_frame_json(const ComparisonResult& result) {
-    // export_csv's table as JSON: the videos the scores are of, the CSV's
-    // header as "columns", and each of its rows a list in "rows", one a
-    // line, a blank cell null. Numbers as Python writes them (an endless
-    // PSNR Infinity), the time rounded as the CSV writes it.
-    const CsvTable table = csv_table(portable_metric_results(result));
+// export_csv's table as JSON: the videos the scores are of, the CSV's
+// header as "columns", and each of its rows a list in "rows", one a line, a
+// blank cell null. Numbers as Python writes them (an endless PSNR
+// Infinity), the time rounded as the CSV writes it.
+std::string json_text(const CsvTable& table, const ComparisonResult& result) {
     using Json = nlohmann::ordered_json;
     Json columns = Json::array({"frame", "time_s"});
     for (const std::string& name : table.names) {
@@ -207,6 +204,31 @@ std::string per_frame_json(const ComparisonResult& result) {
     }
     text += table.frames.empty() ? "]\n}\n" : "\n  ]\n}\n";
     return text;
+}
+
+}  // namespace
+
+std::string per_frame_csv(const ComparisonResult& result) {
+    return csv_text(csv_table(portable_metric_results(result)));
+}
+
+std::string per_frame_json(const ComparisonResult& result) {
+    return json_text(csv_table(portable_metric_results(result)), result);
+}
+
+PerFrameTexts per_frame_texts(const ComparisonResult& result, bool csv, bool json) {
+    PerFrameTexts texts;
+    if (!csv && !json) {
+        return texts;
+    }
+    const CsvTable table = csv_table(portable_metric_results(result));
+    if (csv) {
+        texts.csv = csv_text(table);
+    }
+    if (json) {
+        texts.json = json_text(table, result);
+    }
+    return texts;
 }
 
 void export_per_frame_json(const ComparisonResult& result, const std::filesystem::path& path) {

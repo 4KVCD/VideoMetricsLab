@@ -139,9 +139,10 @@ MainWindow::ExportPlan MainWindow::export_plan(std::vector<BundleVideo> videos,
                                                const SegmentRules& rules, bool several, const QString& name) {
     const std::vector<std::string> items = exported_items(settings_);
     const bool graphs = std::find(items.begin(), items.end(), "graphs") != items.end();
-    ExportPlan plan{std::move(videos), reference, {}, graphs, several, name};
+    ExportPlan plan{std::move(videos), reference, {}, {}, graphs, several, name};
     bool segments_skipped = false;
-    plan.files = export_files(settings_, plan.videos, reference, document, rules, several, name, segments_skipped);
+    plan.files =
+        export_files(settings_, plan.videos, reference, document, rules, several, name, plan.frames, segments_skipped);
     if (segments_skipped) {
         logger.info("No weak segments exported for " + name.toStdString() + ": the rules have no condition");
         show_status(app::tr("{name}'s weak segments weren't exported: no condition is set in Settings > Weak "
@@ -155,7 +156,7 @@ MainWindow::ExportPlan MainWindow::export_plan(std::vector<BundleVideo> videos,
 }
 
 void MainWindow::save_export(ExportPlan plan, const std::optional<std::filesystem::path>& folder) {
-    if (plan.files.empty() && !plan.graphs) {
+    if (plan.files.empty() && plan.frames.empty() && !plan.graphs) {
         if (!folder) {
             dialogs_.inform(app::tr("Nothing to export"),
                             app::tr("Nothing that Settings > Storage > Exports include ticks could be exported."));
@@ -176,11 +177,14 @@ void MainWindow::save_export(ExportPlan plan, const std::optional<std::filesyste
             destination = path_of(path);
         }
         if (plan.graphs) {
-            queue_bundle({plan.videos, plan.reference, destination, std::move(plan.files), plan.several, automatic});
+            queue_bundle({plan.videos, plan.reference, destination, std::move(plan.files), plan.several, automatic,
+                          false, std::move(plan.frames)});
             return;
         }
         file_writes_->submit(app::tr("export {name}", {{"name", name_of(destination)}}),
-                             [files = std::move(plan.files), out = destination] { write_zip(out, files); });
+                             [files = std::move(plan.files), frames = std::move(plan.frames), out = destination] {
+                                 write_zip(out, made_files(files, frames));
+                             });
         if (!automatic) {
             show_status(app::tr("Exported to {path}", {{"path", text_of(destination)}}));
         }
@@ -197,9 +201,11 @@ void MainWindow::save_export(ExportPlan plan, const std::optional<std::filesyste
         }
         destination = path_of(chosen);
     }
-    if (!plan.files.empty()) {
+    if (!plan.files.empty() || !plan.frames.empty()) {
         file_writes_->submit(app::tr("export {name}", {{"name", plan.name}}),
-                             [files = std::move(plan.files), destination] { write_loose(destination, files); });
+                             [files = std::move(plan.files), frames = std::move(plan.frames), destination] {
+                                 write_loose(destination, made_files(files, frames));
+                             });
     }
     if (plan.graphs) {
         queue_bundle({plan.videos, plan.reference, destination, {}, plan.several, automatic, true});
@@ -414,10 +420,14 @@ void MainWindow::write_ready_bundles() {
         const QString destination = text_of(ready.destination);
         if (ready.loose) {
             file_writes_->submit(app::tr("export {name}", {{"name", name_of(ready.destination)}}),
-                                 [files = std::move(files), out = ready.destination] { write_loose(out, files); });
+                                 [files = std::move(files), frames = ready.frames, out = ready.destination] {
+                                     write_loose(out, made_files(files, frames));
+                                 });
         } else {
             file_writes_->submit(app::tr("export {name}", {{"name", name_of(ready.destination)}}),
-                                 [files = std::move(files), out = ready.destination] { write_zip(out, files); });
+                                 [files = std::move(files), frames = ready.frames, out = ready.destination] {
+                                     write_zip(out, made_files(files, frames));
+                                 });
         }
         logger.info("Graphs exported to " + platform::path_text(ready.destination) +
                     (missing.empty() ? std::string() : " without the bitrate of " + QStringList(missing.begin(), missing.end()).join(", ").toStdString()));
