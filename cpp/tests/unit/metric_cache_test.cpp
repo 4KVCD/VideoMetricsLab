@@ -725,7 +725,19 @@ TEST(MetricCache, ClearingKeepsTheComparisonsWhoseReferenceIsGone) {
         EXPECT_EQ(listed.reference_found, listed.label == "here") << listed.label;
     }
 
+    // Issue #134: the bitrate of the kept ones' files is kept too, the only
+    // bitrate there is of the reference gone; the rest is deleted.
+    SavedBitrate bitrate;
+    bitrate.data = bitrate_data(folder / "t.mp4", {0.0}, {1 / 24.0}, {1000}, {true});
+    save_bitrate(cache, saved_content_hash(saved["here"], true), bitrate);
+    save_bitrate(cache, saved_content_hash(saved["gone"], true), bitrate);
+    save_bitrate(cache, saved_content_hash(saved["gone"], false), bitrate);  // t.mp4, of all three
+    save_bitrate(cache, "of no comparison", bitrate);
     const ClearedResults cleared = clear_saved_results(cache, true);
+    EXPECT_FALSE(load_saved_bitrate(cache, saved_content_hash(saved["here"], true), folder / "here.mp4"));
+    EXPECT_TRUE(load_saved_bitrate(cache, saved_content_hash(saved["gone"], true), folder / "gone.mp4"));
+    EXPECT_TRUE(load_saved_bitrate(cache, saved_content_hash(saved["gone"], false), folder / "t.mp4"));
+    EXPECT_FALSE(load_saved_bitrate(cache, "of no comparison", folder / "t.mp4"));
     EXPECT_EQ(cleared.removed, 1);
     EXPECT_EQ(cleared.kept, 2);
     EXPECT_FALSE(std::filesystem::exists(saved["here"]));
@@ -737,6 +749,7 @@ TEST(MetricCache, ClearingKeepsTheComparisonsWhoseReferenceIsGone) {
     EXPECT_EQ(everything.removed, 2);
     EXPECT_EQ(everything.kept, 0);
     EXPECT_TRUE(list_saved_comparisons(cache).empty());
+    EXPECT_FALSE(std::filesystem::exists(bitrate_store_folder(cache)));
 }
 
 TEST(MetricCache, SavedComparisonsAreListedReadAndDeleted) {

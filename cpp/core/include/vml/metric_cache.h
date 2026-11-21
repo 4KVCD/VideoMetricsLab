@@ -290,7 +290,7 @@ struct ClearedResults {
 // bitrate (its bitrate folder; nothing else there): every comparison, or
 // with `keep_without_reference` every one whose reference is still where it
 // was (reference_where_saved), keeping those whose scores could not be
-// calculated again.
+// calculated again, and the bitrate of their files.
 ClearedResults clear_saved_results(const std::filesystem::path& base, bool keep_without_reference);
 
 }  // namespace vml
