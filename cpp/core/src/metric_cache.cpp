@@ -1199,6 +1199,18 @@ KnownFiles& known_files() {
     return known;
 }
 
+// After this process wrote one of `folder`'s files: its comparison is read
+// again at the next lookup. The file's time may not show the write: files
+// are stamped from a clock that ticks about every 16 ms on Windows by
+// default, so a write in the tick of the last read leaves the time as read.
+void forget_read_comparison(const std::filesystem::path& folder) {
+    KnownFiles& known = known_files();
+    const std::lock_guard lock(known.mutex);
+    for (auto& [base, comparisons] : known.recorded) {
+        comparisons.erase(folder);
+    }
+}
+
 std::optional<std::string> sampled_of(const std::filesystem::path& file) {
     const std::string identity = file_identity(file);
     KnownFiles& known = known_files();
@@ -1596,12 +1608,12 @@ bool record_test_stream(const std::filesystem::path& base, const std::filesystem
         (*identity)["distorted"]["stream"] = *stream;
         try {
             write_atomically(folder / "identity.json", python_json_compact(*identity));
+            forget_read_comparison(folder);
             recorded_any = true;
         } catch (const std::exception&) {
             // a record only: the scores stay found by the file's path and sampled hash
         }
     }
-    // Read again at the next lookup (recorded_comparisons: its time changed).
     return recorded_any;
 }
 
@@ -1646,7 +1658,7 @@ void cache_parts::record_identity(const std::filesystem::path& directory, const 
     } catch (const std::exception&) {
         return;  // a record only: the scores are saved without it
     }
-    // Read again at the next lookup (recorded_comparisons: its time changed).
+    forget_read_comparison(directory);
 }
 
 std::filesystem::path recipe_directory(const std::filesystem::path& base, const std::filesystem::path& source,
@@ -1783,6 +1795,7 @@ std::filesystem::path store_result(const std::filesystem::path& base, const std:
     const std::string context = python_json_compact(context_json(result, label, recipe));
     forget_scores_of_another_picture(directory, nlohmann::json::parse(context));
     write_atomically(directory / "context.json", context);
+    forget_read_comparison(directory);
     // A score saved under a request it does not answer would answer it from
     // then on: loading checks the saved request, not the score. A perceptual
     // score is saved under its own implementation's id (stored_spec), which

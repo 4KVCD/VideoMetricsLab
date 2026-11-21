@@ -971,8 +971,13 @@ TEST(MetricCache, ARemuxedTestStreamKeepsItsScores) {
     EXPECT_EQ(heads + wholes, 0);
     EXPECT_FALSE(identity_of()["distorted"].contains("stream"));
     EXPECT_TRUE(test_stream_wanted(cache, folder / "t.mkv"));
+    const auto saved_time = std::filesystem::last_write_time(saved / "identity.json");
     EXPECT_TRUE(record_test_stream(cache, folder / "t.mkv"));
     EXPECT_EQ(wholes, 1);
+    // As when the save and the record fall in one tick of the clock files
+    // are stamped from (about 16 ms on Windows by default): the file's time
+    // does not show the record.
+    std::filesystem::last_write_time(saved / "identity.json", saved_time);
     EXPECT_FALSE(test_stream_wanted(cache, folder / "t.mkv"));
     EXPECT_FALSE(record_test_stream(cache, folder / "t.mkv"));
     EXPECT_EQ(wholes, 1);
