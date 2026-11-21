@@ -1181,20 +1181,29 @@ std::optional<int> BitratePanel::frame_at_time(double seconds, bool at_or_after)
     // A time typed to the millisecond is a frame's within half of one, as
     // the boxes show it (FrameControls::Timeline).
     constexpr double half_a_millisecond = 0.0005;
+    // The first line the time is not past the end of answers, as the first
+    // line with the frame does in time_of_frame: the frame boxes reach the
+    // longest line's last frame. Issue #140: the first line alone answered,
+    // so a time past its end went to its last frame, or cleared the range.
+    std::optional<int> last;  // past every line's end: the latest last frame
     for (const DrawnPlot& drawn : current_plots_) {
         const std::vector<double>& times = drawn.data->times;  // in presentation order
         if (times.empty()) {
             continue;
         }
         const double at = seconds + drawn.start;
+        if (at - half_a_millisecond > times.back()) {
+            last = std::max(last.value_or(0), static_cast<int>(times.size()) - 1);
+            continue;
+        }
         if (at_or_after) {
             const auto found = std::lower_bound(times.begin(), times.end(), at - half_a_millisecond);
-            return found == times.end() ? std::nullopt : std::optional(static_cast<int>(found - times.begin()));
+            return static_cast<int>(found - times.begin());
         }
         const auto found = std::upper_bound(times.begin(), times.end(), at + half_a_millisecond);
         return found == times.begin() ? std::nullopt : std::optional(static_cast<int>(found - times.begin()) - 1);
     }
-    return std::nullopt;
+    return at_or_after ? std::nullopt : last;
 }
 
 std::optional<int> BitratePanel::frame_at(double time) const {

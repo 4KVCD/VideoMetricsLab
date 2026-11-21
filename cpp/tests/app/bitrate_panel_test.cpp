@@ -251,6 +251,43 @@ TEST_F(BitratePanelTest, AFrameRangesFiguresAndGoToFrame) {
     EXPECT_EQ(controls.range_start_time->text().toStdString(), "0:00:01.000");
 }
 
+// Issue #140: with a shorter video drawn first, a time past its end went to
+// its last frame, and a range of such times was cleared: only the first
+// line's times were looked at, while the frame boxes reach the longest
+// line's last frame and show its times.
+TEST_F(BitratePanelTest, TimesPastTheFirstVideosEndAreTheLongerOnes) {
+    VideoColors colors;
+    const auto panel = make_panel(colors);
+    const std::filesystem::path shorter("short.mkv");
+    const std::filesystem::path longer("long.mkv");
+    panel->add_files({shorter, longer});
+    analyzed(*panel, shorter,
+             std::make_shared<const BitrateData>(
+                 bitrate_data(shorter, {0.0, 0.5}, {0.5, 0.5}, {1000, 1000}, {true, false})));
+    analyzed(*panel, longer, two_seconds(longer));
+    FrameControls& controls = *panel->frame_controls;
+    const auto type_time = [](QLineEdit& box, const QString& text) {
+        box.setText(text);
+        box.setModified(true);
+        emit box.returnPressed();
+        emit box.editingFinished();
+    };
+    controls.frame_spin->setValue(3);
+    EXPECT_EQ(controls.time_edit->text().toStdString(), "0:00:01.500");
+    controls.frame_spin->setValue(0);
+    type_time(*controls.time_edit, "0:00:01.500");
+    EXPECT_EQ(controls.frame_spin->value(), 3);
+    type_time(*controls.time_edit, "0:00:01.200");  // within the longer one's frame 2
+    EXPECT_EQ(controls.frame_spin->value(), 2);
+    type_time(*controls.time_edit, "0:00:09");  // past both: the last frame there is
+    EXPECT_EQ(controls.frame_spin->value(), 3);
+    type_time(*controls.range_start_time, "0:00:01");
+    type_time(*controls.range_end_time, "0:00:01.500");
+    EXPECT_EQ(controls.selected_frames(), (std::optional<std::pair<int, int>>{{2, 3}}));
+    type_time(*controls.range_start_time, "0:00:00.500");  // the shorter one's last frame, to the longer one's
+    EXPECT_EQ(controls.selected_frames(), (std::optional<std::pair<int, int>>{{1, 3}}));
+}
+
 // A frame's type shows under the pointer in the frame graph; its colours only
 // once ticked, and only there.
 TEST_F(BitratePanelTest, FrameTypesInTheFrameGraph) {
