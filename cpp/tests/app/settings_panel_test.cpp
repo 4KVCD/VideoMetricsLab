@@ -5,10 +5,12 @@
 #include <QLabel>
 #include <QComboBox>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMenu>
 #include <QPushButton>
 #include <QScrollBar>
 #include <QSpinBox>
+#include <QStackedWidget>
 #include <QTabWidget>
 #include <QVBoxLayout>
 #include <QTest>
@@ -134,6 +136,36 @@ TEST(SettingsPanel, NotificationsStoreKeysAsChosenAndPreviewTheMessage) {
     EXPECT_EQ(settings.notify_video_line, "");
     EXPECT_FALSE(panel.notify_preview->text().contains("encode-crf18.mkv"));
     EXPECT_TRUE(panel.notify_preview->text().contains("2:14:09"));
+}
+
+// The services: a list of all of them, its tick and the page's "Send to"
+// box one setting either way; a page's keys stored as the others; a page
+// for each, shown as its row is chosen.
+TEST(SettingsPanel, NotificationServicesAreListedAndTickedEitherWay) {
+    Settings settings;
+    settings.gotify_url = "http://gotify.lan";
+    FileWrites writes;
+    const Dialogs dialogs = standard_dialogs(nullptr);
+    SettingsPanel panel(settings, writes, [] { return ToolsStatus{}; }, dialogs);
+    ASSERT_EQ(panel.notify_services->count(), static_cast<int>(notification_services().size()));
+    QListWidgetItem* gotify = panel.notify_services->item(2);
+    EXPECT_EQ(gotify->text(), "Gotify");
+    gotify->setCheckState(Qt::Checked);
+    EXPECT_TRUE(panel.gotify_enabled->isChecked());
+    EXPECT_TRUE(settings.gotify_enabled);
+    panel.gotify_enabled->setChecked(false);
+    EXPECT_EQ(gotify->checkState(), Qt::Unchecked);
+    EXPECT_FALSE(settings.gotify_enabled);
+
+    panel.notify_services->setCurrentRow(2);
+    EXPECT_TRUE(panel.gotify_url->isVisibleTo(panel.service_pages));
+    EXPECT_EQ(panel.gotify_url->text(), "http://gotify.lan");
+    panel.gotify_token->setText("app-token");
+    emit panel.gotify_token->editingFinished();
+    EXPECT_EQ(secret_of(settings.gotify_token), "app-token");
+    EXPECT_EQ(secret_is_encrypted(settings.gotify_token), secrets_can_be_encrypted());
+    panel.discord_mention_when->setCurrentIndex(1);
+    EXPECT_EQ(settings.discord_mention_when, "always");
 }
 
 // Settings > Storage > Exports include: a box for each kind of export, in

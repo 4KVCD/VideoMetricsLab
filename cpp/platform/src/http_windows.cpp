@@ -90,9 +90,13 @@ private:
 };
 
 // Sends the request on `request` and reads the answer into `response`.
-void exchange(HINTERNET request, std::string_view content_type, std::string_view body, HttpResponse& response) {
-    const std::wstring header = L"Content-Type: " + widen(content_type);
-    if (!WinHttpSendRequest(request, header.c_str(), static_cast<DWORD>(header.size()),
+void exchange(HINTERNET request, const HttpRequest& asked, HttpResponse& response) {
+    std::wstring headers = L"Content-Type: " + widen(asked.content_type);
+    for (const auto& [name, value] : asked.headers) {
+        headers += L"\r\n" + widen(name) + L": " + widen(value);
+    }
+    const std::string_view body = asked.body;
+    if (!WinHttpSendRequest(request, headers.c_str(), static_cast<DWORD>(headers.size()),
                             const_cast<char*>(body.data()), static_cast<DWORD>(body.size()),
                             static_cast<DWORD>(body.size()), 0) ||
         !WinHttpReceiveResponse(request, nullptr)) {
@@ -123,17 +127,18 @@ void exchange(HINTERNET request, std::string_view content_type, std::string_view
 
 }  // namespace
 
-HttpResponse http_post(std::string_view url, std::string_view content_type, std::string_view body,
-                       std::chrono::seconds timeout) {
+HttpResponse http_post(const HttpRequest& asked, std::chrono::seconds timeout) {
     HttpResponse response;
-    const std::wstring wide_url = widen(url);
+    const std::wstring wide_url = widen(asked.url);
     URL_COMPONENTS parts{};
     parts.dwStructSize = sizeof parts;
     parts.dwHostNameLength = static_cast<DWORD>(-1);
     parts.dwUrlPathLength = static_cast<DWORD>(-1);
     parts.dwExtraInfoLength = static_cast<DWORD>(-1);
-    if (!WinHttpCrackUrl(wide_url.c_str(), 0, 0, &parts) || parts.nScheme != INTERNET_SCHEME_HTTPS) {
-        response.error = "not an https URL";
+    const bool cracked = WinHttpCrackUrl(wide_url.c_str(), 0, 0, &parts);
+    const bool secure = cracked && parts.nScheme == INTERNET_SCHEME_HTTPS;
+    if (!secure && !(cracked && asked.plain_http && parts.nScheme == INTERNET_SCHEME_HTTP)) {
+        response.error = asked.plain_http ? "not an http or https URL" : "not an https URL";
         return response;
     }
     const std::wstring host(parts.lpszHostName, parts.dwHostNameLength);
@@ -153,7 +158,7 @@ HttpResponse http_post(std::string_view url, std::string_view content_type, std:
         return response;
     }
     InternetHandle request(WinHttpOpenRequest(connection.handle, L"POST", path.c_str(), nullptr, WINHTTP_NO_REFERER,
-                                              WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE));
+                                              WINHTTP_DEFAULT_ACCEPT_TYPES, secure ? WINHTTP_FLAG_SECURE : 0));
     if (request.handle == nullptr) {
         response.error = last_error("WinHttpOpenRequest");
         return response;
@@ -162,7 +167,7 @@ HttpResponse http_post(std::string_view url, std::string_view content_type, std:
     DWORD no_redirects = WINHTTP_DISABLE_REDIRECTS;
     WinHttpSetOption(request.handle, WINHTTP_OPTION_DISABLE_FEATURE, &no_redirects, sizeof no_redirects);
     Deadline deadline(request.handle, timeout);
-    exchange(request.handle, content_type, body, response);
+    exchange(request.handle, asked, response);
     if (deadline.stop()) {
         request.handle = nullptr;  // closed at the deadline
         response = HttpResponse();

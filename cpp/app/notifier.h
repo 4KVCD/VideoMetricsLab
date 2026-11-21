@@ -49,6 +49,10 @@ signals:
     void sent(const QString& service, const QString& error);
 
 private:
+    // Posts one request; `again` for the one retry a 429 that says how long
+    // to wait gets.
+    void post(const NotificationRequest& item, bool again);
+
     QNetworkAccessManager* network_;
 };
 

@@ -33,13 +33,15 @@ std::string curl_quoted(std::string_view text) {
 
 }  // namespace
 
-std::string curl_config(std::string_view url, std::string_view content_type, std::string_view body,
-                        std::chrono::seconds timeout) {
+std::string curl_config(const HttpRequest& request, std::chrono::seconds timeout) {
     std::string config;
-    config += "url = " + curl_quoted(url) + "\n";
-    config += "proto = \"=https\"\n";
-    config += "header = " + curl_quoted("Content-Type: " + std::string(content_type)) + "\n";
-    config += "data-binary = " + curl_quoted(body) + "\n";
+    config += "url = " + curl_quoted(request.url) + "\n";
+    config += request.plain_http ? "proto = \"=https,http\"\n" : "proto = \"=https\"\n";
+    config += "header = " + curl_quoted("Content-Type: " + request.content_type) + "\n";
+    for (const auto& [name, value] : request.headers) {
+        config += "header = " + curl_quoted(name + ": " + value) + "\n";
+    }
+    config += "data-binary = " + curl_quoted(request.body) + "\n";
     config += "max-time = " + std::to_string(timeout.count()) + "\n";
     config += "silent\n";
     config += "show-error\n";

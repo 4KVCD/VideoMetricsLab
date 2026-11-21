@@ -135,15 +135,23 @@ TEST(CliNotify, EachVideoAsTheTablesSayIt) {
 // curl's request: every value quoted as curl reads it, so that a quote, a
 // backslash or a line break in the message stays in the message.
 TEST(CliNotify, CurlReadsTheRequestAsSent) {
-    const std::string config = platform::curl_config("https://api.pushover.net/1/messages.json",
-                                                     "application/x-www-form-urlencoded",
-                                                     "message=a \"b\" \\ c\nd", std::chrono::seconds(20));
+    const std::string config = platform::curl_config({"https://api.pushover.net/1/messages.json",
+                                                      "application/x-www-form-urlencoded",
+                                                      "message=a \"b\" \\ c\nd",
+                                                      {{"Access-Token", "k \"1\""}}},
+                                                     std::chrono::seconds(20));
     EXPECT_NE(config.find("url = \"https://api.pushover.net/1/messages.json\"\n"), std::string::npos);
     EXPECT_NE(config.find("proto = \"=https\"\n"), std::string::npos);
     EXPECT_NE(config.find("header = \"Content-Type: application/x-www-form-urlencoded\"\n"), std::string::npos);
     EXPECT_NE(config.find("data-binary = \"message=a \\\"b\\\" \\\\ c\\nd\"\n"), std::string::npos);
     EXPECT_NE(config.find("max-time = 20\n"), std::string::npos);
     EXPECT_NE(config.find("write-out = \"\\n%{http_code}\"\n"), std::string::npos);
+    EXPECT_NE(config.find("header = \"Access-Token: k \\\"1\\\"\"\n"), std::string::npos);
+    // http:// only for a server of the user's own (Gotify, ntfy, a webhook).
+    EXPECT_NE(platform::curl_config({"http://gotify.lan/message", "application/json", "{}", {}, true},
+                                    std::chrono::seconds(20))
+                  .find("proto = \"=https,http\"\n"),
+              std::string::npos);
 }
 
 // curl reads only that request: -q, as its first argument (the only place

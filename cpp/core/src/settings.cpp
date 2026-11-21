@@ -101,6 +101,30 @@ const std::unordered_map<std::string, Field>& fields() {
         {"pushover_priority", &Settings::pushover_priority},
         {"discord_enabled", &Settings::discord_enabled},
         {"discord_webhook", &Settings::discord_webhook},
+        {"discord_mention", &Settings::discord_mention},
+        {"discord_mention_when", &Settings::discord_mention_when},
+        {"discord_silent", &Settings::discord_silent},
+        {"gotify_enabled", &Settings::gotify_enabled},
+        {"gotify_url", &Settings::gotify_url},
+        {"gotify_token", &Settings::gotify_token},
+        {"gotify_priority", &Settings::gotify_priority},
+        {"ntfy_enabled", &Settings::ntfy_enabled},
+        {"ntfy_url", &Settings::ntfy_url},
+        {"ntfy_topic", &Settings::ntfy_topic},
+        {"ntfy_token", &Settings::ntfy_token},
+        {"ntfy_priority", &Settings::ntfy_priority},
+        {"pushbullet_enabled", &Settings::pushbullet_enabled},
+        {"pushbullet_token", &Settings::pushbullet_token},
+        {"pushbullet_device", &Settings::pushbullet_device},
+        {"slack_enabled", &Settings::slack_enabled},
+        {"slack_webhook", &Settings::slack_webhook},
+        {"telegram_enabled", &Settings::telegram_enabled},
+        {"telegram_token", &Settings::telegram_token},
+        {"telegram_chat", &Settings::telegram_chat},
+        {"telegram_silent", &Settings::telegram_silent},
+        {"webhook_enabled", &Settings::webhook_enabled},
+        {"webhook_url", &Settings::webhook_url},
+        {"webhook_header", &Settings::webhook_header},
     };
     return by_key;
 }
@@ -456,6 +480,30 @@ std::string Settings::text() const {
     data["pushover_priority"] = pushover_priority;
     data["discord_enabled"] = discord_enabled;
     data["discord_webhook"] = discord_webhook;
+    data["discord_mention"] = discord_mention;
+    data["discord_mention_when"] = discord_mention_when;
+    data["discord_silent"] = discord_silent;
+    data["gotify_enabled"] = gotify_enabled;
+    data["gotify_url"] = gotify_url;
+    data["gotify_token"] = gotify_token;
+    data["gotify_priority"] = gotify_priority;
+    data["ntfy_enabled"] = ntfy_enabled;
+    data["ntfy_url"] = ntfy_url;
+    data["ntfy_topic"] = ntfy_topic;
+    data["ntfy_token"] = ntfy_token;
+    data["ntfy_priority"] = ntfy_priority;
+    data["pushbullet_enabled"] = pushbullet_enabled;
+    data["pushbullet_token"] = pushbullet_token;
+    data["pushbullet_device"] = pushbullet_device;
+    data["slack_enabled"] = slack_enabled;
+    data["slack_webhook"] = slack_webhook;
+    data["telegram_enabled"] = telegram_enabled;
+    data["telegram_token"] = telegram_token;
+    data["telegram_chat"] = telegram_chat;
+    data["telegram_silent"] = telegram_silent;
+    data["webhook_enabled"] = webhook_enabled;
+    data["webhook_url"] = webhook_url;
+    data["webhook_header"] = webhook_header;
     return python_json_dumps(data, 2);
 }
 
