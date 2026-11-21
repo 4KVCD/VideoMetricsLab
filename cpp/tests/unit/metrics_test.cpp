@@ -102,5 +102,22 @@ TEST(Metrics, UnknownKeyIsNotFound) {
     EXPECT_THROW(metric_definition("vmaf_v2"), std::out_of_range);
 }
 
+// Pictures too small for a metric are refused, naming each metric with the
+// size it needs; the limit is on both sides, and a metric with none (PSNR,
+// CVVDP) takes any size.
+TEST(Metrics, TooSmallPicturesNameTheMetricsAndTheSizeEachNeeds) {
+    const std::vector<std::string> all{"vmaf", "vmaf_neg", "psnr", "ssim", "ssimulacra2", "butteraugli", "cvvdp"};
+    EXPECT_EQ(too_small_problem(all, 6, 6),
+              "The compared pictures, 6x6, are too small for VMAF v0.6.1 and VMAF NEG (at least 32x32); SSIM "
+              "(at least 11x11); SSIMULACRA2 and Butteraugli (at least 8x8).");
+    EXPECT_EQ(too_small_problem(all, 64, 10),
+              "The compared pictures, 64x10, are too small for VMAF v0.6.1 and VMAF NEG (at least 32x32); SSIM "
+              "(at least 11x11).");
+    EXPECT_EQ(too_small_problem(all, 32, 32), std::nullopt);
+    EXPECT_EQ(too_small_problem({"psnr", "xpsnr", "cvvdp"}, 2, 2), std::nullopt);
+    EXPECT_EQ(too_small_problem({"ssimulacra2"}, 8, 7),
+              "The compared pictures, 8x7, are too small for SSIMULACRA2 (at least 8x8).");
+}
+
 }  // namespace
 }  // namespace vml

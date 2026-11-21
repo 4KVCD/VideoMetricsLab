@@ -1010,6 +1010,7 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
     // looked for or a process is started (resampling keeps the tags).
     scored_colours(request.source, request.distorted);
     const CropPair found = crops ? *crops : perceptual_crops(request, on_status, cancel);
+    refuse_too_small(request, keys, found);
     if (isolation_program()) {
         return score_cpu_task_apart(request, keys, found, on_progress, on_status, cancel);
     }

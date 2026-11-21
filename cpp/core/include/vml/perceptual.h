@@ -125,6 +125,11 @@ CropPair resolve_crops(const std::string& ffmpeg, const VideoInfo& source, const
 CropPair perceptual_crops(const PerceptualRequest& request, const StatusCallback& on_status,
                           const CancelToken& cancel);
 
+// Throws PerceptualRunError when the pictures, cut by `crops`, are compared at
+// a size too small for one of the metrics of `keys` (metrics.h's
+// too_small_problem): SSIMULACRA2 and Butteraugli would give a perfect score.
+void refuse_too_small(const PerceptualRequest& request, const std::vector<std::string>& keys, const CropPair& crops);
+
 // The request with a resolution test's test video in it, which is the source
 // scaled down and back (VideoInfo::resample_via): that size depends on the
 // `crop`, and it reaches a pass's process with the video. Any other request as

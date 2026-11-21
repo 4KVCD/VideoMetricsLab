@@ -55,6 +55,11 @@ struct MetricDefinition {
     std::optional<FfmpegMetricBinding> ffmpeg_binding;
     // The backend that calculates a metric that is not FFmpeg's.
     std::string_view backend_id;
+    // The smallest width and height the metric gives a real score at (0:
+    // any); smaller pictures are refused (too_small_problem). SSIM's 11x11
+    // window, SSIMULACRA2's and Butteraugli's 8x8 (libjxl's own tool refuses
+    // less; its library and Vship give a perfect score there).
+    int smallest_side;
 
     // A score as shown: at the metric's precision, infinity as a sign, and
     // no value (or NaN) as a dash.
@@ -79,6 +84,11 @@ const MetricDefinition* find_metric(std::string_view key);
 
 // The metric with this key. Throws std::out_of_range for an unknown key.
 const MetricDefinition& metric_definition(std::string_view key);
+
+// Why pictures compared at `width` x `height` cannot be scored with the
+// metrics of `keys`, naming those they are too small for and the size each
+// needs (MetricDefinition::smallest_side); nothing when all can be.
+std::optional<std::string> too_small_problem(const std::vector<std::string>& keys, int width, int height);
 
 // The metrics' labels with `separator` between them: "VMAF v0.6.1, PSNR".
 std::string metric_labels(const std::vector<std::string>& keys, std::string_view separator = ", ");

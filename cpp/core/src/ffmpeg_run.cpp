@@ -2107,6 +2107,16 @@ void log_software_decoding(const HardwareDecoding& decoding, const VideoInfo& so
     log_video(decoding.distorted, distorted, "The test video");
 }
 
+// Throws VmafRunError when pictures compared at `size` are too small for one
+// of the run's metrics (too_small_problem): libvmaf's VMAF would read past
+// them on the CPU, and SSIM has no score under its window.
+void refuse_too_small(const VmafOptions& options, Size size) {
+    if (const std::optional<std::string> problem =
+            too_small_problem(options.requested_metrics(), size.first, size.second)) {
+        throw VmafRunError(*problem);
+    }
+}
+
 // run_vmaf's run of the pair as it is marked (size_changes.h). Throws
 // VideoSizeChanged when FFmpeg rebuilt its filters for one of them.
 ComparisonResult run_vmaf_once(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
@@ -2128,6 +2138,7 @@ ComparisonResult run_vmaf_once(const RunEnvironment& environment, const VideoInf
     // After cropping: removing a letterbox is what makes a letterboxed source
     // and a cropped encode the same shape.
     validate_display_geometry(source, distorted, source_crop, distorted_crop);
+    refuse_too_small(options, analysis_dimensions(source, distorted, options, source_crop, distorted_crop));
     return score_pair(environment, source, distorted, std::move(options), source_crop, distorted_crop, decoding,
                       on_progress, on_status, cancel, result_distorted_path);
 }
@@ -2355,6 +2366,7 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
     if (options.resample_test->width >= resample_analysis_dimensions(source, source_crop).first) {
         throw VmafRunError(resample_not_smaller);
     }
+    refuse_too_small(options, resample_analysis_dimensions(source, source_crop));
     if (std::optional<ComparisonResult> on_gpu =
             resample_test_on_gpu(environment, source, options, source_crop, on_progress, on_status, cancel)) {
         return std::move(*on_gpu);

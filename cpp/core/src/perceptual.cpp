@@ -4,6 +4,7 @@
 
 #include "vml/crop_detect.h"
 #include "vml/geometry.h"
+#include "vml/metrics.h"
 
 namespace vml {
 
@@ -93,6 +94,14 @@ CropPair perceptual_crops(const PerceptualRequest& request, const StatusCallback
         throw PerceptualRunError(resample_not_smaller);
     }
     return {crop, crop};
+}
+
+void refuse_too_small(const PerceptualRequest& request, const std::vector<std::string>& keys, const CropPair& crops) {
+    const auto [width, height] = compared_dimensions(request.source, request.distorted,
+                                                     request.options.scale_direction, crops.first, crops.second);
+    if (const std::optional<std::string> problem = too_small_problem(keys, width, height)) {
+        throw PerceptualRunError(*problem);
+    }
 }
 
 PerceptualRequest with_resample_test_video(PerceptualRequest request, const std::optional<CropBox>& crop) {

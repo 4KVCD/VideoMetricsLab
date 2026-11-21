@@ -2324,6 +2324,7 @@ public:
                               StatusKind::gpu_perceptual_failed});
         }
         const CropPair crops = routes_.find_crops(request_, hooks_.on_status, cancel_);
+        refuse_too_small(request_, keys_, crops);  // before any GPU work; CPU metrics too
         PerceptualTaskOutput gpu_output;
         try {
             gpu_output = routes_.run_gpu(request_, gpu_, *device_, crops, together_, hooks_, cancel_);
