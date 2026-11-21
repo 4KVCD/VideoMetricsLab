@@ -377,12 +377,13 @@ WeakSegmentsDialog::WeakSegmentsDialog(WeakFramesVideo video, const MetricDefini
         }
         saved_ = rules_to_save();
         profiles_.push_back({text, saved_});
-        emit rules_saved(text, saved_);
         {
             const QSignalBlocker blocker(profile_combo_);  // shown as it is, not started again
             profile_combo_->addItem(qt_text(text), qt_text(text));
             profile_combo_->setCurrentIndex(profile_combo_->count() - 1);
         }
+        // Picked before the window hands the profiles back (set_profiles).
+        emit rules_saved(text, saved_);
         show_saved_state();
     });
     save_row->addWidget(save_new_button_);
@@ -416,6 +417,34 @@ WeakSegmentsDialog::WeakSegmentsDialog(WeakFramesVideo video, const MetricDefini
     start_from_profile(metric);
     refresh();
     resize(760, 620);
+}
+
+void WeakSegmentsDialog::set_profiles(std::vector<SegmentProfile> profiles, const std::string& in_use) {
+    profiles_ = std::move(profiles);
+    if (profiles_.empty()) {
+        profiles_.push_back({"", SegmentRules{}});
+    }
+    {
+        const QSignalBlocker blocker(profile_combo_);  // what is shown stays, unsaved changes too
+        const QString picked = profile_combo_->currentData().toString();
+        profile_combo_->clear();
+        for (const SegmentProfile& profile : profiles_) {
+            profile_combo_->addItem(profile.name.empty() ? app::tr("Default") : qt_text(profile.name),
+                                    qt_text(profile.name));
+        }
+        // Names are the same in any case, as Settings takes them.
+        int index = profile_combo_->findData(picked, Qt::UserRole, Qt::MatchFixedString);
+        if (index < 0) {
+            index = profile_combo_->findData(qt_text(in_use), Qt::UserRole, Qt::MatchFixedString);
+        }
+        profile_combo_->setCurrentIndex(std::max(index, 0));
+    }
+    const auto profile = std::find_if(profiles_.begin(), profiles_.end(),
+                                      [name = profile_name()](const SegmentProfile& p) { return p.name == name; });
+    saved_ = profile != profiles_.end() ? profile->rules : SegmentRules{};
+    saved_.ranges.clear();
+    editor_->set_remembered(saved_.conditions);
+    show_saved_state();
 }
 
 std::string WeakSegmentsDialog::profile_name() const { return profile_combo_->currentData().toString().toStdString(); }
