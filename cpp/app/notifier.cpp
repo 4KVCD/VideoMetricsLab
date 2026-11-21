@@ -123,8 +123,10 @@ void Notifier::send(const std::vector<NotificationRequest>& requests) {
             }
             const QString answer = service_answer(reply->readAll());
             if (status == 0) {
-                // Qt's text can hold the URL, which for a webhook is its key.
-                emit sent(service, reply->errorString().replace(url, service));
+                // Qt's text can hold the URL, which for a webhook is its key,
+                // or its path alone (the token in it).
+                emit sent(service, QString::fromStdString(vml::without_secret_url(
+                                       reply->errorString().toStdString(), url.toStdString(), service.toStdString())));
             } else {
                 emit sent(service, answer.isEmpty() ? QStringLiteral("HTTP %1").arg(status)
                                                     : QStringLiteral("HTTP %1: %2").arg(status).arg(answer));

@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <string>
-#include <utility>
 
 #include "report.h"
 
@@ -36,31 +35,6 @@ std::string service_answer(const std::string& body) {
     std::replace(start.begin(), start.end(), '\n', ' ');
     std::replace(start.begin(), start.end(), '\r', ' ');
     return start;
-}
-
-// `text` with each `secret` in it replaced by `name`.
-std::string replaced(std::string text, const std::string& secret, const std::string& name) {
-    if (secret.empty()) {
-        return text;
-    }
-    for (std::size_t at = text.find(secret); at != std::string::npos; at = text.find(secret, at + name.size())) {
-        text.replace(at, secret.size(), name);
-    }
-    return text;
-}
-
-// `text` with `url` (a webhook's URL, which is its key) replaced by `name`,
-// and its path too: what curl's messages show of it when they show the
-// request (`POST /api/webhooks/<id>/<token>`), with or without the query.
-std::string without(std::string text, const std::string& url, const std::string& name) {
-    text = replaced(std::move(text), url, name);
-    const std::size_t scheme = url.find("://");
-    const std::size_t path = url.find('/', scheme == std::string::npos ? 0 : scheme + 3);
-    if (path == std::string::npos || path + 1 >= url.size()) {
-        return text;  // no path: nothing more to hide
-    }
-    text = replaced(std::move(text), url.substr(path), name);
-    return replaced(std::move(text), url.substr(path, url.find('?', path) - path), name);
 }
 
 }  // namespace
@@ -128,7 +102,7 @@ std::vector<NotifyLine> notify_run_end(const Settings& settings, const NotifiedR
                                : "HTTP " + std::to_string(answer.status) +
                                      (answer.body.empty() ? std::string() : ": " + service_answer(answer.body));
         lines.push_back({true, "The notification to " + request.service +
-                                   " could not be sent: " + without(why, request.url, request.service)});
+                                   " could not be sent: " + without_secret_url(why, request.url, request.service)});
     }
     return lines;
 }

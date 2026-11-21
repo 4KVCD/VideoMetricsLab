@@ -42,6 +42,20 @@ NotifiedRun sample_run() {
 // a metric's statistics, scores in the app's own format and units; a
 // failed video's scores are its result; unknown fields and stray braces
 // stay as typed; a single-line video line joins videos line by line.
+// An error's text loses a webhook's URL and its path, with or without the
+// query: the path holds the token (the window's notifier quoted Qt's text
+// with only the whole URL taken out).
+TEST(Notifications, AnErrorLosesTheWebhooksURLAndPath) {
+    const std::string url = "https://discord.com/api/webhooks/1/secret?wait=true";
+    EXPECT_EQ(without_secret_url("Error transferring " + url + " - server replied", url, "Discord"),
+              "Error transferring Discord - server replied");
+    EXPECT_EQ(without_secret_url("POST /api/webhooks/1/secret?wait=true failed", url, "Discord"),
+              "POST Discord failed");
+    EXPECT_EQ(without_secret_url("path /api/webhooks/1/secret: refused", url, "Discord"), "path Discord: refused");
+    EXPECT_EQ(without_secret_url("Host discord.com not found", url, "Discord"), "Host discord.com not found");
+    EXPECT_EQ(without_secret_url("timed out", "https://api.pushover.net", "Pushover"), "timed out");
+}
+
 TEST(Notifications, TemplatesFillInTheRun) {
     const NotifiedRun run = sample_run();
     EXPECT_EQ(render_notification(standard_notification_title, run, standard_notification_video_line),
