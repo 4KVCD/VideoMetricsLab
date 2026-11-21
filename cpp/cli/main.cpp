@@ -3,7 +3,7 @@
 //
 //     vml-cli compare REFERENCE TEST [TEST ...] [options]
 //     vml-cli bitrate VIDEO [VIDEO ...] [options]
-//     vml-cli bdrate --anchor CSV --test CSV [options]
+//     vml-cli bdrate --anchor FILE --test FILE [options]
 //     vml-cli devices
 //     vml-cli --version
 //

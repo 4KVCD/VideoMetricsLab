@@ -37,6 +37,19 @@ struct RateTable {
 // what is wrong, `name` naming the file.
 RateTable read_rate_table(std::string_view text, const std::string& name);
 
+// The table in a file of either form, by its text: JSON (its first
+// character, after a UTF-8 BOM and white space, a brace) or else CSV
+// (read_rate_table). A JSON file is
+// - a results document, as Export results and the command line's --json
+//   write it, or the command line's --batch {"batch": [...]}: an encode for
+//   each video with a bitrate of the whole file, the sequence its
+//   reference's file name without its extension, each metric's score;
+// - or a run file (.metrics.json): the encode of its one video, as
+//   rate_encode makes it.
+// A video of a range, failed or cancelled, or with no bitrate is left out.
+// Throws std::runtime_error, `name` naming the file, when none is left.
+RateTable read_rate_file(std::string_view text, const std::string& name);
+
 // `table` as a CSV file read_rate_table reads back as it is: its columns in
 // their order, numbers in full, an empty cell for a score not had. A UTF-8
 // byte order mark and CR LF line ends, as the app's other CSV files.

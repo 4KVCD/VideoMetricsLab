@@ -80,6 +80,9 @@ the `low` or `high` ones, and its `bands`.
 | `vmaf_model` | The VMAF model the result records. |
 | `reference_crop`, `test_crop` | The picture compared in each video (`x`, `y`, `width`, `height`), or `null` for the whole frame. |
 | `metrics` | Each metric's score and statistics (below). |
+| `whole_file` | Whether the scores are of the whole videos (`false` for a range), as the scores record it, so known for a saved run loaded into the window too. Only scores of the whole file go with its `bit_rate`. |
+| `resolution_test` | For a resolution test, what the reference was scaled to and back (`label`, `width`, `scaler`); else `null`. Its `bit_rate` is the reference's. |
+| `variant_of` | Window only: for a row that scores another row's file another way (a film grain twin, a "Test both" companion, CVVDP on a further display listed apart), that file; else `null`. |
 | `cvvdp_display`, `cvvdp_displays` | The display CVVDP's score is for, and every display CVVDP was scored on: `display`, `score`, `display_parameters`, `cvvdp` (its full summary), and for a further display its own `timings`. |
 | `settings` | Every setting that changes the scores or how to read them (below). |
 | `black_bars` | How the black bars were found (below). |

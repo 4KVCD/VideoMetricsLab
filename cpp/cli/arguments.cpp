@@ -72,7 +72,7 @@ const char* const bitrate_usage = R"(usage: VideoMetricsLab-cli bitrate [-h] [--
                                    VIDEO [VIDEO ...]
 )";
 
-const char* const bdrate_usage = R"(usage: VideoMetricsLab-cli bdrate [-h] --anchor CSV --test CSV [-m LIST]
+const char* const bdrate_usage = R"(usage: VideoMetricsLab-cli bdrate [-h] --anchor FILE --test FILE [-m LIST]
                                   [--group-by COLUMN] [--json FILE] [-q]
 )";
 
@@ -410,11 +410,13 @@ Calculates each sequence's BD-rate (Bjontegaard delta rate) for each metric: how
 
 options:
   -h, --help          show this help message and exit
-  --anchor CSV        the anchor's encodes: a CSV file with a row per encode
+  --anchor FILE       the anchor's encodes: a CSV file with a row per encode
                       and the columns sequence, kbps, and the scores of any
                       metrics by key (vmaf, psnr, ...; empty where not
-                      scored); other columns are only read for --group-by
-  --test CSV          the test encoder's encodes, in the same form; sequences
+                      scored), other columns only read for --group-by; or a
+                      JSON file, compare's --json (an encode per video) or a
+                      run file (.metrics.json)
+  --test FILE         the test encoder's encodes, in either form; sequences
                       are paired by name
   -m, --metrics LIST  comma-separated: vmaf, vmaf_neg, vmaf_v1, psnr, ssim,
                       xpsnr, ssimulacra2, butteraugli, cvvdp; or all (default:

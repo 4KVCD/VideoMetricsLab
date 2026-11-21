@@ -45,8 +45,10 @@ struct ExportedDisplay {
 
 // A run to export: its result, the name the window gives it, why each
 // metric that failed on its last run did, the preset of the display its
-// CVVDP score is for (none without one), CVVDP on further displays, and how
-// it was made: its run's facts and the run's record (none where unknown).
+// CVVDP score is for (none without one), CVVDP on further displays, how
+// it was made: its run's facts and the run's record (none where unknown),
+// and for a row that scores another row's file another way (a film grain
+// twin, a "Test both" companion, a further CVVDP display), that file.
 struct ExportedRun {
     std::shared_ptr<const ComparisonResult> result;
     QString label;
@@ -55,6 +57,7 @@ struct ExportedRun {
     std::vector<ExportedDisplay> other_displays{};
     std::shared_ptr<const RunFacts> facts{};
     std::shared_ptr<const RunRecord> record{};
+    std::optional<std::filesystem::path> variant_of{};
 };
 
 // The runs as one document: the reference the Videos tab compares with
