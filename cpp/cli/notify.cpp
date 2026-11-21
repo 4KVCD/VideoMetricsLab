@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
 
 #include "report.h"
 
@@ -37,8 +38,8 @@ std::string service_answer(const std::string& body) {
     return start;
 }
 
-// `text` with `secret` (a webhook's URL) replaced by `name`.
-std::string without(std::string text, const std::string& secret, const std::string& name) {
+// `text` with each `secret` in it replaced by `name`.
+std::string replaced(std::string text, const std::string& secret, const std::string& name) {
     if (secret.empty()) {
         return text;
     }
@@ -46,6 +47,20 @@ std::string without(std::string text, const std::string& secret, const std::stri
         text.replace(at, secret.size(), name);
     }
     return text;
+}
+
+// `text` with `url` (a webhook's URL, which is its key) replaced by `name`,
+// and its path too: what curl's messages show of it when they show the
+// request (`POST /api/webhooks/<id>/<token>`), with or without the query.
+std::string without(std::string text, const std::string& url, const std::string& name) {
+    text = replaced(std::move(text), url, name);
+    const std::size_t scheme = url.find("://");
+    const std::size_t path = url.find('/', scheme == std::string::npos ? 0 : scheme + 3);
+    if (path == std::string::npos || path + 1 >= url.size()) {
+        return text;  // no path: nothing more to hide
+    }
+    text = replaced(std::move(text), url.substr(path), name);
+    return replaced(std::move(text), url.substr(path, url.find('?', path) - path), name);
 }
 
 }  // namespace
