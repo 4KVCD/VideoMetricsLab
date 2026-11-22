@@ -27,6 +27,7 @@
 #include "reference.h"
 #include "report.h"
 #include "test_videos.h"
+#include "vml/metric_cache.h"
 #include "vml/model_select.h"
 #include "vml/platform/system.h"
 #include "vml/run_file.h"
@@ -955,6 +956,67 @@ TEST(CommandLine, GpuNamesAGpuThePcHas) {
               "--gpu radeon: more than one GPU here has that in its name: AMD Radeon RX 7900 XTX, AMD Radeon(TM) "
               "Graphics. Give more of the name.");
     EXPECT_EQ(gpu_refusal(std::string("radeon(tm)"), radeons), std::nullopt);
+}
+
+// A run can be held apart from the app's profile: VML_HOME names the folder
+// of the app's own files, --settings reads another settings file (one not
+// there is an input not read, not the defaults), --no-settings takes the
+// defaults, and --cache-dir, --no-save and --no-cache say where the saved
+// scores are and whether they are read and saved. The JSON says which.
+TEST(CommandLine, SettingsAndSavedScoresCanBeChosen) {
+    const std::filesystem::path temporary =
+        std::filesystem::temp_directory_path() / ("vml_profile_test_" + std::to_string(std::random_device{}()));
+    std::filesystem::create_directories(temporary);
+    const std::filesystem::path home = app_data_folder();
+    platform::set_environment_variable("VML_HOME", platform::path_text(temporary / "home"));
+    EXPECT_EQ(Settings::file(), temporary / "home" / "settings.json");
+    EXPECT_EQ(default_cache_dir(), temporary / "home" / "results_cache");
+    platform::set_environment_variable("VML_HOME", "");
+    EXPECT_EQ(app_data_folder(), home);
+
+    Settings mine = Settings::defaults();
+    mine.parallel_jobs = 2;
+    mine.default_compute_cvvdp = false;
+    mine.cache_dir = platform::path_text(temporary / "theirs");
+    ASSERT_FALSE(mine.save_to(temporary / "mine.json"));
+    const Arguments parsed = parse_arguments(
+        {"compare", "r.mkv", "a.mkv", "--settings", platform::path_text(temporary / "mine.json"), "--no-save"});
+    const ChosenSettings chosen = choose_settings(parsed.compare.profile);
+    EXPECT_EQ(chosen.from, "file");
+    EXPECT_EQ(chosen.settings.parallel_jobs, 2);
+    EXPECT_FALSE(chosen.settings.default_compute_cvvdp);
+    const SavedScoresUse saved = saved_scores_use(parsed.compare.profile, chosen.settings);
+    EXPECT_EQ(saved.folder, temporary / "theirs");
+    EXPECT_TRUE(saved.read);
+    EXPECT_FALSE(saved.save);
+    const nlohmann::ordered_json json = profile_json(chosen, saved, options_from_settings(parsed.compare, false));
+    EXPECT_EQ(json["settings"], "file");
+    EXPECT_EQ(json["settings_file"], platform::path_text(temporary / "mine.json"));
+    EXPECT_EQ(json["saved_scores"]["save"], false);
+    const auto& taken = json["options_from_settings"];
+    EXPECT_NE(std::find(taken.begin(), taken.end(), "--metrics"), taken.end());
+    EXPECT_NE(std::find(taken.begin(), taken.end(), "--cache-dir"), taken.end());
+    EXPECT_EQ(std::find(taken.begin(), taken.end(), "--gpu"), taken.end());  // not the settings' GPU
+
+    const Arguments defaults = parse_arguments({"compare", "r.mkv", "a.mkv", "--no-settings", "--no-cache"});
+    const ChosenSettings none = choose_settings(defaults.compare.profile);
+    EXPECT_EQ(none.from, "defaults");
+    EXPECT_TRUE(none.settings.default_compute_cvvdp);
+    EXPECT_FALSE(none.file);
+    const SavedScoresUse unused = saved_scores_use(defaults.compare.profile, none.settings);
+    EXPECT_FALSE(unused.read || unused.save);
+    EXPECT_TRUE(profile_json(none, unused, {})["saved_scores"]["folder"].is_null());
+    EXPECT_THROW(parse_arguments({"compare", "r.mkv", "a.mkv", "--no-cache", "--cache-dir", "x"}), UsageError);
+    EXPECT_THROW(parse_arguments({"compare", "r.mkv", "a.mkv", "--settings", "s.json", "--no-settings"}), UsageError);
+
+    ProfileArguments missing;
+    missing.settings_file = platform::path_text(temporary / "missing.json");
+    EXPECT_THROW(choose_settings(missing), SettingsUnreadable);
+    write_bytes_file(temporary / "broken.json", "{\"parallel_jobs\": ");
+    missing.settings_file = platform::path_text(temporary / "broken.json");
+    EXPECT_THROW(choose_settings(missing), SettingsUnreadable);
+    EXPECT_FALSE(std::filesystem::exists(temporary / "broken.json.unreadable"));  // the file named is not touched
+    std::filesystem::remove_all(temporary);
 }
 
 // The automation contract: every error, failure, note and why in the JSON has

@@ -21,6 +21,8 @@
 #include "arguments.h"
 #include "bdrate.h"
 #include "bitrate.h"
+#include "codes.h"
+#include "common.h"
 #include "compare.h"
 #include "devices.h"
 #include "vml/gpu_choice.h"
@@ -55,16 +57,36 @@ int main(int argc, char** argv) {
             platform::write_text(platform::Stream::output, *arguments.print_and_exit);
             return cli::exit_ok;
         }
+        // The settings the command runs with (--settings, --no-settings, else
+        // the profile's), read once; bdrate reads none.
+        const cli::ProfileArguments* profile = arguments.command == cli::Command::compare  ? &arguments.compare.profile
+                                               : arguments.command == cli::Command::bitrate ? &arguments.bitrate.profile
+                                               : arguments.command == cli::Command::devices ? &arguments.devices.profile
+                                                                                            : nullptr;
+        cli::ChosenSettings chosen;
+        if (profile != nullptr) {
+            try {
+                chosen = cli::choose_settings(*profile);
+            } catch (const cli::SettingsUnreadable& error) {
+                platform::write_text(platform::Stream::error, std::string(error.what()) + "\n");
+                if (arguments.command == cli::Command::compare) {
+                    cli::write_error_json(arguments.compare, error.what(), cli::codes::settings_unreadable);
+                }
+                return cli::exit_input;
+            }
+        }
         // The GPU to score on: --gpu, else one named in the environment,
-        // else the app's (Settings::gpu); the processes this one starts
+        // else the settings' (Settings::gpu); the processes this one starts
         // inherit it.
+        bool gpu_from_settings = false;
         if (arguments.command == cli::Command::compare && arguments.compare.gpu) {
             const std::string& gpu = *arguments.compare.gpu;
             choose_gpu(gpu == "auto" ? std::nullopt : std::optional(gpu));
         } else if (arguments.command == cli::Command::compare || arguments.command == cli::Command::devices) {
             if (!chosen_gpu()) {
-                const Settings settings = Settings::load();
-                choose_gpu(settings.gpu.empty() ? std::nullopt : std::optional(settings.gpu));
+                const std::string& gpu = chosen.settings.gpu;
+                choose_gpu(gpu.empty() ? std::nullopt : std::optional(gpu));
+                gpu_from_settings = true;
             }
         }
         resolve_chosen_gpu();
@@ -75,13 +97,13 @@ int main(int argc, char** argv) {
         app_log::log_to_console(verbose ? app_log::Level::info : app_log::Level::error);
         switch (arguments.command) {
             case cli::Command::compare:
-                return cli::compare(arguments.compare);
+                return cli::compare(arguments.compare, chosen, gpu_from_settings);
             case cli::Command::bitrate:
-                return cli::bitrate(arguments.bitrate);
+                return cli::bitrate(arguments.bitrate, chosen);
             case cli::Command::bdrate:
                 return cli::bdrate(arguments.bdrate);
             case cli::Command::devices:
-                return cli::devices();
+                return cli::devices(chosen.settings);
             case cli::Command::none:
                 platform::write_text(platform::Stream::output, cli::top_help());
                 return cli::exit_usage;

@@ -33,6 +33,16 @@ constexpr unsigned parallel_by_default_above_cores = 12;
 // The parallel-jobs setting a PC with `cores` logical cores starts with.
 int default_parallel_jobs(unsigned cores);
 
+// The environment variable that names the folder of the app's own files in
+// place of the user's home/.videometricslab: a profile of its own, for the
+// window and the command line alike.
+inline constexpr const char* app_data_variable = "VML_HOME";
+
+// The folder of the app's own files: settings.json, the saved scores
+// (results_cache), the logs and the GPU checks. VML_HOME's folder where it
+// is set (not empty), made absolute; else .videometricslab in the user's home.
+std::filesystem::path app_data_folder();
+
 struct Settings {
     // The folder holding ffmpeg and ffprobe; empty means "search the PATH".
     std::string ffmpeg_dir;
@@ -262,7 +272,13 @@ struct Settings {
     static Settings load();
     // load() from a given file, for tests.
     static Settings load_from(const std::filesystem::path& file);
-    // Where settings.json is: the user's home/.videometricslab.
+    // load_from() for a file the user named (the command line's --settings),
+    // which must be there and be JSON: throws std::runtime_error saying why
+    // not, where load_from() would take the defaults. Writes nothing.
+    static Settings load_checked(const std::filesystem::path& file);
+    // Every setting at its default, as a new profile has them.
+    static Settings defaults();
+    // Where settings.json is: in app_data_folder().
     static std::filesystem::path file();
 
     // Saves the settings as the Python app does (json.dumps(asdict(self),

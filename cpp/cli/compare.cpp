@@ -682,15 +682,16 @@ std::optional<std::string> gpu_not_yet(const std::vector<MetricTask>& tasks) {
 
 // Runs the jobs (job_runner.h), keeping each video's result, or why it or
 // some of its metrics failed, in its TestVideo (`targets` holds each job's),
-// saving it in the saved scores under `cache_folder` unless the video's
-// save_scores is false, and showing the run's progress (Progress). A video
+// saving it in the saved scores under `cache_folder` (none: nothing is saved,
+// --no-save) unless the video's save_scores is false, and showing the run's
+// progress (Progress). A video
 // whose run scored fewer frame pairs than its length holds has both videos'
 // frames counted (frame_pairing.h): where they state them, and with
 // `read_whole_files` by reading those that do not. A port of the Python
 // app's command line's cli.run.
 void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targets, const std::vector<VmafJob>& jobs,
-         int parallel, bool gpu_metrics_together, bool read_whole_files, const std::filesystem::path& cache_folder,
-         Progress& progress, const CancelToken& cancel) {
+         int parallel, bool gpu_metrics_together, bool read_whole_files,
+         const std::optional<std::filesystem::path>& cache_folder, Progress& progress, const CancelToken& cancel) {
     // The line being redrawn is drawn with new figures once a second while
     // the run lasts, and ends with the run, however the run ends.
     progress.start();
@@ -706,12 +707,12 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
     const auto keep = [&](std::size_t index, const ComparisonResult& result) {
         TestVideo& target = video(index);
         target.result = result;
-        if (!target.save_scores) {
+        if (!target.save_scores || !cache_folder) {
             return;
         }
         try {
             const std::lock_guard lock(saving);
-            store_result(cache_folder, result.source, target.path, target.request.recipe, result,
+            store_result(*cache_folder, result.source, target.path, target.request.recipe, result,
                          platform::path_text(target.path.stem()), target.request.metrics);
         } catch (const std::exception& error) {
             progress.message(target.label() + ": the scores could not be saved (" + error.what() + ")");
@@ -801,14 +802,15 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
 
 
 // Adds the job that calculates what `video` asks for, less what is saved
-// under `cache_folder` (when `use_saved`); with everything saved, takes the
+// under `cache_folder` (when `use_saved`; a saved comparison's files are
+// recorded there when `save`); with everything saved, takes the
 // saved result and adds none (the Python app's cli._queue). `options` are
 // the run's, with VMAF's model resolved; `share_decode` is plan_tasks's.
 // Returns what this version cannot do yet of the job's VMAF on the GPU
 // (gpu_not_yet), or nothing.
 std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, VmafOptions options,
                                  const PerceptualBackends& backends, const CvvdpSettings& cvvdp, bool use_saved,
-                                 const std::filesystem::path& cache_folder, std::vector<VmafJob>& jobs,
+                                 bool save, const std::filesystem::path& cache_folder, std::vector<VmafJob>& jobs,
                                  bool share_decode = false) {
     // The request the window makes for a row: what the saved scores are
     // looked up and saved under, so that the two apps find each other's.
@@ -839,8 +841,10 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
             saved->source_info.take_bit_rate(source);
             saved->distorted_info.take_bit_rate(*video.info);
             // Saved by an older version: its files recorded now, so that it
-            // is found when they move.
-            record_saved_files(cache_folder, source.path, video.path, video.request.recipe);
+            // is found when they move (not with --no-save).
+            if (save) {
+                record_saved_files(cache_folder, source.path, video.path, video.request.recipe);
+            }
         }
     }
     // The saved scores the run keeps, by the window's rule.
@@ -1081,13 +1085,23 @@ void cancel_on_interrupt(CancelToken cancel, const std::shared_ptr<Progress>& pr
 
 // Sets up where the black bars found are stored, as `settings` say. Returns
 // the saved scores' folder.
-std::filesystem::path apply_settings(const Settings& settings) {
-    const std::filesystem::path cache_folder = settings.cache_dir_path().value_or(default_cache_dir());
-    set_crop_store([cache_folder] {
-        std::filesystem::create_directories(cache_folder);
-        return cache_folder / black_bars_file;
-    });
-    return cache_folder;
+// The black bars found, kept with the saved scores as they are used:
+// read and written, read only (--no-save), or neither (--no-cache).
+void use_crop_store(const SavedScoresUse& saved) {
+    if (!saved.read) {
+        set_crop_store({});
+        return;
+    }
+    const std::filesystem::path folder = saved.folder;
+    const bool save = saved.save;
+    set_crop_store(
+        [folder, save] {
+            if (save) {
+                std::filesystem::create_directories(folder);
+            }
+            return folder / black_bars_file;
+        },
+        save);
 }
 
 // Whether looking for `video`'s film grain failed (scan_stream_start).
@@ -1104,7 +1118,7 @@ class ComparisonPlanner {
 public:
     ComparisonPlanner(const CompareArguments& arguments, const Settings& settings, const VideoInfo& source,
                       const std::vector<CvvdpDisplayChoice>& displays, std::vector<std::string> asked,
-                      std::filesystem::path cache_folder)
+                      const SavedScoresUse& saved)
         : arguments_(arguments),
           settings_(settings),
           source_(source),
@@ -1113,8 +1127,9 @@ public:
           backends_(perceptual_backends(arguments)),
           // The saved scores know a video by its file, not by the colours it
           // was read with, so --colour scores are neither read nor saved.
-          use_saved_(!arguments.recalculate && settings.use_cache && !arguments.colour),
-          cache_folder_(std::move(cache_folder)) {
+          use_saved_(saved.read && !arguments.colour),
+          save_(saved.save),
+          cache_folder_(saved.folder) {
         note_argument_use(source);
     }
 
@@ -1159,6 +1174,7 @@ private:
     const std::vector<std::string> asked_;
     const PerceptualBackends backends_;
     const bool use_saved_;
+    const bool save_;  // scores and records saved (not with --no-save or --no-cache)
     const std::filesystem::path cache_folder_;
     // Each job's video: its index, and for CVVDP on a further display, which.
     std::vector<std::pair<std::size_t, std::optional<std::size_t>>> job_videos_;
@@ -1429,8 +1445,8 @@ std::optional<std::string> ComparisonPlanner::queue_jobs(TestVideo& video, const
     }
     const std::size_t queued = jobs.size();
     if (std::optional<std::string> missing = queue(video, video.source, std::move(options), backends_,
-                                                   display.second, reads_saved(video), cache_folder_, jobs,
-                                                   share_decode)) {
+                                                   display.second, reads_saved(video), save_, cache_folder_,
+                                                   jobs, share_decode)) {
         return missing;
     }
     if (jobs.size() > queued) {
@@ -1456,7 +1472,7 @@ void ComparisonPlanner::queue_other_displays(TestVideo& video) {
         other.save_scores = video.save_scores;
         other.options = row_options(arguments_, settings_, other.metrics);
         const std::size_t before = jobs.size();
-        queue(other, other.source, other.options, backends_, displays_[display].second, reads_saved(other),
+        queue(other, other.source, other.options, backends_, displays_[display].second, reads_saved(other), save_,
               cache_folder_, jobs);
         if (jobs.size() > before) {
             job_videos_.emplace_back(videos.size() - 1, video.other_displays.size() - 1);
@@ -1899,7 +1915,8 @@ nlohmann::ordered_json comparison_results(const CompareArguments& arguments, Com
 // With --batch, each reference's in turn, and the JSON a list of them. False
 // when a file could not be written.
 bool write_results(const CompareArguments& arguments, const Comparisons& comparisons, bool cancelled,
-                   const RunRecord& record, const NameFields& fields, Progress& progress) {
+                   const RunRecord& record, const nlohmann::ordered_json& profile, const NameFields& fields,
+                   Progress& progress) {
     bool written = true;
     std::string tables;
     nlohmann::ordered_json batch = nlohmann::ordered_json::array();
@@ -1912,10 +1929,12 @@ bool write_results(const CompareArguments& arguments, const Comparisons& compari
                 {{"reference", reference}, {"error", comparison->error}, {"error_code", comparison->error_code}});
             if (!arguments.batch) {
                 document = error_document(reference, comparison->error, comparison->error_code, &record);
+                document["profile"] = profile;
             }
             continue;
         }
         document = comparison_results(arguments, *comparison, cancelled, record, fields, tables, written, progress);
+        document["profile"] = profile;
         batch.push_back(document);
     }
     if (arguments.batch) {
@@ -2062,7 +2081,7 @@ bool start_log_file(const std::filesystem::path& file, const std::vector<std::st
 std::optional<int> plan_comparison(Comparison& comparison, std::size_t index, VideoReads& reads,
                                    const CompareArguments& arguments, const Settings& settings,
                                    const ToolsStatus& tools, const std::vector<CvvdpDisplayChoice>& displays,
-                                   const std::vector<std::string>& asked, const std::filesystem::path& cache_folder,
+                                   const std::vector<std::string>& asked, const SavedScoresUse& saved,
                                    Progress& progress) {
     try {
         VideoRead read = reads.reference(index);
@@ -2078,7 +2097,7 @@ std::optional<int> plan_comparison(Comparison& comparison, std::size_t index, Vi
         return std::nullopt;
     }
     ComparisonPlanner& planner =
-        comparison.planner.emplace(arguments, settings, comparison.source, displays, asked, cache_folder);
+        comparison.planner.emplace(arguments, settings, comparison.source, displays, asked, saved);
     for (std::size_t test = 0; test < comparison.tests.size(); ++test) {
         const auto read = [&reads, index, test] { return reads.test(index, test); };
         if (const std::optional<std::string> missing = planner.plan(comparison.tests[test], read, tools.ffmpeg.path)) {
@@ -2105,17 +2124,48 @@ std::optional<int> plan_comparison(Comparison& comparison, std::size_t index, Vi
     return std::nullopt;
 }
 
-// --json: the error document (error_document) of a run that read nothing,
-// its --batch list not read; not where the path has a field that needs the
-// videos, which name_paths refuses. Written as the results would be: to
-// standard output for "-".
-void write_error_json(const CompareArguments& given, const NameFields& fields, const std::string& error,
-                      const std::string& code) {
+}  // namespace
+
+std::vector<std::string> options_from_settings(const CompareArguments& arguments, bool gpu_from_settings) {
+    std::vector<std::string> taken;
+    const auto left_out = [&taken](bool given, const char* option) {
+        if (!given) {
+            taken.emplace_back(option);
+        }
+    };
+    left_out(arguments.metrics.has_value(), "--metrics");
+    left_out(arguments.vmaf_on || arguments.cpu, "--vmaf-on");
+    left_out(arguments.vship.has_value(), "--vship");
+    left_out(arguments.vship_pass.has_value(), "--vship-pass");
+    left_out(arguments.film_grain.has_value(), "--film-grain");
+    left_out(!arguments.cvvdp_displays.empty(), "--cvvdp-display");
+    left_out(arguments.gpu_decode || arguments.no_gpu_decode, "--gpu-decode");
+    left_out(arguments.vvc_decoder || arguments.no_gpu_decode, "--vvc-decoder");
+    left_out(!gpu_from_settings, "--gpu");
+    left_out(arguments.parallel.has_value(), "--parallel");
+    left_out(arguments.frame_counts.has_value(), "--frame-counts");
+    left_out(arguments.test_remuxes.has_value(), "--test-remuxes");
+    left_out(arguments.profile.cache_dir || arguments.profile.no_cache, "--cache-dir");
+    if (arguments.segments_saved && !arguments.segments_profile && !arguments.segments_preset) {
+        taken.emplace_back("--segments");  // "saved": the profile in use
+    }
+    if (arguments.notify) {
+        taken.emplace_back("--notify");  // its services and message
+    }
+    return taken;
+}
+
+void write_error_json(const CompareArguments& given, const std::string& error, const std::string& code) {
     CompareArguments arguments = given;
+    const NameFields fields = run_fields(platform::local_time(std::time(nullptr)));
     if (!arguments.json_path || name_paths(arguments, {}, fields)) {
         return;
     }
-    const nlohmann::ordered_json document = error_document(std::nullopt, error, code);
+    const std::optional<std::string> reference =
+        arguments.batch || !arguments.reference
+            ? std::nullopt
+            : std::optional(platform::path_text(absolute_path(python_path(*arguments.reference))));
+    const nlohmann::ordered_json document = error_document(reference, error, code);
     if (*arguments.json_path == "-") {
         print_results(python_json_dumps(document) + "\n");
     } else if (const std::optional<std::string> failure =
@@ -2124,9 +2174,7 @@ void write_error_json(const CompareArguments& given, const NameFields& fields, c
     }
 }
 
-}  // namespace
-
-int compare(const CompareArguments& given) {
+int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gpu_from_settings) {
     // The command's start, for the results' record and the files' names
     const std::chrono::system_clock::time_point start = std::chrono::system_clock::now();
     const std::string started_utc = utc_text(start);
@@ -2145,7 +2193,7 @@ int compare(const CompareArguments& given) {
     } catch (const std::runtime_error& error) {
         const std::string why = "--batch: " + std::string(error.what());
         print_error(why);
-        write_error_json(given, fields, why, codes::batch_unreadable);
+        write_error_json(given, why, codes::batch_unreadable);
         return exit_input;
     }
     CompareArguments arguments = given;  // with the fields in its paths replaced
@@ -2172,8 +2220,16 @@ int compare(const CompareArguments& given) {
                     "black bars are detected.");
         return exit_usage;
     }
-    const Settings settings = Settings::load();
-    const std::filesystem::path cache_folder = apply_settings(settings);
+    const Settings& settings = chosen.settings;
+    const SavedScoresUse saved = saved_scores_use(arguments.profile, settings);
+    // Saved scores read unless asked to calculate again (--recalculate, or
+    // the settings' "Reuse a saved result when a video is added again" off);
+    // the black bars found are still read: they are not scores.
+    const bool read_scores = saved.read && !arguments.recalculate && settings.use_cache;
+    use_crop_store(saved);
+    SavedScoresUse scores = saved;  // the scores': read as read_scores says
+    scores.read = read_scores;
+    const std::filesystem::path& cache_folder = saved.folder;
     const ToolsStatus tools = check_tools(settings);
     if (!tools.ok()) {
         print_error(ffmpeg_problem(tools));
@@ -2250,7 +2306,7 @@ int compare(const CompareArguments& given) {
         });
         for (std::size_t index = 0; index < comparisons.size(); ++index) {
             if (const std::optional<int> wrong = plan_comparison(*comparisons[index], index, reads, arguments,
-                                                                 settings, tools, displays, asked, cache_folder,
+                                                                 settings, tools, displays, asked, scores,
                                                                  *progress)) {
                 return *wrong;
             }
@@ -2295,7 +2351,7 @@ int compare(const CompareArguments& given) {
             run(run_environment(tools, jobs), targets, jobs, arguments.parallel.value_or(settings.parallel_jobs),
                 arguments.vship_pass ? *arguments.vship_pass == "one" : settings.gpu_metrics_together,
                 arguments.frame_counts ? *arguments.frame_counts == "check" : settings.check_frame_counts,
-                cache_folder, *progress, cancel);
+                scores.save ? std::optional(cache_folder) : std::nullopt, *progress, cancel);
         }
         cancelled = cancel.cancelled();
         *running = false;
@@ -2315,7 +2371,7 @@ int compare(const CompareArguments& given) {
         std::optional<FramesShort>& frames_short = video.result->frames_short;
         frames_short = count_frames_short(*frames_short, video.result->source_info, video.result->distorted_info,
                                           container_frame_counter(tools.ffprobe.path, cancel, read_whole_files));
-        if (video.save_scores && frames_short->counted()) {
+        if (video.save_scores && scores.save && frames_short->counted()) {
             try {
                 store_result(cache_folder, video.result->source, video.path, video.request.recipe, *video.result,
                              platform::path_text(video.path.stem()), video.request.metrics);
@@ -2363,11 +2419,13 @@ int compare(const CompareArguments& given) {
                      0.0,
                      1,
                      this_machine(tools.ffmpeg.path, format_version(tools.ffmpeg.version))};
-    const bool written = write_results(arguments, comparisons, cancelled, record, fields, *progress);
+    const bool written = write_results(arguments, comparisons, cancelled, record,
+                                       profile_json(chosen, scores, options_from_settings(arguments, gpu_from_settings)),
+                                       fields, *progress);
     if (arguments.notify) {
         notify_of_run(settings, comparisons, cancelled, every_ok, record.wall_seconds.value_or(0.0), *progress);
     }
-    if (test_remuxes && !cancelled) {
+    if (test_remuxes && scores.save && !cancelled) {
         record_test_streams(comparisons, cache_folder, *progress, cancel);  // after the results: nothing waits
     }
     const int exit_code = cancelled              ? exit_cancelled

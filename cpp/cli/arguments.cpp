@@ -61,14 +61,18 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--segments-report FILE] [--run-dir FOLDER]
                                    [--log-file FILE] [--name TEMPLATE]
                                    [--notify] [-q] [-v]
+                                   [--settings FILE | --no-settings]
+                                   [--cache-dir FOLDER] [--no-save | --no-cache]
                                    [REFERENCE] [TEST ...]
 )";
 
-const char* const devices_usage = "usage: VideoMetricsLab-cli devices [-h]\n";
+const char* const devices_usage = "usage: VideoMetricsLab-cli devices [-h] [--settings FILE | --no-settings]\n";
 
 const char* const bitrate_usage = R"(usage: VideoMetricsLab-cli bitrate [-h] [--fps RATE] [--csv FOLDER]
                                    [--no-adjust-start] [--difference]
                                    [--json FILE] [-q]
+                                   [--settings FILE | --no-settings]
+                                   [--cache-dir FOLDER] [--no-save | --no-cache]
                                    VIDEO [VIDEO ...]
 )";
 
@@ -130,7 +134,7 @@ options:
 )";
 
 const char* const compare_sections = R"(
-Calculates metrics for each TEST video against REFERENCE. Options left out take the app's saved settings; scores already saved by the app or an earlier run are not calculated again.
+Calculates metrics for each TEST video against REFERENCE. Options left out take the app's saved settings (or --settings FILE's, or with --no-settings the defaults); scores already saved by the app or an earlier run are not calculated again (--no-cache: they are).
 
 positional arguments:
   REFERENCE             the reference video (not with --batch)
@@ -254,7 +258,10 @@ options:
                         is GPU only): VMAF as with --vmaf-on cpu, unless
                         --vmaf-on says otherwise, and SSIMULACRA2 and
                         Butteraugli rather than on the GPU where one can
-  --no-gpu-decode       decode the videos on the CPU
+)"
+// (Two literals: MSVC takes at most 16,380 bytes in one, error C2026. The
+// test SourceLimits.StringLiteralsFitMsvc holds every literal under it.)
+R"(  --no-gpu-decode       decode the videos on the CPU
   --gpu-decode {auto,nvidia,intel,amd}
                         decode the videos on the GPU: auto, the first GPU
                         whose decoder takes each video (NVIDIA, Intel, then
@@ -375,6 +382,17 @@ options:
                         the progress lines; the exit code is the run's
   -q, --quiet           no progress, only the results
   -v, --verbose         the app's log as well
+  --settings FILE       read the settings from FILE (a settings.json, such as
+                        a copy of the app's) in place of the app's; options
+                        left out take its settings, and it is never written
+  --no-settings         every setting at its default, as a new install has
+                        them, whatever the app's settings say
+  --cache-dir FOLDER    read and save the saved scores in FOLDER, in place of
+                        the folder the settings name
+  --no-save             read the saved scores, but save nothing: no scores,
+                        black bars or remux records are written to them
+  --no-cache            neither read nor save the saved scores: every metric
+                        is calculated, and nothing is kept
 
 )";
 
@@ -382,7 +400,10 @@ const char* const devices_sections = R"(
 Shows FFmpeg's version and what would calculate each metric on this PC.
 
 options:
-  -h, --help  show this help message and exit
+  -h, --help       show this help message and exit
+  --settings FILE  read the settings (FFmpeg's folder, the GPU chosen) from
+                   FILE in place of the app's
+  --no-settings    every setting at its default, whatever the app's say
 )";
 
 const char* const bitrate_sections = R"(
@@ -410,6 +431,13 @@ options:
   --json FILE           also write the results as JSON to FILE; - prints the
                         JSON instead of the table
   -q, --quiet           no progress, only the results
+  --settings FILE       read the settings (FFmpeg's folder, the saved
+                        bitrate's folder) from FILE in place of the app's
+  --no-settings         every setting at its default, whatever the app's say
+  --cache-dir FOLDER    read and save the saved bitrate in FOLDER, in place of
+                        the folder the settings name
+  --no-save             read the saved bitrate, but save none
+  --no-cache            neither read nor save the saved bitrate
 
 )";
 
@@ -1159,6 +1187,26 @@ Action help(const std::string& text) {
     return {{"-h", "--help"}, "", Nargs::none, false, [text](const std::vector<std::string>&) { throw Printed{text}; }};
 }
 
+// The options that choose the settings (--settings, --no-settings) and, with
+// `cache`, the saved scores (--cache-dir, --no-save, --no-cache), added to
+// `parser`, keeping what they read in `profile`.
+void add_profile_options(Parser& parser, ProfileArguments& profile, bool cache) {
+    parser.actions.push_back(option({"--settings"}, [&profile](const std::string& value) {
+        profile.settings_file = value;
+    }));
+    parser.actions.push_back(flag({"--no-settings"}, profile.no_settings));
+    parser.exclusive.emplace_back("--settings", "--no-settings");
+    if (cache) {
+        parser.actions.push_back(option({"--cache-dir"}, [&profile](const std::string& value) {
+            profile.cache_dir = value;
+        }));
+        parser.actions.push_back(flag({"--no-save"}, profile.no_save));
+        parser.actions.push_back(flag({"--no-cache"}, profile.no_cache));
+        parser.exclusive.emplace_back("--no-save", "--no-cache");
+        parser.exclusive.emplace_back("--cache-dir", "--no-cache");
+    }
+}
+
 // The compare command's parser, keeping what it reads in `parsed`.
 Parser compare_parser(CompareArguments& parsed) {
     const std::string help_text = std::string(compare_usage) + compare_sections + examples;
@@ -1268,6 +1316,7 @@ Parser compare_parser(CompareArguments& parsed) {
                         {"--range", "--frames"},
                         {"--no-gpu-decode", "--gpu-decode"},
                         {"--segments-all", "--segments-any"}};
+    add_profile_options(parser, parsed.profile, true);
     return parser;
 }
 
@@ -1285,6 +1334,7 @@ Parser bitrate_parser(BitrateArguments& parsed) {
         option({"--json"}, [&parsed](const std::string& value) { parsed.json_path = value; }),
         flag({"-q", "--quiet"}, parsed.quiet),
     };
+    add_profile_options(parser, parsed.profile, true);
     return parser;
 }
 
@@ -1426,7 +1476,8 @@ Arguments parse_arguments(const std::vector<std::string>& arguments) {
                  command_extras = parse_command(parser, bdrate_usage, std::string(program) + " bdrate", rest);
              } else {
                  parsed.command = Command::devices;
-                 const Parser parser{{help(std::string(devices_usage) + devices_sections)}, {}};
+                 Parser parser{{help(std::string(devices_usage) + devices_sections)}, {}};
+                 add_profile_options(parser, parsed.devices.profile, false);
                  command_extras = parse_command(parser, devices_usage, std::string(program) + " devices", rest);
              }
          }},

@@ -65,11 +65,10 @@ std::vector<std::string> device_lines(const DeviceFindings& found) {
     return lines;
 }
 
-int devices() {
+int devices(const Settings& settings) {
     // Ctrl+C ends the command at once with exit code 130, as the Python
     // app's KeyboardInterrupt ends it; a check under way ends with it.
     platform::on_interrupt([] { platform::end_process_now(exit_cancelled); });
-    const Settings settings = Settings::load();
     // Checked anew, not answered by an earlier start: a user asks to know
     // how the GPU does now. What passes is saved again.
     forget_gpu_checks();
