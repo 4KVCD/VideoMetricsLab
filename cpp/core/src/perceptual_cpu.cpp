@@ -23,6 +23,7 @@
 #include "vml/app_log.h"
 #include "vml/append.h"
 #include "vml/build_info.h"
+#include "vml/butteraugli.h"
 #include "vml/colour.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/ffmpeg_tools.h"
@@ -58,14 +59,12 @@ constexpr double memory_share = 0.6;
 // pictures are scored many times a second.
 constexpr std::chrono::milliseconds progress_interval{250};
 
-// The memory of one worker of the app's engines (in_app_schedule): its copy
-// of the pair (two 16-bit RGB pictures), its Butteraugli's planes, and its
-// SSIMULACRA2, which keeps only the rows its filters still need. Measured as
-// the peak working set added by each further worker, at 3840x2160 and
-// 1920x1080: Butteraugli 133-134 bytes per pixel besides the pictures (here
-// with a margin), SSIMULACRA2 about 3 MB at either size.
+// The memory of one worker of the app's engines (in_app_schedule) besides
+// its Butteraugli's (Butteraugli::memory_bytes): its copy of the pair (two
+// 16-bit RGB pictures), and its SSIMULACRA2, which keeps only the rows its
+// filters still need, about 3 MB at 3840x2160 or 1920x1080 (measured as the
+// peak working set added by each further worker; here with a margin).
 constexpr long long in_app_picture_bytes_per_pixel = 12;
-constexpr long long in_app_butteraugli_bytes_per_pixel = 160;
 constexpr long long in_app_ssimulacra2_bytes = 8LL << 20;
 
 // A program's output as Python reads it in text mode: its line endings
@@ -337,7 +336,7 @@ private:
 
 // ----------------------------------------------------------------- public
 
-InAppSchedule in_app_schedule(long long pixels, const std::vector<std::string>& metrics, int concurrent_tasks,
+InAppSchedule in_app_schedule(int width, int height, const std::vector<std::string>& metrics, int concurrent_tasks,
                               unsigned cores, std::optional<unsigned long long> free_memory) {
     const long long task_cores =
         std::max(1LL, static_cast<long long>(std::max(1u, cores)) / std::max(1, concurrent_tasks));
@@ -353,9 +352,11 @@ InAppSchedule in_app_schedule(long long pixels, const std::vector<std::string>& 
     }
     workers = std::max(1LL, workers);
     if (free_memory) {
+        const auto columns = static_cast<std::size_t>(std::max(1, width));
+        const auto rows = static_cast<std::size_t>(std::max(1, height));
         const long long per_worker =
-            std::max(1LL, pixels) *
-                (in_app_picture_bytes_per_pixel + (butteraugli ? in_app_butteraugli_bytes_per_pixel : 0)) +
+            static_cast<long long>(columns * rows) * in_app_picture_bytes_per_pixel +
+            (butteraugli ? static_cast<long long>(Butteraugli::memory_bytes(columns, rows, task_cores)) : 0) +
             (ssimulacra2 ? in_app_ssimulacra2_bytes : 0);
         const auto share = static_cast<long long>(static_cast<double>(*free_memory) * memory_share /
                                                   std::max(1, concurrent_tasks));
@@ -866,9 +867,8 @@ PerceptualTaskOutput score_cpu_task(const PerceptualRequest& request, const std:
     if (free_memory) {
         *free_memory = *free_memory > pipes ? *free_memory - pipes : 0;
     }
-    const long long pixels = static_cast<long long>(width) * height;
     const InAppSchedule schedule =
-        in_app_schedule(pixels, keys, request.concurrent_cpu_tasks, platform::logical_cores(), free_memory);
+        in_app_schedule(width, height, keys, request.concurrent_cpu_tasks, platform::logical_cores(), free_memory);
     const bool with_butteraugli = std::find(keys.begin(), keys.end(), "butteraugli") != keys.end();
     logger.info(join(keys, " and ") + ": " + std::to_string(schedule.workers) + " frame pair" +
                 (schedule.workers == 1 ? "" : "s") + " at a time" +

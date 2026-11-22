@@ -1,20 +1,17 @@
-// The small part of libjxl's image API that the Butteraugli port
-// (butteraugli_kernels.cpp, butteraugli.cpp) is written against: float
-// planes whose rows are 64-byte aligned and padded to a whole number of
-// vectors, as libjxl's ImageF rows are, so that its vector loops can run past
-// the last pixel of a row without leaving it.
+// The shared parts of VideoMetricsLab's Butteraugli engine
+// (butteraugli.cpp drives it, butteraugli_kernels.cpp holds its per-row
+// kernels). The engine computes a picture pair's map row by row: each stage
+// of libjxl's comparator makes one row of its output at a time from rows of
+// its inputs, and keeps its output in a ring of just the rows its consumers
+// still need (every Butteraugli filter reaches a few rows only), where
+// libjxl keeps whole planes. Rows are 64-byte aligned and padded to a whole
+// number of vectors, as libjxl's ImageF rows are, so that its vector loops
+// can run past the last pixel of a row without leaving it.
 #pragma once
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstdlib>
-#include <memory>
-#include <new>
-#include <utility>
-#include <vector>
-
-#include "row_pool.h"
+#include <cstring>
 
 namespace vml::butteraugli {
 
@@ -23,91 +20,7 @@ namespace vml::butteraugli {
 // stay inside the row.
 inline constexpr std::size_t kRowAlign = 16;
 
-class ImageF {
-public:
-    ImageF() = default;
-    ImageF(std::size_t xsize, std::size_t ysize) { allocate(xsize, ysize); }
-    ImageF(ImageF&&) noexcept = default;
-    ImageF& operator=(ImageF&&) noexcept = default;
-
-    std::size_t xsize() const { return xsize_; }
-    std::size_t ysize() const { return ysize_; }
-    std::size_t PixelsPerRow() const { return stride_; }
-
-    float* Row(std::size_t y) { return data_.get() + y * stride_; }
-    const float* Row(std::size_t y) const { return data_.get() + y * stride_; }
-    const float* ConstRow(std::size_t y) const { return Row(y); }
-
-    // This size, in the plane's buffer when it is large enough (so that the
-    // half-resolution comparison reuses the full one's planes), else in a new
-    // one. The contents are left as they are, as libjxl's are undefined after
-    // Create: every user writes a plane before reading it.
-    void ensure(std::size_t xsize, std::size_t ysize) {
-        if (xsize == xsize_ && ysize == ysize_) return;
-        const std::size_t stride = row_floats(xsize);
-        if (stride * std::max<std::size_t>(ysize, 1) > capacity_) {
-            allocate(xsize, ysize);
-            return;
-        }
-        xsize_ = xsize;
-        ysize_ = ysize;
-        stride_ = stride;
-    }
-
-    void zero() {
-        if (data_) std::fill(data_.get(), data_.get() + stride_ * ysize_, 0.0f);
-    }
-
-private:
-    struct AlignedFree {
-        void operator()(float* p) const { ::operator delete[](p, std::align_val_t{64}); }
-    };
-
-    static std::size_t row_floats(std::size_t xsize) { return ((xsize + kRowAlign - 1) / kRowAlign + 1) * kRowAlign; }
-
-    void allocate(std::size_t xsize, std::size_t ysize) {
-        xsize_ = xsize;
-        ysize_ = ysize;
-        stride_ = row_floats(xsize);
-        capacity_ = stride_ * std::max<std::size_t>(ysize, 1);
-        data_.reset(static_cast<float*>(::operator new[](capacity_ * sizeof(float), std::align_val_t{64})));
-        // Zeroed so that the padding never holds NaNs.
-        std::fill(data_.get(), data_.get() + capacity_, 0.0f);
-    }
-
-    std::unique_ptr<float[], AlignedFree> data_;
-    std::size_t xsize_ = 0;
-    std::size_t ysize_ = 0;
-    std::size_t stride_ = 0;
-    std::size_t capacity_ = 0;  // floats in data_
-};
-
-class Image3F {
-public:
-    Image3F() = default;
-    Image3F(std::size_t xsize, std::size_t ysize)
-        : planes_{ImageF(xsize, ysize), ImageF(xsize, ysize), ImageF(xsize, ysize)} {}
-
-    std::size_t xsize() const { return planes_[0].xsize(); }
-    std::size_t ysize() const { return planes_[0].ysize(); }
-
-    ImageF& Plane(std::size_t c) { return planes_[c]; }
-    const ImageF& Plane(std::size_t c) const { return planes_[c]; }
-    float* PlaneRow(std::size_t c, std::size_t y) { return planes_[c].Row(y); }
-    const float* PlaneRow(std::size_t c, std::size_t y) const { return planes_[c].Row(y); }
-    const float* ConstPlaneRow(std::size_t c, std::size_t y) const { return planes_[c].Row(y); }
-
-    void ensure(std::size_t xsize, std::size_t ysize) {
-        for (auto& plane : planes_) plane.ensure(xsize, ysize);
-    }
-
-    void zero() {
-        for (auto& plane : planes_) plane.zero();
-    }
-
-private:
-    ImageF planes_[3];
-};
+inline std::size_t row_floats(std::size_t xsize) { return ((xsize + kRowAlign - 1) / kRowAlign + 1) * kRowAlign; }
 
 struct ButteraugliParams {
     float hf_asymmetry = 1.0f;     // multiplier for new HF artifacts against blurred-away features
@@ -115,55 +28,19 @@ struct ButteraugliParams {
     float intensity_target = 80.0f;  // nits of an input value of 1.0
 };
 
-// One picture's frequency bands, as libjxl's PsychoImage: ultra-high and high
-// frequencies for X and Y, medium and low for X, Y and B.
-struct PsychoImage {
-    ImageF uhf[2];
-    ImageF hf[2];
-    Image3F mf;
-    Image3F lf;
-};
-
-// The separable blurs' plane between their two passes, kept between calls.
-// The columns of one strip of separable_blur, and the rows of one strip's
-// ring: two copies of the last 2 * 16 + 1 rows of the longest kernel.
-inline constexpr std::size_t kBlurStripColumns = 256;
-inline constexpr std::size_t kBlurRingRows = 2 * (2 * 16 + 1);
-
-// blur's scratch: the strips' rings, and a plane for a blur in place.
-struct BlurTemp {
-    ImageF* plane(const ImageF& in) {
-        temp.ensure(in.xsize(), in.ysize());
-        return &temp;
-    }
-    // A ring of kBlurRingRows rows per strip of a plane `xsize` wide. Its
-    // rows are ImageF rows of kBlurStripColumns, whose padding (one more
-    // 64-byte line) keeps their distance off a power of two.
-    ImageF* rings(std::size_t xsize) {
-        const std::size_t strips = (xsize + kBlurStripColumns - 1) / kBlurStripColumns;
-        ring_rows.ensure(kBlurStripColumns, strips * kBlurRingRows);
-        return &ring_rows;
-    }
-    ImageF temp;
-    ImageF ring_rows;
-};
-
-// Planes of the level's size that the masking overwrites (its inputs and
-// intermediate results), lent by the engine from planes it no longer needs.
-struct MaskScratch {
-    ImageF* mask0;
-    ImageF* mask1;
-    ImageF* diff0;
-    ImageF* diff1;
-    ImageF* blurred0;
-    ImageF* blurred1;
-};
-
 // The weights of a 5x5 separable blur, as libjxl's WeightsSeparable5: per
 // direction the weights at distances 0, 1 and 2, each repeated 4 times.
 struct WeightsSeparable5 {
     float horz[3 * 4];
     float vert[3 * 4];
+};
+
+// A blur's kernel (libjxl's ComputeKernel, at most 33 taps) and its centre
+// and left half scaled by 1 / the sum of its taps, as libjxl's convolution
+// weighs the pixels away from the borders.
+struct BlurKernel {
+    float taps[33];
+    float sk[17];
 };
 
 // libjxl's Mirror: out-of-range coordinates reflected, the border pixel
@@ -175,37 +52,109 @@ inline std::int64_t Mirror(std::int64_t x, const std::int64_t xsize) {
     return x;
 }
 
-// The functions below that take a RowPool run their passes in its threads,
-// each pass's rows in bands; the results do not depend on the thread count.
+// Malta's differences have a margin of zeros round them: kMaltaLeft pixels
+// at the left of each row (so that the pixels stay 64-byte aligned),
+// kMaltaMargin at the right, and kMaltaMargin rows of zeros above and below
+// the picture. That is what libjxl's PaddedMaltaUnit gives a pixel near a
+// border, one pixel at a time; with the margins, MaltaUnit (which reads
+// kMaltaMargin pixels round its own) runs in vectors on every pixel.
+inline constexpr std::size_t kMaltaLeft = 16;
+inline constexpr std::size_t kMaltaMargin = 4;
 
-// butteraugli.cpp: libjxl's Blur (a 5-tap kernel through separable5, others
-// through separable_blur).
-void blur(RowPool& pool, const ImageF& in, float sigma, BlurTemp* temp, ImageF* out);
-// convolve_slow.cc's SlowSeparable5, for planes too narrow for separable5.
-void slow_separable5(const ImageF& in, const WeightsSeparable5& weights, ImageF* out);
+// The rows of one plane that a stage keeps: row y in slot y % rows. A ring
+// read through a window of consecutive rows (a vertical blur, Malta) keeps a
+// second copy of each slot `rows` slots on, so that any window of up to
+// `rows` rows lies one stride apart from its first row's slot on; a ring of
+// a whole plane (rows = the plane's height) needs no copy.
+struct Ring {
+    float* data = nullptr;
+    std::size_t stride = 0;  // floats from one slot to the next
+    std::size_t rows = 0;
+    bool doubled = false;
 
-// butteraugli_kernels.cpp, dispatched to the CPU's best instruction set.
-void separable5(RowPool& pool, const ImageF& in, const WeightsSeparable5& weights, ImageF* out);
-void opsin_dynamics_image(RowPool& pool, const Image3F& rgb, const ButteraugliParams& params, Image3F* blurred,
-                          BlurTemp* blur_temp, Image3F* xyb);
-// Uses xyb up: its planes become ps.mf's, and it gets ps.mf's old ones.
-void separate_frequencies(RowPool& pool, BlurTemp* blur_temp, Image3F& xyb, PsychoImage& ps);
-// padded_diffs: scratch, resized here to hold Malta's differences with a
-// margin of zeros round them.
-void malta_diff_map(RowPool& pool, const ImageF& lum0, const ImageF& lum1, double w_0gt1, double w_0lt1, double norm1,
-                    ImageF* padded_diffs, ImageF* block_diff_ac);
-void malta_diff_map_lf(RowPool& pool, const ImageF& lum0, const ImageF& lum1, double w_0gt1, double w_0lt1, double norm1,
-                       ImageF* padded_diffs, ImageF* block_diff_ac);
-void l2_diff_asymmetric(RowPool& pool, const ImageF& i0, const ImageF& i1, float w_0gt1, float w_0lt1, ImageF* diffmap);
-void l2_diff(RowPool& pool, const ImageF& i0, const ImageF& i1, float w, ImageF* diffmap);
-void set_l2_diff(RowPool& pool, const ImageF& i0, const ImageF& i1, float w, ImageF* diffmap);
-void mask_psycho_image(RowPool& pool, const PsychoImage& pi0, const PsychoImage& pi1, BlurTemp* blur_temp,
-                       const MaskScratch& scratch, ImageF* mask, ImageF* diff_ac);
-void combine_channels_to_diffmap(RowPool& pool, const ImageF& mask, const Image3F& block_diff_dc, const Image3F& block_diff_ac,
-                                 float xmul, ImageF* result);
-// libjxl's Blur for a kernel of 2 * half + 1 taps (half 3, 6, 7 or 16), in
-// to out (not in), through temp's rings.
-void separable_blur(RowPool& pool, const ImageF& in, const float* kernel, std::size_t half, BlurTemp* temp,
-                    ImageF* out);
+    float* row(std::size_t y) const { return data + y % rows * stride; }
+    // Called once row y is written: its second copy.
+    void copy_second(std::size_t y) const {
+        if (doubled) {
+            float* const slot = row(y);
+            std::memcpy(slot + rows * stride, slot, stride * sizeof(float));
+        }
+    }
+};
+
+// The stages of one resolution, in the order a row goes through them (the
+// names are what each makes).
+enum StageKind : std::uint8_t {
+    kStageRgb,         // linear rgb (at half resolution: 2x2 means of the full one's)
+    kStageOpsin,       // libjxl's OpsinDynamicsImage, and the low frequencies' horizontal blur
+    kStageLf,          // the low frequencies (SeparateLFAndMF), and the medium's horizontal blur
+    kStageMf,          // the medium frequencies (SeparateMFAndHF), and the high's horizontal blur
+    kStageHf,          // the high and ultra-high frequencies (SeparateHFAndUHF), and the masking's horizontal blur
+    kStageMaskBlur,    // the masking's blurred differences (Mask)
+    kStageMaltaDiffs,  // Malta's differences of the two pictures' bands
+    kStageCompare,     // the map (DiffmapPsychoImage)
+    kStageKinds,
+};
+
+// What the stages keep, each made by one stage (`producer`): `planes` rings
+// per picture, or per pair of pictures.
+enum Group : std::uint8_t {
+    kRgb, kXyb, kLfh, kLf, kMfRaw, kMfh, kMf, kHfRaw, kHfh, kHf, kUhf, kMh, kBm, kMalta, kMap, kGroups,
+};
+struct GroupInfo {
+    std::uint8_t planes;
+    bool per_picture;
+    bool windowed;  // read through windows of consecutive rows (Ring::doubled)
+    StageKind producer;
+};
+inline constexpr GroupInfo kGroupInfo[kGroups] = {
+    {3, true, false, kStageRgb},         // kRgb: linear rgb
+    {3, true, false, kStageOpsin},       // kXyb: XYB
+    {3, true, true, kStageOpsin},        // kLfh: XYB blurred horizontally for the low frequencies
+    {3, true, false, kStageLf},          // kLf: the low frequencies, as vals
+    {2, true, false, kStageLf},          // kMfRaw: X and Y less the low frequencies
+    {3, true, true, kStageLf},           // kMfh: that blurred horizontally
+    {3, true, false, kStageMf},          // kMf: the medium frequencies
+    {2, true, false, kStageMf},          // kHfRaw: X and Y less the medium frequencies
+    {2, true, true, kStageMf},           // kHfh: that blurred horizontally
+    {2, true, false, kStageHf},          // kHf: the high frequencies
+    {2, true, false, kStageHf},          // kUhf: the ultra-high frequencies
+    {1, true, true, kStageHf},           // kMh: the masking's differences blurred horizontally
+    {1, true, false, kStageMaskBlur},    // kBm: the masking's blurred differences
+    {6, false, true, kStageMaltaDiffs},  // kMalta: the six Malta differences, with their margins
+    {1, false, false, kStageCompare},    // kMap: the half resolution's map
+};
+
+// One resolution's rings: [group][picture][plane]; groups made per pair use
+// picture 0. Malta's rows are counted from the top of its margin: its row p
+// is the picture's row p - kMaltaMargin.
+struct LevelRings {
+    std::size_t xsize = 0;
+    std::size_t ysize = 0;
+    Ring ring[kGroups][2][6];
+
+    const Ring& at(Group group, std::size_t picture, std::size_t plane) const { return ring[group][picture][plane]; }
+};
+
+// Everything the stages read, for one engine.
+struct StreamFrame {
+    LevelRings level[2];  // full, half resolution
+    WeightsSeparable5 opsin_blur;
+    BlurKernel lf_blur, mf_blur, hf_blur, mask_blur;  // 33, 15, 7 and 13 taps
+    ButteraugliParams params;
+    float* map = nullptr;  // the full resolution's map, `xsize` floats per row
+};
+
+// butteraugli_kernels.cpp, dispatched to the CPU's best instruction set: row
+// `row` of stage `kind` (kStageOpsin to kStageCompare) at resolution `level`
+// for picture `picture` (0 for the pair stages). Reads only rows its inputs
+// have made, writes only its own row.
+void run_stage_row(const StreamFrame& frame, StageKind kind, std::size_t level, std::size_t picture,
+                   std::size_t row);
+
+// butteraugli.cpp: convolve_slow.cc's SlowSeparable5 for one row of a plane
+// too narrow for the vector code, rows[0..4] the input rows y - 2 to y + 2.
+void slow_separable5_row(const float* const rows[5], std::size_t xsize, const WeightsSeparable5& weights,
+                         float* row_out);
 
 }  // namespace vml::butteraugli

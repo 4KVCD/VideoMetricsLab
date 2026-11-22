@@ -21,7 +21,6 @@ constexpr std::size_t kBandsPerThread = 4;
 
 // claim_'s fields.
 constexpr std::uint64_t kBandMask = 0xFFFF;
-constexpr std::size_t kMaxBands = kBandMask;
 
 constexpr std::uint64_t make_claim(std::uint32_t pass, std::uint64_t bands, std::uint64_t next) {
     return static_cast<std::uint64_t>(pass) << 32 | bands << 16 | next;

@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <new>
 #include <utility>
 #include <vector>
 
@@ -106,12 +107,15 @@ HWY_INLINE V FastLog2f(const DF df, V x) {
     return Add(EvalRationalPolynomial22(df, Sub(mantissa, Set(df, 1.0f)), p, q), exp_val);
 }
 
-// libjxl's Separable5 (enc_convolve_separable5.cc) over a whole plane: a 5x5
-// separable blur with mirrored borders. Rows are convolved horizontally with
-// vectors; the last columns of rows whose width is not a whole number of
-// vectors (from x = the end of the vector loop) are computed by a scalar 2D
-// sum, as libjxl does, so the vector width decides which columns those are.
-class Separable5Impl {
+// libjxl's Separable5 (enc_convolve_separable5.cc) for one row: a 5x5
+// separable blur with mirrored borders. VideoMetricsLab: the five input rows
+// (y - 2 to y + 2, mirrored at the picture's top and bottom: the rows
+// libjxl's border code, and its table for pictures of 4 rows or fewer, pick)
+// are passed in. Rows are convolved horizontally with vectors; the last
+// columns of rows whose width is not a whole number of vectors (from x = the
+// end of the vector loop) are computed by a scalar 2D sum, as libjxl does,
+// so the vector width decides which columns those are.
+class Separable5Row {
 public:
     using D = HWY_CAPPED(float, 16);
     using DI32 = HWY_CAPPED(int32_t, 16);
@@ -120,89 +124,39 @@ public:
     using I = decltype(SetTableIndices(D(), static_cast<int32_t*>(nullptr)));
     static constexpr int64_t kRadius = 2;
 
-    Separable5Impl(RowPool& pool, const ImageF& in, const WeightsSeparable5& weights, ImageF* out)
-        : pool_(pool), in_(in), weights_(weights), out_(out) {}
-
-    void Run() {
+    static void Run(const float* const rows[5], const size_t xsize, const WeightsSeparable5& weights,
+                    float* const row_out) {
         const size_t min_width = Lanes(D()) + kRadius;
-        if (in_.xsize() < min_width) {
-            slow_separable5(in_, weights_, out_);
+        if (xsize < min_width) {
+            slow_separable5_row(rows, xsize, weights, row_out);
             return;
         }
-        switch (in_.xsize() % Lanes(D())) {
+        switch (xsize % Lanes(D())) {
         case 0:
-            RunRows<0>();
+            ConvolveRow<0>(rows, xsize, weights, row_out);
             break;
         case 1:
-            RunRows<1>();
+            ConvolveRow<1>(rows, xsize, weights, row_out);
             break;
         case 2:
-            RunRows<2>();
+            ConvolveRow<2>(rows, xsize, weights, row_out);
             break;
         default:
-            RunRows<3>();
+            ConvolveRow<3>(rows, xsize, weights, row_out);
             break;
         }
     }
 
 private:
-    // VideoMetricsLab: the rows in bands; a row within kRadius of the top or
-    // the bottom takes the border code, as in libjxl's three loops.
     template <size_t kSizeModN>
-    void RunRows() {
-        const size_t ysize = in_.ysize();
-        pool_.run(ysize, [&](size_t row_begin, size_t row_end) {
-            for (size_t y = row_begin; y < row_end; ++y) {
-                if (y < kRadius || y + kRadius >= ysize) {
-                    ConvolveRow<kSizeModN, true>(y);
-                } else {
-                    ConvolveRow<kSizeModN, false>(y);
-                }
-            }
-        });
-    }
-
-    template <size_t kSizeModN, bool kBorder>
-    void ConvolveRow(const size_t y) {
+    static void ConvolveRow(const float* const rows[5], const size_t xsize, const WeightsSeparable5& weights_,
+                            float* const row_out) {
         const D d;
-        const int64_t stride = static_cast<int64_t>(in_.PixelsPerRow());
-        const size_t xsize = in_.xsize();
-        const float* const row_m = in_.ConstRow(y);
-        float* const row_out = out_->Row(y);
-        const float* row_t2 = row_m - 2 * stride;
-        const float* row_t1 = row_m - stride;
-        const float* row_b1 = row_m + stride;
-        const float* row_b2 = row_m + 2 * stride;
-        if constexpr (kBorder) {
-            const size_t ysize = in_.ysize();
-            if (ysize <= 2 * kRadius) {  // double reflections
-                static constexpr size_t kBorderLut[4 * 8] = {
-                    0, 0, 0, 0, 0, 0xBAD, 0xBAD, 0xBAD,  // 1 row
-                    1, 0, 0, 1, 1, 0,     0xBAD, 0xBAD,  // 2 rows
-                    1, 0, 0, 1, 2, 2,     1,     0xBAD,  // 3 rows
-                    1, 0, 0, 1, 2, 3,     3,     2,      // 4 rows
-                };
-                const size_t o = ysize * 8 - 6 + y;
-                row_t2 = in_.ConstRow(kBorderLut[o - 2]);
-                row_t1 = in_.ConstRow(kBorderLut[o - 1]);
-                row_b1 = in_.ConstRow(kBorderLut[o + 1]);
-                row_b2 = in_.ConstRow(kBorderLut[o + 2]);
-            } else if (y < kRadius) {
-                if (y == 0) {
-                    row_t1 = row_m;
-                    row_t2 = row_b1;
-                } else {
-                    row_t2 = row_t1;
-                }
-            } else {
-                if (y + 1 == ysize) {
-                    row_b1 = row_m;
-                    row_b2 = row_t1;
-                } else {
-                    row_b2 = row_b1;
-                }
-            }
-        }
+        const float* const row_t2 = rows[0];
+        const float* const row_t1 = rows[1];
+        const float* const row_m = rows[2];
+        const float* const row_b1 = rows[3];
+        const float* const row_b2 = rows[4];
         const V wh0 = LoadDup128(d, weights_.horz + 0 * 4);
         const V wh1 = LoadDup128(d, weights_.horz + 1 * 4);
         const V wh2 = LoadDup128(d, weights_.horz + 2 * 4);
@@ -236,7 +190,6 @@ private:
             x += Lanes(d);
         }
         if constexpr (kSizeModN != 0) {
-            const float* rows[5] = {row_t2, row_t1, row_m, row_b1, row_b2};
             for (; x < xsize; ++x) {
                 float mul = 0.0f;
                 for (int64_t dy = -kRadius; dy <= kRadius; ++dy) {
@@ -324,16 +277,7 @@ private:
         const V mul1 = MulAdd(Add(l1, r1), wh1, mul0);
         return MulAdd(Add(l2, r2), wh2, mul1);
     }
-
-    RowPool& pool_;
-    const ImageF& in_;
-    const WeightsSeparable5& weights_;
-    ImageF* out_;
 };
-
-void Separable5(RowPool& pool, const ImageF& in, const WeightsSeparable5& weights, ImageF* out) {
-    Separable5Impl(pool, in, weights, out).Run();
-}
 
 // ---- libjxl's butteraugli.cc, its Highway section ----
 
@@ -413,150 +357,6 @@ HWY_INLINE V SuppressXByY(const D d, const V vx, const V vy) {
   const auto ywv = Set(d, suppress);
   const auto scaler = MulAdd(Div(ywv, MulAdd(vy, vy, ywv)), one_minus_s, sv);
   return Mul(scaler, vx);
-}
-
-// VideoMetricsLab: libjxl blurs each plane and subtracts it (Subtract) one
-// plane at a time, then converts lf to vals (XybLowFreqToVals) in a pass of
-// its own. Here the three blurs come first (a blur reads only its own plane
-// of xyb, which no subtraction of another plane has touched), then a single
-// pass does each row's three subtractions and then its conversion.
-void SeparateLFAndMF(RowPool& pool, const Image3F& xyb, Image3F* lf, Image3F* mf, BlurTemp* blur_temp) {
-  static const double kSigmaLf = 7.15593339443;
-  for (int i = 0; i < 3; ++i) {
-    blur(pool, xyb.Plane(i), kSigmaLf, blur_temp, &lf->Plane(i));
-  }
-  const HWY_FULL(float) d;
-  const size_t xsize = xyb.xsize();
-  pool.run(xyb.ysize(), [&](size_t row_begin, size_t row_end) {
-    for (size_t y = row_begin; y < row_end; ++y) {
-      // mf (which may be xyb itself) keeps what lf does not have.
-      for (int i = 0; i < 3; ++i) {
-        const float* row_xyb = xyb.ConstPlaneRow(i, y);
-        const float* row_lf = lf->ConstPlaneRow(i, y);
-        float* row_mf = mf->PlaneRow(i, y);
-        for (size_t x = 0; x < xsize; x += Lanes(d)) {
-          Store(Sub(Load(d, row_xyb + x), Load(d, row_lf + x)), d, row_mf + x);
-        }
-      }
-      float* BUTTERAUGLI_RESTRICT row_x = lf->PlaneRow(0, y);
-      float* BUTTERAUGLI_RESTRICT row_y = lf->PlaneRow(1, y);
-      float* BUTTERAUGLI_RESTRICT row_b = lf->PlaneRow(2, y);
-      for (size_t x = 0; x < xsize; x += Lanes(d)) {
-        auto valx = Undefined(d);
-        auto valy = Undefined(d);
-        auto valb = Undefined(d);
-        XybLowFreqToVals(d, Load(d, row_x + x), Load(d, row_y + x),
-                         Load(d, row_b + x), &valx, &valy, &valb);
-        Store(valx, d, row_x + x);
-        Store(valy, d, row_y + x);
-        Store(valb, d, row_b + x);
-      }
-    }
-  });
-  return;
-}
-
-// VideoMetricsLab: libjxl copies mf's X and Y planes into hf, blurs mf in
-// place and subtracts the blurred mf from the copy. Here the blur goes into
-// hf and the loop after it subtracts it from mf, which still holds the
-// original. One pass does the X and Y planes, then SuppressXByY on them.
-void SeparateMFAndHF(RowPool& pool, Image3F* mf, ImageF* hf, BlurTemp* blur_temp) {
-  const HWY_FULL(float) d;
-  static const double kSigmaHf = 3.22489901262;
-  static const double kRemoveMfRange = 0.29;
-  static const double kAddMfRange = 0.1;
-  const size_t xsize = mf->xsize();
-  const size_t ysize = mf->ysize();
-  hf[0].ensure(xsize, ysize);
-  hf[1].ensure(xsize, ysize);
-
-  blur(pool, mf->Plane(0), kSigmaHf, blur_temp, &hf[0]);
-  blur(pool, mf->Plane(1), kSigmaHf, blur_temp, &hf[1]);
-  pool.run(ysize, [&](size_t row_begin, size_t row_end) {
-    for (size_t y = row_begin; y < row_end; ++y) {
-      float* BUTTERAUGLI_RESTRICT row_mf_x = mf->PlaneRow(0, y);
-      float* BUTTERAUGLI_RESTRICT row_mf_y = mf->PlaneRow(1, y);
-      float* BUTTERAUGLI_RESTRICT row_hf_x = hf[0].Row(y);
-      float* BUTTERAUGLI_RESTRICT row_hf_y = hf[1].Row(y);
-      for (size_t x = 0; x < xsize; x += Lanes(d)) {
-        auto mfx = Load(d, row_hf_x + x);  // the blurred mf
-        const auto hfx = Sub(Load(d, row_mf_x + x), mfx);
-        mfx = RemoveRangeAroundZero(d, kRemoveMfRange, mfx);
-        Store(mfx, d, row_mf_x + x);
-
-        auto mfy = Load(d, row_hf_y + x);  // the blurred mf
-        const auto hfy = Sub(Load(d, row_mf_y + x), mfy);
-        mfy = AmplifyRangeAroundZero(d, kAddMfRange, mfy);
-        Store(mfy, d, row_mf_y + x);
-        Store(hfy, d, row_hf_y + x);
-
-        Store(SuppressXByY(d, hfx, hfy), d, row_hf_x + x);
-      }
-    }
-  });
-
-  blur(pool, mf->Plane(2), kSigmaHf, blur_temp, &mf->Plane(2));
-  return;
-}
-
-// VideoMetricsLab: as in SeparateMFAndHF, the blur goes into uhf instead of
-// blurring a copy, and one pass after both blurs reads the originals from hf.
-void SeparateHFAndUHF(RowPool& pool, ImageF* hf, ImageF* uhf, BlurTemp* blur_temp) {
-  const HWY_FULL(float) d;
-  const size_t xsize = hf[0].xsize();
-  const size_t ysize = hf[0].ysize();
-  static const double kSigmaUhf = 1.56416327805;
-  static const double kRemoveHfRange = 1.5;
-  static const double kAddHfRange = 0.132;
-  static const double kRemoveUhfRange = 0.04;
-  static const double kMaxclampHf = 28.4691806922;
-  static const double kMaxclampUhf = 5.19175294647;
-  static const double kMulYHf = 2.155;
-  static const double kMulYUhf = 2.69313763794;
-  uhf[0].ensure(xsize, ysize);
-  uhf[1].ensure(xsize, ysize);
-
-  blur(pool, hf[0], kSigmaUhf, blur_temp, &uhf[0]);
-  blur(pool, hf[1], kSigmaUhf, blur_temp, &uhf[1]);
-  pool.run(ysize, [&](size_t row_begin, size_t row_end) {
-    for (size_t y = row_begin; y < row_end; ++y) {
-      float* BUTTERAUGLI_RESTRICT row_uhf_x = uhf[0].Row(y);
-      float* BUTTERAUGLI_RESTRICT row_hf_x = hf[0].Row(y);
-      float* BUTTERAUGLI_RESTRICT row_uhf_y = uhf[1].Row(y);
-      float* BUTTERAUGLI_RESTRICT row_hf_y = hf[1].Row(y);
-      for (size_t x = 0; x < xsize; x += Lanes(d)) {
-        auto hfx = Load(d, row_uhf_x + x);  // the blurred hf
-        auto uhfx = Sub(Load(d, row_hf_x + x), hfx);
-        hfx = RemoveRangeAroundZero(d, kRemoveHfRange, hfx);
-        uhfx = RemoveRangeAroundZero(d, kRemoveUhfRange, uhfx);
-        Store(hfx, d, row_hf_x + x);
-        Store(uhfx, d, row_uhf_x + x);
-
-        auto hfy = Load(d, row_uhf_y + x);  // the blurred hf
-        hfy = MaximumClamp(d, hfy, kMaxclampHf);
-        auto uhfy = Sub(Load(d, row_hf_y + x), hfy);
-        uhfy = MaximumClamp(d, uhfy, kMaxclampUhf);
-        uhfy = Mul(uhfy, Set(d, kMulYUhf));
-        Store(uhfy, d, row_uhf_y + x);
-        hfy = Mul(hfy, Set(d, kMulYHf));
-        hfy = AmplifyRangeAroundZero(d, kAddHfRange, hfy);
-        Store(hfy, d, row_hf_y + x);
-      }
-    }
-  });
-  return;
-}
-
-void SeparateFrequencies(RowPool& pool, BlurTemp* blur_temp, Image3F& xyb, PsychoImage& ps) {
-  // VideoMetricsLab: the planes are kept from frame to frame, and mf is
-  // computed in xyb's planes (Subtract is element-wise), which then trade
-  // places with ps.mf's: a picture's bands take no planes of their own for mf.
-  ps.lf.ensure(xyb.xsize(), xyb.ysize());
-  SeparateLFAndMF(pool, xyb, &ps.lf, &xyb, blur_temp);
-  std::swap(ps.mf, xyb);
-  SeparateMFAndHF(pool, &ps.mf, &ps.hf[0], blur_temp);
-  SeparateHFAndUHF(pool, &ps.hf[0], &ps.uhf[0], blur_temp);
-  return;
 }
 
 namespace {
@@ -1029,159 +829,6 @@ HWY_INLINE Vec<DF> MaltaDiffs(DF df, Vec<DF> r0, Vec<DF> r1, float norm1, float 
   return Combine(df, DemoteTo(dh, upper), DemoteTo(dh, lower));
 }
 
-// VideoMetricsLab: Malta's differences go into a plane with a margin of
-// zeros round them, kMaltaLeft pixels at the left (so that the pixels' rows
-// stay 64-byte aligned), kMaltaMargin at the right and kMaltaMargin rows
-// above and below: what libjxl's PaddedMaltaUnit gives MaltaUnit for a
-// pixel near a border, one pixel at a time. MaltaUnit reads kMaltaMargin
-// pixels round its own, so it then runs in vectors on every pixel, each
-// lane doing what PaddedMaltaUnit's one lane did.
-constexpr size_t kMaltaLeft = 16;
-constexpr size_t kMaltaMargin = 4;
-
-template <class Tag>
-static void MaltaDiffMapT(RowPool& pool, const Tag /*tag*/, const ImageF& lum0,
-                            const ImageF& lum1, const double w_0gt1,
-                            const double w_0lt1, const double norm1,
-                            const double len, const double mulli,
-                            ImageF* HWY_RESTRICT padded_diffs,
-                            ImageF* HWY_RESTRICT block_diff_ac) {
-  const size_t xsize_ = lum0.xsize();
-  const size_t ysize_ = lum0.ysize();
-
-  const float kWeight0 = 0.5;
-  const float kWeight1 = 0.33;
-
-  const double w_pre0gt1 = mulli * std::sqrt(kWeight0 * w_0gt1) / (len * 2 + 1);
-  const double w_pre0lt1 = mulli * std::sqrt(kWeight1 * w_0lt1) / (len * 2 + 1);
-  const float norm2_0gt1 = w_pre0gt1 * norm1;
-  const float norm2_0lt1 = w_pre0lt1 * norm1;
-
-  padded_diffs->ensure(kMaltaLeft + xsize_ + kMaltaMargin, ysize_ + 2 * kMaltaMargin);
-  const size_t stride = padded_diffs->PixelsPerRow();
-  for (size_t y = 0; y < kMaltaMargin; ++y) {
-    std::fill(padded_diffs->Row(y), padded_diffs->Row(y) + stride, 0.0f);
-    std::fill(padded_diffs->Row(ysize_ + kMaltaMargin + y), padded_diffs->Row(ysize_ + kMaltaMargin + y) + stride,
-              0.0f);
-  }
-  // The pixels in vectors (MaltaDiffs), the last ones of a row that do not
-  // fill one in libjxl's scalar code (MaltaDiffPixel).
-  const HWY_FULL(float) d;
-  const size_t lanes = Lanes(d);
-  pool.run(ysize_, [&](size_t row_begin, size_t row_end) {
-    for (size_t y = row_begin; y < row_end; ++y) {
-      const float* HWY_RESTRICT row0 = lum0.ConstRow(y);
-      const float* HWY_RESTRICT row1 = lum1.ConstRow(y);
-      float* HWY_RESTRICT row_diffs = padded_diffs->Row(y + kMaltaMargin) + kMaltaLeft;
-      std::fill(row_diffs - kMaltaMargin, row_diffs, 0.0f);
-      size_t x = 0;
-      for (; x + lanes <= xsize_; x += lanes) {
-        Store(MaltaDiffs(d, Load(d, row0 + x), Load(d, row1 + x), static_cast<float>(norm1), norm2_0gt1, norm2_0lt1),
-              d, row_diffs + x);
-      }
-      for (; x < xsize_; ++x) {
-        row_diffs[x] = MaltaDiffPixel(row0[x], row1[x], norm1, norm2_0gt1, norm2_0lt1);
-      }
-      std::fill(row_diffs + xsize_, row_diffs + xsize_ + kMaltaMargin, 0.0f);
-    }
-  });
-
-  // libjxl's sums of the line kernels (MaltaUnit) round every pixel, added
-  // to block_diff_ac. The last vector of a row may run past its last pixel:
-  // those lanes read the padding past the margin and land in block_diff_ac's
-  // padding, and no lane of a pixel reads them.
-  pool.run(ysize_, [&](size_t row_begin, size_t row_end) {
-    for (size_t y = row_begin; y < row_end; ++y) {
-      const float* BUTTERAUGLI_RESTRICT row_in = padded_diffs->ConstRow(y + kMaltaMargin) + kMaltaLeft;
-      float* BUTTERAUGLI_RESTRICT row_diff = block_diff_ac->Row(y);
-      for (size_t x = 0; x < xsize_; x += lanes) {
-        const auto unit = MaltaUnit(Tag(), d, row_in + x, static_cast<ptrdiff_t>(stride));
-        Store(Add(Load(d, row_diff + x), unit), d, row_diff + x);
-      }
-    }
-  });
-  return;
-}
-
-// Need non-template wrapper functions for HWY_EXPORT.
-void MaltaDiffMap(RowPool& pool, const ImageF& lum0, const ImageF& lum1, const double w_0gt1,
-                    const double w_0lt1, const double norm1,
-                    ImageF* HWY_RESTRICT diffs,
-                    ImageF* HWY_RESTRICT block_diff_ac) {
-  const double len = 3.75;
-  static const double mulli = 0.39905817637;
-  MaltaDiffMapT(pool, MaltaTag(), lum0, lum1, w_0gt1, w_0lt1,
-                                    norm1, len, mulli, diffs, block_diff_ac);
-  return;
-}
-
-void MaltaDiffMapLF(RowPool& pool, const ImageF& lum0, const ImageF& lum1,
-                      const double w_0gt1, const double w_0lt1,
-                      const double norm1, ImageF* HWY_RESTRICT diffs,
-                      ImageF* HWY_RESTRICT block_diff_ac) {
-  const double len = 3.75;
-  static const double mulli = 0.611612573796;
-  MaltaDiffMapT(pool, MaltaTagLF(), lum0, lum1, w_0gt1, w_0lt1,
-                                    norm1, len, mulli, diffs, block_diff_ac);
-  return;
-}
-
-void CombineChannelsForMasking(RowPool& pool, const ImageF* hf, const ImageF* uhf,
-                               ImageF* out) {
-  // Only X and Y components are involved in masking. B's influence
-  // is considered less important in the high frequency area, and we
-  // don't model masking from lower frequency signals.
-  static const float muls[3] = {
-      2.5f,
-      0.4f,
-      0.4f,
-  };
-  // VideoMetricsLab: libjxl's scalar loop in vectors, each lane with its
-  // operations (the rows are padded to whole vectors).
-  const HWY_FULL(float) d;
-  const auto mul0 = Set(d, muls[0]);
-  const auto mul1 = Set(d, muls[1]);
-  const auto mul2 = Set(d, muls[2]);
-  pool.run(hf[0].ysize(), [&](size_t row_begin, size_t row_end) {
-    for (size_t y = row_begin; y < row_end; ++y) {
-      const float* BUTTERAUGLI_RESTRICT row_y_hf = hf[1].Row(y);
-      const float* BUTTERAUGLI_RESTRICT row_y_uhf = uhf[1].Row(y);
-      const float* BUTTERAUGLI_RESTRICT row_x_hf = hf[0].Row(y);
-      const float* BUTTERAUGLI_RESTRICT row_x_uhf = uhf[0].Row(y);
-      float* BUTTERAUGLI_RESTRICT row = out->Row(y);
-      for (size_t x = 0; x < hf[0].xsize(); x += Lanes(d)) {
-        const auto xdiff = Mul(Add(Load(d, row_x_uhf + x), Load(d, row_x_hf + x)), mul0);
-        const auto ydiff = ContractedMulAdd(Load(d, row_y_uhf + x), mul1, Mul(Load(d, row_y_hf + x), mul2));
-        Store(Sqrt(ContractedMulAdd(xdiff, xdiff, Mul(ydiff, ydiff))), d, row + x);
-      }
-      }
-  });
-}
-
-void DiffPrecompute(RowPool& pool, const ImageF& xyb, float mul, float bias_arg, ImageF* out) {
-  const size_t xsize = xyb.xsize();
-  const size_t ysize = xyb.ysize();
-  const float bias = mul * bias_arg;
-  const float sqrt_bias = std::sqrt(bias);
-  // VideoMetricsLab: libjxl's scalar loop in vectors, each lane with its
-  // operations.
-  const HWY_FULL(float) d;
-  const auto mulv = Set(d, mul);
-  const auto biasv = Set(d, bias);
-  const auto sqrt_biasv = Set(d, sqrt_bias);
-  pool.run(ysize, [&](size_t row_begin, size_t row_end) {
-    for (size_t y = row_begin; y < row_end; ++y) {
-      const float* BUTTERAUGLI_RESTRICT row_in = xyb.Row(y);
-      float* BUTTERAUGLI_RESTRICT row_out = out->Row(y);
-      for (size_t x = 0; x < xsize; x += Lanes(d)) {
-        // kBias makes sqrt behave more linearly.
-        const auto in = Load(d, row_in + x);
-        Store(Sub(Sqrt(ContractedMulAdd(mulv, Abs(in), biasv)), sqrt_biasv), d, row_out + x);
-      }
-      }
-  });
-}
-
 // std::log(80.0) / std::log(255.0);
 constexpr float kIntensityTargetNormalizationHack = 0.79079917404f;
 static const float kInternalGoodQualityThreshold =
@@ -1219,136 +866,70 @@ HWY_INLINE void KeepMin3(const V v, V& min0, V& min1, V& min2) {
   min2 = Min(min2, larger1);
 }
 
-void FuzzyErosionPixel(const ImageF& from, size_t x, size_t y, ImageF* to);
+void FuzzyErosionPixel(const float* above, const float* row, const float* below, size_t xsize, size_t x,
+                       float* out);
 
-void FuzzyErosion(RowPool& pool, const ImageF& from, ImageF* to) {
-  const size_t xsize = from.xsize();
-  const size_t ysize = from.ysize();
+// libjxl's FuzzyErosion for row `row`: `above` and `below` are the rows kStep
+// above and below it, null outside the picture.
+void FuzzyErosionRow(const float* above, const float* row, const float* below, size_t xsize, float* out) {
   static const int kStep = 3;
   const HWY_FULL(float) d;
   const size_t lanes = Lanes(d);
-  pool.run(ysize, [&](size_t row_begin, size_t row_end) {
-    for (size_t y = row_begin; y < row_end; ++y) {
-      // Columns [kStep, middle_end) of rows with all eight neighbours.
-      size_t x = 0;
-      if (y >= kStep && y + kStep < ysize && xsize >= 2 * kStep) {
-        for (; x < kStep; ++x) FuzzyErosionPixel(from, x, y, to);
-        const float* above = from.Row(y - kStep);
-        const float* row = from.Row(y);
-        const float* below = from.Row(y + kStep);
-        float* out = to->Row(y);
-        for (; x + lanes + kStep <= xsize; x += lanes) {
-          auto min0 = LoadU(d, row + x);
-          auto min1 = Add(min0, min0);  // 2 * v, exactly
-          auto min2 = min1;
-          KeepMin3(LoadU(d, row + x - kStep), min0, min1, min2);
-          KeepMin3(LoadU(d, above + x - kStep), min0, min1, min2);
-          KeepMin3(LoadU(d, below + x - kStep), min0, min1, min2);
-          KeepMin3(LoadU(d, row + x + kStep), min0, min1, min2);
-          KeepMin3(LoadU(d, above + x + kStep), min0, min1, min2);
-          KeepMin3(LoadU(d, below + x + kStep), min0, min1, min2);
-          KeepMin3(LoadU(d, above + x), min0, min1, min2);
-          KeepMin3(LoadU(d, below + x), min0, min1, min2);
-          StoreU(ContractedMulAdd(Set(d, 0.25f), min2, ContractedMulAdd(Set(d, 0.45f), min0, Mul(Set(d, 0.3f), min1))),
-                 d, out + x);
-        }
-      }
-      for (; x < xsize; ++x) FuzzyErosionPixel(from, x, y, to);
-      }
-  });
+  // Columns [kStep, middle_end) of rows with all eight neighbours.
+  size_t x = 0;
+  if (above != nullptr && below != nullptr && xsize >= 2 * kStep) {
+    for (; x < kStep; ++x) FuzzyErosionPixel(above, row, below, xsize, x, out);
+    for (; x + lanes + kStep <= xsize; x += lanes) {
+      auto min0 = LoadU(d, row + x);
+      auto min1 = Add(min0, min0);  // 2 * v, exactly
+      auto min2 = min1;
+      KeepMin3(LoadU(d, row + x - kStep), min0, min1, min2);
+      KeepMin3(LoadU(d, above + x - kStep), min0, min1, min2);
+      KeepMin3(LoadU(d, below + x - kStep), min0, min1, min2);
+      KeepMin3(LoadU(d, row + x + kStep), min0, min1, min2);
+      KeepMin3(LoadU(d, above + x + kStep), min0, min1, min2);
+      KeepMin3(LoadU(d, below + x + kStep), min0, min1, min2);
+      KeepMin3(LoadU(d, above + x), min0, min1, min2);
+      KeepMin3(LoadU(d, below + x), min0, min1, min2);
+      StoreU(ContractedMulAdd(Set(d, 0.25f), min2, ContractedMulAdd(Set(d, 0.45f), min0, Mul(Set(d, 0.3f), min1))),
+             d, out + x);
+    }
+  }
+  for (; x < xsize; ++x) FuzzyErosionPixel(above, row, below, xsize, x, out);
 }
 
 // libjxl's FuzzyErosion for one pixel.
-void FuzzyErosionPixel(const ImageF& from, size_t x, size_t y, ImageF* to) {
-  const size_t xsize = from.xsize();
-  const size_t ysize = from.ysize();
+void FuzzyErosionPixel(const float* above, const float* row, const float* below, size_t xsize, size_t x,
+                       float* out) {
   static const int kStep = 3;
-  {
-    {
-      float min0 = from.Row(y)[x];
-      float min1 = 2 * min0;
-      float min2 = min1;
-      if (x >= kStep) {
-        StoreMin3(from.Row(y)[x - kStep], min0, min1, min2);
-        if (y >= kStep) {
-          StoreMin3(from.Row(y - kStep)[x - kStep], min0, min1, min2);
-        }
-        if (y < ysize - kStep) {
-          StoreMin3(from.Row(y + kStep)[x - kStep], min0, min1, min2);
-        }
-      }
-      if (x < xsize - kStep) {
-        StoreMin3(from.Row(y)[x + kStep], min0, min1, min2);
-        if (y >= kStep) {
-          StoreMin3(from.Row(y - kStep)[x + kStep], min0, min1, min2);
-        }
-        if (y < ysize - kStep) {
-          StoreMin3(from.Row(y + kStep)[x + kStep], min0, min1, min2);
-        }
-      }
-      if (y >= kStep) {
-        StoreMin3(from.Row(y - kStep)[x], min0, min1, min2);
-      }
-      if (y < ysize - kStep) {
-        StoreMin3(from.Row(y + kStep)[x], min0, min1, min2);
-      }
-      to->Row(y)[x] = ScalarMulAdd(0.25f, min2, ScalarMulAdd(0.45f, min0, 0.3f * min1));
+  float min0 = row[x];
+  float min1 = 2 * min0;
+  float min2 = min1;
+  if (x >= kStep) {
+    StoreMin3(row[x - kStep], min0, min1, min2);
+    if (above != nullptr) {
+      StoreMin3(above[x - kStep], min0, min1, min2);
+    }
+    if (below != nullptr) {
+      StoreMin3(below[x - kStep], min0, min1, min2);
     }
   }
-}
-
-// Compute values of local frequency and dc masking based on the activity
-// in the two images. img_diff_ac may be null.
-void Mask(RowPool& pool, const ImageF& mask0, const ImageF& mask1, BlurTemp* blur_temp,
-            ImageF* BUTTERAUGLI_RESTRICT mask,
-            ImageF* BUTTERAUGLI_RESTRICT diff_ac, const MaskScratch& scratch) {
-  const size_t xsize = mask0.xsize();
-  const size_t ysize = mask0.ysize();
-  mask->ensure(xsize, ysize);
-  static const float kMul = 6.19424080439;
-  static const float kBias = 12.61050594197;
-  static const float kRadius = 2.7;
-  // VideoMetricsLab: lent planes instead of new ones.
-  ImageF& diff0 = *scratch.diff0;
-  ImageF& diff1 = *scratch.diff1;
-  ImageF& blurred0 = *scratch.blurred0;
-  ImageF& blurred1 = *scratch.blurred1;
-  DiffPrecompute(pool, mask0, kMul, kBias, &diff0);
-  DiffPrecompute(pool, mask1, kMul, kBias, &diff1);
-  blur(pool, diff0, kRadius, blur_temp, &blurred0);
-  FuzzyErosion(pool, blurred0, mask);  // VideoMetricsLab: libjxl erodes into diff0, then copies it into the mask
-  blur(pool, diff1, kRadius, blur_temp, &blurred1);
-  if (diff_ac != nullptr) {
-    // VideoMetricsLab: libjxl's scalar loop in vectors.
-    static const float kMaskToErrorMul = 10.0;
-    const HWY_FULL(float) d;
-    const auto error_mul = Set(d, kMaskToErrorMul);
-    pool.run(ysize, [&](size_t row_begin, size_t row_end) {
-      for (size_t y = row_begin; y < row_end; ++y) {
-        const float* row0 = blurred0.Row(y);
-        const float* row1 = blurred1.Row(y);
-        float* row_ac = diff_ac->Row(y);
-        for (size_t x = 0; x < xsize; x += Lanes(d)) {
-          const auto diff = Sub(Load(d, row0 + x), Load(d, row1 + x));
-          Store(ContractedMulAdd(Mul(error_mul, diff), diff, Load(d, row_ac + x)), d, row_ac + x);
-        }
-          }
-    });
+  if (x < xsize - kStep) {
+    StoreMin3(row[x + kStep], min0, min1, min2);
+    if (above != nullptr) {
+      StoreMin3(above[x + kStep], min0, min1, min2);
+    }
+    if (below != nullptr) {
+      StoreMin3(below[x + kStep], min0, min1, min2);
+    }
   }
-  return;
-}
-
-// `diff_ac` may be null.
-void MaskPsychoImage(RowPool& pool, const PsychoImage& pi0, const PsychoImage& pi1, BlurTemp* blur_temp,
-                       const MaskScratch& scratch,
-                       ImageF* BUTTERAUGLI_RESTRICT mask,
-                       ImageF* BUTTERAUGLI_RESTRICT diff_ac) {
-  ImageF& mask0 = *scratch.mask0;
-  ImageF& mask1 = *scratch.mask1;
-  CombineChannelsForMasking(pool, &pi0.hf[0], &pi0.uhf[0], &mask0);
-  CombineChannelsForMasking(pool, &pi1.hf[0], &pi1.uhf[0], &mask1);
-  Mask(pool, mask0, mask1, blur_temp, mask, diff_ac, scratch);
-  return;
+  if (above != nullptr) {
+    StoreMin3(above[x], min0, min1, min2);
+  }
+  if (below != nullptr) {
+    StoreMin3(below[x], min0, min1, min2);
+  }
+  out[x] = ScalarMulAdd(0.25f, min2, ScalarMulAdd(0.45f, min0, 0.3f * min1));
 }
 
 double MaskY(double delta) {
@@ -1374,87 +955,61 @@ inline float MaskColor(const float color[3], const float mask) {
 }
 
 // Diffmap := sqrt of sum{diff images by multiplied by X and Y/B masks}
-void CombineChannelsToDiffmap(RowPool& pool, const ImageF& mask,
-                                const Image3F& block_diff_dc,
-                                const Image3F& block_diff_ac, float xmul,
-                                ImageF* result) {
-  size_t xsize = mask.xsize();
-  size_t ysize = mask.ysize();
-  pool.run(ysize, [&](size_t row_begin, size_t row_end) {
-    for (size_t y = row_begin; y < row_end; ++y) {
-      float* BUTTERAUGLI_RESTRICT row_out = result->Row(y);
-      for (size_t x = 0; x < xsize; ++x) {
-        float val = mask.Row(y)[x];
-        float maskval = MaskY(val);
-        float dc_maskval = MaskDcY(val);
-        float diff_dc[3];
-        float diff_ac[3];
-        for (int i = 0; i < 3; ++i) {
-          diff_dc[i] = block_diff_dc.PlaneRow(i, y)[x];
-          diff_ac[i] = block_diff_ac.PlaneRow(i, y)[x];
-        }
-        diff_ac[0] *= xmul;
-        diff_dc[0] *= xmul;
-        row_out[x] = std::sqrt(MaskColor(diff_dc, dc_maskval) +
-                               MaskColor(diff_ac, maskval));
-      }
-      }
-  });
-  return;
+// (libjxl's CombineChannelsToDiffmap, for one row).
+void CombineChannelsToDiffmapRow(const float* mask, const float* const block_diff_dc[3],
+                                 const float* const block_diff_ac[3], float xmul, size_t xsize, float* row_out) {
+  for (size_t x = 0; x < xsize; ++x) {
+    float val = mask[x];
+    float maskval = MaskY(val);
+    float dc_maskval = MaskDcY(val);
+    float diff_dc[3];
+    float diff_ac[3];
+    for (int i = 0; i < 3; ++i) {
+      diff_dc[i] = block_diff_dc[i][x];
+      diff_ac[i] = block_diff_ac[i][x];
+    }
+    diff_ac[0] *= xmul;
+    diff_dc[0] *= xmul;
+    row_out[x] = std::sqrt(MaskColor(diff_dc, dc_maskval) +
+                           MaskColor(diff_ac, maskval));
+  }
 }
 
-// Adds weighted L2 difference between i0 and i1 to diffmap.
-static void L2Diff(RowPool& pool, const ImageF& i0, const ImageF& i1, const float w,
-                   ImageF* BUTTERAUGLI_RESTRICT diffmap) {
+// Adds weighted L2 difference between row0 and row1 to row_diff.
+static void L2DiffRow(const float* BUTTERAUGLI_RESTRICT row0, const float* BUTTERAUGLI_RESTRICT row1, size_t xsize,
+                      const float w, float* BUTTERAUGLI_RESTRICT row_diff) {
   if (w == 0) return;
 
   const HWY_FULL(float) d;
   const auto weight = Set(d, w);
 
-  pool.run(i0.ysize(), [&](size_t row_begin, size_t row_end) {
-    for (size_t y = row_begin; y < row_end; ++y) {
-      const float* BUTTERAUGLI_RESTRICT row0 = i0.ConstRow(y);
-      const float* BUTTERAUGLI_RESTRICT row1 = i1.ConstRow(y);
-      float* BUTTERAUGLI_RESTRICT row_diff = diffmap->Row(y);
-
-      for (size_t x = 0; x < i0.xsize(); x += Lanes(d)) {
-        const auto diff = Sub(Load(d, row0 + x), Load(d, row1 + x));
-        const auto diff2 = Mul(diff, diff);
-        const auto prev = Load(d, row_diff + x);
-        Store(MulAdd(diff2, weight, prev), d, row_diff + x);
-      }
-      }
-  });
+  for (size_t x = 0; x < xsize; x += Lanes(d)) {
+    const auto diff = Sub(Load(d, row0 + x), Load(d, row1 + x));
+    const auto diff2 = Mul(diff, diff);
+    const auto prev = Load(d, row_diff + x);
+    Store(MulAdd(diff2, weight, prev), d, row_diff + x);
+  }
 }
 
-// Initializes diffmap to the weighted L2 difference between i0 and i1.
-static void SetL2Diff(RowPool& pool, const ImageF& i0, const ImageF& i1, const float w,
-                      ImageF* BUTTERAUGLI_RESTRICT diffmap) {
+// Sets row_diff to the weighted L2 difference between row0 and row1.
+static void SetL2DiffRow(const float* BUTTERAUGLI_RESTRICT row0, const float* BUTTERAUGLI_RESTRICT row1, size_t xsize,
+                         const float w, float* BUTTERAUGLI_RESTRICT row_diff) {
   if (w == 0) return;
 
   const HWY_FULL(float) d;
   const auto weight = Set(d, w);
 
-  pool.run(i0.ysize(), [&](size_t row_begin, size_t row_end) {
-    for (size_t y = row_begin; y < row_end; ++y) {
-      const float* BUTTERAUGLI_RESTRICT row0 = i0.ConstRow(y);
-      const float* BUTTERAUGLI_RESTRICT row1 = i1.ConstRow(y);
-      float* BUTTERAUGLI_RESTRICT row_diff = diffmap->Row(y);
-
-      for (size_t x = 0; x < i0.xsize(); x += Lanes(d)) {
-        const auto diff = Sub(Load(d, row0 + x), Load(d, row1 + x));
-        const auto diff2 = Mul(diff, diff);
-        Store(Mul(diff2, weight), d, row_diff + x);
-      }
-      }
-  });
+  for (size_t x = 0; x < xsize; x += Lanes(d)) {
+    const auto diff = Sub(Load(d, row0 + x), Load(d, row1 + x));
+    const auto diff2 = Mul(diff, diff);
+    Store(Mul(diff2, weight), d, row_diff + x);
+  }
 }
 
-// i0 is the original image.
-// i1 is the deformed copy.
-static void L2DiffAsymmetric(RowPool& pool, const ImageF& i0, const ImageF& i1, float w_0gt1,
-                             float w_0lt1,
-                             ImageF* BUTTERAUGLI_RESTRICT diffmap) {
+// row0 is the original image's.
+// row1 is the deformed copy's.
+static void L2DiffAsymmetricRow(const float* BUTTERAUGLI_RESTRICT row0, const float* BUTTERAUGLI_RESTRICT row1,
+                                size_t xsize, float w_0gt1, float w_0lt1, float* BUTTERAUGLI_RESTRICT row_diff) {
   if (w_0gt1 == 0 && w_0lt1 == 0) {
     return;
   }
@@ -1463,37 +1018,29 @@ static void L2DiffAsymmetric(RowPool& pool, const ImageF& i0, const ImageF& i1, 
   const auto vw_0gt1 = Set(d, w_0gt1 * 0.8);
   const auto vw_0lt1 = Set(d, w_0lt1 * 0.8);
 
-  pool.run(i0.ysize(), [&](size_t row_begin, size_t row_end) {
-    for (size_t y = row_begin; y < row_end; ++y) {
-      const float* BUTTERAUGLI_RESTRICT row0 = i0.Row(y);
-      const float* BUTTERAUGLI_RESTRICT row1 = i1.Row(y);
-      float* BUTTERAUGLI_RESTRICT row_diff = diffmap->Row(y);
+  for (size_t x = 0; x < xsize; x += Lanes(d)) {
+    const auto val0 = Load(d, row0 + x);
+    const auto val1 = Load(d, row1 + x);
 
-      for (size_t x = 0; x < i0.xsize(); x += Lanes(d)) {
-        const auto val0 = Load(d, row0 + x);
-        const auto val1 = Load(d, row1 + x);
+    // Primary symmetric quadratic objective.
+    const auto diff = Sub(val0, val1);
+    auto total = MulAdd(Mul(diff, diff), vw_0gt1, Load(d, row_diff + x));
 
-        // Primary symmetric quadratic objective.
-        const auto diff = Sub(val0, val1);
-        auto total = MulAdd(Mul(diff, diff), vw_0gt1, Load(d, row_diff + x));
+    // Secondary half-open quadratic objectives.
+    const auto fabs0 = Abs(val0);
+    const auto too_small = Mul(Set(d, 0.4), fabs0);
+    const auto too_big = fabs0;
 
-        // Secondary half-open quadratic objectives.
-        const auto fabs0 = Abs(val0);
-        const auto too_small = Mul(Set(d, 0.4), fabs0);
-        const auto too_big = fabs0;
-
-        const auto if_neg = IfThenElse(
-            Gt(val1, Neg(too_small)), Add(val1, too_small),
-            IfThenElseZero(Lt(val1, Neg(too_big)), Sub(Neg(val1), too_big)));
-        const auto if_pos =
-            IfThenElse(Lt(val1, too_small), Sub(too_small, val1),
-                       IfThenElseZero(Gt(val1, too_big), Sub(val1, too_big)));
-        const auto v = IfThenElse(Lt(val0, Zero(d)), if_neg, if_pos);
-        total = MulAdd(vw_0lt1, Mul(v, v), total);
-        Store(total, d, row_diff + x);
-      }
-      }
-  });
+    const auto if_neg = IfThenElse(
+        Gt(val1, Neg(too_small)), Add(val1, too_small),
+        IfThenElseZero(Lt(val1, Neg(too_big)), Sub(Neg(val1), too_big)));
+    const auto if_pos =
+        IfThenElse(Lt(val1, too_small), Sub(too_small, val1),
+                   IfThenElseZero(Gt(val1, too_big), Sub(val1, too_big)));
+    const auto v = IfThenElse(Lt(val0, Zero(d)), if_neg, if_pos);
+    total = MulAdd(vw_0lt1, Mul(v, v), total);
+    Store(total, d, row_diff + x);
+  }
 }
 
 // A simple HDR compatible gamma function.
@@ -1557,93 +1104,80 @@ BUTTERAUGLI_INLINE void OpsinAbsorbance(const DF df, const V& in0, const V& in1,
   }
 }
 
-// `blurred` is a temporary image used inside this function and not returned.
-void OpsinDynamicsImage(RowPool& pool, const Image3F& rgb, const ButteraugliParams& params,
-                          Image3F* blurred, BlurTemp* blur_temp, Image3F* xyb) {
-  const double kSigma = 1.2;
-  blur(pool, rgb.Plane(0), kSigma, blur_temp, &blurred->Plane(0));
-  blur(pool, rgb.Plane(1), kSigma, blur_temp, &blurred->Plane(1));
-  blur(pool, rgb.Plane(2), kSigma, blur_temp, &blurred->Plane(2));
+// libjxl's OpsinDynamicsImage for one row: `blurred` holds the row of each
+// rgb plane's 5x5 blur.
+void OpsinDynamicsRow(const float* const rgb[3], const float* const blurred[3], size_t xsize, float intensity_target,
+                      float* const xyb[3]) {
   const HWY_FULL(float) df;
-  const auto intensity_target_multiplier = Set(df, params.intensity_target);
-  pool.run(rgb.ysize(), [&](size_t row_begin, size_t row_end) {
-    for (size_t y = row_begin; y < row_end; ++y) {
-      const float* row_r = rgb.ConstPlaneRow(0, y);
-      const float* row_g = rgb.ConstPlaneRow(1, y);
-      const float* row_b = rgb.ConstPlaneRow(2, y);
-      const float* row_blurred_r = blurred->ConstPlaneRow(0, y);
-      const float* row_blurred_g = blurred->ConstPlaneRow(1, y);
-      const float* row_blurred_b = blurred->ConstPlaneRow(2, y);
-      float* row_out_x = xyb->PlaneRow(0, y);
-      float* row_out_y = xyb->PlaneRow(1, y);
-      float* row_out_b = xyb->PlaneRow(2, y);
-      const auto min = Set(df, 1e-4f);
-      for (size_t x = 0; x < rgb.xsize(); x += Lanes(df)) {
-        auto sensitivity0 = Undefined(df);
-        auto sensitivity1 = Undefined(df);
-        auto sensitivity2 = Undefined(df);
-        {
-          // Calculate sensitivity based on the smoothed image gamma derivative.
-          auto pre_mixed0 = Undefined(df);
-          auto pre_mixed1 = Undefined(df);
-          auto pre_mixed2 = Undefined(df);
-          OpsinAbsorbance<true>(
-              df, Mul(Load(df, row_blurred_r + x), intensity_target_multiplier),
-              Mul(Load(df, row_blurred_g + x), intensity_target_multiplier),
-              Mul(Load(df, row_blurred_b + x), intensity_target_multiplier),
-              &pre_mixed0, &pre_mixed1, &pre_mixed2);
-          pre_mixed0 = Max(pre_mixed0, min);
-          pre_mixed1 = Max(pre_mixed1, min);
-          pre_mixed2 = Max(pre_mixed2, min);
-          sensitivity0 = Div(Gamma(df, pre_mixed0), pre_mixed0);
-          sensitivity1 = Div(Gamma(df, pre_mixed1), pre_mixed1);
-          sensitivity2 = Div(Gamma(df, pre_mixed2), pre_mixed2);
-          sensitivity0 = Max(sensitivity0, min);
-          sensitivity1 = Max(sensitivity1, min);
-          sensitivity2 = Max(sensitivity2, min);
-        }
-        auto cur_mixed0 = Undefined(df);
-        auto cur_mixed1 = Undefined(df);
-        auto cur_mixed2 = Undefined(df);
-        OpsinAbsorbance<false>(
-            df, Mul(Load(df, row_r + x), intensity_target_multiplier),
-            Mul(Load(df, row_g + x), intensity_target_multiplier),
-            Mul(Load(df, row_b + x), intensity_target_multiplier), &cur_mixed0,
-            &cur_mixed1, &cur_mixed2);
-        cur_mixed0 = Mul(cur_mixed0, sensitivity0);
-        cur_mixed1 = Mul(cur_mixed1, sensitivity1);
-        cur_mixed2 = Mul(cur_mixed2, sensitivity2);
-        // This is a kludge. The negative values should be zeroed away before
-        // blurring. Ideally there would be no negative values in the first place.
-        const auto min01 = Set(df, 1.7557483643287353f);
-        const auto min2 = Set(df, 12.226454707163354f);
-        cur_mixed0 = Max(cur_mixed0, min01);
-        cur_mixed1 = Max(cur_mixed1, min01);
-        cur_mixed2 = Max(cur_mixed2, min2);
+  const auto intensity_target_multiplier = Set(df, intensity_target);
+  const float* row_r = rgb[0];
+  const float* row_g = rgb[1];
+  const float* row_b = rgb[2];
+  const float* row_blurred_r = blurred[0];
+  const float* row_blurred_g = blurred[1];
+  const float* row_blurred_b = blurred[2];
+  float* row_out_x = xyb[0];
+  float* row_out_y = xyb[1];
+  float* row_out_b = xyb[2];
+  const auto min = Set(df, 1e-4f);
+  for (size_t x = 0; x < xsize; x += Lanes(df)) {
+    auto sensitivity0 = Undefined(df);
+    auto sensitivity1 = Undefined(df);
+    auto sensitivity2 = Undefined(df);
+    {
+      // Calculate sensitivity based on the smoothed image gamma derivative.
+      auto pre_mixed0 = Undefined(df);
+      auto pre_mixed1 = Undefined(df);
+      auto pre_mixed2 = Undefined(df);
+      OpsinAbsorbance<true>(
+          df, Mul(Load(df, row_blurred_r + x), intensity_target_multiplier),
+          Mul(Load(df, row_blurred_g + x), intensity_target_multiplier),
+          Mul(Load(df, row_blurred_b + x), intensity_target_multiplier),
+          &pre_mixed0, &pre_mixed1, &pre_mixed2);
+      pre_mixed0 = Max(pre_mixed0, min);
+      pre_mixed1 = Max(pre_mixed1, min);
+      pre_mixed2 = Max(pre_mixed2, min);
+      sensitivity0 = Div(Gamma(df, pre_mixed0), pre_mixed0);
+      sensitivity1 = Div(Gamma(df, pre_mixed1), pre_mixed1);
+      sensitivity2 = Div(Gamma(df, pre_mixed2), pre_mixed2);
+      sensitivity0 = Max(sensitivity0, min);
+      sensitivity1 = Max(sensitivity1, min);
+      sensitivity2 = Max(sensitivity2, min);
+    }
+    auto cur_mixed0 = Undefined(df);
+    auto cur_mixed1 = Undefined(df);
+    auto cur_mixed2 = Undefined(df);
+    OpsinAbsorbance<false>(
+        df, Mul(Load(df, row_r + x), intensity_target_multiplier),
+        Mul(Load(df, row_g + x), intensity_target_multiplier),
+        Mul(Load(df, row_b + x), intensity_target_multiplier), &cur_mixed0,
+        &cur_mixed1, &cur_mixed2);
+    cur_mixed0 = Mul(cur_mixed0, sensitivity0);
+    cur_mixed1 = Mul(cur_mixed1, sensitivity1);
+    cur_mixed2 = Mul(cur_mixed2, sensitivity2);
+    // This is a kludge. The negative values should be zeroed away before
+    // blurring. Ideally there would be no negative values in the first place.
+    const auto min01 = Set(df, 1.7557483643287353f);
+    const auto min2 = Set(df, 12.226454707163354f);
+    cur_mixed0 = Max(cur_mixed0, min01);
+    cur_mixed1 = Max(cur_mixed1, min01);
+    cur_mixed2 = Max(cur_mixed2, min2);
 
-        Store(Sub(cur_mixed0, cur_mixed1), df, row_out_x + x);
-        Store(Add(cur_mixed0, cur_mixed1), df, row_out_y + x);
-        Store(cur_mixed2, df, row_out_b + x);
-      }
-      }
-  });
-  return;
+    Store(Sub(cur_mixed0, cur_mixed1), df, row_out_x + x);
+    Store(Add(cur_mixed0, cur_mixed1), df, row_out_y + x);
+    Store(cur_mixed2, df, row_out_b + x);
+  }
 }
 
 // VideoMetricsLab's form of libjxl's Blur for its 7, 13, 15 and 33 tap
 // kernels. libjxl convolves the rows and writes the result transposed, then
 // does the same again, so that its second pass convolves the columns; here
-// a horizontal pass (ConvolveRowSegment) and a vertical pass
-// (ConvolveRingRow) work on rows the right way round, so that both run in
-// vectors across a row with plain loads and stores, without the transposes.
-// They run on strips of kBlurStripColumns columns, each from the top of the
-// picture to the bottom (BlurStrip): a row's horizontal pass, for the
-// strip's columns only, goes into a ring of the last 2 * kHalf + 1 rows, and
-// the vertical pass of the row kHalf above it follows at once. The ring
-// stays in the core's cache, where a whole temporary plane went out to
-// memory and back (with many copies of Butteraugli at once, the blurs
-// waited on memory most of the time). Every output pixel gets libjxl's
-// operations in libjxl's order
+// a horizontal pass (ConvolveRowSegment) of each row goes into a ring of
+// rows as the row is made, and the vertical pass (VerticalRow) of a row
+// reads the ring once the rows kHalf below it are in: both run in vectors
+// across a row with plain loads and stores, without the transposes, and the
+// ring stays in the cache where a whole plane went out to memory and back.
+// Every output pixel gets libjxl's operations in libjxl's order
 // (its ConvolutionWithTranspose, scalar code): away from the borders the
 // kHalf mirrored pairs of the pre-scaled kernel, (a + b) * weight, go
 // round-robin into four sums, then centre * weight + sum0 + sum1 + sum2
@@ -1733,96 +1267,431 @@ void ConvolveRowSegment(const float* row, size_t xsize, const float* kernel, con
   for (; x < x1; ++x) border_pixel(x);
 }
 
-// The vertical pass of row y of a strip, `width` columns (whole vectors),
-// from the strip's ring: 2 * (2 * kHalf + 1) rows `stride` apart, in which
-// rows r % kRows and r % kRows + kRows both hold row r's horizontal pass, so
-// that rows y - kHalf to y + kHalf lie one stride apart from row
-// (y - kHalf) % kRows on, as the plane's rows did.
+// `xsize` rounded up to whole vectors: the columns the vector loops cover.
+inline size_t VectorColumns(size_t xsize) {
+  const HWY_FULL(float) d;
+  return (xsize + Lanes(d) - 1) / Lanes(d) * Lanes(d);
+}
+
+// The vertical pass of row y, `width` columns (whole vectors), from `ring`'s
+// rows y - kHalf to y + kHalf of the horizontal pass. Away from the top and
+// bottom those lie one stride apart from row y - kHalf's slot on (Ring);
+// near them, the rows inside the picture are read one by one.
 template <size_t kHalf>
-void ConvolveRingRow(const float* ring, size_t stride, size_t y, size_t ysize, const float* kernel, const float* sk,
-                     size_t width, float* row_out) {
-  constexpr size_t kRows = 2 * kHalf + 1;
+void VerticalRow(const Ring& ring, size_t y, size_t ysize, const BlurKernel& kernel, size_t width, float* row_out) {
   const HWY_FULL(float) d;
   const size_t lanes = Lanes(d);
   if (y >= kHalf && y + kHalf < ysize) {
-    const float* first = ring + (y - kHalf) % kRows * stride;
+    const float* first = ring.row(y - kHalf);
     const auto pairs = std::make_index_sequence<kHalf>();
     for (size_t x = 0; x < width; x += lanes) {
-      Store(ConvolveMiddle<kHalf>(d, first + x, static_cast<ptrdiff_t>(stride), sk, pairs), d, row_out + x);
+      Store(ConvolveMiddle<kHalf>(d, first + x, static_cast<ptrdiff_t>(ring.stride), kernel.sk, pairs), d,
+            row_out + x);
     }
     return;
   }
   size_t first, last;
-  const auto scale = Set(d, BorderScale(kernel, kHalf, y, ysize, &first, &last));
+  const auto scale = Set(d, BorderScale(kernel.taps, kHalf, y, ysize, &first, &last));
   for (size_t x = 0; x < width; x += lanes) {
     auto sum = Zero(d);
     for (size_t j = first; j <= last; ++j) {
-      sum = Add(sum, Mul(Load(d, ring + j % kRows * stride + x), Set(d, kernel[j + kHalf - y])));
+      sum = Add(sum, Mul(Load(d, ring.row(j) + x), Set(d, kernel.taps[j + kHalf - y])));
     }
     Store(Mul(sum, scale), d, row_out + x);
   }
 }
 
-// Columns [x0, x1) of the blur, top to bottom, through `ring` (see
-// ConvolveRingRow). Row y is written once rows up to y + kHalf are in.
+// The horizontal pass of row y (`row`) into its slot of `ring`. The slot's
+// columns from xsize to the last whole vector are zeros, so that the
+// vertical pass's padding gets zeros.
 template <size_t kHalf>
-void BlurStrip(const ImageF& in, const float* kernel, const float* sk, size_t x0, size_t x1, float* ring,
-               size_t stride, ImageF* out) {
-  constexpr size_t kRows = 2 * kHalf + 1;
+void HorizontalRow(const float* row, size_t xsize, const BlurKernel& kernel, const Ring& ring, size_t y) {
+  float* const slot = ring.row(y);
+  ConvolveRowSegment<kHalf>(row, xsize, kernel.taps, kernel.sk, 0, xsize, slot);
+  std::fill(slot + xsize, slot + VectorColumns(xsize), 0.0f);
+  ring.copy_second(y);
+}
+
+// ---- VideoMetricsLab: the stages, one row at a time ----
+
+// The weights of the per-band differences (libjxl's, as it names them).
+constexpr double wMfMalta = 37.0819870399;
+constexpr double norm1Mf = 130262059.556;
+constexpr double wMfMaltaX = 8246.75321353;
+constexpr double norm1MfX = 1009002.70582;
+constexpr double wHfMalta = 18.7237414387;
+constexpr double norm1Hf = 4498534.45232;
+constexpr double wHfMaltaX = 6923.99476109;
+constexpr double norm1HfX = 8051.15833247;
+constexpr double wUhfMalta = 1.10039032555;
+constexpr double norm1Uhf = 71.7800275169;
+constexpr double wUhfMaltaX = 173.5;
+constexpr double norm1UhfX = 5.0;
+constexpr double wmul[9] = {
+    400.0, 1.50815703118, 0, 2150.0, 10.6195433239, 16.2176043152, 29.2353797994, 0.844626970982, 0.703646627719,
+};
+
+// A thread's own rows for a stage's intermediate results, which no other
+// row needs: `count` rows of `stride` floats, 64-byte aligned.
+float* ScratchRows(size_t count, size_t stride) {
+  struct Scratch {
+    float* data = nullptr;
+    size_t floats = 0;
+    ~Scratch() { ::operator delete[](data, std::align_val_t{64}); }
+  };
+  thread_local Scratch scratch;
+  const size_t floats = count * stride;
+  if (scratch.floats < floats) {
+    ::operator delete[](scratch.data, std::align_val_t{64});
+    scratch.data = static_cast<float*>(::operator new[](floats * sizeof(float), std::align_val_t{64}));
+    std::fill_n(scratch.data, floats, 0.0f);  // the padding never holds NaNs
+    scratch.floats = floats;
+  }
+  return scratch.data;
+}
+
+// The planes one picture's stages read and write at one resolution.
+struct PictureRows {
+  const LevelRings& level;
+  size_t picture;
+  const Ring& at(Group group, size_t plane) const { return level.at(group, picture, plane); }
+};
+
+// kStageOpsin: libjxl's OpsinDynamicsImage of row y (its 5x5 blur of each
+// rgb plane, then the conversion), then the horizontal pass of the low
+// frequencies' blur of each XYB plane.
+void OpsinRow(const StreamFrame& frame, const PictureRows& p, size_t y) {
+  const size_t xsize = p.level.xsize;
+  const int64_t ysize = static_cast<int64_t>(p.level.ysize);
+  const size_t stride = p.at(kRgb, 0).stride;
+  float* const scratch = ScratchRows(3, stride);
+  float* const blurred[3] = {scratch, scratch + stride, scratch + 2 * stride};
+  for (size_t c = 0; c < 3; ++c) {
+    const float* rows[5];
+    for (int64_t dy = -2; dy <= 2; ++dy) {
+      rows[dy + 2] = p.at(kRgb, c).row(static_cast<size_t>(Mirror(static_cast<int64_t>(y) + dy, ysize)));
+    }
+    Separable5Row::Run(rows, xsize, frame.opsin_blur, blurred[c]);
+  }
+  const float* const rgb[3] = {p.at(kRgb, 0).row(y), p.at(kRgb, 1).row(y), p.at(kRgb, 2).row(y)};
+  float* const xyb[3] = {p.at(kXyb, 0).row(y), p.at(kXyb, 1).row(y), p.at(kXyb, 2).row(y)};
+  OpsinDynamicsRow(rgb, blurred, xsize, frame.params.intensity_target, xyb);
+  for (size_t c = 0; c < 3; ++c) HorizontalRow<16>(xyb[c], xsize, frame.lf_blur, p.at(kLfh, c), y);
+}
+
+// kStageLf: libjxl's SeparateLFAndMF for row y (lf = xyb blurred, mf = xyb -
+// lf, lf converted to vals), then the horizontal pass of mf's blur. The
+// blue mf is needed only by that pass.
+void LfRow(const StreamFrame& frame, const PictureRows& p, size_t y) {
+  const HWY_FULL(float) d;
+  const size_t xsize = p.level.xsize;
+  const size_t width = VectorColumns(xsize);
+  float* const mf_raw[3] = {p.at(kMfRaw, 0).row(y), p.at(kMfRaw, 1).row(y), ScratchRows(1, p.at(kLf, 0).stride)};
+  for (size_t i = 0; i < 3; ++i) {
+    float* const row_lf = p.at(kLf, i).row(y);
+    VerticalRow<16>(p.at(kLfh, i), y, p.level.ysize, frame.lf_blur, width, row_lf);
+    const float* const row_xyb = p.at(kXyb, i).row(y);
+    for (size_t x = 0; x < xsize; x += Lanes(d)) {
+      Store(Sub(Load(d, row_xyb + x), Load(d, row_lf + x)), d, mf_raw[i] + x);
+    }
+  }
+  float* BUTTERAUGLI_RESTRICT row_x = p.at(kLf, 0).row(y);
+  float* BUTTERAUGLI_RESTRICT row_y = p.at(kLf, 1).row(y);
+  float* BUTTERAUGLI_RESTRICT row_b = p.at(kLf, 2).row(y);
+  for (size_t x = 0; x < xsize; x += Lanes(d)) {
+    auto valx = Undefined(d);
+    auto valy = Undefined(d);
+    auto valb = Undefined(d);
+    XybLowFreqToVals(d, Load(d, row_x + x), Load(d, row_y + x),
+                     Load(d, row_b + x), &valx, &valy, &valb);
+    Store(valx, d, row_x + x);
+    Store(valy, d, row_y + x);
+    Store(valb, d, row_b + x);
+  }
+  for (size_t i = 0; i < 3; ++i) HorizontalRow<7>(mf_raw[i], xsize, frame.mf_blur, p.at(kMfh, i), y);
+}
+
+// kStageMf: libjxl's SeparateMFAndHF for row y (mf blurred; for X and Y,
+// hf = mf - the blurred mf and mf's ranges reshaped, then SuppressXByY on hf;
+// blue mf = the blurred mf), then the horizontal pass of hf's blur.
+void MfRow(const StreamFrame& frame, const PictureRows& p, size_t y) {
+  const HWY_FULL(float) d;
+  static const double kRemoveMfRange = 0.29;
+  static const double kAddMfRange = 0.1;
+  const size_t xsize = p.level.xsize;
+  const size_t width = VectorColumns(xsize);
+  const size_t stride = p.at(kMf, 0).stride;
+  float* const scratch = ScratchRows(2, stride);
+  float* BUTTERAUGLI_RESTRICT blurred_x = scratch;
+  float* BUTTERAUGLI_RESTRICT blurred_y = scratch + stride;
+  VerticalRow<7>(p.at(kMfh, 0), y, p.level.ysize, frame.mf_blur, width, blurred_x);
+  VerticalRow<7>(p.at(kMfh, 1), y, p.level.ysize, frame.mf_blur, width, blurred_y);
+  const float* BUTTERAUGLI_RESTRICT row_raw_x = p.at(kMfRaw, 0).row(y);
+  const float* BUTTERAUGLI_RESTRICT row_raw_y = p.at(kMfRaw, 1).row(y);
+  float* BUTTERAUGLI_RESTRICT row_mf_x = p.at(kMf, 0).row(y);
+  float* BUTTERAUGLI_RESTRICT row_mf_y = p.at(kMf, 1).row(y);
+  float* BUTTERAUGLI_RESTRICT row_hf_x = p.at(kHfRaw, 0).row(y);
+  float* BUTTERAUGLI_RESTRICT row_hf_y = p.at(kHfRaw, 1).row(y);
+  for (size_t x = 0; x < xsize; x += Lanes(d)) {
+    auto mfx = Load(d, blurred_x + x);
+    const auto hfx = Sub(Load(d, row_raw_x + x), mfx);
+    mfx = RemoveRangeAroundZero(d, kRemoveMfRange, mfx);
+    Store(mfx, d, row_mf_x + x);
+
+    auto mfy = Load(d, blurred_y + x);
+    const auto hfy = Sub(Load(d, row_raw_y + x), mfy);
+    mfy = AmplifyRangeAroundZero(d, kAddMfRange, mfy);
+    Store(mfy, d, row_mf_y + x);
+    Store(hfy, d, row_hf_y + x);
+
+    Store(SuppressXByY(d, hfx, hfy), d, row_hf_x + x);
+  }
+  VerticalRow<7>(p.at(kMfh, 2), y, p.level.ysize, frame.mf_blur, width, p.at(kMf, 2).row(y));
+  HorizontalRow<3>(row_hf_x, xsize, frame.hf_blur, p.at(kHfh, 0), y);
+  HorizontalRow<3>(row_hf_y, xsize, frame.hf_blur, p.at(kHfh, 1), y);
+}
+
+// kStageHf: libjxl's SeparateHFAndUHF for row y (hf blurred; uhf = hf - the
+// blurred hf; both reshaped), then the masking's input (libjxl's
+// CombineChannelsForMasking and DiffPrecompute) and the horizontal pass of
+// its blur.
+void HfRow(const StreamFrame& frame, const PictureRows& p, size_t y) {
+  const HWY_FULL(float) d;
+  static const double kRemoveHfRange = 1.5;
+  static const double kAddHfRange = 0.132;
+  static const double kRemoveUhfRange = 0.04;
+  static const double kMaxclampHf = 28.4691806922;
+  static const double kMaxclampUhf = 5.19175294647;
+  static const double kMulYHf = 2.155;
+  static const double kMulYUhf = 2.69313763794;
+  const size_t xsize = p.level.xsize;
+  const size_t width = VectorColumns(xsize);
+  const size_t stride = p.at(kHf, 0).stride;
+  float* const scratch = ScratchRows(2, stride);
+  float* BUTTERAUGLI_RESTRICT blurred_x = scratch;
+  float* BUTTERAUGLI_RESTRICT blurred_y = scratch + stride;
+  VerticalRow<3>(p.at(kHfh, 0), y, p.level.ysize, frame.hf_blur, width, blurred_x);
+  VerticalRow<3>(p.at(kHfh, 1), y, p.level.ysize, frame.hf_blur, width, blurred_y);
+  const float* BUTTERAUGLI_RESTRICT row_raw_x = p.at(kHfRaw, 0).row(y);
+  const float* BUTTERAUGLI_RESTRICT row_raw_y = p.at(kHfRaw, 1).row(y);
+  float* BUTTERAUGLI_RESTRICT row_hf_x = p.at(kHf, 0).row(y);
+  float* BUTTERAUGLI_RESTRICT row_hf_y = p.at(kHf, 1).row(y);
+  float* BUTTERAUGLI_RESTRICT row_uhf_x = p.at(kUhf, 0).row(y);
+  float* BUTTERAUGLI_RESTRICT row_uhf_y = p.at(kUhf, 1).row(y);
+  for (size_t x = 0; x < xsize; x += Lanes(d)) {
+    auto hfx = Load(d, blurred_x + x);
+    auto uhfx = Sub(Load(d, row_raw_x + x), hfx);
+    hfx = RemoveRangeAroundZero(d, kRemoveHfRange, hfx);
+    uhfx = RemoveRangeAroundZero(d, kRemoveUhfRange, uhfx);
+    Store(hfx, d, row_hf_x + x);
+    Store(uhfx, d, row_uhf_x + x);
+
+    auto hfy = Load(d, blurred_y + x);
+    hfy = MaximumClamp(d, hfy, kMaxclampHf);
+    auto uhfy = Sub(Load(d, row_raw_y + x), hfy);
+    uhfy = MaximumClamp(d, uhfy, kMaxclampUhf);
+    uhfy = Mul(uhfy, Set(d, kMulYUhf));
+    Store(uhfy, d, row_uhf_y + x);
+    hfy = Mul(hfy, Set(d, kMulYHf));
+    hfy = AmplifyRangeAroundZero(d, kAddHfRange, hfy);
+    Store(hfy, d, row_hf_y + x);
+  }
+
+  // Only X and Y components are involved in masking. B's influence
+  // is considered less important in the high frequency area, and we
+  // don't model masking from lower frequency signals.
+  static const float muls[3] = {
+      2.5f,
+      0.4f,
+      0.4f,
+  };
+  static const float kMul = 6.19424080439;
+  static const float kBias = 12.61050594197;
+  const auto mul0 = Set(d, muls[0]);
+  const auto mul1 = Set(d, muls[1]);
+  const auto mul2 = Set(d, muls[2]);
+  const float bias = kMul * kBias;
+  const float sqrt_bias = std::sqrt(bias);
+  const auto mulv = Set(d, kMul);
+  const auto biasv = Set(d, bias);
+  const auto sqrt_biasv = Set(d, sqrt_bias);
+  float* const masking = blurred_x;  // read above, free now
+  for (size_t x = 0; x < xsize; x += Lanes(d)) {
+    const auto xdiff = Mul(Add(Load(d, row_uhf_x + x), Load(d, row_hf_x + x)), mul0);
+    const auto ydiff = ContractedMulAdd(Load(d, row_uhf_y + x), mul1, Mul(Load(d, row_hf_y + x), mul2));
+    const auto in = Sqrt(ContractedMulAdd(xdiff, xdiff, Mul(ydiff, ydiff)));
+    // kBias makes sqrt behave more linearly.
+    Store(Sub(Sqrt(ContractedMulAdd(mulv, Abs(in), biasv)), sqrt_biasv), d, masking + x);
+  }
+  HorizontalRow<6>(masking, xsize, frame.mask_blur, p.at(kMh, 0), y);
+}
+
+// kStageMaskBlur: the vertical pass of the masking's blur, row y.
+void MaskBlurRow(const StreamFrame& frame, const PictureRows& p, size_t y) {
+  VerticalRow<6>(p.at(kMh, 0), y, p.level.ysize, frame.mask_blur, VectorColumns(p.level.xsize), p.at(kBm, 0).row(y));
+}
+
+// The six Malta differences, in the order their sums are added to the AC
+// differences: the band and channel compared, the kernel, the weights, and
+// the AC plane they go to.
+struct MaltaBand {
+  Group group;
+  size_t channel;
+  bool lf;  // MaltaTagLF's kernel, else MaltaTag's
+  size_t ac;
+};
+constexpr MaltaBand kMaltaBands[6] = {
+    {kUhf, 1, false, 1}, {kUhf, 0, false, 0}, {kHf, 1, true, 1}, {kHf, 0, true, 0}, {kMf, 1, true, 1}, {kMf, 0, true, 0},
+};
+
+// libjxl's weights of the Malta difference `band` (DiffmapPsychoImage).
+void MaltaWeights(size_t band, float hf_asymmetry, double* w_0gt1, double* w_0lt1, double* norm1) {
+  switch (band) {
+    case 0: *w_0gt1 = wUhfMalta * hf_asymmetry; *w_0lt1 = wUhfMalta / hf_asymmetry; *norm1 = norm1Uhf; break;
+    case 1: *w_0gt1 = wUhfMaltaX * hf_asymmetry; *w_0lt1 = wUhfMaltaX / hf_asymmetry; *norm1 = norm1UhfX; break;
+    case 2:
+      *w_0gt1 = wHfMalta * std::sqrt(hf_asymmetry); *w_0lt1 = wHfMalta / std::sqrt(hf_asymmetry); *norm1 = norm1Hf;
+      break;
+    case 3:
+      *w_0gt1 = wHfMaltaX * std::sqrt(hf_asymmetry); *w_0lt1 = wHfMaltaX / std::sqrt(hf_asymmetry);
+      *norm1 = norm1HfX;
+      break;
+    case 4: *w_0gt1 = wMfMalta; *w_0lt1 = wMfMalta; *norm1 = norm1Mf; break;
+    default: *w_0gt1 = wMfMaltaX; *w_0lt1 = wMfMaltaX; *norm1 = norm1MfX; break;
+  }
+}
+
+// kStageMaltaDiffs: row p of the six Malta difference rings (libjxl's
+// MaltaDiffMapT: the pixels in vectors (MaltaDiffs), the last ones of a row
+// that do not fill one in its scalar code (MaltaDiffPixel)). The rows of the
+// margin above and below the picture are zeros.
+void MaltaDiffsRow(const StreamFrame& frame, const LevelRings& level, size_t p) {
+  const size_t xsize = level.xsize;
+  if (p < kMaltaMargin || p >= level.ysize + kMaltaMargin) {
+    for (size_t band = 0; band < 6; ++band) {
+      const Ring& ring = level.at(kMalta, 0, band);
+      std::fill_n(ring.row(p), ring.stride, 0.0f);
+      ring.copy_second(p);
+    }
+    return;
+  }
+  const size_t y = p - kMaltaMargin;
+  const float kWeight0 = 0.5;
+  const float kWeight1 = 0.33;
+  const double len = 3.75;
   const HWY_FULL(float) d;
   const size_t lanes = Lanes(d);
-  const size_t xsize = in.xsize();
-  const size_t ysize = in.ysize();
-  // The vertical pass runs on whole vectors; the ring's columns past the
-  // picture's last are zeros, so that out's padding gets zeros as before.
-  const size_t width = (x1 - x0 + lanes - 1) / lanes * lanes;
-  size_t next_out = 0;
-  for (size_t r = 0; r < ysize; ++r) {
-    float* const slot = ring + r % kRows * stride;
-    ConvolveRowSegment<kHalf>(in.ConstRow(r), xsize, kernel, sk, x0, x1, slot);
-    std::fill(slot + (x1 - x0), slot + width, 0.0f);
-    std::copy(slot, slot + width, slot + kRows * stride);
-    for (; next_out + kHalf <= r; ++next_out) {
-      ConvolveRingRow<kHalf>(ring, stride, next_out, ysize, kernel, sk, width, out->Row(next_out) + x0);
+  for (size_t band = 0; band < 6; ++band) {
+    const MaltaBand& b = kMaltaBands[band];
+    double w_0gt1, w_0lt1, norm1;
+    MaltaWeights(band, frame.params.hf_asymmetry, &w_0gt1, &w_0lt1, &norm1);
+    const double mulli = b.lf ? 0.611612573796 : 0.39905817637;
+    const double w_pre0gt1 = mulli * std::sqrt(kWeight0 * w_0gt1) / (len * 2 + 1);
+    const double w_pre0lt1 = mulli * std::sqrt(kWeight1 * w_0lt1) / (len * 2 + 1);
+    const float norm2_0gt1 = w_pre0gt1 * norm1;
+    const float norm2_0lt1 = w_pre0lt1 * norm1;
+    const float* HWY_RESTRICT row0 = level.at(b.group, 0, b.channel).row(y);
+    const float* HWY_RESTRICT row1 = level.at(b.group, 1, b.channel).row(y);
+    const Ring& ring = level.at(kMalta, 0, band);
+    float* HWY_RESTRICT row_diffs = ring.row(p) + kMaltaLeft;
+    std::fill(row_diffs - kMaltaMargin, row_diffs, 0.0f);
+    size_t x = 0;
+    for (; x + lanes <= xsize; x += lanes) {
+      Store(MaltaDiffs(d, Load(d, row0 + x), Load(d, row1 + x), static_cast<float>(norm1), norm2_0gt1, norm2_0lt1),
+            d, row_diffs + x);
     }
-  }
-  for (; next_out < ysize; ++next_out) {
-    ConvolveRingRow<kHalf>(ring, stride, next_out, ysize, kernel, sk, width, out->Row(next_out) + x0);
+    for (; x < xsize; ++x) {
+      row_diffs[x] = MaltaDiffPixel(row0[x], row1[x], norm1, norm2_0gt1, norm2_0lt1);
+    }
+    std::fill(row_diffs + xsize, row_diffs + xsize + kMaltaMargin, 0.0f);
+    ring.copy_second(p);
   }
 }
 
-// The strips are independent, so the pool's threads take them; a band of
-// strips uses the ring of its first.
-template <size_t kHalf>
-void SeparableBlurT(RowPool& pool, const ImageF& in, const float* kernel, const float* sk, ImageF* rings,
-                    ImageF* out) {
-  const size_t xsize = in.xsize();
-  const size_t strips = (xsize + kBlurStripColumns - 1) / kBlurStripColumns;
-  pool.run(strips, [&](size_t s0, size_t s1) {
-    float* const ring = rings->Row(s0 * kBlurRingRows);
-    for (size_t s = s0; s < s1; ++s) {
-      const size_t x0 = s * kBlurStripColumns;
-      BlurStrip<kHalf>(in, kernel, sk, x0, std::min(xsize, x0 + kBlurStripColumns), ring, rings->PixelsPerRow(),
-                       out);
-    }
-  });
+// libjxl's sums of Malta's line kernels (MaltaUnit) round every pixel of
+// row y, added to row_ac. `center` is the row's first pixel in the ring of
+// differences. The last vector of a row may run past its last pixel: those
+// lanes read the padding past the margin and land in row_ac's padding, and
+// no lane of a pixel reads them.
+template <class Tag>
+void AddMaltaRow(Tag tag, const float* center, size_t stride, size_t xsize, float* row_ac) {
+  const HWY_FULL(float) d;
+  for (size_t x = 0; x < xsize; x += Lanes(d)) {
+    const auto unit = MaltaUnit(tag, d, center + x, static_cast<ptrdiff_t>(stride));
+    Store(Add(Load(d, row_ac + x), unit), d, row_ac + x);
+  }
 }
 
-// `kernel` has 2 * half + 1 taps; out is not in.
-void SeparableBlur(RowPool& pool, const ImageF& in, const float* kernel, size_t half, BlurTemp* temp, ImageF* out) {
-  ImageF* const rings = temp->rings(in.xsize());
-  // libjxl's scale of the taps away from the borders: 1 / their sum.
-  float weight_no_border = 0.0f;
-  for (size_t j = 0; j < 2 * half + 1; ++j) weight_no_border += kernel[j];
-  const float scale_no_border = 1.0f / weight_no_border;
-  float sk[17];  // the scaled kernel's centre and left half (half <= 16)
-  for (size_t i = 0; i <= half; ++i) sk[i] = kernel[i] * scale_no_border;
-  switch (half) {
-    case 3: SeparableBlurT<3>(pool, in, kernel, sk, rings, out); break;
-    case 6: SeparableBlurT<6>(pool, in, kernel, sk, rings, out); break;
-    case 7: SeparableBlurT<7>(pool, in, kernel, sk, rings, out); break;
-    case 16: SeparableBlurT<16>(pool, in, kernel, sk, rings, out); break;
-    default: break;  // blur takes no other length
+// kStageCompare: libjxl's DiffmapPsychoImage for row y. Every difference
+// lands in each pixel in libjxl's order: the DC differences (set), then per
+// AC plane the Malta sums, the L2 differences and, for Y, the mask's; then
+// the mask (libjxl's Mask: FuzzyErosion of the reference's blurred masking
+// differences) and the combination into the map's row.
+void CompareRow(const StreamFrame& frame, size_t level_index, size_t y) {
+  const HWY_FULL(float) d;
+  const LevelRings& level = frame.level[level_index];
+  const size_t xsize = level.xsize;
+  const size_t ysize = level.ysize;
+  const size_t stride = level.at(kLf, 0, 0).stride;
+  const float hf_asymmetry = frame.params.hf_asymmetry;
+  float* const scratch = ScratchRows(7, stride);
+  float* const dc[3] = {scratch, scratch + stride, scratch + 2 * stride};
+  float* const ac[3] = {scratch + 3 * stride, scratch + 4 * stride, scratch + 5 * stride};
+  float* const mask = scratch + 6 * stride;
+  const auto row = [&](Group group, size_t picture, size_t plane, size_t at) {
+    return level.at(group, picture, plane).row(at);
+  };
+
+  for (size_t c = 0; c < 3; ++c) {
+    SetL2DiffRow(row(kLf, 0, c, y), row(kLf, 1, c, y), xsize, static_cast<float>(wmul[6 + c]), dc[c]);
+    std::fill_n(ac[c], stride, 0.0f);
+  }
+  for (size_t band = 0; band < 6; ++band) {
+    const Ring& ring = level.at(kMalta, 0, band);
+    // Rows y to y + 2 * kMaltaMargin of the margined differences, around the
+    // picture's row y.
+    const float* center = ring.row(y) + kMaltaMargin * ring.stride + kMaltaLeft;
+    if (kMaltaBands[band].lf) {
+      AddMaltaRow(MaltaTagLF(), center, ring.stride, xsize, ac[kMaltaBands[band].ac]);
+    } else {
+      AddMaltaRow(MaltaTag(), center, ring.stride, xsize, ac[kMaltaBands[band].ac]);
+    }
+  }
+  for (size_t c = 0; c < 3; ++c) {
+    if (c < 2) {  // no blue-channel error at high frequencies
+      L2DiffAsymmetricRow(row(kHf, 0, c, y), row(kHf, 1, c, y), xsize, static_cast<float>(wmul[c] * hf_asymmetry),
+                          static_cast<float>(wmul[c] / hf_asymmetry), ac[c]);
+    }
+    L2DiffRow(row(kMf, 0, c, y), row(kMf, 1, c, y), xsize, static_cast<float>(wmul[3 + c]), ac[c]);
+  }
+
+  static const int kStep = 3;
+  const float* const blurred0 = row(kBm, 0, 0, y);
+  const float* const blurred1 = row(kBm, 1, 0, y);
+  FuzzyErosionRow(y >= kStep ? row(kBm, 0, 0, y - kStep) : nullptr, blurred0,
+                  y + kStep < ysize ? row(kBm, 0, 0, y + kStep) : nullptr, xsize, mask);
+  static const float kMaskToErrorMul = 10.0;
+  const auto error_mul = Set(d, kMaskToErrorMul);
+  for (size_t x = 0; x < xsize; x += Lanes(d)) {
+    const auto diff = Sub(Load(d, blurred0 + x), Load(d, blurred1 + x));
+    Store(ContractedMulAdd(Mul(error_mul, diff), diff, Load(d, ac[1] + x)), d, ac[1] + x);
+  }
+
+  float* const out = level_index == 0 ? frame.map + y * xsize : row(kMap, 0, 0, y);
+  CombineChannelsToDiffmapRow(mask, dc, ac, frame.params.xmul, xsize, out);
+}
+
+void RunStageRow(const StreamFrame& frame, StageKind kind, size_t level, size_t picture, size_t row) {
+  const PictureRows p{frame.level[level], picture};
+  switch (kind) {
+    case kStageOpsin: OpsinRow(frame, p, row); break;
+    case kStageLf: LfRow(frame, p, row); break;
+    case kStageMf: MfRow(frame, p, row); break;
+    case kStageHf: HfRow(frame, p, row); break;
+    case kStageMaskBlur: MaskBlurRow(frame, p, row); break;
+    case kStageMaltaDiffs: MaltaDiffsRow(frame, frame.level[level], row); break;
+    case kStageCompare: CompareRow(frame, level, row); break;
+    default: break;  // the rgb rows are the engine's
   }
 }
 
@@ -1837,66 +1706,11 @@ HWY_AFTER_NAMESPACE();
 #if HWY_ONCE
 namespace vml::butteraugli {
 
-HWY_EXPORT(Separable5);
-HWY_EXPORT(OpsinDynamicsImage);
-HWY_EXPORT(SeparateFrequencies);
-HWY_EXPORT(MaltaDiffMap);
-HWY_EXPORT(MaltaDiffMapLF);
-HWY_EXPORT(L2DiffAsymmetric);
-HWY_EXPORT(L2Diff);
-HWY_EXPORT(SetL2Diff);
-HWY_EXPORT(MaskPsychoImage);
-HWY_EXPORT(CombineChannelsToDiffmap);
-HWY_EXPORT(SeparableBlur);
+HWY_EXPORT(RunStageRow);
 
-void separable5(RowPool& pool, const ImageF& in, const WeightsSeparable5& weights, ImageF* out) {
-    HWY_DYNAMIC_DISPATCH(Separable5)(pool, in, weights, out);
-}
-
-void opsin_dynamics_image(RowPool& pool, const Image3F& rgb, const ButteraugliParams& params, Image3F* blurred,
-                          BlurTemp* blur_temp, Image3F* xyb) {
-    HWY_DYNAMIC_DISPATCH(OpsinDynamicsImage)(pool, rgb, params, blurred, blur_temp, xyb);
-}
-
-void separate_frequencies(RowPool& pool, BlurTemp* blur_temp, Image3F& xyb, PsychoImage& ps) {
-    HWY_DYNAMIC_DISPATCH(SeparateFrequencies)(pool, blur_temp, xyb, ps);
-}
-
-void malta_diff_map(RowPool& pool, const ImageF& lum0, const ImageF& lum1, double w_0gt1, double w_0lt1, double norm1,
-                    ImageF* diffs, ImageF* block_diff_ac) {
-    HWY_DYNAMIC_DISPATCH(MaltaDiffMap)(pool, lum0, lum1, w_0gt1, w_0lt1, norm1, diffs, block_diff_ac);
-}
-
-void malta_diff_map_lf(RowPool& pool, const ImageF& lum0, const ImageF& lum1, double w_0gt1, double w_0lt1, double norm1,
-                       ImageF* diffs, ImageF* block_diff_ac) {
-    HWY_DYNAMIC_DISPATCH(MaltaDiffMapLF)(pool, lum0, lum1, w_0gt1, w_0lt1, norm1, diffs, block_diff_ac);
-}
-
-void l2_diff_asymmetric(RowPool& pool, const ImageF& i0, const ImageF& i1, float w_0gt1, float w_0lt1, ImageF* diffmap) {
-    HWY_DYNAMIC_DISPATCH(L2DiffAsymmetric)(pool, i0, i1, w_0gt1, w_0lt1, diffmap);
-}
-
-void l2_diff(RowPool& pool, const ImageF& i0, const ImageF& i1, float w, ImageF* diffmap) {
-    HWY_DYNAMIC_DISPATCH(L2Diff)(pool, i0, i1, w, diffmap);
-}
-
-void set_l2_diff(RowPool& pool, const ImageF& i0, const ImageF& i1, float w, ImageF* diffmap) {
-    HWY_DYNAMIC_DISPATCH(SetL2Diff)(pool, i0, i1, w, diffmap);
-}
-
-void mask_psycho_image(RowPool& pool, const PsychoImage& pi0, const PsychoImage& pi1, BlurTemp* blur_temp,
-                       const MaskScratch& scratch, ImageF* mask, ImageF* diff_ac) {
-    HWY_DYNAMIC_DISPATCH(MaskPsychoImage)(pool, pi0, pi1, blur_temp, scratch, mask, diff_ac);
-}
-
-void combine_channels_to_diffmap(RowPool& pool, const ImageF& mask, const Image3F& block_diff_dc, const Image3F& block_diff_ac,
-                                 float xmul, ImageF* result) {
-    HWY_DYNAMIC_DISPATCH(CombineChannelsToDiffmap)(pool, mask, block_diff_dc, block_diff_ac, xmul, result);
-}
-
-void separable_blur(RowPool& pool, const ImageF& in, const float* kernel, std::size_t half, BlurTemp* temp,
-                    ImageF* out) {
-    HWY_DYNAMIC_DISPATCH(SeparableBlur)(pool, in, kernel, half, temp, out);
+void run_stage_row(const StreamFrame& frame, StageKind kind, std::size_t level, std::size_t picture,
+                   std::size_t row) {
+    HWY_DYNAMIC_DISPATCH(RunStageRow)(frame, kind, level, picture, row);
 }
 
 }  // namespace vml::butteraugli

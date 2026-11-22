@@ -42,19 +42,19 @@ struct InAppSchedule {
     std::size_t butteraugli_threads = 1;
 };
 
-// The schedule for a task of `metrics` on pairs of `pixels`, given the
-// logical `cores` shared with the other tasks the CPU's queue runs at the
-// same time (`concurrent_tasks`): with both metrics, a sixth of the task's
-// cores pairs at a time, each Butteraugli on the rest of its share less one
-// core for its SSIMULACRA2; Butteraugli alone, a twelfth, on its share;
-// SSIMULACRA2 alone, half, on one thread each. Every split of 24 cores
-// (8 fast, 16 slow) gave nearly the same speed, the CPU being full (4K pairs,
-// both metrics: 16.4 s for 4 x 5 threads, 16.7 to 19.7 s for 2 x 11 to
-// 12 x 1), so these are the fastest or within 3% of it with the fewest pairs
-// in memory: 1 pair x 24 threads was 17% slower, the threads of one picture
-// waiting on each other. Workers are also no more than fit in 60% of
-// `free_memory`, at a worker's measured peak memory.
-InAppSchedule in_app_schedule(long long pixels, const std::vector<std::string>& metrics, int concurrent_tasks,
+// The schedule for a task of `metrics` on pairs of `width` x `height`,
+// given the logical `cores` shared with the other tasks the CPU's queue runs
+// at the same time (`concurrent_tasks`): with both metrics, a sixth of the
+// task's cores pairs at a time, each Butteraugli on the rest of its share
+// less one core for its SSIMULACRA2; Butteraugli alone, a twelfth, on its
+// share; SSIMULACRA2 alone, half, on one thread each. Measured on 24 cores
+// (8 fast, 16 slow), 4K pairs: Butteraugli alone 23.7 s for 2 pairs x 12
+// threads, 25.3 s for 4 x 6, 29.4 s for 1 x 24 (the threads of one picture
+// waiting on each other at the end of each band of rows); both metrics
+// 27.7 s for 4 pairs, 36.7 s for 2 (one SSIMULACRA2 thread a pair).
+// Workers are also no more than fit in 60% of `free_memory`, at a worker's
+// memory (its pair, Butteraugli::memory_bytes, SSIMULACRA2's rows).
+InAppSchedule in_app_schedule(int width, int height, const std::vector<std::string>& metrics, int concurrent_tasks,
                               unsigned cores, std::optional<unsigned long long> free_memory);
 
 // The score in a tool's printed output (as the engines' SSIMULACRA2 score

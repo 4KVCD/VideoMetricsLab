@@ -32,6 +32,12 @@ public:
     std::size_t width() const;
     std::size_t height() const;
 
+    // The memory an engine for pictures of this size holds on `threads`
+    // threads: its map, its rings (the rows its stages still need, a few
+    // dozen per stage) and each thread's scratch rows; for sizing how many
+    // engines run at a time, without making one.
+    static std::size_t memory_bytes(std::size_t width, std::size_t height, std::size_t threads);
+
     // The distortion map of `test` against `source`, both rgb48 pictures (red,
     // green, blue interleaved) whose rows are `stride` samples apart: one
     // float per pixel, top row first. Valid until the next call.

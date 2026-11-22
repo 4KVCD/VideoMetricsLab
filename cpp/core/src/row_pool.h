@@ -43,8 +43,28 @@ public:
                  const_cast<void*>(static_cast<const void*>(&fn)));
     }
 
+    // Calls fn(i) for every i in [0, count), the threads taking them one at
+    // a time (or in runs, for counts over kMaxBands), and waits for all.
+    template <class F>
+    void run_each(std::size_t count, F&& fn) {
+        if (count == 0) return;
+        const auto items = [&fn](std::size_t i0, std::size_t i1) {
+            for (std::size_t i = i0; i < i1; ++i) fn(i);
+        };
+        if (workers_.empty() || count == 1) {
+            items(0, count);
+            return;
+        }
+        using Items = decltype(items);
+        dispatch(count, (count + kMaxBands - 1) / kMaxBands,
+                 [](void* f, std::size_t i0, std::size_t i1) { (*static_cast<const Items*>(f))(i0, i1); },
+                 const_cast<void*>(static_cast<const void*>(&items)));
+    }
+
 private:
     using Call = void (*)(void* fn, std::size_t y0, std::size_t y1);
+
+    static constexpr std::size_t kMaxBands = 0xFFFF;  // claim_'s band fields
 
     std::size_t band_size(std::size_t rows, std::size_t align) const;
     void dispatch(std::size_t rows, std::size_t band_rows, Call call, void* fn);
