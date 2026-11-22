@@ -35,7 +35,7 @@ libvmaf, Vship and FFmpeg's libraries are loaded the same way, from
 | SSIMULACRA2, Butteraugli, CVVDP | `vship.cpp`, `vship_run.cpp` (on the GPU), `perceptual_cpu.cpp`, `cpu_pair_scorer.cpp`, `ssimulacra2.cpp`, `butteraugli.cpp` (on the CPU, the app's own engines), `perceptual.cpp`, `cvvdp.cpp` |
 | Metric registry | `metrics.cpp` |
 | Results and persistence | `results.cpp`, `metric_cache.cpp`, `run_file.cpp`, `result_json.cpp`, `export_csv.cpp`, `settings.cpp` |
-| Statistics and graphs | `stats.cpp`; `app/graph_panel.cpp`, `app/chart.cpp`, `app/export_image.cpp` (Export graph as PNG) |
+| Statistics and graphs | `stats.cpp`; `app/graph_panel.cpp`, `app/chart.cpp`, `app/export_image.cpp` (Graph as PNG) |
 | The window's runs | `app/run_worker.cpp`, `app/main_window_run.cpp`, `run_line.cpp` |
 | Still comparison | `frame_extract.cpp`, `app/frame_compare_panel.cpp` |
 | Native playback | `native_playback.cpp`, `soundtrack_clock.cpp`; `app/native_pool.cpp`, `native_decoder.cpp`, `native_device.cpp`, `native_presentation.cpp`, `native_soundtrack.cpp`, `native_dav1d.cpp` |
@@ -190,9 +190,10 @@ When you add to the window:
 
 ## Exports
 
-The window offers two kinds of export, and a new one is one of them. (Some
-older tabs' exports predate this and are still to be brought into line:
-Metric Graphs', Bitrate Viewer's, BD-rate's and Video Compare's.)
+The window offers two kinds of export, and a new one is one of them. (Still
+to be brought into line: the Videos and Saved Results menus, which mix the
+archive with quick grabs of their own; and BD-rate's table, which has CSV
+but not yet JSON, nor its chart as PNG.)
 
 **A quick grab exports what is shown.** Every view that shows something
 exportable (a graph, a list or table, the statistics) has a right-click menu

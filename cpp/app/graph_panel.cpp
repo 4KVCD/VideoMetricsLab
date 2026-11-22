@@ -12,6 +12,7 @@
 #include <QMenu>
 #include <QPixmap>
 #include <QPushButton>
+#include <QSaveFile>
 #include <QScrollBar>
 #include <QTabBar>
 #include <QTableWidget>
@@ -40,6 +41,7 @@
 #include "vml/film_grain_scoring.h"
 #include "vml/number_format.h"
 #include "vml/options.h"
+#include "vml/python_json.h"
 #include "vml/run_file.h"
 #include "vml/stats.h"
 #include "vml/time_format.h"
@@ -1282,6 +1284,9 @@ MetricPage* GraphPanel::build_page(const MetricDefinition& metric) {
             [this, page](double x, double y) { page->on_hover(x, y, entries_); });
     connect(&page->chart(), &ChartWidget::range_dragged, this,
             [this, page](double start, double now, bool finished) { on_range_dragged(page, start, now, finished); });
+    page->chart().setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(&page->chart(), &QWidget::customContextMenuRequested, this,
+            [this, page](const QPoint& position) { show_graph_menu(page->chart(), position); });
     pages_[std::string(metric.key)] = page;
     return page;
 }
@@ -1390,9 +1395,6 @@ QWidget* GraphPanel::build_action_bar() {
     restore_button_->setEnabled(false);
     connect(restore_button_, &QPushButton::clicked, this, [this] { emit restore_removed_requested(); });
     layout->addWidget(restore_button_);
-    auto* png_button = new QPushButton(app::tr("Export graph as PNG"));
-    connect(png_button, &QPushButton::clicked, this, [this] { on_export_png(); });
-    layout->addWidget(png_button);
     layout->addWidget(theme::separator(16));
     layout->addWidget(frame_controls_);  // made in the constructor
     layout->addWidget(theme::separator(16));
@@ -1407,6 +1409,18 @@ QWidget* GraphPanel::build_action_bar() {
     });
     layout->addWidget(difference_box_);
     layout->addStretch(1);
+    // Export, at the bar's right end: all the videos' archive, and the quick
+    // grabs of the page shown, filled as it opens.
+    auto* export_button = new QPushButton(app::tr("Export"));
+    auto* exports = new QMenu(export_button);
+    connect(exports, &QMenu::aboutToShow, this, [this, exports] {
+        exports->clear();
+        StatsMenu items;
+        fill_stats_menu(*exports, -1, items, true);
+        connect_menu(items);
+    });
+    export_button->setMenu(exports);
+    layout->addWidget(export_button);
     return bar;
 }
 
@@ -2123,7 +2137,7 @@ void GraphPanel::on_add_saved_run() {
     }
 }
 
-void GraphPanel::on_export_png() {
+QString GraphPanel::export_stem() const {
     // Named after the test video whose line it shows (its label, as the line
     // is named), or after the reference when the lines are of several.
     const std::string key(current_metric().key);
@@ -2135,10 +2149,80 @@ void GraphPanel::on_export_png() {
             ++lines;
         }
     }
-    const QString stem = !first      ? QStringLiteral("comparison")
-                         : lines == 1 ? first->label
-                                      : text_of(first->result->source.stem());
-    const QString suggested = suggested_file_name(stem + "_" + QString::fromStdString(key), ".png");
+    return !first ? QStringLiteral("comparison") : lines == 1 ? first->label : text_of(first->result->source.stem());
+}
+
+void GraphPanel::export_statistics(bool json) {
+    const auto [headers, rows] = export_table();
+    if (rows.empty()) {
+        return;
+    }
+    const std::string key(current_metric().key);
+    const QString suggested =
+        suggested_file_name(export_stem() + "_" + QString::fromStdString(key) + "_statistics", json ? ".json" : ".csv");
+    const QString path = dialogs.save_file(app::tr("Export statistics"), suggested,
+                                           json ? app::tr("JSON file (*.json)") : app::tr("CSV file (*.csv)"));
+    if (path.isEmpty()) {
+        return;
+    }
+    std::string text;
+    if (json) {
+        // As the per-frame scores' JSON: the columns, then a list a row.
+        nlohmann::ordered_json columns = nlohmann::ordered_json::array();
+        for (const QString& header : headers) {
+            columns.push_back(header.toStdString());
+        }
+        nlohmann::ordered_json list = nlohmann::ordered_json::array();
+        for (const auto& [label, colour, cells] : rows) {
+            nlohmann::ordered_json row = nlohmann::ordered_json::array({label.toStdString()});
+            for (const QString& cell : cells) {
+                row.push_back(cell.toStdString());
+            }
+            list.push_back(std::move(row));
+        }
+        const std::optional<std::pair<int, int>> range = selected_frames();
+        nlohmann::ordered_json frames = nullptr;
+        if (range) {
+            frames = {{"first_frame", range->first}, {"last_frame", range->second}};
+        }
+        text = python_json_dumps(nlohmann::ordered_json{
+                   {"metric", key}, {"frames", frames}, {"columns", columns}, {"rows", list}}) +
+               "\n";
+    } else {
+        // A cell with a comma or a quote in quotes, its quotes doubled.
+        const auto cell = [](const QString& value) {
+            if (!value.contains(QLatin1Char(',')) && !value.contains(QLatin1Char('"'))) {
+                return value.toStdString();
+            }
+            QString quoted = value;
+            quoted.replace(QStringLiteral("\""), QStringLiteral("\"\""));
+            return ("\"" + quoted + "\"").toStdString();
+        };
+        std::string lines;
+        for (std::size_t i = 0; i < headers.size(); ++i) {
+            lines += (i > 0 ? "," : "") + cell(headers[i]);
+        }
+        lines += "\n";
+        for (const auto& [label, colour, cells] : rows) {
+            lines += cell(label);
+            for (const QString& value : cells) {
+                lines += "," + cell(value);
+            }
+            lines += "\n";
+        }
+        text = text_lines(lines);
+    }
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly) ||
+        file.write(text.data(), static_cast<qint64>(text.size())) != static_cast<qint64>(text.size()) ||
+        !file.commit()) {
+        dialogs.alert(app::tr("Export failed"), app::tr("Could not write {path}", {{"path", path}}));
+    }
+}
+
+void GraphPanel::on_export_png() {
+    const std::string key(current_metric().key);
+    const QString suggested = suggested_file_name(export_stem() + "_" + QString::fromStdString(key), ".png");
     const QString path = dialogs.save_file(app::tr("Export graph"), suggested, app::tr("PNG image (*.png)"));
     if (!path.isEmpty() && !render_export_image().save(path)) {
         dialogs.alert(app::tr("Export failed"), app::tr("Could not write {path}", {{"path", path}}));
@@ -2184,11 +2268,11 @@ std::optional<std::pair<int, int>> GraphPanel::shown_difference_pair() const {
     return page == pages_.end() ? std::nullopt : page->second->difference_pair();
 }
 
-void GraphPanel::fill_stats_menu(QMenu& menu, int row, StatsMenu& items) const {
-    // The statistics' right-click menu, as the Videos table's: the clicked
-    // line's video's export, where the window can export it on its own (not
-    // a line of a saved run loaded), and all the videos', each of what
-    // Settings' Exports include and named after it.
+void GraphPanel::fill_stats_menu(QMenu& menu, int row, StatsMenu& items, bool graph) const {
+    // The archive first, as the Videos table's menu: the clicked line's
+    // video's, where the window can export it on its own (not a line of a
+    // saved run loaded), and all the videos', each of what Settings'
+    // Exports include and named after it; then the quick grabs.
     if (const QTableWidgetItem* item = stats_table_->item(row, 0)) {
         const auto entry = entries_.find(item->data(Qt::UserRole).toInt());
         if (entry != entries_.end()) {
@@ -2205,13 +2289,64 @@ void GraphPanel::fill_stats_menu(QMenu& menu, int row, StatsMenu& items) const {
         items.all_videos = menu.addAction(export_action_text(ExportScope::all_videos, chosen));
         items.all_videos->setEnabled(anything && videos_exportable());
     }
+    add_quick_grabs(menu, items, graph, true);
+}
+
+void GraphPanel::add_quick_grabs(QMenu& menu, StatsMenu& items, bool graph, bool statistics) const {
+    // What the page shows: offered where it shows something.
+    const auto page = pages_.find(std::string(current_metric().key));
+    const bool shown = page != pages_.end() && page->second->chart().has_data();
+    if (!shown) {
+        return;
+    }
+    if (!menu.isEmpty()) {
+        menu.addSeparator();
+    }
+    if (graph) {
+        items.graph = menu.addAction(app::tr("Graph as PNG..."));
+    }
+    if (statistics) {
+        items.statistics_csv = menu.addAction(app::tr("Statistics as CSV..."));
+        items.statistics_json = menu.addAction(app::tr("Statistics as JSON..."));
+    }
     if (difference_on_ && shown_difference_pair()) {
         // What the band shows, which no export of Settings' includes.
-        if (!menu.isEmpty()) {
-            menu.addSeparator();
-        }
-        items.difference = menu.addAction(app::tr("Export the difference as CSV..."));
+        items.difference = menu.addAction(app::tr("Difference as CSV..."));
     }
+}
+
+void GraphPanel::connect_menu(const StatsMenu& items) {
+    if (items.this_video != nullptr) {
+        connect(items.this_video, &QAction::triggered, this,
+                [this, identity = items.identity] { emit video_export_requested(identity); });
+    }
+    if (items.all_videos != nullptr) {
+        connect(items.all_videos, &QAction::triggered, this, [this] { emit all_videos_export_requested(); });
+    }
+    if (items.graph != nullptr) {
+        connect(items.graph, &QAction::triggered, this, [this] { on_export_png(); });
+    }
+    if (items.statistics_csv != nullptr) {
+        connect(items.statistics_csv, &QAction::triggered, this, [this] { export_statistics(false); });
+    }
+    if (items.statistics_json != nullptr) {
+        connect(items.statistics_json, &QAction::triggered, this, [this] { export_statistics(true); });
+    }
+    if (items.difference != nullptr) {
+        connect(items.difference, &QAction::triggered, this, [this] { on_export_difference(); });
+    }
+}
+
+void GraphPanel::show_graph_menu(ChartWidget& chart, const QPoint& position) {
+    // The graph's right-click: the graph, and the difference it shows.
+    QMenu menu(this);
+    StatsMenu items;
+    add_quick_grabs(menu, items, true, false);
+    if (menu.isEmpty()) {
+        return;
+    }
+    connect_menu(items);
+    menu.exec(chart.mapToGlobal(position));
 }
 
 void GraphPanel::show_stats_menu(const QPoint& position) {
@@ -2221,14 +2356,8 @@ void GraphPanel::show_stats_menu(const QPoint& position) {
     if (menu.isEmpty()) {
         return;
     }
-    const QAction* chosen = menu.exec(stats_table_->viewport()->mapToGlobal(position));
-    if (chosen != nullptr && chosen == items.this_video) {
-        emit video_export_requested(items.identity);
-    } else if (chosen != nullptr && chosen == items.all_videos) {
-        emit all_videos_export_requested();
-    } else if (chosen != nullptr && chosen == items.difference) {
-        on_export_difference();
-    }
+    connect_menu(items);
+    menu.exec(stats_table_->viewport()->mapToGlobal(position));
 }
 
 std::vector<GraphPanel::Run> GraphPanel::runs() const {
