@@ -442,6 +442,10 @@ void MainWindow::show_table_menu(const QPoint& position) {
     }
     QAction* all_videos = menu.addAction(export_action_text(ExportScope::all_videos, items));
     all_videos->setEnabled(anything && !exported_runs().empty());
+    // Then the Export button's quick grabs, of the same rows.
+    menu.addSeparator();
+    SavedResultsPanel::add_quick_grabs(menu, !export_menu_rows().empty(),
+                                       [this](SavedResultsPanel::Export kind) { export_rows_as(kind); });
     const QAction* chosen = menu.exec(distorted_table_->viewport()->mapToGlobal(position));
     if (chosen != nullptr && chosen == recalculate) {
         recompute_rows(std::vector<int>(selected.begin(), selected.end()));
