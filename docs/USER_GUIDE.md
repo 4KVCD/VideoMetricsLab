@@ -984,24 +984,33 @@ by the right-click menus or after each run. Tick:
   reference's (`<video> - <metric>.png`), with several videos all of them
   together too, as **Graphs as ZIP...** draws them, once the bitrate is
   read;
+- **Worst frames**: each video's worst frames of every metric, as many
+  dips as the Worst Frames tab lists (10, 25 or 50), each with every
+  metric's score there (`<video> - worst frames.json`, `.csv`; see
+  [RESULTS_JSON.md](RESULTS_JSON.md#worst-frames-as-json-and-csv));
 - **Weak segments**: by the profile in use: a video's
   (`<video>.<metrics>.segments.json`, `.csv`), or every video's in one
   report. Nothing while the profile has no condition.
 
-**In** chooses the formats results, per-frame scores and weak segments are
-written in:
+**In** chooses the formats results, per-frame scores, worst frames and weak
+segments are written in:
 **JSON**, **CSV** or both. With neither, only graphs are exported.
 
 **As** saves them as **A .zip file** (`<video> - VideoMetricsLab.zip`, or
-named after the reference for every video), or as **Loose files** side by
-side in a folder you choose.
+named after the reference for every video), or as **Loose files** in a
+folder you choose. With several videos, each video's own files (its graphs,
+per-frame scores and worst frames) are in a folder of its name, and the
+files of all of them together (the results, the weak segments report, the
+"All test videos" graphs) beside those folders.
 
 The right-click menus of the Videos table, of Metric Graphs' statistics and
 of the Saved Results tab offer an export of what is ticked, named after it:
 **Export this video's results, graphs and weak segments...** for the video
 clicked (once its metrics are all scored), and **Export all videos'
 results, graphs and weak segments...** for every test video scored against
-the reference (**Export the selected videos'...** on Saved Results). Untick
+the reference. **Export the selected videos'...** takes the selected
+rows: on Saved Results, and in the Videos table where you right-click one
+of several rows selected. Untick
 what you never want, CSV say, and it's left out of every export. A line of a run file imported with **Import run file...** has no
 export of its own (it has no row in the Videos table), but is in all the
 videos' results.
@@ -1009,7 +1018,8 @@ videos' results.
 **Settings > Storage > After each run > Export each video** exports each
 video as Exports include say once its run ends: **Save to** puts it next to
 the test video, or in the export folder (next to the video while none is
-set). Files of the same names are replaced. Settings from before these
+set). No file is replaced: where a name is taken, the new files are
+numbered. Settings from before these
 choices carry over: results and graphs in a .zip, and weak segments as loose
 files where they were exported alone.
 

@@ -234,6 +234,17 @@ TEST(WeakFrames, WorstFramesExportEveryMetricsScore) {
               R"({"rank":1,"frame":15,"time":1.5,"scores":{"vmaf":40.0,"butteraugli":4.5}},)"
               R"({"rank":2,"frame":3,"time":0.3,"scores":{"vmaf":60.0,"butteraugli":1.0}}]})");
     EXPECT_EQ(worst_frames_file_suffix("vmaf"), "vmaf.worst");
+
+    // Every metric's, for the archive: Butteraugli's worst is its highest.
+    EXPECT_EQ(worst_frames_report_csv(results, 1),
+              "metric,rank,frame,time,vmaf,butteraugli\n"
+              "vmaf,1,15,1.5,40.0,4.5\n"
+              "butteraugli,1,15,1.5,40.0,4.5\n");
+    EXPECT_EQ(worst_frames_report_json(results, 1).dump(),
+              R"({"dips":1,"metrics":[{"metric":"vmaf","worst_frames":[)"
+              R"({"rank":1,"frame":15,"time":1.5,"scores":{"vmaf":40.0,"butteraugli":4.5}}]},)"
+              R"({"metric":"butteraugli","worst_frames":[)"
+              R"({"rank":1,"frame":15,"time":1.5,"scores":{"vmaf":40.0,"butteraugli":4.5}}]}]})");
 }
 
 // The report of several videos: the rules once, then each video's segments

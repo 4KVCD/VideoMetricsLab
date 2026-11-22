@@ -151,7 +151,7 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
         QMenu menu;
         const QAction* contents = panel.fill_menu(menu);
         ASSERT_NE(contents, nullptr);
-        EXPECT_EQ(contents->text(), "Export this video's results, graphs and weak segments...");
+        EXPECT_EQ(contents->text(), "Export this video's results, graphs, worst frames and weak segments...");
         EXPECT_TRUE(contents->isEnabled());
     }
 
@@ -170,7 +170,7 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
             }
         }
         EXPECT_EQ(texts, (QStringList{"Open in Metric Graphs",
-                                      "Export this video's results, graphs and weak segments..."}));
+                                      "Export this video's results, graphs, worst frames and weak segments..."}));
         menu.actions().first()->trigger();
         EXPECT_EQ(opened.count(), 2);
         ASSERT_EQ(opened.at(1).at(0).value<std::vector<LoadedSavedResult>>().size(), 1U);
@@ -186,7 +186,7 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
             texts << action->text();
         }
     }
-    EXPECT_EQ(texts, (QStringList{"Export this video's results, graphs and weak segments...", "Results",
+    EXPECT_EQ(texts, (QStringList{"Export this video's results, graphs, worst frames and weak segments...", "Results",
                                   "Per-frame scores", "Graphs as ZIP...", "Weak segments"}));
     QSignalSpy exports(&panel, &SavedResultsPanel::export_requested);
     menu.actions().first()->trigger();

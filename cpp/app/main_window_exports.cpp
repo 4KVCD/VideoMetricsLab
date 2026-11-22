@@ -402,6 +402,11 @@ void MainWindow::save_export(ExportPlan plan, const std::optional<std::filesyste
         return;
     }
     const bool automatic = folder.has_value();
+    // The folders the videos' files go in (in_video_folders): their names,
+    // with several videos; none for one.
+    const std::vector<QString> folders =
+        plan.several && plan.videos.size() > 1 ? bundle_names(plan.videos) : std::vector<QString>{};
+    const std::vector<std::string> shared = shared_stems(plan.name);
     if (settings_.export_zip) {
         const QString file_name = file_safe(plan.name + QStringLiteral(" - VideoMetricsLab")) + ".zip";
         std::filesystem::path destination;
@@ -419,12 +424,15 @@ void MainWindow::save_export(ExportPlan plan, const std::optional<std::filesyste
         // name, which another video's may share).
         if (plan.graphs) {
             queue_bundle({plan.videos, plan.reference, destination, std::move(plan.files), plan.several, automatic,
-                          false, automatic, std::move(plan.saved_bitrate), std::move(plan.frames)});
+                          false, automatic, std::move(plan.saved_bitrate), std::move(plan.frames), folders, shared});
             return;
         }
         file_writes_->submit(app::tr("export {name}", {{"name", name_of(destination)}}),
                              [files = std::move(plan.files), frames = std::move(plan.frames), out = destination,
-                              automatic] { write_zip(automatic ? free_path(out) : out, made_files(files, frames)); });
+                              automatic, folders, shared] {
+                                 write_zip(automatic ? free_path(out) : out,
+                                           in_video_folders(made_files(files, frames), folders, shared));
+                             });
         if (!automatic) {
             show_status(app::tr("Exported to {path}", {{"path", text_of(destination)}}));
         }
@@ -445,11 +453,12 @@ void MainWindow::save_export(ExportPlan plan, const std::optional<std::filesyste
     // they are all numbered alike (write_loose_export).
     if (plan.graphs) {
         queue_bundle({plan.videos, plan.reference, destination, std::move(plan.files), plan.several, automatic, true,
-                      false, std::move(plan.saved_bitrate), std::move(plan.frames)});
+                      false, std::move(plan.saved_bitrate), std::move(plan.frames), folders, shared});
     } else {
         file_writes_->submit(app::tr("export {name}", {{"name", plan.name}}),
-                             [files = std::move(plan.files), frames = std::move(plan.frames), destination] {
-                                 write_loose(destination, made_files(files, frames));
+                             [files = std::move(plan.files), frames = std::move(plan.frames), destination,
+                              folders, shared] {
+                                 write_loose(destination, in_video_folders(made_files(files, frames), folders, shared));
                              });
     }
     if (!plan.graphs && !automatic) {
@@ -660,16 +669,20 @@ void MainWindow::write_ready_bundles() {
         files.insert(files.end(), std::make_move_iterator(bitrate_graphs.begin()),
                      std::make_move_iterator(bitrate_graphs.end()));
         const QString destination = text_of(ready.destination);
+        // An archive of several videos: each one's files in a folder of its
+        // own (save_export's folders).
         if (ready.loose) {
             file_writes_->submit(app::tr("export {name}", {{"name", name_of(ready.destination)}}),
-                                 [files = std::move(files), frames = ready.frames, out = ready.destination] {
-                                     write_loose(out, made_files(files, frames));
+                                 [files = std::move(files), frames = ready.frames, out = ready.destination,
+                                  folders = ready.folders, shared = ready.shared] {
+                                     write_loose(out, in_video_folders(made_files(files, frames), folders, shared));
                                  });
         } else {
             file_writes_->submit(app::tr("export {name}", {{"name", name_of(ready.destination)}}),
                                  [files = std::move(files), frames = ready.frames, out = ready.destination,
-                                  numbered = ready.numbered] {
-                                     write_zip(numbered ? free_path(out) : out, made_files(files, frames));
+                                  numbered = ready.numbered, folders = ready.folders, shared = ready.shared] {
+                                     write_zip(numbered ? free_path(out) : out,
+                                               in_video_folders(made_files(files, frames), folders, shared));
                                  });
         }
         logger.info("Graphs exported to " + platform::path_text(ready.destination) +

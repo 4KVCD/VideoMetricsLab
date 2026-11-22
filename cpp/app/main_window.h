@@ -561,6 +561,11 @@ private:
         SavedBitrates saved_bitrate{};
         // Per-frame scores, made with the files (made_files).
         std::vector<FrameFiles> frames{};
+        // With several videos, the folders their own files go in, and the
+        // stems of the files of all of them (in_video_folders); none: as
+        // they are.
+        std::vector<QString> folders{};
+        std::vector<std::string> shared{};
     };
     // The scored test videos of the reference the Videos tab compares with,
     // in its order; a row's, when it is one of them.
