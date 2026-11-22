@@ -32,6 +32,9 @@
                   },
                   "error": {
                     "type": "string"
+                  },
+                  "error_code": {
+                    "type": "string"
                   }
                 }
               }
@@ -97,6 +100,12 @@
           "type": "object"
         },
         "log_file": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "error_code": {
           "type": "string"
         }
       }
@@ -256,6 +265,9 @@
                   },
                   "why": {
                     "type": "string"
+                  },
+                  "code": {
+                    "type": "string"
                   }
                 }
               }
@@ -267,6 +279,21 @@
             "object",
             "null"
           ]
+        },
+        "error_code": {
+          "type": "string"
+        },
+        "note_codes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "failed_metric_codes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     },

@@ -178,8 +178,9 @@ std::string segments_file_suffix(const SegmentRules& rules);
 // start_time, end_time, frames, then <metric>_min, _max and _mean.
 std::string segments_csv(const std::vector<WeakSegment>& segments, const SegmentRules& rules);
 
-// Worst frames `worst` (worst_frames' list, for metric `key`) as JSON: the
-// metric, the number of dips asked for, the frame ranges looked in (empty:
+// Worst frames `worst` (worst_frames' list, for metric `key`) as JSON, led
+// by document_head's keys (worst-frames-1): the metric, the number of dips
+// asked for, the frame ranges looked in (empty:
 // all), then "worst_frames", one object per frame, worst first: rank (1 is
 // the worst), frame, time and "scores", every scored metric's score at that
 // frame, in the registry's order (null where it has none).

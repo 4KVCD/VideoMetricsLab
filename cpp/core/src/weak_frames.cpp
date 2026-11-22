@@ -467,7 +467,10 @@ Json worst_frames_json(const MetricResultSet& results, const std::string& key, c
                             {"time", worst[i].time},
                             {"scores", std::move(scores)}});
     }
-    return Json{{"metric", key}, {"dips", dips}, {"ranges", std::move(range_list)}, {"worst_frames", std::move(list)}};
+    Json json = document_head(worst_frames_format);
+    json.update(
+        Json{{"metric", key}, {"dips", dips}, {"ranges", std::move(range_list)}, {"worst_frames", std::move(list)}});
+    return json;
 }
 
 std::string worst_frames_csv(const MetricResultSet& results, const std::vector<WorstFrame>& worst) {

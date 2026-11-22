@@ -30,6 +30,7 @@ tests hold the app's output to.
 | `"segments-1"` | A video's weak segments, `<video>.<metrics>.segments.json` | `compare --segments-dir`, the window's exports | `segments.schema.json` |
 | `"segments-report-1"` | Every video's weak segments in one file | `compare --segments-report`, the window's exports | `segments-report.schema.json` |
 | `"frames-1"` | A video's per-frame scores ([below](#per-frame-scores-as-json)) | `compare --frames-json`, the window's exports | `frames.schema.json` |
+| `"worst-frames-1"` | A metric's worst dips ([below](#worst-frames-as-json-and-csv)) | the Worst Frames tab's **Worst frames as JSON...** | `worst-frames.schema.json` |
 | `"bitrate-1"` | Each video's bitrate | `bitrate --json` | `bitrate.schema.json` |
 | `"bdrate-1"` | BD-rates | `bdrate --json` | `bdrate.schema.json` |
 | `"devices-1"` | Where each metric would be calculated | `devices --json` | `devices.schema.json` |
@@ -302,6 +303,7 @@ shown there.
 
 | Key | Meaning |
 | --- | --- |
+| `app`, `version`, `commit`, `format` | As in [every file](#the-format-of-each-file): `format` is `"worst-frames-1"`. |
 | `metric` | The metric the dips are of (`vmaf`). |
 | `dips` | How many dips were asked for (10, 25 or 50); fewer are listed where the video has fewer. |
 | `ranges` | The frames looked in, `first_frame` and `last_frame` each (Metric Graphs' highlighted range); empty: the whole video. |

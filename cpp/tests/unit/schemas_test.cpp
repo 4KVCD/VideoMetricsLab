@@ -175,6 +175,15 @@ TEST(Schemas, HoldEveryDocument) {
     EXPECT_EQ(report["format"], "segments-report-1");
     EXPECT_EQ(schema_errors("segments-report", report), std::vector<std::string>{});
 
+    const MetricResultSet& scores = result.metric_results;
+    const std::optional<ScoreSamples> vmaf = score_samples(scores, "vmaf");
+    ASSERT_TRUE(vmaf);
+    const std::vector<WorstFrame> dips = worst_frames(*vmaf, MetricDirection::higher_is_better, 10);
+    ASSERT_FALSE(dips.empty());
+    const nlohmann::ordered_json worst = worst_frames_json(scores, "vmaf", dips, 10, {});
+    EXPECT_EQ(worst["format"], "worst-frames-1");
+    EXPECT_EQ(schema_errors("worst-frames", worst), std::vector<std::string>{});
+
     const nlohmann::ordered_json frames = nlohmann::ordered_json::parse(per_frame_json(result));
     EXPECT_EQ(frames["rows"][0][4], "inf");  // PSNR of the identical frame: JSON, not Python's Infinity
     EXPECT_EQ(schema_errors("frames", frames), std::vector<std::string>{});
