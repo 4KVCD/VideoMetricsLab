@@ -87,6 +87,16 @@ function Get-Imports([string]$File) {
     }
 }
 
+# Sets an environment variable for this process and the programs it starts,
+# or removes it when the value is $null. Not with
+# SetEnvironmentVariable($Name, $null): PowerShell 7 passes the $null to its
+# string parameter as "", which leaves the variable set, and empty. (Nor with
+# a [string] $Value here, which would make $null "" in the same way.)
+function Set-ProcessVariable([string]$Name, $Value) {
+    if ($null -eq $Value) { Remove-Item "Env:$Name" -ErrorAction SilentlyContinue }
+    else { Set-Item "Env:$Name" $Value }
+}
+
 # 1. The native libraries, from this commit's source: they are not in git,
 #    so ones left from another commit would be stale.
 if (-not (Get-Command g++ -ErrorAction SilentlyContinue)) {
@@ -269,7 +279,7 @@ $environment = @{
 $saved = @{}
 foreach ($name in $environment.Keys) {
     $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
-    [Environment]::SetEnvironmentVariable($name, $environment[$name], 'Process')
+    Set-ProcessVariable $name $environment[$name]
 }
 try {
     # Start-Process -Wait: a windowed program, which PowerShell does not
@@ -288,7 +298,7 @@ try {
     Write-Host '==> Command line' -ForegroundColor Cyan
     Invoke-Program 'VideoMetricsLab-cli.exe devices' { & $cli devices 2>&1 }
 } finally {
-    foreach ($name in $saved.Keys) { [Environment]::SetEnvironmentVariable($name, $saved[$name], 'Process') }
+    foreach ($name in $saved.Keys) { Set-ProcessVariable $name $saved[$name] }
 }
 Remove-Item $profileFolder -Recurse -Force
 
