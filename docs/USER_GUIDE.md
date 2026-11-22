@@ -122,8 +122,11 @@ VML Modern shows at once; VML Classic, chosen while VML Modern is shown, when
 the app is next started. **Accent**, usable with VML Modern, is the system's
 (**Same as Windows**), one of six colours, a colour picked with **Custom...**,
 or one typed as `#RRGGBB` in the box beside it; text on it is dark or light,
-whichever reads. VML Classic keeps the system's accent. **Light or dark** is
-the system's (**Same as Windows**), **Light** or **Dark**, in either interface.
+whichever reads. VML Classic keeps the system's accent. **Theme** is the
+system's (**Same as Windows**), **Light**, **Dark** or **Mocha**. **Mocha** is
+dark chocolate browns with cream text, and an amber accent while the accent
+is **Same as Windows** (after the Solar Dusk palette); it is VML Modern's
+alone, and VML Classic shows it as **Dark**.
 
 While metrics are calculated, Settings stays open, but the ffmpeg folder, the
 saved results' folder and **Clear saved results** are locked until the run

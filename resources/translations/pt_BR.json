@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Mocha": "Mocha",
+  "Mocha: VML Modern only": "Mocha: só no VML Modern",
+  "Theme": "Tema",
+  "Dark chocolate browns with an amber accent. VML Classic shows Dark.": "Marrons chocolate escuros com destaque âmbar. O VML Classic mostra Escuro.",
   "Import run file...": "Importar arquivo de execução...",
   "Import run file": "Importar arquivo de execução",
   "Export run file": "Exportar arquivo de execução",
@@ -843,8 +847,6 @@
   "Accent": "Destaque",
   "VML Modern only": "Somente VML Modern",
   "The accent's color as #RRGGBB: type one of your own.": "A cor do destaque como #RRGGBB: digite uma sua.",
-  "Light or dark": "Claro ou escuro",
-  "Both interfaces": "Ambas as interfaces",
   "Text on an accent button is dark or light, whichever reads on it. Exported graphs keep their own colors (Storage > Exported graphs).": "O texto em um botão de destaque é escuro ou claro, o que for mais legível sobre ele. Os gráficos exportados mantêm as próprias cores (Armazenamento > Gráficos exportados).",
   "Same as Windows": "Igual ao Windows",
   "Same as macOS": "Igual ao macOS",

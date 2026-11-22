@@ -162,7 +162,7 @@ differs is drawn by the style sheet, from a role a widget is given with
 | `footer` | a strip of buttons along a card's bottom | a strip of the card's alternate colour |
 | `title`, `hint` | a card's title and the line beside it | semibold; muted |
 | `choice` | a frame picked as a whole, with a `checked` property (Settings' interface cards) | a raised card, the one picked tinted and edged in the accent |
-| `segments` | a row of checkable buttons, one of a few (Settings' Light or dark) | a sunken strip, the one picked raised |
+| `segments` | a row of checkable buttons, one of a few (Settings' Theme) | a sunken strip, the one picked raised |
 
 Classic draws every role alike, as the system draws the widget.
 

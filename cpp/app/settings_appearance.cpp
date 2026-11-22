@@ -190,7 +190,7 @@ QWidget* SettingsPanel::build_appearance_page() {
     interface_layout->addLayout(cards);
     page_layout->addWidget(interface_box);
 
-    // The accent, and light or dark: a row each, named on the left.
+    // The accent, and the theme: a row each, named on the left.
     auto* look_box = new QGroupBox;
     auto* grid = new QGridLayout(look_box);
     grid->setHorizontalSpacing(20);
@@ -275,7 +275,7 @@ QWidget* SettingsPanel::build_appearance_page() {
     });
     grid->addWidget(accent_controls, 0, 1);
 
-    grid->addWidget(row_name(app::tr("Light or dark"), app::tr("Both interfaces")), 1, 0);
+    grid->addWidget(row_name(app::tr("Theme"), app::tr("Mocha: VML Modern only")), 1, 0);
     auto* modes = new QWidget;
     modes->setObjectName("themeModes");
     theme::set_role(modes, "segments");
@@ -291,12 +291,16 @@ QWidget* SettingsPanel::build_appearance_page() {
 #endif
         {app::tr("Light"), "light"},
         {app::tr("Dark"), "dark"},
+        {app::tr("Mocha"), "mocha"},
     };
     for (const auto& [name, value] : choices) {
         auto* mode = new QPushButton(name);
         mode->setCheckable(true);
         mode->setProperty("value", value);
         mode->setChecked(QString::fromStdString(settings_.theme) == value);
+        if (value == "mocha") {
+            mode->setToolTip(app::tr("Dark chocolate browns with an amber accent. VML Classic shows Dark."));
+        }
         theme_buttons->addButton(mode);
         modes_row->addWidget(mode);
     }

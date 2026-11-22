@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Mocha": "モカ",
+  "Mocha: VML Modern only": "モカ: VML Modern のみ",
+  "Theme": "テーマ",
+  "Dark chocolate browns with an amber accent. VML Classic shows Dark.": "濃いチョコレートブラウンとアンバーのアクセント。VML Classic ではダークになります。",
   "Run file (.metrics.json)...": "実行結果ファイル (.metrics.json)...",
   "Show removed videos": "削除した動画を表示",
   "Brings back the Videos tab's videos removed from the graph.": "グラフから削除した「動画」タブの動画を元に戻します。",
@@ -843,8 +847,6 @@
   "Accent": "アクセント",
   "VML Modern only": "VML Modern のみ",
   "The accent's color as #RRGGBB: type one of your own.": "アクセントの色（#RRGGBB）。独自の色を入力できます。",
-  "Light or dark": "ライトまたはダーク",
-  "Both interfaces": "両方のインターフェイス",
   "Text on an accent button is dark or light, whichever reads on it. Exported graphs keep their own colors (Storage > Exported graphs).": "アクセントボタンの文字は、読みやすいほうに合わせて暗い色か明るい色になります。書き出したグラフは独自の色のままです（保存場所 > エクスポートするグラフ）。",
   "Same as Windows": "Windows と同じ",
   "Same as macOS": "macOS と同じ",

@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Mocha": "มอคค่า",
+  "Mocha: VML Modern only": "มอคค่า: VML Modern เท่านั้น",
+  "Theme": "ธีม",
+  "Dark chocolate browns with an amber accent. VML Classic shows Dark.": "สีน้ำตาลช็อกโกแลตเข้มพร้อมสีเน้นอำพัน VML Classic แสดงเป็นมืด",
   "Import run file...": "นำเข้าไฟล์ผลการรัน...",
   "Import run file": "นำเข้าไฟล์ผลการรัน",
   "Export run file": "ส่งออกไฟล์ผลการรัน",
@@ -843,8 +847,6 @@
   "Accent": "สีเน้น",
   "VML Modern only": "เฉพาะ VML Modern",
   "The accent's color as #RRGGBB: type one of your own.": "สีเน้นในรูปแบบ #RRGGBB: พิมพ์สีของคุณเอง",
-  "Light or dark": "สว่างหรือมืด",
-  "Both interfaces": "ทั้งสองอินเทอร์เฟซ",
   "Text on an accent button is dark or light, whichever reads on it. Exported graphs keep their own colors (Storage > Exported graphs).": "ข้อความบนปุ่มสีเน้นจะเป็นสีเข้มหรือสีอ่อน แล้วแต่ว่าแบบใดอ่านง่ายกว่า กราฟที่ส่งออกจะคงสีของตัวเองไว้ (ที่จัดเก็บ > กราฟที่ส่งออก)",
   "Same as Windows": "เหมือน Windows",
   "Same as macOS": "เหมือน macOS",

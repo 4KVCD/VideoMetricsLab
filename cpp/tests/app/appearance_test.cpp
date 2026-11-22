@@ -146,15 +146,16 @@ protected:
         return padded_child_->pos();
     }
 
-    // Modern in dark or light: each role drawn as its rule says, a style
-    // sheet Qt reads, and the window's tabs drawn in it.
-    static void check_modern(bool dark) {
-        theme::apply_theme(dark ? "dark" : "light");
+    // Modern in dark, light or Mocha (dark, in its own colours): each role
+    // drawn as its rule says, a style sheet Qt reads, and the window's tabs
+    // drawn in it.
+    static void check_modern(bool dark, bool mocha = false) {
+        theme::apply_theme(mocha ? "mocha" : dark ? "dark" : "light");
         std::vector<std::string> warnings = warnings_while([] {
             theme::apply_appearance(theme::Interface::modern, accent);
         });
         ASSERT_EQ(theme::current_interface(), theme::Interface::modern);
-        const char* name = dark ? "modern-dark" : "modern-light";
+        const char* name = mocha ? "modern-mocha" : dark ? "modern-dark" : "modern-light";
         // Modern's layout: the container padded, its labels shown and
         // Classic's hidden, the box untitled.
         EXPECT_GE(child_place().x(), 12) << name;
@@ -282,6 +283,28 @@ TEST_F(Appearance, ModernDark) {
         GTEST_SKIP() << "This platform does not take the app's dark (Qt's offscreen one): run with VML_TEST_ON_SCREEN=1.";
     }
     check_modern(true);
+}
+
+// Mocha: Modern's dark, in chocolate browns; amber while no accent is
+// chosen, the one chosen otherwise; and in Classic, Dark.
+TEST_F(Appearance, ModernMocha) {
+    theme::apply_theme("dark");
+    if (!theme::is_dark()) {
+        GTEST_SKIP() << "This platform does not take the app's dark (Qt's offscreen one): run with VML_TEST_ON_SCREEN=1.";
+    }
+    check_modern(true, true);
+    EXPECT_TRUE(theme::is_mocha());
+    EXPECT_EQ(theme::modern_colour("card", true), QColor("#251c16"));
+    EXPECT_NE(theme::modern_colour("card", true), theme::modern_colour("card", false));
+    EXPECT_EQ(QApplication::palette().color(QPalette::Accent), accent);  // the one chosen
+    theme::apply_appearance(theme::Interface::modern, std::nullopt);
+    EXPECT_EQ(QApplication::palette().color(QPalette::Accent), theme::mocha_accent());
+    // Back to Dark: Modern's own dark colours, at once.
+    theme::apply_theme("dark");
+    EXPECT_FALSE(theme::is_mocha());
+    EXPECT_EQ(QApplication::palette().color(QPalette::Base), theme::modern_colour("card", true));
+    EXPECT_NE(theme::modern_colour("card", true), QColor("#251c16"));
+    EXPECT_NE(QApplication::palette().color(QPalette::Accent), theme::mocha_accent());  // the system's again
 }
 
 }  // namespace

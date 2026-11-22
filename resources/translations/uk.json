@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Mocha": "Мока",
+  "Mocha: VML Modern only": "Мока: лише VML Modern",
+  "Theme": "Тема",
+  "Dark chocolate browns with an amber accent. VML Classic shows Dark.": "Темні шоколадно-коричневі тони з бурштиновим акцентом. У VML Classic — Темна.",
   "Import run file...": "Імпорт файлу прогону...",
   "Import run file": "Імпорт файлу прогону",
   "Export run file": "Експорт файлу прогону",
@@ -843,8 +847,6 @@
   "Accent": "Акцент",
   "VML Modern only": "Лише VML Modern",
   "The accent's color as #RRGGBB: type one of your own.": "Колір акценту у вигляді #RRGGBB: введіть свій.",
-  "Light or dark": "Світла чи темна",
-  "Both interfaces": "Обидва інтерфейси",
   "Text on an accent button is dark or light, whichever reads on it. Exported graphs keep their own colors (Storage > Exported graphs).": "Текст на акцентній кнопці темний або світлий — який краще читається на ній. Експортовані графіки зберігають власні кольори (Сховище > Експортовані графіки).",
   "Same as Windows": "Як у Windows",
   "Same as macOS": "Як у macOS",

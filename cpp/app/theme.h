@@ -41,8 +41,15 @@ struct ChartColours {
     QColor highlight;   // Metric Graphs' frame range, shaded under the lines (ChartWidget::set_highlight)
 };
 
-// Whether the window is drawn in dark colours now.
+// Whether the window is drawn in dark colours now (Mocha's too).
 bool is_dark();
+
+// Whether the window is drawn in Mocha's colours now: Settings.theme "mocha",
+// in VML Modern (in Classic, Mocha is Dark).
+bool is_mocha();
+
+// Mocha's accent, used while no accent is chosen (Solar Dusk's amber).
+QColor mocha_accent();
 
 // A named colour for the theme in use (or for dark or light, if given).
 QColor color(const char* name, std::optional<bool> dark = std::nullopt);
@@ -84,8 +91,9 @@ void recolour(QTableWidgetItem* item);
 // colours when the sheet is applied.
 void refresh();
 
-// Asks Qt for Settings.theme's colours: "light", "dark", or "" for Windows'
-// own.
+// Asks Qt for Settings.theme's colours: "light", "dark", "mocha" (dark, in
+// VML Modern's chocolate browns and amber, after the Solar Dusk palette), or
+// "" for Windows' own.
 void apply_theme(const QString& theme);
 
 // The window's interface (Settings > Window > Interface).

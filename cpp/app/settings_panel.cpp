@@ -1124,6 +1124,9 @@ void SettingsPanel::set_run_active(bool active) {
 void SettingsPanel::apply_global_changes(const Settings& before) {
     if (settings_.theme != before.theme) {
         theme::apply_theme(text_of(settings_.theme));  // the window's changeEvent follows
+        if (accent_value.isEmpty()) {
+            set_accent(QString());  // the accent box shows the one in use now (Mocha's amber, or the system's)
+        }
     }
     // VML Modern at once, its accent too; VML Classic, chosen while Modern
     // is shown, at the next start (theme::apply_appearance; the status says so).

@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Mocha": "Moka",
+  "Mocha: VML Modern only": "Moka: hanya VML Modern",
+  "Theme": "Tema",
+  "Dark chocolate browns with an amber accent. VML Classic shows Dark.": "Cokelat tua seperti cokelat batangan dengan aksen amber. VML Classic menampilkan Gelap.",
   "Import run file...": "Impor berkas proses...",
   "Import run file": "Impor berkas proses",
   "Export run file": "Ekspor berkas proses",
@@ -843,8 +847,6 @@
   "Accent": "Aksen",
   "VML Modern only": "Hanya VML Modern",
   "The accent's color as #RRGGBB: type one of your own.": "Warna aksen sebagai #RRGGBB: ketik warna Anda sendiri.",
-  "Light or dark": "Terang atau gelap",
-  "Both interfaces": "Kedua antarmuka",
   "Text on an accent button is dark or light, whichever reads on it. Exported graphs keep their own colors (Storage > Exported graphs).": "Teks pada tombol aksen gelap atau terang, mana yang lebih mudah dibaca di atasnya. Grafik yang diekspor mempertahankan warnanya sendiri (Penyimpanan > Grafik yang diekspor).",
   "Same as Windows": "Sama seperti Windows",
   "Same as macOS": "Sama seperti macOS",

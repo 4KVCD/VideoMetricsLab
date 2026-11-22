@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Mocha": "모카",
+  "Mocha: VML Modern only": "모카: VML Modern 전용",
+  "Theme": "테마",
+  "Dark chocolate browns with an amber accent. VML Classic shows Dark.": "짙은 초콜릿 갈색과 호박색 강조색. VML Classic에서는 어둡게로 표시됩니다.",
   "Run file (.metrics.json)...": "실행 결과 파일 (.metrics.json)...",
   "Show removed videos": "제거한 동영상 표시",
   "Brings back the Videos tab's videos removed from the graph.": "그래프에서 제거한 영상 탭의 동영상을 다시 표시합니다.",
@@ -843,8 +847,6 @@
   "Accent": "강조 색",
   "VML Modern only": "VML Modern 전용",
   "The accent's color as #RRGGBB: type one of your own.": "강조 색을 #RRGGBB로 나타냅니다. 원하는 색을 입력하세요.",
-  "Light or dark": "밝게 또는 어둡게",
-  "Both interfaces": "두 인터페이스 모두",
   "Text on an accent button is dark or light, whichever reads on it. Exported graphs keep their own colors (Storage > Exported graphs).": "강조 색 버튼의 글자는 더 잘 읽히는 쪽에 따라 어둡거나 밝게 표시됩니다. 내보낸 그래프는 자체 색을 유지합니다(저장소 > 내보낸 그래프).",
   "Same as Windows": "Windows와 같게",
   "Same as macOS": "macOS와 같게",

@@ -226,10 +226,14 @@ TEST(SettingsPanel, AppearanceSavesEachChoice) {
     EXPECT_EQ(panel.accent_hex->text(), QApplication::palette().color(QPalette::Accent).name().toUpper());
 
     const QList<QAbstractButton*> modes = panel.theme_buttons->buttons();
-    ASSERT_EQ(modes.size(), 3);
+    ASSERT_EQ(modes.size(), 4);  // the system's, Light, Dark, Mocha
     EXPECT_TRUE(modes[0]->isChecked());
     modes[1]->click();
     EXPECT_EQ(settings.theme, "light");
+    modes[2]->click();
+    EXPECT_EQ(settings.theme, "dark");
+    modes[3]->click();
+    EXPECT_EQ(settings.theme, "mocha");
     modes[0]->click();
     EXPECT_EQ(settings.theme, "");
 }

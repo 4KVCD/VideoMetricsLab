@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Mocha": "Moka",
+  "Mocha: VML Modern only": "Moka: jen VML Modern",
+  "Theme": "Motiv",
+  "Dark chocolate browns with an amber accent. VML Classic shows Dark.": "Tmavé čokoládově hnědé odstíny s jantarovým akcentem. VML Classic ukazuje Tmavý.",
   "Import run file...": "Importovat soubor běhu...",
   "Import run file": "Importovat soubor běhu",
   "Export run file": "Exportovat soubor běhu",
@@ -843,8 +847,6 @@
   "Accent": "Zvýraznění",
   "VML Modern only": "Pouze VML Modern",
   "The accent's color as #RRGGBB: type one of your own.": "Barva zvýraznění jako #RRGGBB: zadejte vlastní.",
-  "Light or dark": "Světlý nebo tmavý",
-  "Both interfaces": "Obě rozhraní",
   "Text on an accent button is dark or light, whichever reads on it. Exported graphs keep their own colors (Storage > Exported graphs).": "Text na tlačítku v barvě zvýraznění je tmavý nebo světlý, podle toho, co je na něm čitelnější. Exportované grafy si ponechávají vlastní barvy (Úložiště > Exportované grafy).",
   "Same as Windows": "Stejně jako Windows",
   "Same as macOS": "Stejně jako macOS",

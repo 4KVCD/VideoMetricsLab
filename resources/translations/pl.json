@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Mocha": "Mokka",
+  "Mocha: VML Modern only": "Mokka: tylko VML Modern",
+  "Theme": "Motyw",
+  "Dark chocolate browns with an amber accent. VML Classic shows Dark.": "Ciemne czekoladowe brązy z bursztynowym akcentem. VML Classic pokazuje Ciemny.",
   "Import run file...": "Importuj plik przebiegu...",
   "Import run file": "Importuj plik przebiegu",
   "Export run file": "Eksportuj plik przebiegu",
@@ -843,8 +847,6 @@
   "Accent": "Akcent",
   "VML Modern only": "Tylko VML Modern",
   "The accent's color as #RRGGBB: type one of your own.": "Kolor akcentu jako #RRGGBB: wpisz własny.",
-  "Light or dark": "Jasny lub ciemny",
-  "Both interfaces": "Oba interfejsy",
   "Text on an accent button is dark or light, whichever reads on it. Exported graphs keep their own colors (Storage > Exported graphs).": "Tekst na przycisku w kolorze akcentu jest ciemny lub jasny, zależnie od tego, co jest na nim czytelniejsze. Wyeksportowane wykresy zachowują własne kolory (Przechowywanie > Eksportowane wykresy).",
   "Same as Windows": "Jak w Windows",
   "Same as macOS": "Jak w macOS",

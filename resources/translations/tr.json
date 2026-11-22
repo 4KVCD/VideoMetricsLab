@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Mocha": "Mocha",
+  "Mocha: VML Modern only": "Mocha: yalnızca VML Modern",
+  "Theme": "Tema",
+  "Dark chocolate browns with an amber accent. VML Classic shows Dark.": "Koyu çikolata kahvesi tonları ve kehribar vurgu. VML Classic Koyu gösterir.",
   "Import run file...": "Çalıştırma dosyasını içe aktar...",
   "Import run file": "Çalıştırma dosyasını içe aktar",
   "Export run file": "Çalıştırma dosyasını dışa aktar",
@@ -843,8 +847,6 @@
   "Accent": "Vurgu",
   "VML Modern only": "Yalnızca VML Modern",
   "The accent's color as #RRGGBB: type one of your own.": "Vurgunun rengi #RRGGBB olarak: kendi renginizi yazın.",
-  "Light or dark": "Açık veya koyu",
-  "Both interfaces": "Her iki arayüz",
   "Text on an accent button is dark or light, whichever reads on it. Exported graphs keep their own colors (Storage > Exported graphs).": "Vurgu düğmesindeki yazı, üzerinde hangisi daha iyi okunuyorsa koyu ya da açık olur. Dışa aktarılan grafikler kendi renklerini korur (Depolama > Dışa aktarılan grafikler).",
   "Same as Windows": "Windows ile aynı",
   "Same as macOS": "macOS ile aynı",

@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Mocha": "摩卡",
+  "Mocha: VML Modern only": "摩卡：仅限 VML Modern",
+  "Theme": "主题",
+  "Dark chocolate browns with an amber accent. VML Classic shows Dark.": "深巧克力棕色配琥珀色强调色。VML Classic 显示为深色。",
   "Run file (.metrics.json)...": "运行结果文件 (.metrics.json)...",
   "Show removed videos": "显示已移除的视频",
   "Brings back the Videos tab's videos removed from the graph.": "恢复从图表中移除的“视频”标签页中的视频。",
@@ -843,8 +847,6 @@
   "Accent": "强调色",
   "VML Modern only": "仅 VML Modern",
   "The accent's color as #RRGGBB: type one of your own.": "强调色，格式为 #RRGGBB：可输入自己的颜色。",
-  "Light or dark": "浅色或深色",
-  "Both interfaces": "两种界面",
   "Text on an accent button is dark or light, whichever reads on it. Exported graphs keep their own colors (Storage > Exported graphs).": "强调色按钮上的文字为深色或浅色，取其在按钮上更易读者。导出的图表保留各自的颜色（存储 > 导出的图表）。",
   "Same as Windows": "跟随 Windows",
   "Same as macOS": "跟随 macOS",

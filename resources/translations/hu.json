@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Mocha": "Mokka",
+  "Mocha: VML Modern only": "Mokka: csak VML Modern",
+  "Theme": "Téma",
+  "Dark chocolate browns with an amber accent. VML Classic shows Dark.": "Sötét csokoládébarna árnyalatok borostyán kiemelőszínnel. A VML Classic Sötétet mutat.",
   "Import run file...": "Futtatási fájl importálása...",
   "Import run file": "Futtatási fájl importálása",
   "Export run file": "Futtatási fájl exportálása",
@@ -843,8 +847,6 @@
   "Accent": "Kiemelőszín",
   "VML Modern only": "Csak VML Modern",
   "The accent's color as #RRGGBB: type one of your own.": "A kiemelőszín #RRGGBB formában: írjon be egy sajátot.",
-  "Light or dark": "Világos vagy sötét",
-  "Both interfaces": "Mindkét felület",
   "Text on an accent button is dark or light, whichever reads on it. Exported graphs keep their own colors (Storage > Exported graphs).": "A kiemelőszínű gomb szövege sötét vagy világos, aszerint, hogy melyik olvasható jobban rajta. Az exportált grafikonok megtartják saját színeiket (Tárolás > Exportált grafikonok).",
   "Same as Windows": "Mint a Windows",
   "Same as macOS": "Mint a macOS",

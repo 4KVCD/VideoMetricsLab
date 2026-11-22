@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Mocha": "موكا",
+  "Mocha: VML Modern only": "موكا: VML Modern فقط",
+  "Theme": "السمة",
+  "Dark chocolate browns with an amber accent. VML Classic shows Dark.": "درجات بني الشوكولاتة الداكنة مع لون تمييز كهرماني. يعرض VML Classic الوضع الداكن.",
   "Import run file...": "استيراد ملف التشغيل...",
   "Import run file": "استيراد ملف التشغيل",
   "Export run file": "تصدير ملف التشغيل",
@@ -843,8 +847,6 @@
   "Accent": "لون التمييز",
   "VML Modern only": "VML Modern فقط",
   "The accent's color as #RRGGBB: type one of your own.": "لون التمييز بصيغة #RRGGBB: اكتب لونًا من اختيارك.",
-  "Light or dark": "فاتح أو داكن",
-  "Both interfaces": "كلتا الواجهتين",
   "Text on an accent button is dark or light, whichever reads on it. Exported graphs keep their own colors (Storage > Exported graphs).": "يكون النص على زر لون التمييز داكنًا أو فاتحًا، أيهما يُقرأ عليه أفضل. تحتفظ الرسوم البيانية المُصدَّرة بألوانها الخاصة (التخزين > الرسوم المُصدَّرة).",
   "Same as Windows": "مثل Windows",
   "Same as macOS": "مثل macOS",

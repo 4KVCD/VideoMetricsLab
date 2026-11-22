@@ -58,7 +58,7 @@ const std::map<QString, std::pair<QString, QString>> colours = {
 // name -> (light, dark): the VML Modern interface's colours, its palette's
 // and its style sheet's (modern_style_sheet). The accent is the palette's.
 const std::map<QString, std::pair<QString, QString>> modern_colours = {
-    {"window", {"#f3f3f5", "#1b1b1d"}},         // the window behind the cards
+    {"window", {"#f3f3f5", "#141416"}},         // the window behind the cards
     {"card", {"#ffffff", "#252528"}},           // a group box, a table, a menu
     {"card_alt", {"#f6f6f8", "#29292d"}},       // a table's every other row
     {"inset", {"#f5f5f7", "#2a2a2e"}},          // a box inside a card, without an edge
@@ -76,6 +76,46 @@ const std::map<QString, std::pair<QString, QString>> modern_colours = {
     {"danger", {"#b3261e", "#ff9a8f"}},
     {"danger_border", {"#e3a9a3", "#6b3530"}},
 };
+
+// name -> colour: Mocha's in place of Modern's dark ones: a dark chocolate
+// brown behind lighter brown cards, cream text, after the Solar Dusk
+// palette (shadcn), whose amber is Mocha's accent (mocha_accent). The window
+// is a deep brown, not near-black, so that it reads as brown.
+const std::map<QString, QString> mocha_colours = {
+    {"window", "#1b130e"},
+    {"card", "#251c16"},
+    {"card_alt", "#291f18"},
+    {"inset", "#2b2019"},
+    {"raised", "#32261e"},
+    {"hover", "#3f3128"},
+    {"pressed", "#211812"},
+    {"field", "#16100c"},
+    {"border", "#382c24"},
+    {"border_strong", "#4f4034"},
+    {"text", "#fbf4ec"},
+    {"text_soft", "#e6d8cb"},
+    {"text_muted", "#b8a596"},
+    {"disabled", "#877668"},
+    {"scroll", "#67564a"},
+    {"danger", "#f87171"},
+    {"danger_border", "#7f2d2a"},
+};
+
+// name -> colour: Mocha's in place of a few of `colours`' dark ones, whose
+// blue would clash with its amber: Metric Graphs' statistics and their
+// sorting headings.
+const std::map<QString, QString> mocha_window_colours = {
+    {"mean_tint", "#30241c"},
+    {"mean_selected", "#6a4419"},
+    {"link", "#fbbf24"},
+    {"link_selected", "#fde68a"},
+};
+
+// Whether Settings.theme is "mocha" (apply_theme).
+bool& mocha_asked() {
+    static bool mocha = false;
+    return mocha;
+}
 
 // VML Modern's style: Fusion, with its tick boxes and radio buttons drawn in
 // Modern's colours. Fusion draws their edge darker than the window, which
@@ -160,6 +200,10 @@ struct Appearance {
     bool applied = false;
     QString sheet;
     std::optional<bool> dark;
+    std::optional<bool> mocha;
+    // The system's accent, as the palette had it before the app set one:
+    // put back when Mocha's amber is no longer in use.
+    std::optional<QColor> system_accent;
 };
 
 Appearance& appearance() {
@@ -176,12 +220,21 @@ QString rgba(const QColor& colour, double alpha) {
         .arg(alpha, 0, 'f', 2);
 }
 
+// The accent chosen, else Mocha's amber while Mocha is in use; none: the
+// system's.
+std::optional<QColor> accent_chosen() {
+    if (appearance().accent) {
+        return appearance().accent;
+    }
+    if (is_mocha()) {
+        return mocha_accent();
+    }
+    return std::nullopt;
+}
+
 // The accent in use: the one chosen, else the palette's (the system's).
 QColor accent_in_use() {
-    if (appearance().accent) {
-        return *appearance().accent;
-    }
-    return QGuiApplication::palette().color(QPalette::Accent);
+    return accent_chosen().value_or(QGuiApplication::palette().color(QPalette::Accent));
 }
 
 // The application's palette for the interface and accent applied: in
@@ -219,10 +272,17 @@ void apply_palette(bool dark) {
             palette.setColor(QPalette::Disabled, role, colour("disabled"));
         }
     }
-    if (applied.accent) {
-        palette.setColor(QPalette::Accent, *applied.accent);
-        palette.setColor(QPalette::Highlight, *applied.accent);
-        palette.setColor(QPalette::HighlightedText, text_on(*applied.accent));
+    // The accent chosen or Mocha's; else the system's, set again only where
+    // the palette (copied from the application's) still has another, such
+    // as Mocha's amber after a switch to Dark.
+    std::optional<QColor> accent = accent_chosen();
+    if (!accent && applied.system_accent && palette.color(QPalette::Accent) != *applied.system_accent) {
+        accent = applied.system_accent;
+    }
+    if (accent) {
+        palette.setColor(QPalette::Accent, *accent);
+        palette.setColor(QPalette::Highlight, *accent);
+        palette.setColor(QPalette::HighlightedText, text_on(*accent));
     }
     if (palette != QApplication::palette() || palette.resolveMask() != QApplication::palette().resolveMask()) {
         QApplication::setPalette(palette);
@@ -321,8 +381,18 @@ bool is_dark() {
     return QGuiApplication::palette().window().color().lightness() < 128;
 }
 
+bool is_mocha() { return mocha_asked() && appearance().ui == Interface::modern; }
+
+QColor mocha_accent() { return QColor("#d97706"); }
+
 QColor color(const char* name, std::optional<bool> dark) {
-    const auto& pair = colours.at(QString::fromUtf8(name));
+    const QString key = QString::fromUtf8(name);
+    if (!dark && is_mocha()) {  // the window's own colours, in Mocha
+        if (const auto mocha = mocha_window_colours.find(key); mocha != mocha_window_colours.end()) {
+            return QColor(mocha->second);
+        }
+    }
+    const auto& pair = colours.at(key);
     return QColor(dark.value_or(is_dark()) ? pair.second : pair.first);
 }
 
@@ -330,6 +400,10 @@ QColor readable(const QColor& series_colour) { return is_dark() ? series_colour.
 
 ChartColours chart_colours(std::optional<bool> dark) {
     if (dark.value_or(is_dark())) {
+        if (!dark && is_mocha()) {  // the window's own colours, in Mocha: its card and cream text
+            return {QColor("#251c16"), QColor("#ece0d4"), QColor("#b8a596"), QColor(255, 247, 237, 34),
+                    QColor("#b8a596"), QColor(253, 186, 116), QColor(245, 158, 11, 48)};
+        }
         return {QColor(30, 30, 30), QColor(220, 220, 220), QColor(150, 150, 150), QColor(255, 255, 255, 38),
                 QColor(170, 170, 170), QColor(200, 160, 255), QColor(120, 170, 255, 48)};
     }
@@ -389,10 +463,11 @@ void recolour(QTableWidgetItem* item) {
     }
     const QColor current = data.canConvert<QBrush>() ? data.value<QBrush>().color() : data.value<QColor>();
     const QString name = current.name().toLower();
-    const bool dark = is_dark();
-    for (const auto& [_, pair] : colours) {
-        if (pair.first.toLower() == name || pair.second.toLower() == name) {
-            item->setData(Qt::ForegroundRole, QColor(dark ? pair.second : pair.first));
+    for (const auto& [key, pair] : colours) {
+        const auto mocha = mocha_window_colours.find(key);
+        const bool mocha_match = mocha != mocha_window_colours.end() && mocha->second.toLower() == name;
+        if (pair.first.toLower() == name || pair.second.toLower() == name || mocha_match) {
+            item->setData(Qt::ForegroundRole, color(key.toUtf8().constData()));
             return;
         }
     }
@@ -403,8 +478,9 @@ void refresh() {
     // dark), and the accent; set only where they change.
     if (appearance().applied && QApplication::instance() != nullptr) {
         const bool dark = scheme_is_dark();
-        if (appearance().dark != dark) {
+        if (appearance().dark != dark || appearance().mocha != is_mocha()) {
             appearance().dark = dark;
+            appearance().mocha = is_mocha();
             apply_palette(dark);
         }
         apply_sheet(dark);
@@ -455,6 +531,7 @@ void apply_appearance(Interface ui, std::optional<QColor> accent) {
     Appearance& applied = appearance();
     if (!applied.applied) {
         applied.classic_style = QApplication::style()->name();
+        applied.system_accent = QGuiApplication::palette().color(QPalette::Accent);
         applied.applied = true;
     }
     applied.ui = ui;
@@ -472,6 +549,7 @@ void apply_appearance(Interface ui, std::optional<QColor> accent) {
     }
     const bool dark = scheme_is_dark();
     applied.dark = dark;
+    applied.mocha = is_mocha();
     apply_palette(dark);
     apply_sheet(dark);
     // Templates that differ by interface ({hint_style}, style_classic).
@@ -599,7 +677,13 @@ QColor text_on(const QColor& colour) {
 }
 
 QColor modern_colour(const char* name, bool dark) {
-    const auto& pair = modern_colours.at(QString::fromUtf8(name));
+    const QString key = QString::fromUtf8(name);
+    if (dark && is_mocha()) {
+        if (const auto mocha = mocha_colours.find(key); mocha != mocha_colours.end()) {
+            return QColor(mocha->second);
+        }
+    }
+    const auto& pair = modern_colours.at(key);
     return QColor(dark ? pair.second : pair.first);
 }
 
@@ -690,7 +774,7 @@ QWidget[vmlRole="toolbar"] { background: {raised}; border: 1px solid {border}; b
         {"danger_tint", rgba(modern_colour("danger", dark), 0.12)},
     };
     for (const auto& [name, pair] : modern_colours) {
-        values.emplace_back(name, dark ? pair.second : pair.first);
+        values.emplace_back(name, modern_colour(name.toUtf8().constData(), dark).name());
     }
     // Longest names first: {card_alt} before {card}.
     std::sort(values.begin(), values.end(), [](const auto& a, const auto& b) { return a.first.size() > b.first.size(); });
@@ -704,10 +788,18 @@ void apply_theme(const QString& theme) {
     if (QGuiApplication::instance() == nullptr) {
         return;
     }
-    const Qt::ColorScheme scheme = theme == "light"  ? Qt::ColorScheme::Light
-                                   : theme == "dark" ? Qt::ColorScheme::Dark
-                                                     : Qt::ColorScheme::Unknown;
+    // Mocha is dark, in VML Modern's browns (is_mocha).
+    const Qt::ColorScheme scheme = theme == "light"                     ? Qt::ColorScheme::Light
+                                   : theme == "dark" || theme == "mocha" ? Qt::ColorScheme::Dark
+                                                                        : Qt::ColorScheme::Unknown;
+    const bool mocha_before = is_mocha();
+    mocha_asked() = theme == "mocha";
     QGuiApplication::styleHints()->setColorScheme(scheme);
+    // Dark to Mocha and back is no change of scheme, so nothing tells the
+    // window: its palette and sheet are set here.
+    if (is_mocha() != mocha_before) {
+        refresh();
+    }
 }
 
 }  // namespace vml::app::theme

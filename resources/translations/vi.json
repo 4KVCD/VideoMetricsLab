@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Mocha": "Mocha",
+  "Mocha: VML Modern only": "Mocha: chỉ VML Modern",
+  "Theme": "Chủ đề",
+  "Dark chocolate browns with an amber accent. VML Classic shows Dark.": "Tông nâu sô-cô-la đậm với màu nhấn hổ phách. VML Classic hiển thị Tối.",
   "Import run file...": "Nhập tệp kết quả chạy...",
   "Import run file": "Nhập tệp kết quả chạy",
   "Export run file": "Xuất tệp kết quả chạy",
@@ -843,8 +847,6 @@
   "Accent": "Màu nhấn",
   "VML Modern only": "Chỉ VML Modern",
   "The accent's color as #RRGGBB: type one of your own.": "Màu nhấn dạng #RRGGBB: nhập màu của riêng bạn.",
-  "Light or dark": "Sáng hoặc tối",
-  "Both interfaces": "Cả hai giao diện",
   "Text on an accent button is dark or light, whichever reads on it. Exported graphs keep their own colors (Storage > Exported graphs).": "Chữ trên nút màu nhấn có màu tối hoặc sáng, tùy màu nào dễ đọc hơn trên nút. Đồ thị đã xuất giữ màu riêng của chúng (Lưu trữ > Biểu đồ xuất).",
   "Same as Windows": "Giống Windows",
   "Same as macOS": "Giống macOS",
