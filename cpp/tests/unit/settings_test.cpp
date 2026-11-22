@@ -165,6 +165,19 @@ TEST(Settings, ExportsCarryOverTheOldAfterRunChoices) {
     EXPECT_NE(saved.find("\"export_formats\": [\n    \"csv\"\n  ]"), std::string::npos);
 }
 
+// VML Modern is the default interface, for a settings file from before
+// there was a choice too; one that picked VML Classic keeps it.
+TEST(Settings, ModernIsTheDefaultInterface) {
+    const test::Folder folder;
+    const auto load = [&folder](const std::string& text) {
+        std::ofstream(folder / "settings.json", std::ios::binary) << text;
+        return Settings::load_from(folder / "settings.json");
+    };
+    EXPECT_EQ(Settings{}.interface_style, "modern");
+    EXPECT_EQ(load(R"({"theme": "dark"})").interface_style, "modern");
+    EXPECT_EQ(load(R"({"interface": "classic"})").interface_style, "classic");
+}
+
 // Exports as the first v2.7 builds saved them, results by format: Results in
 // those formats; weak segments alone, in both, as they were written.
 TEST(Settings, ExportsCarryOverResultsByFormat) {

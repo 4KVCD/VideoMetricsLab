@@ -178,13 +178,14 @@ QWidget* SettingsPanel::build_appearance_page() {
     interface_buttons->addButton(modern_radio, 1);
     auto* modern_picture = new InterfacePreview(true);
     modern_preview = modern_picture;
-    cards->addWidget(new InterfaceCard(classic_radio, new InterfacePreview(false), app::tr("VML Classic"),
-                                       app::tr("The window as it has been: the system's own controls, framed boxes, "
-                                               "every button alike.")),
-                     1);
+    // VML Modern first: the default.
     cards->addWidget(new InterfaceCard(modern_radio, modern_picture, app::tr("VML Modern"),
                                        app::tr("Cards, grouped toolbars, one accent button per tab, scores that read "
                                                "first.")),
+                     1);
+    cards->addWidget(new InterfaceCard(classic_radio, new InterfacePreview(false), app::tr("VML Classic"),
+                                       app::tr("The window as it has been: the system's own controls, framed boxes, "
+                                               "every button alike.")),
                      1);
     interface_layout->addLayout(cards);
     page_layout->addWidget(interface_box);

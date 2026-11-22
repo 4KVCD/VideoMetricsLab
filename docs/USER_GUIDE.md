@@ -109,14 +109,14 @@ newly added videos, and the GPU metrics), **Weak segments**, **Storage** and
 had open when it was last closed (off by default).
 
 **Settings > Appearance** chooses how the window looks; nothing else changes
-with it. **Interface** is a card each, with a picture of it:
+with it. **Interface** is a card each, with a picture of it, VML Modern first:
 
-- **VML Classic** (the default): the window as it has always been, in the
-  system's own controls.
-- **VML Modern**: boxes as cards, each tab's main action (**Calculate
-  metrics**, **Open in Metric Graphs**, **Play**, **Calculate bitrate**) in the
-  accent colour, actions that delete in red, and ticked boxes and the selection
-  in the accent.
+- **VML Modern** (the default): boxes as cards, each tab's main action
+  (**Calculate metrics**, **Open in Metric Graphs**, **Play**, **Calculate
+  bitrate**) in the accent colour, actions that delete in red, and ticked
+  boxes and the selection in the accent.
+- **VML Classic**: the window as it was before VML Modern, in the system's
+  own controls.
 
 VML Modern shows at once; VML Classic, chosen while VML Modern is shown, when
 the app is next started. **Accent**, usable with VML Modern, is the system's
