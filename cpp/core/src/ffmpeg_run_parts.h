@@ -36,6 +36,8 @@ struct ParsedScores {
     std::vector<std::string> order;  // the keys in the Python app's order
     // Metrics asked for that the run did not score, with why (the others stand).
     std::map<std::string, std::string> failed;
+    // PairScores::features_on_gpu: HDR VMAF where the GPU calculated its features.
+    std::vector<std::string> features_on_gpu;
 
     bool has(const std::string& key) const { return metrics.contains(key); }
 };

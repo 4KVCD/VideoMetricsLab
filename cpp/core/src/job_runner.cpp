@@ -251,6 +251,9 @@ private:
 
     // A task's name in the log: "GPU metrics (SSIMULACRA2, CVVDP)".
     std::string task_name(std::size_t task) const;
+    // A task's metrics as the log and the run line show them: those scored in
+    // its own place, and those the CPU scores beside them.
+    std::pair<std::vector<std::string>, std::vector<std::string>> shown_keys(std::size_t task) const;
     // Whether the video's frames may have been paired out of step
     // (frame_pairing.h), as it ends: seen from its result at no cost, and
     // counted (RunEvents::count_frames, which may read whole files) without
@@ -433,12 +436,28 @@ JobRun::JobRun(Scheduler& scheduler, std::size_t index, const VmafJob& job)
     }
 }
 
-std::string JobRun::task_name(std::size_t task) const {
+std::pair<std::vector<std::string>, std::vector<std::string>> JobRun::shown_keys(std::size_t task) const {
     const MetricTask& planned = job_.tasks[task];
-    std::string name = std::string(pool_of(task) == gpu_pool ? "GPU" : "CPU") + " metrics (" +
-                       metric_labels(own_keys(planned)) + ")";
-    if (!planned.cpu_beside.empty()) {
-        name += " with CPU metrics (" + metric_labels(planned.cpu_beside) + ") beside them";
+    std::vector<std::string> own = own_keys(planned);
+    std::vector<std::string> beside = planned.cpu_beside;
+    // HDR VMAF beside the GPU's VMAF scores its features on the GPU too (hdr_plan; only its pictures are converted
+    // on the CPU), so it is shown with the GPU's metrics. In the CPU's task it stays there: that task waits for a
+    // CPU slot, as the run line says.
+    if (pool_of(task) == gpu_pool && job_.options.vmaf_on_gpu) {
+        if (const auto hdr = std::find(beside.begin(), beside.end(), "vmaf_hdr"); hdr != beside.end()) {
+            own.push_back(*hdr);
+            beside.erase(hdr);
+        }
+    }
+    return {std::move(own), std::move(beside)};
+}
+
+std::string JobRun::task_name(std::size_t task) const {
+    const auto [own, beside] = shown_keys(task);
+    std::string name =
+        std::string(pool_of(task) == gpu_pool ? "GPU" : "CPU") + " metrics (" + metric_labels(own) + ")";
+    if (!beside.empty()) {
+        name += " with CPU metrics (" + metric_labels(beside) + ") beside them";
     }
     return name;
 }
@@ -912,13 +931,12 @@ void JobRun::finish() {
 std::vector<TaskSnapshot> JobRun::snapshots() const {
     std::vector<TaskSnapshot> found;
     for (std::size_t task = 0; task < tasks_.size(); ++task) {
-        const MetricTask& planned = job_.tasks[task];
-        if (!planned.cpu_beside.empty()) {
+        const auto [own, beside] = shown_keys(task);
+        if (!beside.empty()) {
             // Shown as the CPU's task they were, with the GPU's progress.
-            found.push_back(snapshot_of(task, "ffmpeg", "cpu", planned.cpu_beside));
+            found.push_back(snapshot_of(task, "ffmpeg", "cpu", beside));
         }
-        found.push_back(snapshot_of(task, planned.backend, pool_of(task) == gpu_pool ? "gpu" : "cpu",
-                                    own_keys(planned)));
+        found.push_back(snapshot_of(task, job_.tasks[task].backend, pool_of(task) == gpu_pool ? "gpu" : "cpu", own));
     }
     return found;
 }

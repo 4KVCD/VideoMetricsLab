@@ -56,9 +56,10 @@ struct MetricTask {
     // Why metrics of the GPU's are here, on the CPU: a check of the GPU
     // failed (scores_on_gpu). Said as the task starts, as a GPU failure is.
     std::vector<std::string> fallbacks{};
-    // Of the GPU's task's metric_keys: PSNR, SSIM and XPSNR, scored in the
-    // app beside the GPU's metrics from the same decode of each video
-    // (plan_tasks's share_decode), and shown as the CPU's metrics.
+    // Of the GPU's task's metric_keys: PSNR, SSIM, XPSNR and HDR VMAF, scored
+    // in the app beside the GPU's metrics from the same decode of each video
+    // (plan_tasks's share_decode), and shown as the CPU's metrics; HDR VMAF,
+    // whose features the GPU calculates there, as the GPU's.
     std::vector<std::string> cpu_beside{};
 
     // Whether it waits in the GPU's queue rather than the CPU's.
