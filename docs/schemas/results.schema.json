@@ -168,6 +168,74 @@
         "run_file": {
           "type": "string"
         },
+        "stills": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "frame",
+              "time",
+              "from",
+              "metrics",
+              "score",
+              "segment",
+              "reference",
+              "test",
+              "side_by_side"
+            ],
+            "properties": {
+              "frame": {
+                "type": "integer"
+              },
+              "time": {
+                "type": "number"
+              },
+              "from": {
+                "enum": [
+                  "worst",
+                  "segment"
+                ]
+              },
+              "metrics": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "score": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "enum": [
+                      "inf",
+                      "-inf"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "segment": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "reference": {
+                "type": "string"
+              },
+              "test": {
+                "type": "string"
+              },
+              "side_by_side": {
+                "type": "string"
+              }
+            }
+          }
+        },
         "metrics": {
           "type": "object",
           "additionalProperties": {

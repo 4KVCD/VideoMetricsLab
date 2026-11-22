@@ -123,6 +123,12 @@ struct CompareArguments {
     std::vector<GateRule> require;
     // --fail-on-segments: a test video with a weak segment (by --segments) fails the quality gate.
     bool fail_on_segments = false;
+    // --stills: the folder for PNGs of the worst frames (stills.h); --stills-from
+    // "worst" (each metric's worst dips) or "segments" (each weak segment's
+    // worst frame), --stills-count how many dips of each metric, or segments.
+    std::optional<std::string> stills;
+    std::optional<std::string> stills_from;
+    std::optional<int> stills_count;
     // --run-dir: the folder for each video's saved run (<name>.metrics.json), as Save analysis results writes it.
     std::optional<std::string> run_dir;
     // --log-file: the file the app's log is written to as well, as the window's log (file_names.h's fields in it).

@@ -61,7 +61,9 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--segment-merge-frames N]
                                    [--segments-dir FOLDER]
                                    [--segments-report FILE] [--require RULES]
-                                   [--fail-on-segments] [--run-dir FOLDER]
+                                   [--fail-on-segments] [--stills FOLDER]
+                                   [--stills-from {worst,segments}]
+                                   [--stills-count N] [--run-dir FOLDER]
                                    [--log-file FILE] [--name TEMPLATE]
                                    [--notify] [-q] [-v] [--progress {text,jsonl}]
                                    [--timeout SECONDS] [--video-timeout SECONDS]
@@ -91,7 +93,9 @@ const char* const saved_usage = R"(usage: VideoMetricsLab-cli saved [-h] [--filt
                                  [--segment-min-frames N]
                                  [--segment-merge-frames N]
                                  [--segments-dir FOLDER]
-                                 [--segments-report FILE] [-q]
+                                 [--segments-report FILE] [--stills FOLDER]
+                                 [--stills-from {worst,segments}]
+                                 [--stills-count N] [-q]
                                  {list,show,delete} [ITEM ...]
 )";
 
@@ -102,7 +106,9 @@ const char* const report_usage = R"(usage: VideoMetricsLab-cli report [-h] [--js
                                   [--segment-min-frames N]
                                   [--segment-merge-frames N]
                                   [--segments-dir FOLDER]
-                                  [--segments-report FILE] [-q]
+                                  [--segments-report FILE] [--stills FOLDER]
+                                  [--stills-from {worst,segments}]
+                                  [--stills-count N] [-q]
                                   RUNFILE [RUNFILE ...]
 )";
 
@@ -427,6 +433,15 @@ R"(  --no-gpu-decode       decode the videos on the CPU
                         to a video (HDR VMAF of SDR) is left out of its gate
   --fail-on-segments    a quality gate: a test video with a weak segment, by
                         --segments, makes the exit code 3
+  --stills FOLDER       write PNGs of the worst frames to FOLDER, as Video
+                        Compare's Export frame as PNG makes them (HDR as SDR):
+                        <video>.frame<N>.reference.png, .test.png and
+                        .side-by-side.png; the JSON lists them
+  --stills-from {worst,segments}
+                        worst: each metric's worst dips (default); segments:
+                        the worst frame of each weak segment (--segments)
+  --stills-count N      how many dips of each metric, or segments, the
+                        weakest first (default 5)
   --run-dir FOLDER      write each video's result to FOLDER as
                         <video>.metrics.json, the file the app's Save
                         analysis results writes and Metric Graphs' Add saved
@@ -567,6 +582,12 @@ options:
                         write each video's segments to FOLDER, as compare's
   --segments-report FILE
                         write every video's segments to FILE as one report
+  --stills FOLDER       write PNGs of the worst frames to FOLDER, as compare's
+                        (the videos must still be there)
+  --stills-from {worst,segments}
+                        worst: each metric's worst dips (default); segments:
+                        the worst frame of each weak segment
+  --stills-count N      how many dips of each metric, or segments (default 5)
   -q, --quiet           only the results
 )";
 
@@ -600,6 +621,12 @@ options:
                         write each video's segments to FOLDER, as compare's
   --segments-report FILE
                         write every video's segments to FILE as one report
+  --stills FOLDER       write PNGs of the worst frames to FOLDER, as compare's
+                        (the videos must still be there)
+  --stills-from {worst,segments}
+                        worst: each metric's worst dips (default); segments:
+                        the worst frame of each weak segment
+  --stills-count N      how many dips of each metric, or segments (default 5)
   -q, --quiet           only the results
 )";
 
@@ -1538,6 +1565,10 @@ Parser compare_parser(CompareArguments& parsed) {
                    }
                }),
         flag({"--fail-on-segments"}, parsed.fail_on_segments),
+        option({"--stills"}, [&parsed](const std::string& value) { parsed.stills = value; }),
+        option({"--stills-from"},
+               [&parsed](const std::string& value) { parsed.stills_from = choice(value, {"worst", "segments"}); }),
+        option({"--stills-count"}, [&parsed](const std::string& value) { parsed.stills_count = int_up_to(value, 100); }),
         option({"--run-dir"}, [&parsed](const std::string& value) { parsed.run_dir = value; }),
         option({"--log-file"}, [&parsed](const std::string& value) { parsed.log_file = value; }),
         option({"--name"}, [&parsed](const std::string& value) { parsed.name = value; }),
@@ -1596,6 +1627,10 @@ std::vector<Action> saved_output_options(CompareArguments& parsed) {
                [&parsed](const std::string& value) { parsed.segment_merge_frames = int_from_zero(value); }),
         option({"--segments-dir"}, [&parsed](const std::string& value) { parsed.segments_dir = value; }),
         option({"--segments-report"}, [&parsed](const std::string& value) { parsed.segments_report = value; }),
+        option({"--stills"}, [&parsed](const std::string& value) { parsed.stills = value; }),
+        option({"--stills-from"},
+               [&parsed](const std::string& value) { parsed.stills_from = choice(value, {"worst", "segments"}); }),
+        option({"--stills-count"}, [&parsed](const std::string& value) { parsed.stills_count = int_up_to(value, 100); }),
         flag({"-q", "--quiet"}, parsed.quiet),
     };
 }
@@ -1649,7 +1684,7 @@ std::optional<std::string> saved_misuse(const SavedArguments& parsed) {
     }
     const bool writes = output.csv || output.frames_json || output.run_dir || output.worst ||
                         !output.segments.empty() || output.segments_saved || output.segments_report ||
-                        output.segments_dir;
+                        output.segments_dir || output.stills;
     if (parsed.action != "show" && writes) {
         return "the scores' options (--csv, --segments...) are show's";
     }
@@ -1797,6 +1832,19 @@ std::optional<std::string> segment_option_alone(const CompareArguments& argument
     return std::nullopt;
 }
 
+// Why the stills' options do not fit, or nothing: one given without
+// --stills, or the segments' stills without --segments.
+std::optional<std::string> stills_misuse(const CompareArguments& arguments) {
+    if (!arguments.stills && (arguments.stills_from || arguments.stills_count)) {
+        return std::string("argument ") + (arguments.stills_from ? "--stills-from" : "--stills-count") +
+               ": only with --stills, whose stills it picks";
+    }
+    if (arguments.stills_from == "segments" && arguments.segments.empty() && !arguments.segments_saved) {
+        return "argument --stills-from: segments only with --segments, whose segments it takes";
+    }
+    return std::nullopt;
+}
+
 // What is wrong with the videos given: REFERENCE and TEST, or --batch's list
 // in their place (as argparse words a missing argument, or a conflict).
 std::optional<std::string> batch_misuse(const CompareArguments& arguments) {
@@ -1851,6 +1899,9 @@ Arguments parse_arguments(const std::vector<std::string>& arguments) {
                                            ? ": only with --segments, whose conditions find the weak segments"
                                            : ": only with --segments, whose segments it shapes"));
                  }
+                 if (const std::optional<std::string> misuse = stills_misuse(parsed.compare)) {
+                     throw UsageError(std::string(compare_usage) + prog + ": error: " + *misuse);
+                 }
                  if (parsed.compare.name) {
                      if (const std::optional<std::string> wrong =
                              name_template_error(*parsed.compare.name, parsed.compare.batch.has_value())) {
@@ -1880,6 +1931,9 @@ Arguments parse_arguments(const std::vector<std::string>& arguments) {
                  if (const std::optional<std::string> option = segment_option_alone(parsed.saved.output)) {
                      throw UsageError(std::string(usage) + prog + ": error: argument " + *option +
                                       ": only with --segments, whose segments it shapes");
+                 }
+                 if (const std::optional<std::string> misuse = stills_misuse(parsed.saved.output)) {
+                     throw UsageError(std::string(usage) + prog + ": error: " + *misuse);
                  }
              } else if (command == "target") {
                  parsed.command = Command::target;

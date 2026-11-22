@@ -14,6 +14,7 @@ add_library(vml_cli STATIC
     notify.cpp
     report.cpp
     saved.cpp
+    stills.cpp
     watch.cpp
     weak_report.cpp
 )

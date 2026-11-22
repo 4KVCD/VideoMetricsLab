@@ -652,6 +652,9 @@ $run.videos[0].metrics.vmaf.score
 | `--segments-report FILE` | Write every test video's segments (with `--batch`, every reference's) to FILE as one report, as the app's exports of all the videos with **Weak segments** ticked: JSON, or CSV when FILE ends in `.csv`. The fields of `--json`'s path are filled in in its path. |
 | `--require RULES` | A quality gate: the bars each test video's scores must reach, comma-separated, such as `"vmaf>=95,vmaf.worst_1_percent>=90,butteraugli<=1.5"` (quoted: `<` and `>` are the shell's). Each is METRIC, a statistic after a dot if wanted, then `>=`, `>`, `<=` or `<` and a number. The statistics are those of the JSON's `metrics`: `score` (the default), `median`, `min`, `max`, `worst_10_percent`, `worst_5_percent`, `worst_1_percent` and `worst_0.1_percent`; for CVVDP, all but its score are of its per-second scores (`cvvdp.min` is its worst second). Repeat it to add rules. A video that misses a bar, or whose metric was not scored, fails its gate and makes the exit code 3; a metric that does not apply to a video (HDR VMAF of SDR video) is left out of its gate. Each video's checks follow the tables, and are in the JSON's `gate`. A rule's metric must be one of those compared. |
 | `--fail-on-segments` | A quality gate: a test video with a weak segment, by `--segments`' conditions, fails its gate (exit code 3). With `--require`, both must pass. |
+| `--stills FOLDER` | Write PNGs of the worst frames to FOLDER, as Video Compare's **Export frame as PNG** makes them (cropped and scaled as the metrics compared them, HDR mapped to SDR): `<video>.frame<N>.reference.png`, `.test.png`, and `.side-by-side.png` with the reference on the left. The JSON lists each video's `stills`. |
+| `--stills-from {worst,segments}` | `worst` (default): each metric's worst dips, as `--worst` finds them, a frame two metrics chose once. `segments`: the worst frame of each weak segment `--segments` finds, by its first condition's metric, the weakest segments first. |
+| `--stills-count N` | How many dips of each metric, or how many segments (default 5, at most 100). |
 | `--run-dir FOLDER` | Write each video's result to FOLDER as `<video>.metrics.json`, the file the Videos tab's **Export > Run file (.metrics.json)...** writes: **Import run file...**, on the Videos tab or Metric Graphs, opens it on any PC, without its saved scores. |
 | `--log-file FILE` | Also write the app's log to FILE, as the window writes its own: the whole run, whatever `-v` says, added to the end when FILE is there. |
 | `--name TEMPLATE` | Name each test video's files (`--csv`, `--segments-dir`, `--run-dir`) after TEMPLATE in place of `<video>`. Its fields: `{test}` and `{reference}` (the files' names without extension), `{version}` (the app's: `2.6`), `{date}` and `{time}` (the run's start: `20261117`, `180912`) and with `--batch` `{sequence}` (the row's, else the reference's name); `{{` and `}}` are braces. In the names, characters other than letters, digits, `-`, `_` and `.` become `_`, as in `<video>`. The same fields, but `{sequence}`, are filled in in `--json`'s, `--scores-csv`'s, `--segments-report`'s and `--log-file`'s paths, `{test}` and `{reference}` only when one video is compared. A name already taken gets a number, which the JSON's `csv`, `run_file` and `segment_files` give. |
@@ -776,8 +779,8 @@ be gone:
 
 `saved show` and `report` take compare's outputs: `--json`, `--csv`,
 `--frames-json`, `--run-dir`, `--worst`, `--segments` (with `saved`,
-`profile:NAME` and `preset:KEY`) and its options, `--segments-dir` and
-`--segments-report`. The JSON is compare's results file, its `read_from`
+`profile:NAME` and `preset:KEY`) and its options, `--segments-dir`,
+`--segments-report` and `--stills` (whose videos must still be there). The JSON is compare's results file, its `read_from`
 `"saved results"` or `"run files"`; a video's `settings`, `black_bars`,
 `metric_status`, `decode_plan` and `timings` are `null`, as for a saved run
 the window opens, which does not record them. With several references, it
