@@ -416,7 +416,9 @@ std::string rate_table_csv(const RateTable& table) {
         }
         return line + "\r\n";
     };
-    std::string text = "\xEF\xBB\xBF" + row([](const std::string& column) { return csv_cell(column); });
+    // No byte order mark: a file for programs (bdrate, a script), which a
+    // mark's first column name trips; its text is ASCII but for file names.
+    std::string text = row([](const std::string& column) { return csv_cell(column); });
     for (const RateTable::Encode& encode : table.encodes) {
         text += row([&encode](const std::string& column) {
             if (column == "sequence") {

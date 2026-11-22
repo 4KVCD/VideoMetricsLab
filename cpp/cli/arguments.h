@@ -89,6 +89,8 @@ struct CompareArguments {
     bool recalculate = false;
     bool difference = false;  // the first test video minus the second, too
     std::optional<std::string> csv;
+    // --frames-json: the folder for each video's per-frame scores as JSON (<video>.frames.json).
+    std::optional<std::string> frames_json;
     std::optional<std::string> json_path;  // "-" prints the JSON instead of the tables
     std::optional<int> worst;  // --worst N: each metric's N worst dips, after the tables
     // --segments: where scores fall past these (weak_frames.h), with the
@@ -148,6 +150,7 @@ struct BdrateArguments {
 
 // The devices command's arguments.
 struct DevicesArguments {
+    std::optional<std::string> json_path;  // "-" prints the JSON instead of the lines
     ProfileArguments profile;  // its settings only
 };
 

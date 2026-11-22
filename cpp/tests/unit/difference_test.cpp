@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "test_videos.h"
+#include "vml/build_info.h"
 #include "vml/export_csv.h"
 #include "vml/platform/system.h"
 #include "vml/temp_files.h"
@@ -37,9 +38,10 @@ TEST(ExportCsv, ACvvdpScoreWithoutSecondsIsWritten) {
     EXPECT_NE(text.str().find(",8.5"), std::string::npos) << text.str();
 }
 
-// Per-frame scores as JSON: the CSV's table, its header as "columns" and
-// each row a list on a line of its own, a blank cell null, an endless PSNR
-// Infinity as Python writes it.
+// Per-frame scores as JSON: its head (frames-1), the CSV's table, its header
+// as "columns" and each row a list on a line of its own, a blank cell null,
+// an endless PSNR "inf" as the results write it (Python's Infinity is not
+// JSON, and strict readers refuse it).
 TEST(ExportCsv, JsonHoldsTheCsvsTable) {
     ComparisonResult result;
     result.source = "r.mkv";
@@ -61,7 +63,10 @@ TEST(ExportCsv, JsonHoldsTheCsvsTable) {
     EXPECT_TRUE(csv.starts_with("frame,time_s,vmaf,vmaf_neg,psnr,ssim,xpsnr,vmaf_v1,ssimulacra2,butteraugli\r\n"))
         << csv;
     EXPECT_EQ(per_frame_json(result),
-              "{\n"
+              std::string("{\n  \"app\": \"VideoMetricsLab\",\n  \"version\": \"") + VML_VERSION +
+                  "\",\n  \"commit\": \"" + build_commit() +
+                  "\",\n"
+              "  \"format\": \"frames-1\",\n"
               "  \"reference\": \"r.mkv\",\n"
               "  \"test\": \"t.mkv\",\n"
               "  \"fps\": 24.0,\n"
@@ -70,7 +75,7 @@ TEST(ExportCsv, JsonHoldsTheCsvsTable) {
               "    \"ssim\",\n    \"xpsnr\",\n    \"vmaf_v1\",\n    \"ssimulacra2\",\n    \"butteraugli\"\n"
               "  ],\n"
               "  \"rows\": [\n"
-              "    [0, 0.0, 95.5, null, Infinity, null, null, null, null, null],\n"
+              "    [0, 0.0, 95.5, null, \"inf\", null, null, null, null, null],\n"
               "    [1, 0.041667, 80.25, null, null, null, null, null, null, null]\n"
               "  ]\n"
               "}\n");

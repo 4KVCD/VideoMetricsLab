@@ -103,7 +103,7 @@ int main(int argc, char** argv) {
             case cli::Command::bdrate:
                 return cli::bdrate(arguments.bdrate);
             case cli::Command::devices:
-                return cli::devices(chosen.settings);
+                return cli::devices(chosen.settings, arguments.devices.json_path);
             case cli::Command::none:
                 platform::write_text(platform::Stream::output, cli::top_help());
                 return cli::exit_usage;

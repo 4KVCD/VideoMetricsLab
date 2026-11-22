@@ -163,6 +163,10 @@ std::vector<ConditionCount> condition_counts(const ComparisonResult& result, con
 // the rules' as "left_out", where there are any.
 nlohmann::ordered_json segments_json(const std::vector<WeakSegment>& segments, const SegmentRules& rules,
                                      const std::vector<WeakCondition>& left_out = {});
+// segments_json as a file of its own (<video>.<metrics>.segments.json):
+// led by document_head's "app", "version", "commit" and "format" (segments-1).
+nlohmann::ordered_json segments_file_json(const std::vector<WeakSegment>& segments, const SegmentRules& rules,
+                                          const std::vector<WeakCondition>& left_out = {});
 
 // What an export of segments by `rules` is named after, before ".json" or
 // ".csv": its conditions' metrics, each once, in the conditions' order,
@@ -211,7 +215,8 @@ struct SegmentsReportVideo {
     const ComparisonResult* result = nullptr;
 };
 
-// Every video's segments by `rules`, as one JSON report: the rules (as
+// Every video's segments by `rules`, as one JSON report, led by
+// document_head's keys (segments-report-1): the rules (as
 // segments_json gives them, without ranges), then "videos", each with its
 // name, path, reference, segment_count, weak_frames (the segments' frames
 // added up) and segments (segments_json's); a video without scores for a

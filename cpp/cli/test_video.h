@@ -53,6 +53,7 @@ struct TestVideo {
     std::vector<std::pair<std::string, MetricOutcome>> not_applicable;
     bool from_cache = false;  // nothing had to be calculated
     std::optional<std::filesystem::path> csv_file;  // where --csv wrote its scores
+    std::optional<std::filesystem::path> frames_json_file;  // where --frames-json wrote them
     std::optional<std::filesystem::path> run_file;  // where --run-dir wrote its result
     std::vector<std::filesystem::path> segment_files;  // where --segments-dir wrote its segments
     // What its files are named after (--name's template, filled in), when not

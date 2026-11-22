@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/4KVCD/VideoMetricsLab/blob/release/v2.7/docs/schemas/segments.schema.json",
+  "title": "VideoMetricsLab weak segments of a video (segments-1)",
+  "description": "A video's weak segments file, <video>.<metrics>.segments.json: compare --segments-dir and the window's exports.",
+  "type": "object",
+  "required": [
+    "app",
+    "version",
+    "commit",
+    "format",
+    "conditions",
+    "combine",
+    "min_frames",
+    "merge_frames",
+    "segments"
+  ],
+  "properties": {
+    "app": {
+      "const": "VideoMetricsLab"
+    },
+    "version": {
+      "type": "string"
+    },
+    "commit": {
+      "type": "string"
+    },
+    "format": {
+      "const": "segments-1"
+    },
+    "conditions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "left_out": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "combine": {
+      "enum": [
+        "any",
+        "all"
+      ]
+    },
+    "min_frames": {
+      "type": "integer"
+    },
+    "merge_frames": {
+      "type": "integer"
+    },
+    "ranges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "first_frame",
+          "last_frame"
+        ]
+      }
+    },
+    "segments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/segment"
+      }
+    }
+  },
+  "$defs": {
+    "segment": {
+      "type": "object",
+      "required": [
+        "first_frame",
+        "last_frame",
+        "start_time",
+        "end_time",
+        "frames",
+        "metrics"
+      ],
+      "properties": {
+        "first_frame": {
+          "type": "integer"
+        },
+        "last_frame": {
+          "type": "integer"
+        },
+        "start_time": {
+          "type": "number"
+        },
+        "end_time": {
+          "type": "number"
+        },
+        "frames": {
+          "type": "integer"
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "min",
+              "max",
+              "mean"
+            ],
+            "properties": {
+              "min": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "enum": [
+                      "inf",
+                      "-inf"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "max": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "enum": [
+                      "inf",
+                      "-inf"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "mean": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "enum": [
+                      "inf",
+                      "-inf"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

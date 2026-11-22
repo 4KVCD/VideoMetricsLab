@@ -1878,6 +1878,9 @@ nlohmann::ordered_json comparison_results(const CompareArguments& arguments, Com
     if (arguments.run_dir) {
         written = write_run_files(videos, python_path(*arguments.run_dir), message, failed) && written;
     }
+    if (arguments.frames_json) {
+        written = write_csvs(videos, python_path(*arguments.frames_json), message, failed, true) && written;
+    }
     if (arguments.csv) {
         const std::filesystem::path folder = python_path(*arguments.csv);
         written = write_csvs(videos, folder, message, failed) && written;

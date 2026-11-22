@@ -272,7 +272,7 @@ bool write_segment_files(std::vector<TestVideo>& videos, const SegmentRules& rul
             unique_output_paths(folder, video.file_stem(), {suffix + ".json", suffix + ".csv"}, reserved);
         try {
             if (const std::optional<std::string> wrong =
-                    write_json_file(paths[0], segments_json(segments, used, left_out))) {
+                    write_json_file(paths[0], segments_file_json(segments, used, left_out))) {
                 throw std::runtime_error(*wrong);
             }
             write_text(paths[1], text_file(segments_csv(segments, used)));
