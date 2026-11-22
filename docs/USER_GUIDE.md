@@ -40,8 +40,11 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
 **HDR VMAF** scores PQ (HDR10) videos with Netflix's HDR VMAF models (1080p,
 phone, 4K, and high-frame-rate variants), chosen in **HDR VMAF model**. It is
 off by default: tick its column to score it. Both videos are converted to the
-model's ICtCp form on the CPU; its features are then calculated on the GPU when
-VMAF runs on the GPU (else on the CPU), with the same scores. It uses the same
+model's ICtCp form and its features calculated on the GPU when VMAF runs on the
+GPU (else on the CPU), with the same scores. The GPU's conversion is checked
+against the CPU's on the first frame; where the GPU cannot convert the
+pictures exactly as the CPU does (8-bit videos, a Mac), they are converted on
+the CPU and only the features go to the GPU. It uses the same
 decode of each video as VMAF on the GPU and PSNR, SSIM and XPSNR in the app
 (where they cannot share a decode, it decodes the videos once more). A video that is not PQ is refused, with
 the reason in its log; its other metrics are still scored. It is not

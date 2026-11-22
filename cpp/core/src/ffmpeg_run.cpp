@@ -2094,14 +2094,15 @@ std::variant<GpuPlan, std::string> hdr_plan(const RunFrames& run, const VmafOpti
     return plan;
 }
 
-// The log line of HDR VMAF's libvmaf and threads, as a run starts it (HdrScorer logs where its features go).
+// The log line of HDR VMAF's libvmaf and threads, as a run starts it (HdrScorer logs where its features and its
+// pictures' conversion go).
 void log_hdr_vmaf(const GpuPlan& plan) {
     const std::string converters =
         std::to_string(hdr_conversion_threads(std::thread::hardware_concurrency(), plan.hdr_gpu.has_value()));
     if (plan.hdr_gpu) {
         logger.info("HDR VMAF in the app: its features on the GPU where the engine takes them, its pictures "
-                    "converted on " + converters + " CPU threads; " + cpu_library_build() + ", " +
-                    std::to_string(plan.hdr_threads) + " threads");
+                    "converted on the GPU where it can, else on " + converters + " CPU threads; " +
+                    cpu_library_build() + ", " + std::to_string(plan.hdr_threads) + " threads");
     } else {
         logger.info("HDR VMAF in the app: " + cpu_library_build() + ", " + std::to_string(plan.hdr_threads) +
                     " threads, its pictures converted on " + converters);
