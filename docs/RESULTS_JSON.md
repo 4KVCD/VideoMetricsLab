@@ -27,10 +27,12 @@ seconds, sizes are in bytes and bitrates are in bits per second.
 | `videos` | One entry for each test video (below). |
 | `difference` | Command line with `--difference` only: the first video minus the second. |
 | `log_file` | Command line with `--log-file` only: the log's file, its fields filled in. |
+| `error`, `error_code` | Command line only, when nothing was compared: why, and its [code](#codes). The reference could not be read (`reference_unreadable`): `reference` has only its `path` and `videos` is empty; or the `--batch` list could not be read (`batch_unreadable`): no `reference`, an empty `batch`, and no `run` or `machine`. |
 
 With `--batch`, the command line's `--json` is `{"batch": [...]}`: this document
-for each reference in turn, or `{"reference": path, "error": why}` for a
-reference that could not be read.
+for each reference in turn, or `{"reference": path, "error": why, "error_code":
+code}` for a reference that could not be read (`reference_unreadable`) or
+whose rows find only it (`no_test_video`).
 
 ### `run`
 
@@ -71,6 +73,9 @@ the `low` or `high` ones, and its `bands`.
 | `path`, `reference` | The test video and the reference it was compared with. |
 | `label` | Window only: the name the window gives it. |
 | `status` | `ok`, `partial` (some metrics failed: `failed_metrics` says why), and on the command line also `failed` (with `error`) or `cancelled`. |
+| `error`, `error_code` | Command line only, for a video not compared: why, and its [code](#codes). |
+| `notes`, `note_codes` | Command line only: what the reader should know about how the video was scored (a metric left out, colours guessed, a GPU metric that fell back...), and each note's [code](#codes), in step. |
+| `failed_metrics`, `failed_metric_codes` | Command line only: each metric that failed, why, and its [code](#codes). |
 | `from_saved_scores` | Command line only: whether the scores came from saved scores. |
 | `csv`, `run_file`, `segment_files` | Command line only: where `--csv`, `--run-dir` and `--segments-dir` wrote this video's files (the `.<metrics>.segments.json`, then the `.csv`), for a script to find them under the names they were given (`--name`, or a number after a name taken). A further CVVDP display's entry in `cvvdp_displays` has its own `csv` and `run_file`. |
 | `width` ... `encoder_settings` | The test video's details (see [File details](#file-details)). |
@@ -86,7 +91,7 @@ the `low` or `high` ones, and its `bands`.
 | `cvvdp_display`, `cvvdp_displays` | The display CVVDP's score is for, and every display CVVDP was scored on: `display`, `score`, `display_parameters`, `cvvdp` (its full summary), and for a further display its own `timings`. |
 | `settings` | Every setting that changes the scores or how to read them (below). |
 | `black_bars` | How the black bars were found (below). |
-| `metric_status` | For each metric asked for: `status` is `calculated`, `saved` (taken from saved scores), `failed` or `cancelled`, or `not run`; `why` for the failed and not run ones. |
+| `metric_status` | For each metric asked for: `status` is `calculated`, `saved` (taken from saved scores), `failed` or `cancelled`, `not run`, or `not applicable` (command line: the metric does not apply to these videos, such as HDR VMAF of a video that is not PQ; it is left out, and not a failure); `why` and its [code](#codes) for the failed, not run and not applicable ones. |
 | `decode_plan` | For each pass, its `metrics` and the `decoders` it used for the `source` and the `test` video, after any fallback: FFmpeg's hardware decoder (`cuda`, `d3d11va`, `vulkan`, `videotoolbox`), `vvdec` (VVC decoded on the GPU by vvdec-vulkan) or `software`; for a video decoded in `software`, `source_why` or `test_why` says why (GPU decoding is off, a format or codec GPU decoders do not decode exactly, VVdeC decoding VVC on the CPU, the GPU's decoding having failed in the run, or no GPU decoder here for its codec). |
 | `timings` | `started_utc`, `seconds` (pauses included), `paused_seconds`, and `passes` (below). |
 
@@ -185,6 +190,48 @@ For the reference and each test video:
 | `bit_depth`, `chroma_subsampling` | From the pixel format (`4:2:0`). |
 | `colour` | `range`, `matrix`, `transfer`, `primaries`, `chroma_location`, as the app reads the video: its tags, or those given or taken from the other video where it has none. |
 | `writing_library`, `encoder`, `encoder_settings` | The container's and the stream's encoder tags (`Lavf63.1.101`, `Lavc63.1.101 libx264`) and the encoder settings tag where the file has one. |
+
+## Codes
+
+A code is a word that says what an error, failure, note or reason is, for a
+program to act on, where the text beside it is for a person and may change
+with any version. A code keeps its meaning: it is never renamed or used for
+something else, and new ones may be added, so a reader should take a code it
+does not know as the general case (an error, a failure, a note).
+
+| Code | Where | Meaning |
+| --- | --- | --- |
+| `no_match` | `error_code` | A pattern found no file. |
+| `unreadable` | `error_code` | FFmpeg could not read the video (no such file, or not a video). |
+| `no_metric` | `error_code` | None of the metrics asked for can be calculated for the video. |
+| `not_comparable` | `error_code` | The two videos cannot be compared as asked (their lengths differ, say). |
+| `run_failed` | `error_code` | The video's run failed as a whole. |
+| `reference_unreadable` | `error_code` | The reference could not be read. |
+| `no_test_video` | `error_code` | `--batch`: the reference's rows find only it. |
+| `batch_unreadable` | `error_code` | The `--batch` list could not be read. |
+| `calculation_failed` | `failed_metric_codes`, `metric_status` | The metric failed while it was calculated. |
+| `needs_every_frame` | `failed_metric_codes` | CVVDP asked for with `--subsample` above 1. |
+| `no_gpu` | `failed_metric_codes` | A metric calculated on the GPU only, and no GPU for it. |
+| `not_planned` | `metric_status` | Not run: no task was planned to calculate it. |
+| `no_saved_score` | `metric_status` | Window only, not run: a video shown from saved scores that has none for the metric. |
+| `hdr_vmaf_colours` | `metric_status` | Not applicable: HDR VMAF scores PQ (HDR10) video, with colours libvmaf converts, only. |
+| `gpu_fallback` | `note_codes` | A GPU metric fell back, to the CPU or to stock Vship. |
+| `metric_left_out` | `note_codes` | A metric ticked by default in the app cannot be calculated, and was left out. |
+| `not_applicable` | `note_codes`, `metric_status` | A metric does not apply to the videos (its `metric_status` says why, with a more precise code such as `hdr_vmaf_colours` where there is one). |
+| `colours_taken` | `note_codes` | A video with no colour tags took the other video's. |
+| `colours_guessed` | `note_codes` | A video's colours were guessed (no tags, and none to take). |
+| `film_grain_unknown` | `note_codes` | Whether a video has film grain could not be found out. |
+| `film_grain_left_out` | `note_codes` | A video's film grain was left out of its score. |
+| `sdr_display` | `note_codes` | HDR video, CVVDP modelled the app's default SDR display. |
+| `near_miss_crop` | `note_codes` | The two videos' pictures were a few lines apart, and one was scaled to the other. |
+| `frame_counts` | `note_codes` | Fewer frames were compared than the videos' length should have (`frame_sync` says more). |
+
+The `bitrate` command's videos have an `error_code` too: `no_match`,
+`unreadable`, or `no_packets` (a raw YUV file, which has no encoded packets).
+`bdrate`'s JSON, when its files give no BD-rate, is its `app`, `version`,
+`commit`, `format`, `anchor` and `test` with `error` and `error_code`:
+`rates_unreadable` (a file cannot be read, or is not one it reads),
+`no_common_metric` or `no_common_sequence`.
 
 ## Per-frame scores as JSON
 

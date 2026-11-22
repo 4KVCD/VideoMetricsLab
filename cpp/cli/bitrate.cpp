@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <system_error>
 
+#include "codes.h"
 #include "common.h"
 #include "compare.h"
 #include "vml/bitrate_store.h"
@@ -56,10 +57,12 @@ std::optional<std::vector<BitrateVideo>> read_videos(const std::vector<std::file
         BitrateVideo& video = videos.emplace_back(BitrateVideo{path, std::nullopt, std::nullopt, {}});
         if (std::optional<std::string> nothing = found_nothing(path)) {
             video.error = *std::move(nothing);
+            video.error_code = codes::no_match;
             continue;
         }
         if (is_raw_yuv(path)) {
             video.error = "a raw YUV file has pictures and no encoded packets, so it has no bitrate";
+            video.error_code = codes::no_packets;
             continue;
         }
         try {
@@ -80,6 +83,7 @@ std::optional<std::vector<BitrateVideo>> read_videos(const std::vector<std::file
             video.info = std::move(info);
         } catch (const std::exception& error) {
             video.error = error.what();
+            video.error_code = codes::unreadable;
         }
     }
     if (arguments.fps && !any_raw) {
@@ -126,6 +130,7 @@ void read_packets(std::vector<BitrateVideo>& videos, const std::string& ffprobe,
             }
         } catch (const std::exception& error) {
             video.error = error.what();
+            video.error_code = codes::unreadable;
             progress.problem(name + ": not read: " + video.error);
         }
     }
@@ -266,6 +271,7 @@ Json bitrate_json(const std::vector<BitrateVideo>& videos, const std::optional<B
         Json entry{{"path", platform::path_text(video.path)}};
         if (!video.data) {
             entry["error"] = video.error;
+            entry["error_code"] = video.error_code;
             entries.push_back(entry);
             continue;
         }
@@ -357,8 +363,10 @@ int bitrate(const BitrateArguments& arguments) {
     progress.start();
     read_packets(*videos, ffprobe.path, settings.cache_dir_path().value_or(default_cache_dir()), progress);
 
-    bool ok = std::all_of(videos->begin(), videos->end(),
-                          [](const BitrateVideo& video) { return video.data.has_value(); });
+    // A video not read is an input not read (exit_input): the others are still given.
+    const bool all_read = std::all_of(videos->begin(), videos->end(),
+                                      [](const BitrateVideo& video) { return video.data.has_value(); });
+    bool ok = true;  // every file written
     std::optional<BitrateDifference> difference;
     if (arguments.difference) {
         difference = bitrate_difference(*videos);
@@ -384,7 +392,7 @@ int bitrate(const BitrateArguments& arguments) {
             }
         }
     }
-    return ok ? exit_ok : exit_failed;
+    return !all_read ? exit_input : ok ? exit_ok : exit_failed;
 }
 
 }  // namespace vml::cli
