@@ -133,7 +133,6 @@ TEST(WeakFrames, WeakSegmentsFollowTheRules) {
     EXPECT_EQ(spans(segments_for(ranged)), (std::vector<std::pair<int, int>>{{15, 19}, {50, 52}}));
 }
 
-// The two exports, and the conditions they are read from.
 // Which condition made each segment, and each condition's frames: a long dip
 // in VMAF and one frame of SSIMULACRA2 below its threshold, with a shortest
 // segment of 6. The SSIMULACRA2 frame is in no segment, and the counts say
@@ -171,6 +170,7 @@ TEST(WeakFrames, EachConditionsFramesAreCounted) {
     EXPECT_EQ(condition_counts(results, rules, 59, some)[1].holds, 0);
 }
 
+// The two exports, and the conditions they are read from.
 TEST(WeakFrames, ExportsAndConditionsRead) {
     SegmentRules rules{{*parse_weak_condition("vmaf<90")}};
     rules.min_frames = 2;

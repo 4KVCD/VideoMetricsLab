@@ -90,8 +90,9 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
    Under the summary, each condition's line says how many frames it holds on
    and how many of them are in the segments listed, with why any are not
    (a run shorter than the shortest segment, or, with every condition, a
-   frame where another doesn't hold); with more than one condition, the
-   **Weak by** column names those behind each segment.
+   frame where another doesn't hold); with more than one condition and
+   **any condition holds**, the **Weak by** column names those behind each
+   segment.
 
 **Highlight best/worst results**, under the video table, colours each metric's
 best score green and its worst red among the test videos that have one.

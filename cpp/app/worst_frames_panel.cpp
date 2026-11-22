@@ -603,8 +603,10 @@ void WeakSegmentsDialog::show_condition_counts() {
 void WeakSegmentsDialog::fill_table() {
     const SegmentRules current = rules();
     QStringList headers{app::tr("First"), app::tr("Last"), app::tr("Frames"), app::tr("Start"), app::tr("End")};
-    // Which conditions held in each segment, where there are several.
-    const bool weak_by = current.conditions.size() > 1;
+    // Which conditions held in each segment, where there are several and any
+    // of them makes a frame weak: with every one required, each segment's
+    // frames hold them all, and the column would only list them again.
+    const bool weak_by = current.conditions.size() > 1 && !current.all;
     if (weak_by) {
         headers.append(app::tr("Weak by"));
     }
