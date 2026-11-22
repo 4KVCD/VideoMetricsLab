@@ -36,10 +36,15 @@ std::string segments_source(const CompareArguments& arguments);
 // replace its condition on their metric, or are added. Those on metrics
 // not compared are refused later, as given conditions are
 // (segments_refusal). The saved conditions left
-// out, on metrics not compared, are returned. Throws
-// std::invalid_argument when none is left.
+// out, on metrics not compared, are returned. A profile (not a preset) with
+// no condition on the metrics compared takes one on the metric shown, as the
+// Worst Frames tab does (default_weak_condition: Settings::graph_metric where
+// it is compared, else the first metric compared), put in `fallback` where
+// given. Throws std::invalid_argument when none is left: a preset none of
+// whose conditions is on a metric compared.
 std::vector<std::string> take_saved_segments(CompareArguments& arguments, const Settings& settings,
-                                             const std::vector<std::string>& asked);
+                                             const std::vector<std::string>& asked,
+                                             std::optional<WeakCondition>* fallback = nullptr);
 
 // Why --segments cannot be answered with the metrics asked for: a
 // condition's metric that is not one of them. Nothing when it can.

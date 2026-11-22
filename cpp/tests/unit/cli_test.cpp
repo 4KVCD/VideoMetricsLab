@@ -202,20 +202,21 @@ TEST(CommandLine, SegmentsSavedTakesTheWindowsRulesAndReportsEveryVideo) {
     EXPECT_TRUE(arguments.segments_all);
     EXPECT_EQ(arguments.segment_min_frames, 2);
     EXPECT_EQ(arguments.segment_merge_frames, 1);  // given here
-    const auto refusal = [&settings](const std::vector<std::string>& asked) {
+    // A profile with no condition on the metrics compared takes one on the
+    // metric shown, as the Worst Frames tab starts: Metric Graphs' metric
+    // where it is compared, else the first (default_weak_condition).
+    const auto fallback = [&settings](const std::vector<std::string>& asked) {
         CompareArguments saved = parse_arguments({"compare", "ref.mkv", "a.mkv", "--segments", "saved"}).compare;
-        try {
-            take_saved_segments(saved, settings, asked);
-        } catch (const std::invalid_argument& error) {
-            return std::string(error.what());
-        }
-        return std::string("taken");
+        std::optional<WeakCondition> taken;
+        take_saved_segments(saved, settings, asked, &taken);
+        EXPECT_EQ(saved.segments.size(), 1U);
+        return taken ? taken->text() : std::string("none");
     };
-    EXPECT_EQ(refusal({"psnr"}),
-              "--segments saved: none of the profile's conditions (vmaf<80, ssimulacra2<60) is on a metric compared "
-              "(-m)");
+    settings.graph_metric = "vmaf";
+    EXPECT_EQ(fallback({"psnr"}), default_weak_condition(metric_definition("psnr")).text());
     settings.weak_segment_conditions.clear();
-    EXPECT_TRUE(refusal({"vmaf"}).starts_with("--segments saved: the profile has no conditions"));
+    EXPECT_EQ(fallback({"psnr", "vmaf"}), "vmaf<85");  // the metric shown, compared
+    EXPECT_EQ(fallback({"psnr", "ssim"}), default_weak_condition(metric_definition("psnr")).text());
 
     // profile:NAME: that profile's (any case), not the one in use; a name no
     // profile has is refused with the app's profiles.

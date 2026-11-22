@@ -2260,9 +2260,10 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
         return exit_usage;
     }
     std::vector<std::string> saved_left_out;  // --segments saved's conditions on metrics not compared
+    std::optional<WeakCondition> saved_fallback;  // the one taken for a profile with none on them
     if (arguments.segments_saved) {
         try {
-            saved_left_out = take_saved_segments(arguments, settings, asked);
+            saved_left_out = take_saved_segments(arguments, settings, asked, &saved_fallback);
         } catch (const std::invalid_argument& error) {
             print_error(error.what());
             return exit_usage;
@@ -2321,6 +2322,11 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
     for (const std::string& condition : saved_left_out) {
         progress->message("note: --segments " + segments_source(arguments) + ": " + condition +
                           " is left out: its metric is not compared (-m)");
+    }
+    if (saved_fallback) {
+        progress->message("note: --segments " + segments_source(arguments) +
+                          ": the profile has no condition on the metrics compared, so " + saved_fallback->text() +
+                          " is taken, as the Worst Frames tab starts (a condition given after it takes its place)");
     }
     // Every comparison's jobs in one run: one start of the GPU's work for all.
     std::vector<VmafJob> jobs;

@@ -157,6 +157,22 @@ TEST(WeakFrames, EachConditionsFramesAreCounted) {
     EXPECT_EQ(counts[0].in_segments, 10);
     EXPECT_EQ(counts[1].holds, 2);        // frames 15 and 40
     EXPECT_EQ(counts[1].in_segments, 1);  // frame 40 alone is shorter than 6
+    // The same as the files and the command line give them, as the Worst
+    // Frames tab shows them: the segment weak by both (frame 15), and the
+    // video's weak frames, seconds and share of the 60 compared.
+    ComparisonResult result;
+    result.fps = fps;
+    result.metric_results = results;
+    result.compared_frame_count = 60;
+    const nlohmann::ordered_json json = video_segments_json(result, segments, rules);
+    EXPECT_EQ(json["segments"][0]["weak_by"], nlohmann::ordered_json::array({"vmaf<85", "ssimulacra2<60"}));
+    EXPECT_EQ(json["segments"][0]["condition_frames"], (nlohmann::ordered_json{{"vmaf<85", 10}, {"ssimulacra2<60", 1}}));
+    EXPECT_EQ(json["segment_count"], 1);
+    EXPECT_EQ(json["weak_frames"], 10);
+    EXPECT_DOUBLE_EQ(json["weak_seconds"].get<double>(), 10 / fps);
+    EXPECT_DOUBLE_EQ(json["weak_percent"].get<double>(), 100.0 * 10 / 60);
+    EXPECT_EQ(json["condition_counts"][1], (nlohmann::ordered_json{
+                                                {"condition", "ssimulacra2<60"}, {"holds", 2}, {"in_segments", 1}}));
     // Every condition required: no frame holds both but 15, a run of one.
     rules.all = true;
     const std::vector<WeakSegment> none = weak_segments(results, rules, fps, 59);
@@ -174,8 +190,8 @@ TEST(WeakFrames, EachConditionsFramesAreCounted) {
 TEST(WeakFrames, ExportsAndConditionsRead) {
     SegmentRules rules{{*parse_weak_condition("vmaf<90")}};
     rules.min_frames = 2;
-    const std::vector<WeakSegment> segments{{10, 14, 1.0, 1.5, {{"vmaf", 40.0, 80.0, 72.0}}},
-                                            {30, 31, 3.0, 3.2, {{"vmaf", 85.5, 86.0, std::nullopt}}}};
+    const std::vector<WeakSegment> segments{{10, 14, 1.0, 1.5, {{"vmaf", 40.0, 80.0, 72.0}}, {5}},
+                                            {30, 31, 3.0, 3.2, {{"vmaf", 85.5, 86.0, std::nullopt}}, {2}}};
     EXPECT_EQ(segments_csv(segments, rules),
               "first_frame,last_frame,start_time,end_time,frames,vmaf_min,vmaf_max,vmaf_mean\n"
               "10,14,1.0,1.5,5,40.0,80.0,72.0\n"
@@ -183,9 +199,11 @@ TEST(WeakFrames, ExportsAndConditionsRead) {
     EXPECT_EQ(segments_json(segments, rules).dump(),
               R"({"conditions":["vmaf<90"],"combine":"any","min_frames":2,"merge_frames":0,"ranges":[],)"
               R"("segments":[{"first_frame":10,"last_frame":14,"start_time":1.0,"end_time":1.5,"frames":5,)"
-              R"("metrics":{"vmaf":{"min":40.0,"max":80.0,"mean":72.0}}},)"
+              R"("metrics":{"vmaf":{"min":40.0,"max":80.0,"mean":72.0}},)"
+              R"("weak_by":["vmaf<90"],"condition_frames":{"vmaf<90":5}},)"
               R"({"first_frame":30,"last_frame":31,"start_time":3.0,"end_time":3.2,"frames":2,)"
-              R"("metrics":{"vmaf":{"min":85.5,"max":86.0,"mean":null}}}]})");
+              R"("metrics":{"vmaf":{"min":85.5,"max":86.0,"mean":null}},)"
+              R"("weak_by":["vmaf<90"],"condition_frames":{"vmaf<90":2}}]})");
 
     // Their names: the conditions' metrics, each once, in their order.
     EXPECT_EQ(segments_file_suffix(rules), "vmaf.segments");

@@ -169,7 +169,7 @@ TEST(Schemas, HoldEveryDocument) {
     const ComparisonResult& result = *videos[0].result;
     const std::vector<WeakSegment> segments = weak_segments(result, rules);
     ASSERT_EQ(segments.size(), 1u);
-    EXPECT_EQ(schema_errors("segments", segments_file_json(segments, rules)), std::vector<std::string>{});
+    EXPECT_EQ(schema_errors("segments", segments_file_json(result, segments, rules)), std::vector<std::string>{});
     const nlohmann::ordered_json report =
         segments_report_json({SegmentsReportVideo{"a.mkv", "a.mkv", "r.mkv", &result}}, rules);
     EXPECT_EQ(report["format"], "segments-report-1");

@@ -382,12 +382,23 @@ Json segments_json(const std::vector<WeakSegment>& segments, const SegmentRules&
                                        {"max", json_number(metric.max)},
                                        {"mean", json_number(metric.mean)}};
         }
+        Json weak_by = Json::array();
+        Json condition_frames = Json::object();
+        for (std::size_t c = 0; c < rules.conditions.size() && c < segment.condition_frames.size(); ++c) {
+            const std::string text = rules.conditions[c].text();
+            condition_frames[text] = segment.condition_frames[c];
+            if (segment.condition_frames[c] > 0) {
+                weak_by.push_back(text);
+            }
+        }
         list.push_back(Json{{"first_frame", segment.first_frame},
                             {"last_frame", segment.last_frame},
                             {"start_time", segment.start_time},
                             {"end_time", segment.end_time},
                             {"frames", segment.frames()},
-                            {"metrics", std::move(metrics)}});
+                            {"metrics", std::move(metrics)},
+                            {"weak_by", std::move(weak_by)},
+                            {"condition_frames", std::move(condition_frames)}});
     }
     Json json{{"conditions", std::move(conditions)}};
     if (!left_out.empty()) {
@@ -401,10 +412,51 @@ Json segments_json(const std::vector<WeakSegment>& segments, const SegmentRules&
     return json;
 }
 
-Json segments_file_json(const std::vector<WeakSegment>& segments, const SegmentRules& rules,
-                        const std::vector<WeakCondition>& left_out) {
+Json segments_summary_json(const ComparisonResult& result, const SegmentRules& rules,
+                           const std::vector<WeakSegment>& segments) {
+    long long frames = 0;
+    double seconds = 0.0;
+    for (const WeakSegment& segment : segments) {
+        frames += segment.frames();
+        seconds += segment.end_time - segment.start_time;
+    }
+    // The frames the segments could have held: those compared, or those of
+    // them inside the ranges.
+    const long long last = last_compared_frame(result);
+    const long long first = last - result.compared_frame_count + 1;
+    long long counted = result.compared_frame_count;
+    if (!rules.ranges.empty()) {
+        counted = 0;
+        for (const FrameInterval& range : rules.ranges) {
+            counted += std::max(0LL, std::min<long long>(range.last, last) - std::max<long long>(range.first, first) + 1);
+        }
+    }
+    Json counts = Json::array();
+    const std::vector<ConditionCount> held = condition_counts(result, rules, segments);
+    for (std::size_t c = 0; c < held.size(); ++c) {
+        counts.push_back(Json{{"condition", rules.conditions[c].text()},
+                              {"holds", held[c].holds},
+                              {"in_segments", held[c].in_segments}});
+    }
+    return Json{{"segment_count", segments.size()},
+                {"weak_frames", frames},
+                {"weak_seconds", seconds},
+                {"weak_percent", counted > 0 ? Json(100.0 * static_cast<double>(frames) / static_cast<double>(counted))
+                                             : Json(nullptr)},
+                {"condition_counts", std::move(counts)}};
+}
+
+Json video_segments_json(const ComparisonResult& result, const std::vector<WeakSegment>& segments,
+                         const SegmentRules& rules, const std::vector<WeakCondition>& left_out) {
+    Json json = segments_json(segments, rules, left_out);
+    json.update(segments_summary_json(result, rules, segments));
+    return json;
+}
+
+Json segments_file_json(const ComparisonResult& result, const std::vector<WeakSegment>& segments,
+                        const SegmentRules& rules, const std::vector<WeakCondition>& left_out) {
     Json file = document_head(segments_format);
-    file.update(segments_json(segments, rules, left_out));
+    file.update(video_segments_json(result, segments, rules, left_out));
     return file;
 }
 
@@ -542,15 +594,8 @@ Json segments_report_json(const std::vector<SegmentsReportVideo>& videos, const 
     Json list = Json::array();
     for (const SegmentsReportVideo& video : videos) {
         const std::vector<WeakSegment> segments = weak_segments(*video.result, without_ranges);
-        long long frames = 0;
-        for (const WeakSegment& segment : segments) {
-            frames += segment.frames();
-        }
-        Json entry{{"name", video.name},
-                   {"path", video.path},
-                   {"reference", video.reference},
-                   {"segment_count", segments.size()},
-                   {"weak_frames", frames}};
+        Json entry{{"name", video.name}, {"path", video.path}, {"reference", video.reference}};
+        entry.update(segments_summary_json(*video.result, without_ranges, segments));
         std::vector<WeakCondition> left_out;
         scored_rules(video.result->metric_results, without_ranges, &left_out);
         if (!left_out.empty()) {
