@@ -2,7 +2,7 @@
 // the scores of libjxl 0.12.0's official tools to the last bit, on a small
 // pair of odd size read as BT.709 SDR, as PQ, and with the source and the
 // test read with different colours; and the same scores whatever number of
-// threads Butteraugli's work is split between.
+// threads each engine's work is split between.
 #include "vml/cpu_pair_scorer.h"
 
 #include <gtest/gtest.h>
@@ -38,8 +38,10 @@ void write_synthetic_pair(std::uint16_t* source, std::uint16_t* test) {
     }
 }
 
-std::vector<double> scores(const VideoColour& source, const VideoColour& test, std::size_t butteraugli_threads) {
-    CpuPairScorer scorer({"ssimulacra2", "butteraugli"}, source, test, width, height, butteraugli_threads);
+std::vector<double> scores(const VideoColour& source, const VideoColour& test, std::size_t butteraugli_threads,
+                           std::size_t ssimulacra2_threads = 1) {
+    CpuPairScorer scorer({"ssimulacra2", "butteraugli"}, source, test, width, height, butteraugli_threads,
+                         ssimulacra2_threads);
     write_synthetic_pair(scorer.source_samples(), scorer.test_samples());
     return scorer.score();
 }
@@ -69,11 +71,12 @@ TEST(CpuPairScorer, GivesTheOfficialToolsScores) {
 #endif
 }
 
-TEST(CpuPairScorer, ButteraugliThreadsDoNotChangeTheScores) {
+TEST(CpuPairScorer, ThreadsDoNotChangeTheScores) {
     const std::vector<double> one_thread = scores(bt709, bt709, 1);
-    EXPECT_EQ(scores(bt709, bt709, 3), one_thread);
-    // More threads than rows of the half-size level.
-    EXPECT_EQ(scores(bt709, bt709, 32), one_thread);
+    EXPECT_EQ(scores(bt709, bt709, 3, 3), one_thread);
+    // More threads than rows of the half-size level, or of SSIMULACRA2's
+    // smallest scale.
+    EXPECT_EQ(scores(bt709, bt709, 32, 32), one_thread);
 }
 
 }  // namespace

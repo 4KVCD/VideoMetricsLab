@@ -18,6 +18,7 @@
 
 #include "reference.h"
 #include "test_videos.h"
+#include "vml/butteraugli.h"
 #include "vml/colour.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/ffprobe.h"
@@ -26,6 +27,7 @@
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/size_changes.h"
+#include "vml/ssimulacra2.h"
 #include "vml/vship_run.h"
 
 namespace vml {
@@ -221,6 +223,28 @@ TEST(PerceptualCpu, TakesButteraugli3NormAsNumpy) {
                                       butteraugli_norm3_top_row_first(map->first, map->second)));
     }
     EXPECT_EQ(maps, 7);
+}
+
+// The memory cap counts each worker's engines at the threads they get: with
+// both metrics on 24 cores, 4 pairs at a time give Butteraugli 5 threads and
+// SSIMULACRA2 1, whose rings differ from those on all 24 threads.
+TEST(PerceptualCpu, CapsWorkersByTheirEnginesRealMemory) {
+    const std::vector<std::string> both{"ssimulacra2", "butteraugli"};
+    const auto worker = [](std::size_t butteraugli_threads, std::size_t ssimulacra2_threads) {
+        return 3840ULL * 2160 * 12 + Butteraugli::memory_bytes(3840, 2160, butteraugli_threads) +
+               Ssimulacra2::memory_bytes(3840, 2160, ssimulacra2_threads);
+    };
+    const InAppSchedule uncapped = in_app_schedule(3840, 2160, both, 1, 24, std::nullopt);
+    EXPECT_EQ(uncapped.workers, 4);
+    EXPECT_EQ(uncapped.butteraugli_threads, 5u);
+    EXPECT_EQ(uncapped.ssimulacra2_threads, 1u);
+    // 60% of the free memory holds 4 workers; a little less, 3 pairs on 8
+    // threads (7 + 1) each.
+    const auto free_for = [](unsigned long long bytes) { return static_cast<unsigned long long>(bytes / 0.6) + 2; };
+    EXPECT_EQ(in_app_schedule(3840, 2160, both, 1, 24, free_for(4 * worker(5, 1))).workers, 4);
+    const InAppSchedule capped = in_app_schedule(3840, 2160, both, 1, 24, free_for(4 * worker(5, 1) - 600));
+    EXPECT_EQ(capped.workers, 3);
+    EXPECT_EQ(capped.butteraugli_threads, 7u);
 }
 
 // ---------------------------------------------------------------- with FFmpeg

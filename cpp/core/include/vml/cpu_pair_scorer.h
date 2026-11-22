@@ -28,13 +28,14 @@ float butteraugli_intensity_of(const VideoColour& source, const VideoColour& tes
 // One worker's scorer of frame pairs of `width` x `height`, the source's
 // pictures read with `source_colour` and the test's with `test_colour`: each
 // pair by `keys`' metrics ("ssimulacra2", "butteraugli"). Butteraugli splits
-// each pair's work between `butteraugli_threads` threads; with both metrics,
-// SSIMULACRA2 runs on a thread of its own meanwhile. Throws
-// PerceptualRunError when there is no memory for its engines.
+// each pair's work between `butteraugli_threads` threads and SSIMULACRA2
+// between `ssimulacra2_threads`; with both metrics they run at the same time.
+// Throws PerceptualRunError when there is no memory for its engines.
 class CpuPairScorer {
 public:
     CpuPairScorer(const std::vector<std::string>& keys, const VideoColour& source_colour,
-                  const VideoColour& test_colour, int width, int height, std::size_t butteraugli_threads);
+                  const VideoColour& test_colour, int width, int height, std::size_t butteraugli_threads,
+                  std::size_t ssimulacra2_threads = 1);
     ~CpuPairScorer();
     CpuPairScorer(const CpuPairScorer&) = delete;
     CpuPairScorer& operator=(const CpuPairScorer&) = delete;

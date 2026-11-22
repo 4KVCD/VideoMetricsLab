@@ -36,24 +36,26 @@ inline constexpr double butteraugli_intensity_nits = 203.0;
 
 // How the app's engines (cpu_pair_scorer.h) share the CPU: how many frame
 // pairs are scored at a time, and how many threads each pair's Butteraugli
-// takes.
+// and SSIMULACRA2 take.
 struct InAppSchedule {
     int workers = 1;
     std::size_t butteraugli_threads = 1;
+    std::size_t ssimulacra2_threads = 1;
 };
 
 // The schedule for a task of `metrics` on pairs of `width` x `height`,
 // given the logical `cores` shared with the other tasks the CPU's queue runs
 // at the same time (`concurrent_tasks`): with both metrics, a sixth of the
 // task's cores pairs at a time, each Butteraugli on the rest of its share
-// less one core for its SSIMULACRA2; Butteraugli alone, a twelfth, on its
-// share; SSIMULACRA2 alone, half, on one thread each. Measured on 24 cores
-// (8 fast, 16 slow), 4K pairs: Butteraugli alone 23.7 s for 2 pairs x 12
-// threads, 25.3 s for 4 x 6, 29.4 s for 1 x 24 (the threads of one picture
-// waiting on each other at the end of each band of rows); both metrics
-// 27.7 s for 4 pairs, 36.7 s for 2 (one SSIMULACRA2 thread a pair).
-// Workers are also no more than fit in 60% of `free_memory`, at a worker's
-// memory (its pair, Butteraugli::memory_bytes, SSIMULACRA2's rows).
+// less one core for its SSIMULACRA2; either metric alone, a twelfth, on its
+// share. Measured on 24 cores (8 fast, 16 slow), 4K pairs: Butteraugli alone
+// 23.7 s for 2 pairs x 12 threads, 25.3 s for 4 x 6, 29.4 s for 1 x 24 (the
+// threads of one picture waiting on each other at the end of each band of
+// rows); both metrics 27.7 s for 4 pairs, 36.7 s for 2 (one SSIMULACRA2
+// thread a pair); SSIMULACRA2 alone 6.3 s for 2 x 12, 9.6 s for 4 x 6,
+// 11.4 s for 12 x 1. Workers are also no more than fit in 60% of
+// `free_memory`, at a worker's memory with its engines' thread counts (its
+// pair, Butteraugli::memory_bytes, Ssimulacra2::memory_bytes).
 InAppSchedule in_app_schedule(int width, int height, const std::vector<std::string>& metrics, int concurrent_tasks,
                               unsigned cores, std::optional<unsigned long long> free_memory);
 

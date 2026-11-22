@@ -77,7 +77,8 @@ struct CpuPairScorer::State {
 };
 
 CpuPairScorer::CpuPairScorer(const std::vector<std::string>& keys, const VideoColour& source_colour,
-                             const VideoColour& test_colour, int width, int height, std::size_t butteraugli_threads)
+                             const VideoColour& test_colour, int width, int height, std::size_t butteraugli_threads,
+                             std::size_t ssimulacra2_threads)
     : state_(std::make_unique<State>()) {
     State& s = *state_;
     s.keys = keys;
@@ -90,7 +91,8 @@ CpuPairScorer::CpuPairScorer(const std::vector<std::string>& keys, const VideoCo
         s.test.resize(s.width * rows * 3);
         for (const std::string& key : keys) {
             if (key == "ssimulacra2") {
-                s.ssimulacra2.emplace(source_reading, test_reading, s.width, rows);
+                s.ssimulacra2.emplace(source_reading, test_reading, s.width, rows, Ssimulacra2::Terms::weighted,
+                                      ssimulacra2_threads);
             } else if (key == "butteraugli") {
                 s.butteraugli.emplace(source_reading, test_reading, s.width, rows,
                                       butteraugli_intensity_of(source_colour, test_colour), butteraugli_threads);
@@ -115,8 +117,8 @@ std::vector<double> CpuPairScorer::score() {
     double ssimulacra2 = 0.0;
     double butteraugli = 0.0;
     if (s.ssimulacra2 && s.butteraugli) {
-        // SSIMULACRA2 (one thread) beside Butteraugli (its pool's): both only
-        // read the pictures. The future's destructor waits for it, also when
+        // SSIMULACRA2 (its pool's threads) beside Butteraugli (its own): both
+        // only read the pictures. The future's destructor waits for it, also when
         // Butteraugli throws.
         std::future<double> ssimulacra2_done = std::async(std::launch::async, [&s] { return s.ssimulacra2_score(); });
         butteraugli = s.butteraugli_score();

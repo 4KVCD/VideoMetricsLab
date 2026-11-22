@@ -5,20 +5,33 @@
 // before, downsampled in linear sRGB): both pictures in XYB, five planes per
 // channel blurred with a recursive Gaussian (the two pictures, their squares
 // and their product), then an SSIM map and two edge maps whose sums give the
-// scale's averages. Here every scale is fed one linear row at a time, top to
-// bottom. A row's XYB, products and horizontal blurs are made at once; the
-// vertical blur of row n follows when row n + 4 arrives (libjxl's filter
-// reads rows n - 6 and n + 4), and the maps of row n with it. Two linear rows
-// make one row of the next scale. The rings below hold just the rows still
-// needed.
+// scale's averages. Here the pair streams through every scale from top to
+// bottom in steps of a few dozen rows, split between the pair's threads like
+// Butteraugli's engine (butteraugli.cpp). Each scale has three stages: its
+// rows (linear, then XYB, products and horizontal blurs; two linear rows make
+// one row of the next scale), the vertical blur in column strips (libjxl's
+// filter makes row n from rows n - 6 and n + 4, column by column), and the
+// maps' sums. In a step every stage works on rows that earlier steps made,
+// so its tasks run in any order on any thread; the rings below hold just the
+// rows still needed. Each sum is one task per step that adds the step's rows
+// in order, so every sum is added pixel by pixel in libjxl's order and the
+// score does not depend on the number of threads.
 #include "vml/ssimulacra2.h"
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
+#include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <exception>
+#include <limits>
+#include <mutex>
 #include <new>
+#include <utility>
 
+#include "row_pool.h"
 #include "ssimulacra2_kernels.h"
 
 namespace vml {
@@ -31,11 +44,8 @@ constexpr std::size_t kChannels = 3;
 constexpr std::size_t kPictures = 2;  // the source, then the test picture
 // The vertical blur's output row n reads the horizontally blurred rows n - 6
 // and n + 4 (libjxl's radius of 5).
-constexpr std::size_t kBlurAbove = 6;
-constexpr std::size_t kBlurBelow = 4;
-constexpr std::size_t kBlurredRows = kBlurAbove + 1 + kBlurBelow;
-// The maps of row n need its XYB rows, made when row n + 4 arrived.
-constexpr std::size_t kXybRows = kBlurBelow + 1;
+constexpr std::int64_t kBlurAbove = 6;
+constexpr std::int64_t kBlurBelow = 4;
 constexpr std::size_t kColumnStateRows = 6;  // blur_column_step's state
 
 // The planes blurred per channel (libjxl's mu1, mu2, sigma1_sq, sigma2_sq
@@ -177,12 +187,136 @@ void downsample_row(const float* upper, const float* lower, std::size_t in_width
     }
 }
 
-// Pointers to both pictures' three linear planes of one row.
-struct LinearRow {
-    const float* planes[kPictures][kChannels];
+// ---- The schedule ----
+
+// Each scale's stages: its rows (linear, XYB, products, horizontal blurs),
+// the vertical blur in column strips, and the maps' sums.
+enum StageKind { kRowStage, kColumnStage, kSumStage, kStageKinds };
+constexpr std::size_t kStages = kMaxScales * kStageKinds;
+constexpr std::size_t stage_of(std::size_t scale, StageKind kind) { return scale * kStageKinds + kind; }
+
+// The vertical blur takes a scale's height + 4 steps: step m makes output row
+// m - 4 (the first 4 only warm the filters up) from the horizontally blurred
+// rows m (the bottom; zeros past the picture) and m - 10 (the top, from
+// output row 6 on).
+constexpr std::int64_t kWarmUpSteps = kBlurBelow;
+constexpr std::int64_t kTopBehind = kBlurAbove + kBlurBelow;
+
+// The rings a scale's stages write: its linear rows (read by the next scale),
+// XYB rows, horizontal blurs and vertical blurs.
+enum Group { kLinear, kXyb, kHorizontal, kVertical, kGroups };
+
+// How a consumer's row reaches into its producer's rows.
+enum class Reach : std::uint8_t {
+    kSame,       // row y reads row y
+    kSubsample,  // the next scale's row y reads rows 2y and 2y + 1 (clipped)
+    kColumn,     // the vertical blur's step m reads rows m - 10 and m (clipped)
+    kBlurred,    // the sums' row n read the vertical blur's step n + 4
 };
 
-// One scale's rows and sums.
+struct Edge {
+    std::size_t consumer;
+    std::size_t producer;
+    Reach reach;
+    Group group;  // the producer's ring it reads
+};
+
+// The last producer row that consumer row y reads.
+std::int64_t last_read(Reach reach, std::int64_t y, std::int64_t producer_rows) {
+    switch (reach) {
+    case Reach::kSame: return y;
+    case Reach::kSubsample: return std::min(2 * y + 1, producer_rows - 1);
+    case Reach::kColumn: return std::min(y, producer_rows - 1);
+    case Reach::kBlurred: return y + kWarmUpSteps;
+    }
+    return y;
+}
+
+// The last consumer row that reads producer row j.
+std::int64_t last_reader(Reach reach, std::int64_t j, std::int64_t consumer_rows) {
+    switch (reach) {
+    case Reach::kSame: return std::min(j, consumer_rows - 1);
+    case Reach::kSubsample: return std::min(j / 2, consumer_rows - 1);
+    case Reach::kColumn: return std::min(j + kTopBehind, consumer_rows - 1);
+    case Reach::kBlurred: return std::clamp<std::int64_t>(j - kWarmUpSteps, 0, consumer_rows - 1);
+    }
+    return j;
+}
+
+// The rows one consumer row reads at once, which need slots of their own.
+std::int64_t window_rows(Reach reach) {
+    switch (reach) {
+    case Reach::kSubsample: return 2;
+    case Reach::kColumn: return kTopBehind + 1;
+    default: return 1;
+    }
+}
+
+// n / d rounded up, for d > 0 and any n.
+std::int64_t ceil_div(std::int64_t n, std::int64_t d) { return n >= 0 ? (n + d - 1) / d : -(-n / d); }
+
+// When each stage makes each row, as Butteraugli's engine does
+// (butteraugli.cpp): a step's rows read only rows of earlier steps, so they
+// can run in any order, and a ring keeps a row until its last reader's step.
+// Rows are counted in full-size rows, so that every scale keeps pace with the
+// one above it: scale s's row y is at 2^s * y (its `pitch`), and stage s
+// makes in step k the rows at [k * band - lag, (k + 1) * band - lag).
+struct Schedule {
+    std::size_t scales = 0;
+    std::int64_t band = 1;
+    std::int64_t rows[kStages] = {};
+    std::int64_t pitch[kStages] = {};
+    std::int64_t lag[kStages] = {};
+    std::int64_t steps = 0;
+    std::size_t ring_rows[kMaxScales][kGroups] = {};
+
+    std::int64_t step_of(std::size_t stage, std::int64_t row) const {
+        return (row * pitch[stage] + lag[stage]) / band;
+    }
+    // The first row stage `stage` makes in step k or later.
+    std::int64_t first_row(std::size_t stage, std::int64_t k) const {
+        return std::clamp<std::int64_t>(ceil_div(k * band - lag[stage], pitch[stage]), 0, rows[stage]);
+    }
+};
+
+// The full-size rows a step makes on `threads` threads for a picture `width`
+// pixels wide (a smaller scale makes rows in proportion). One thread makes
+// one row per step: its rows then stay in the cache, as in a plain streaming
+// engine (64 rows took a quarter longer). Several threads take a band of
+// about as many pixels as 16 rows of 4K, so that the rings stay in the
+// last-level cache: on 12 threads of a Core Ultra 9 285K, 4K took 2.0x the
+// CPU time at 64 rows and 1.2x at 32 or 8 rows, 12 to 24 rows being as
+// fast as 16; at 1080p, 16 to 64 rows were as fast, 8 slower. A test build
+// with VML_SSIMULACRA2_BAND_FROM_ENV takes it from VML_SSIMULACRA2_BAND, to
+// show that every band gives the same score.
+std::int64_t band_rows(std::size_t threads, std::size_t width) {
+    constexpr std::size_t kBandPixels = 16 * 3840;
+    const auto rows_for_width = static_cast<std::int64_t>(kBandPixels / std::max<std::size_t>(width, 1));
+    const std::int64_t kBandRows = threads > 1 ? std::clamp<std::int64_t>(rows_for_width, 8, 64) : 1;
+#if defined(VML_SSIMULACRA2_BAND_FROM_ENV) && defined(_WIN32)
+    char* text = nullptr;
+    std::size_t length = 0;
+    if (_dupenv_s(&text, &length, "VML_SSIMULACRA2_BAND") == 0 && text != nullptr) {
+        const long value = std::strtol(text, nullptr, 10);
+        std::free(text);
+        if (value >= 1 && value <= 1024) return value;
+    }
+#endif
+    return kBandRows;
+}
+
+// ---- The scales ----
+
+// A ring of rows, row y in slot y % rows.
+struct Ring {
+    float* data = nullptr;
+    std::size_t rows = 0;
+    std::size_t stride = 0;
+
+    float* row(std::int64_t y) const { return data + static_cast<std::size_t>(y) % rows * stride; }
+};
+
+// One scale's rings and sums.
 struct Scale {
     std::size_t width = 0;
     std::size_t height = 0;
@@ -190,24 +324,190 @@ struct Scale {
     bool ssim_map[kChannels] = {};
     bool edge_maps[kChannels] = {};
 
-    float* xyb[kPictures][kChannels][kXybRows] = {};               // by row % kXybRows
-    float* blurred_rows[kChannels][kQuantities][kBlurredRows] = {};  // horizontal blur, by row % kBlurredRows
-    float* column_state[kChannels][kQuantities] = {};
-    float* blurred[kChannels][kQuantities] = {};  // the vertical blur's current output row
-    float* product = nullptr;
+    Ring linear[kPictures][kChannels];
+    Ring xyb[kPictures][kChannels];
+    Ring horizontal[kChannels][kQuantities];  // the horizontal blurs
+    Ring vertical[kChannels][kQuantities];    // the vertical blurs, by the step that made them
+    float* column_state[kChannels][kQuantities] = {};  // each column strip's 6 rows of blur_column_step's state
     float* zeros = nullptr;
-    float* even_row[kPictures][kChannels] = {};      // the last even linear row, for the next scale
-    float* next_scale_row[kPictures][kChannels] = {};  // the next scale's row being made
-    AlignedRows memory;
 
-    std::size_t rows_in = 0;
-    std::ptrdiff_t next_output = 0;  // the vertical blur's next step
     double ssim_sums[kChannels][2] = {};
     double edge_sums[kChannels][4] = {};
 
     bool uses(std::size_t c, std::size_t q) const {
         return q <= kMu2 ? ssim_map[c] || edge_maps[c] : ssim_map[c];
     }
+    bool blurs(std::size_t c) const { return uses(c, kMu1); }
+    bool any_edge_maps() const { return edge_maps[0] || edge_maps[1] || edge_maps[2]; }
+    bool any_blurs() const { return blurs(0) || blurs(1) || blurs(2); }
+};
+
+// The scales libjxl computes for pictures of this size, while the scale
+// before (for the first two, the full picture) is at least 8 by 8, each with
+// the maps that `terms` needs.
+std::vector<Scale> scales_for(std::size_t width, std::size_t height, Ssimulacra2::Terms terms) {
+    std::vector<Scale> scales;
+    std::size_t checked_width = width, checked_height = height;
+    for (std::size_t s = 0; s < kMaxScales; ++s) {
+        if (checked_width < 8 || checked_height < 8) break;
+        Scale scale;
+        scale.width = width;
+        scale.height = height;
+        scale.stride = padded_width(width);
+        scales.push_back(scale);
+        checked_width = width;
+        checked_height = height;
+        width = (width + 1) / 2;
+        height = (height + 1) / 2;
+    }
+    // The weight of each term: channel, then scale (of those computed), then
+    // norm, as Msssim::Score walks them.
+    for (std::size_t s = 0; s < scales.size(); ++s) {
+        for (std::size_t c = 0; c < kChannels; ++c) {
+            const double* weight = &kWeights[(c * scales.size() + s) * 6];
+            scales[s].ssim_map[c] = terms == Ssimulacra2::Terms::all || weight[0] != 0.0 || weight[3] != 0.0;
+            scales[s].edge_maps[c] = terms == Ssimulacra2::Terms::all || weight[1] != 0.0 || weight[2] != 0.0 ||
+                                     weight[4] != 0.0 || weight[5] != 0.0;
+        }
+    }
+    return scales;
+}
+
+std::vector<Edge> make_edges(const std::vector<Scale>& scales) {
+    std::vector<Edge> edges;
+    for (std::size_t s = 0; s < scales.size(); ++s) {
+        const std::size_t rows = stage_of(s, kRowStage);
+        if (s > 0) edges.push_back({rows, stage_of(s - 1, kRowStage), Reach::kSubsample, kLinear});
+        if (!scales[s].any_blurs()) continue;
+        const std::size_t columns = stage_of(s, kColumnStage);
+        const std::size_t sums = stage_of(s, kSumStage);
+        edges.push_back({columns, rows, Reach::kColumn, kHorizontal});
+        edges.push_back({sums, columns, Reach::kBlurred, kVertical});
+        if (scales[s].any_edge_maps()) edges.push_back({sums, rows, Reach::kSame, kXyb});
+    }
+    return edges;
+}
+
+Schedule make_schedule(const std::vector<Scale>& scales, std::int64_t band) {
+    Schedule schedule;
+    schedule.scales = scales.size();
+    for (std::size_t s = 0; s < scales.size(); ++s) {
+        const auto height = static_cast<std::int64_t>(scales[s].height);
+        const std::int64_t rows[kStageKinds] = {height, height + kWarmUpSteps, height};
+        for (std::size_t kind = 0; kind < kStageKinds; ++kind) {
+            const std::size_t stage = stage_of(s, static_cast<StageKind>(kind));
+            schedule.rows[stage] = rows[kind];
+            schedule.pitch[stage] = std::int64_t{1} << s;
+        }
+    }
+    schedule.band = band;
+    const std::vector<Edge> edges = make_edges(scales);
+    const std::size_t stages = scales.size() * kStageKinds;
+
+    // Lags, in the stages' order (every producer comes before its consumers):
+    // the least that puts every row a consumer row reads in an earlier step.
+    for (std::size_t c = 0; c < stages; ++c) {
+        std::int64_t lag = 0;
+        for (const Edge& e : edges) {
+            if (e.consumer != c) continue;
+            for (std::int64_t y = 0; y < schedule.rows[c]; ++y) {
+                const std::int64_t made =
+                    schedule.step_of(e.producer, last_read(e.reach, y, schedule.rows[e.producer]));
+                lag = std::max(lag, (made + 1) * band - y * schedule.pitch[c]);
+            }
+        }
+        schedule.lag[c] = lag;
+    }
+    for (std::size_t stage = 0; stage < stages; ++stage) {
+        schedule.steps = std::max(schedule.steps, schedule.step_of(stage, schedule.rows[stage] - 1) + 1);
+    }
+
+    // Ring sizes: a producer's row j may be overwritten (by row j + rows) only
+    // in a step after the last one that reads it; the rows a step makes, and
+    // those one consumer row reads, need slots of their own.
+    const StageKind producer_of[kGroups] = {kRowStage, kRowStage, kRowStage, kColumnStage};
+    for (std::size_t s = 0; s < scales.size(); ++s) {
+        for (std::size_t g = 0; g < kGroups; ++g) {
+            const std::size_t p = stage_of(s, producer_of[g]);
+            std::int64_t ring = ceil_div(band, schedule.pitch[p]);
+            for (const Edge& e : edges) {
+                if (e.producer != p || e.group != g) continue;
+                ring = std::max(ring, window_rows(e.reach));
+                for (std::int64_t j = 0; j < schedule.rows[p]; ++j) {
+                    const std::int64_t read =
+                        schedule.step_of(e.consumer, last_reader(e.reach, j, schedule.rows[e.consumer]));
+                    ring = std::max(ring, ceil_div((read + 1) * band - schedule.lag[p], schedule.pitch[p]) - j);
+                }
+            }
+            schedule.ring_rows[s][g] = static_cast<std::size_t>(std::min(ring, schedule.rows[p]));
+        }
+    }
+    return schedule;
+}
+
+// With several threads, the vertical blur's tasks each take columns of this
+// many floats (a multiple of 16, so whole vectors; the last strip of a row may
+// be shorter); one thread takes whole rows.
+constexpr std::size_t kStripFloats = 256;
+
+std::size_t strip_floats(std::size_t threads) {
+    constexpr std::size_t kWholeRow = std::numeric_limits<std::size_t>::max() / 2;  // wider than any row
+    return threads > 1 ? kStripFloats : kWholeRow;
+}
+std::size_t strips_of(const Scale& scale, std::size_t strip) { return (scale.stride + strip - 1) / strip; }
+
+// Points scale s's rings, states and zero row into `block` (counting only,
+// when null), in one order; returns the floats they take.
+std::size_t lay_out(Scale& scale, const Schedule& schedule, std::size_t s, float* block) {
+    std::size_t used = 0;
+    const auto take = [&](std::size_t rows) {
+        float* taken = block ? block + used : nullptr;
+        used += rows * scale.stride;
+        return taken;
+    };
+    const auto ring = [&](Ring& r, Group g) {
+        r.rows = schedule.ring_rows[s][g];
+        r.stride = scale.stride;
+        r.data = take(r.rows);
+    };
+    for (std::size_t i = 0; i < kPictures; ++i) {
+        for (std::size_t c = 0; c < kChannels; ++c) {
+            ring(scale.linear[i][c], kLinear);
+            ring(scale.xyb[i][c], kXyb);
+        }
+    }
+    for (std::size_t c = 0; c < kChannels; ++c) {
+        for (std::size_t q = 0; q < kQuantities; ++q) {
+            if (!scale.uses(c, q)) continue;
+            ring(scale.horizontal[c][q], kHorizontal);
+            ring(scale.vertical[c][q], kVertical);
+            scale.column_state[c][q] = take(kColumnStateRows);
+        }
+    }
+    scale.zeros = take(1);
+    return used;
+}
+
+// A row for the products the horizontal blur reads, one per thread.
+float* product_row(std::size_t stride) {
+    thread_local AlignedRows row;
+    thread_local std::size_t size = 0;
+    if (size < stride) {
+        row = allocate_floats(stride);
+        size = stride;
+    }
+    return row.get();
+}
+
+// One task of a step: a row of a scale's rows, a column strip of one
+// channel's vertical blurs, or one channel's SSIM or edge sums over the
+// step's rows.
+struct Task {
+    std::uint8_t scale;
+    std::uint8_t kind;    // StageKind
+    std::uint16_t index;  // the column task's channel * strips + strip; the sum task's channel * 2 + (edge maps)
+    std::uint32_t first;  // its rows [first, end)
+    std::uint32_t end;
 };
 
 }  // namespace
@@ -215,16 +515,16 @@ struct Scale {
 class Ssimulacra2::Engine {
 public:
     Engine(const JxlLinearRgb& source_reading, const JxlLinearRgb& test_reading, std::size_t width,
-           std::size_t height, Terms terms)
-        : readings_{source_reading, test_reading}, width_(width), height_(height),
+           std::size_t height, Terms terms, std::size_t threads)
+        : pool_(threads), strip_(strip_floats(threads)), readings_{source_reading, test_reading}, width_(width),
+          height_(height),
           opsin_{opsin_constants(source_reading.intensity_target()),
-                 opsin_constants(test_reading.intensity_target())} {
-        make_scales(terms);
-        const std::size_t stride = padded_width(width);
-        input_memory_ = allocate_floats(kPictures * kChannels * stride);
-        for (std::size_t i = 0; i < kPictures; ++i) {
-            for (std::size_t c = 0; c < kChannels; ++c) input_[i][c] = &input_memory_[(i * kChannels + c) * stride];
-        }
+                 opsin_constants(test_reading.intensity_target())},
+          scales_(scales_for(width, height, terms)) {
+        if (scales_.empty()) return;
+        const Schedule schedule = make_schedule(scales_, band_rows(threads, width));
+        allocate(schedule);
+        make_tasks(schedule);
     }
 
     std::size_t width() const { return width_; }
@@ -232,209 +532,206 @@ public:
     const std::vector<ScaleAverages>& averages() const { return averages_; }
 
     double score(const std::uint16_t* source, const std::uint16_t* test, std::size_t stride) {
+        pictures_[0] = source;
+        pictures_[1] = test;
+        stride_ = stride;
         for (Scale& scale : scales_) start(scale);
-        LinearRow row;
-        for (std::size_t i = 0; i < kPictures; ++i) {
-            for (std::size_t c = 0; c < kChannels; ++c) row.planes[i][c] = input_[i][c];
-        }
-        if (!scales_.empty()) {
-            for (std::size_t y = 0; y < height_; ++y) {
-                readings_[0].convert_row(source + y * stride, width_, input_[0][0], input_[0][1], input_[0][2]);
-                readings_[1].convert_row(test + y * stride, width_, input_[1][0], input_[1][1], input_[1][2]);
-                feed(0, row);
-            }
-        }
+        run_steps();
         averages_.clear();
-        for (Scale& scale : scales_) {
-            finish(scale);
-            averages_.push_back(averages_of(scale));
-        }
+        for (const Scale& scale : scales_) averages_.push_back(averages_of(scale));
         return score_of(averages_);
     }
 
 private:
-    // libjxl computes a scale while the scale before it (for the first two,
-    // the full picture) is at least 8 by 8.
-    void make_scales(Terms terms) {
-        std::size_t width = width_, height = height_;
-        std::size_t checked_width = width_, checked_height = height_;
-        for (std::size_t s = 0; s < kMaxScales; ++s) {
-            if (checked_width < 8 || checked_height < 8) break;
-            Scale scale;
-            scale.width = width;
-            scale.height = height;
-            scale.stride = padded_width(width);
-            scales_.push_back(std::move(scale));
-            checked_width = width;
-            checked_height = height;
-            width = (width + 1) / 2;
-            height = (height + 1) / 2;
-        }
-        // The weight of each term: channel, then scale (of those computed),
-        // then norm, as Msssim::Score walks them.
+    // One block for every scale's rings: zeros, or NaNs in a build with
+    // VML_SSIMULACRA2_POISON, to show that no pixel reads a row before it is
+    // written. The zero rows are zeros in both.
+    void allocate(const Schedule& schedule) {
+        std::size_t total = 0;
+        for (std::size_t s = 0; s < scales_.size(); ++s) total += lay_out(scales_[s], schedule, s, nullptr);
+        memory_ = allocate_floats(total);
+#ifdef VML_SSIMULACRA2_POISON
+        std::fill_n(memory_.get(), total, std::numeric_limits<float>::quiet_NaN());
+#endif
+        float* next = memory_.get();
         for (std::size_t s = 0; s < scales_.size(); ++s) {
-            Scale& scale = scales_[s];
-            for (std::size_t c = 0; c < kChannels; ++c) {
-                const double* weight = &kWeights[(c * scales_.size() + s) * 6];
-                scale.ssim_map[c] = terms == Terms::all || weight[0] != 0.0 || weight[3] != 0.0;
-                scale.edge_maps[c] = terms == Terms::all || weight[1] != 0.0 || weight[2] != 0.0 ||
-                                     weight[4] != 0.0 || weight[5] != 0.0;
-            }
-            allocate(scale, s + 1 < scales_.size() ? &scales_[s + 1] : nullptr);
+            next += lay_out(scales_[s], schedule, s, next);
+            std::fill_n(scales_[s].zeros, scales_[s].stride, 0.0f);
         }
     }
 
-    // Every row a scale needs, from one allocation: XYB rings, and per plane
-    // it blurs a ring of horizontal blurs, the vertical state and an output.
-    static void allocate(Scale& scale, const Scale* next) {
-        std::size_t rows = kPictures * kChannels * kXybRows + 2;  // + product + zeros
-        for (std::size_t c = 0; c < kChannels; ++c) {
-            for (std::size_t q = 0; q < kQuantities; ++q) {
-                if (scale.uses(c, q)) rows += kBlurredRows + kColumnStateRows + 1;
+    // Every step's tasks: the sums first (each one long, as its rows must be
+    // added in order), then the column strips, then the rows, which the
+    // threads that end a step share; the largest scale first in each.
+    void make_tasks(const Schedule& schedule) {
+        for (std::int64_t k = 0; k < schedule.steps; ++k) {
+            step_begin_.push_back(tasks_.size());
+            for (const StageKind kind : {kSumStage, kColumnStage, kRowStage}) {
+                for (std::size_t s = 0; s < scales_.size(); ++s) {
+                    const std::size_t stage = stage_of(s, kind);
+                    const std::int64_t first = schedule.first_row(stage, k);
+                    const std::int64_t end = schedule.first_row(stage, k + 1);
+                    if (first < end) add_tasks(s, kind, first, end);
+                }
             }
         }
-        if (next) rows += 2 * kPictures * kChannels;
-        scale.memory = allocate_floats(rows * scale.stride);
-        float* free_row = scale.memory.get();
-        const auto take = [&](std::size_t count) {
-            float* taken = free_row;
-            free_row += count * scale.stride;
-            return taken;
+        step_begin_.push_back(tasks_.size());
+    }
+
+    void add_tasks(std::size_t s, StageKind kind, std::int64_t first, std::int64_t end) {
+        const Scale& scale = scales_[s];
+        const auto add = [&](std::size_t index, std::int64_t from, std::int64_t to) {
+            tasks_.push_back({static_cast<std::uint8_t>(s), static_cast<std::uint8_t>(kind),
+                              static_cast<std::uint16_t>(index), static_cast<std::uint32_t>(from),
+                              static_cast<std::uint32_t>(to)});
         };
-        for (auto& picture : scale.xyb) {
-            for (auto& channel : picture) {
-                for (float*& row : channel) row = take(1);
+        switch (kind) {
+        case kRowStage:
+            for (std::int64_t y = first; y < end; ++y) add(0, y, y + 1);
+            break;
+        case kColumnStage:
+            for (std::size_t c = 0; c < kChannels; ++c) {
+                if (!scale.blurs(c)) continue;
+                const std::size_t strips = strips_of(scale, strip_);
+                for (std::size_t strip = 0; strip < strips; ++strip) add(c * strips + strip, first, end);
             }
-        }
-        scale.product = take(1);
-        scale.zeros = take(1);
-        for (std::size_t c = 0; c < kChannels; ++c) {
-            for (std::size_t q = 0; q < kQuantities; ++q) {
-                if (!scale.uses(c, q)) continue;
-                for (float*& row : scale.blurred_rows[c][q]) row = take(1);
-                scale.column_state[c][q] = take(kColumnStateRows);
-                scale.blurred[c][q] = take(1);
+            break;
+        case kSumStage:
+            for (std::size_t c = 0; c < kChannels; ++c) {
+                if (scale.ssim_map[c]) add(c * 2, first, end);
+                if (scale.edge_maps[c]) add(c * 2 + 1, first, end);
             }
-        }
-        if (next) {
-            for (std::size_t i = 0; i < kPictures; ++i) {
-                for (std::size_t c = 0; c < kChannels; ++c) {
-                    scale.even_row[i][c] = take(1);
-                    scale.next_scale_row[i][c] = take(1);
-                }
-            }
+            break;
+        default: break;
         }
     }
 
-    // A new picture pair: the vertical filters start from zero (libjxl
-    // clears its ring buffer per column strip) and so do the sums.
+    // A new picture pair: the vertical filters start from zero (libjxl clears
+    // its ring buffer per column strip) and so do the sums.
     static void start(Scale& scale) {
-        scale.rows_in = 0;
-        scale.next_output = -static_cast<std::ptrdiff_t>(kBlurBelow);
         for (std::size_t c = 0; c < kChannels; ++c) {
             for (std::size_t q = 0; q < kQuantities; ++q) {
-                if (scale.uses(c, q)) {
-                    std::fill_n(scale.column_state[c][q], kColumnStateRows * scale.stride, 0.0f);
-                }
+                if (scale.uses(c, q)) std::fill_n(scale.column_state[c][q], kColumnStateRows * scale.stride, 0.0f);
             }
             std::fill(std::begin(scale.ssim_sums[c]), std::end(scale.ssim_sums[c]), 0.0);
             std::fill(std::begin(scale.edge_sums[c]), std::end(scale.edge_sums[c]), 0.0);
         }
     }
 
-    // One linear row of scale s: its XYB, products and horizontal blurs, the
-    // vertical step it completes, and every second row the next scale's row.
-    void feed(std::size_t s, const LinearRow& linear) {
-        Scale& scale = scales_[s];
-        const std::size_t y = scale.rows_in++;
-        const std::size_t xyb_slot = y % kXybRows;
-        for (std::size_t i = 0; i < kPictures; ++i) {
-            kernels::positive_xyb_row(linear.planes[i][0], linear.planes[i][1], linear.planes[i][2], opsin_[i].data(),
-                                      scale.xyb[i][0][xyb_slot], scale.xyb[i][1][xyb_slot],
-                                      scale.xyb[i][2][xyb_slot], scale.stride);
+    // A task that throws (a thread's first product row not allocated) must
+    // not leave the pool, whose threads cannot throw: the step's other tasks
+    // are skipped and the error is thrown here. The next pair starts afresh
+    // (start(), and every row is written before it is read).
+    void run_steps() {
+        std::mutex failure_mutex;
+        std::exception_ptr failure;
+        std::atomic<bool> failed{false};
+        for (std::size_t k = 0; k + 1 < step_begin_.size(); ++k) {
+            const std::size_t begin = step_begin_[k];
+            pool_.run_each(step_begin_[k + 1] - begin, [&](std::size_t i) {
+                if (failed.load(std::memory_order_relaxed)) return;
+                try {
+                    run_task(tasks_[begin + i]);
+                } catch (...) {
+                    const std::lock_guard lock(failure_mutex);
+                    if (!failure) failure = std::current_exception();
+                    failed.store(true, std::memory_order_relaxed);
+                }
+            });
+            if (failed.load(std::memory_order_relaxed)) std::rethrow_exception(failure);
         }
-        const std::size_t blur_slot = y % kBlurredRows;
+    }
+
+    void run_task(const Task& task) {
+        Scale& scale = scales_[task.scale];
+        switch (task.kind) {
+        case kRowStage: make_row(task.scale, task.first); break;
+        case kColumnStage:
+            blur_columns(scale, task.index / strips_of(scale, strip_), task.index % strips_of(scale, strip_),
+                         task.first, task.end);
+            break;
+        case kSumStage: add_map_rows(scale, task.index / 2, task.index % 2 != 0, task.first, task.end); break;
+        default: break;
+        }
+    }
+
+    // Row y of scale s: its linear rows (converted from the pictures at the
+    // full size, else the 2x2 means of two rows of the scale above, an odd
+    // last row taken twice), XYB, products and horizontal blurs.
+    void make_row(std::size_t s, std::size_t y) {
+        Scale& scale = scales_[s];
+        float* linear[kPictures][kChannels];
+        for (std::size_t i = 0; i < kPictures; ++i) {
+            for (std::size_t c = 0; c < kChannels; ++c) linear[i][c] = scale.linear[i][c].row(y);
+            if (s == 0) {
+                readings_[i].convert_row(pictures_[i] + y * stride_, width_, linear[i][0], linear[i][1], linear[i][2]);
+                continue;
+            }
+            const Scale& above = scales_[s - 1];
+            const std::size_t upper = 2 * y;
+            const std::size_t lower = std::min(2 * y + 1, above.height - 1);
+            for (std::size_t c = 0; c < kChannels; ++c) {
+                downsample_row(above.linear[i][c].row(upper), above.linear[i][c].row(lower), above.width,
+                               linear[i][c], scale.width);
+            }
+        }
+        float* xyb[kPictures][kChannels];
+        for (std::size_t i = 0; i < kPictures; ++i) {
+            for (std::size_t c = 0; c < kChannels; ++c) xyb[i][c] = scale.xyb[i][c].row(y);
+            kernels::positive_xyb_row(linear[i][0], linear[i][1], linear[i][2], opsin_[i].data(), xyb[i][0],
+                                      xyb[i][1], xyb[i][2], scale.stride);
+        }
         for (std::size_t c = 0; c < kChannels; ++c) {
-            if (!scale.uses(c, kMu1)) continue;
-            const float* img1 = scale.xyb[0][c][xyb_slot];
-            const float* img2 = scale.xyb[1][c][xyb_slot];
-            kernels::blur_row(img1, scale.blurred_rows[c][kMu1][blur_slot], scale.width);
-            kernels::blur_row(img2, scale.blurred_rows[c][kMu2][blur_slot], scale.width);
+            if (!scale.blurs(c)) continue;
+            const float* img1 = xyb[0][c];
+            const float* img2 = xyb[1][c];
+            kernels::blur_row(img1, scale.horizontal[c][kMu1].row(y), scale.width);
+            kernels::blur_row(img2, scale.horizontal[c][kMu2].row(y), scale.width);
             if (!scale.ssim_map[c]) continue;
+            float* product = product_row(scale.stride);
             const std::pair<const float*, const float*> factors[] = {{img1, img1}, {img2, img2}, {img1, img2}};
             for (std::size_t k = 0; k < 3; ++k) {
-                kernels::multiply_row(factors[k].first, factors[k].second, scale.product, scale.stride);
-                kernels::blur_row(scale.product, scale.blurred_rows[c][kSigma11 + k][blur_slot], scale.width);
-            }
-        }
-        column_step(scale, static_cast<std::ptrdiff_t>(y) - static_cast<std::ptrdiff_t>(kBlurBelow));
-
-        if (s + 1 == scales_.size()) return;
-        const bool even = y % 2 == 0;
-        if (even && y + 1 < scale.height) {
-            for (std::size_t i = 0; i < kPictures; ++i) {
-                for (std::size_t c = 0; c < kChannels; ++c) {
-                    std::memcpy(scale.even_row[i][c], linear.planes[i][c], scale.width * sizeof(float));
-                }
-            }
-            return;
-        }
-        // Rows y - 1 and y, or the last (even) row twice.
-        const Scale& next = scales_[s + 1];
-        LinearRow next_row;
-        for (std::size_t i = 0; i < kPictures; ++i) {
-            for (std::size_t c = 0; c < kChannels; ++c) {
-                const float* upper = even ? linear.planes[i][c] : scale.even_row[i][c];
-                downsample_row(upper, linear.planes[i][c], scale.width, scale.next_scale_row[i][c], next.width);
-                next_row.planes[i][c] = scale.next_scale_row[i][c];
-            }
-        }
-        feed(s + 1, next_row);
-    }
-
-    // The vertical blur's output row n (n < 0 only warms the filters up),
-    // then the maps of that row. FastGaussianVertical's input for row n is
-    // the blurred row n + 4 alone up to row 5, then rows n - 6 and n + 4;
-    // past the bottom, a row of zeros stands in for row n + 4.
-    void column_step(Scale& scale, std::ptrdiff_t n) {
-        const std::size_t below = static_cast<std::size_t>(n + static_cast<std::ptrdiff_t>(kBlurBelow));
-        const bool has_above = n >= static_cast<std::ptrdiff_t>(kBlurAbove);
-        for (std::size_t c = 0; c < kChannels; ++c) {
-            for (std::size_t q = 0; q < kQuantities; ++q) {
-                if (!scale.uses(c, q)) continue;
-                float* const* ring = scale.blurred_rows[c][q];
-                const float* bottom = below < scale.height ? ring[below % kBlurredRows] : scale.zeros;
-                const float* top =
-                    has_above ? ring[static_cast<std::size_t>(n - static_cast<std::ptrdiff_t>(kBlurAbove)) %
-                                     kBlurredRows]
-                              : nullptr;
-                kernels::blur_column_step(top, bottom, scale.column_state[c][q], n >= 0 ? scale.blurred[c][q] : nullptr,
-                                          scale.stride);
-            }
-        }
-        scale.next_output = n + 1;
-        if (n >= 0) add_map_rows(scale, static_cast<std::size_t>(n));
-    }
-
-    static void add_map_rows(Scale& scale, std::size_t n) {
-        const std::size_t slot = n % kXybRows;
-        for (std::size_t c = 0; c < kChannels; ++c) {
-            float* const* blurred = scale.blurred[c];
-            if (scale.ssim_map[c]) {
-                add_ssim_row(blurred[kMu1], blurred[kMu2], blurred[kSigma11], blurred[kSigma22], blurred[kSigma12],
-                             scale.width, scale.ssim_sums[c]);
-            }
-            if (scale.edge_maps[c]) {
-                add_edge_row(scale.xyb[0][c][slot], blurred[kMu1], scale.xyb[1][c][slot], blurred[kMu2], scale.width,
-                             scale.edge_sums[c]);
+                kernels::multiply_row(factors[k].first, factors[k].second, product, scale.stride);
+                kernels::blur_row(product, scale.horizontal[c][kSigma11 + k].row(y), scale.width);
             }
         }
     }
 
-    // The last rows' vertical steps, with zeros below the picture.
-    void finish(Scale& scale) {
-        for (std::ptrdiff_t n = scale.next_output; n < static_cast<std::ptrdiff_t>(scale.height); ++n) {
-            column_step(scale, n);
+    // The vertical blur's steps [first, end) of channel c's planes, in one
+    // column strip. FastGaussianVertical's input for output row n = m - 4 is
+    // the horizontal blur of row m alone up to row 5, then rows m - 10 and
+    // m; past the bottom, a row of zeros stands in for row m.
+    void blur_columns(Scale& scale, std::size_t c, std::size_t strip, std::int64_t first, std::int64_t end) const {
+        const std::size_t x0 = strip * strip_;
+        const std::size_t count = std::min(strip_, scale.stride - x0);
+        const auto height = static_cast<std::int64_t>(scale.height);
+        for (std::size_t q = 0; q < kQuantities; ++q) {
+            if (!scale.uses(c, q)) continue;
+            const Ring& horizontal = scale.horizontal[c][q];
+            const Ring& vertical = scale.vertical[c][q];
+            float* state = scale.column_state[c][q] + kColumnStateRows * x0;
+            for (std::int64_t m = first; m < end; ++m) {
+                const float* bottom = (m < height ? horizontal.row(m) : scale.zeros) + x0;
+                const float* top = m >= kTopBehind ? horizontal.row(m - kTopBehind) + x0 : nullptr;
+                float* out = m >= kWarmUpSteps ? vertical.row(m) + x0 : nullptr;
+                kernels::blur_column_step(top, bottom, state, out, count);
+            }
+        }
+    }
+
+    // Rows [first, end) of channel c's SSIM map or edge maps, added to their
+    // sums in order.
+    static void add_map_rows(Scale& scale, std::size_t c, bool edge, std::int64_t first, std::int64_t end) {
+        const Ring* blurred = scale.vertical[c];
+        for (std::int64_t n = first; n < end; ++n) {
+            const std::int64_t m = n + kWarmUpSteps;
+            if (edge) {
+                add_edge_row(scale.xyb[0][c].row(n), blurred[kMu1].row(m), scale.xyb[1][c].row(n),
+                             blurred[kMu2].row(m), scale.width, scale.edge_sums[c]);
+            } else {
+                add_ssim_row(blurred[kMu1].row(m), blurred[kMu2].row(m), blurred[kSigma11].row(m),
+                             blurred[kSigma22].row(m), blurred[kSigma12].row(m), scale.width, scale.ssim_sums[c]);
+            }
         }
     }
 
@@ -471,25 +768,39 @@ private:
         return ssim > 0 ? 100.0 - 10.0 * std::pow(ssim, 0.6276336467831387) : 100.0;
     }
 
+    RowPool pool_;
+    std::size_t strip_;  // the vertical blur's column strip, in floats (strip_floats)
     std::array<JxlLinearRgb, kPictures> readings_;  // source's, test's
     std::size_t width_;
     std::size_t height_;
     std::array<std::array<float, 11>, kPictures> opsin_;  // each picture's
     std::vector<Scale> scales_;
-    AlignedRows input_memory_;
-    float* input_[kPictures][kChannels] = {};
+    AlignedRows memory_;
+    std::vector<Task> tasks_;
+    std::vector<std::size_t> step_begin_;  // each step's first task in tasks_, then tasks_'s size
+    const std::uint16_t* pictures_[kPictures] = {};
+    std::size_t stride_ = 0;
     std::vector<ScaleAverages> averages_;
 };
 
 Ssimulacra2::Ssimulacra2(const JxlLinearRgb& source_reading, const JxlLinearRgb& test_reading, std::size_t width,
-                         std::size_t height, Terms terms)
-    : engine_(std::make_unique<Engine>(source_reading, test_reading, width, height, terms)) {}
+                         std::size_t height, Terms terms, std::size_t threads)
+    : engine_(std::make_unique<Engine>(source_reading, test_reading, width, height, terms, threads)) {}
 Ssimulacra2::~Ssimulacra2() = default;
 Ssimulacra2::Ssimulacra2(Ssimulacra2&&) noexcept = default;
 Ssimulacra2& Ssimulacra2::operator=(Ssimulacra2&&) noexcept = default;
 
 std::size_t Ssimulacra2::width() const { return engine_->width(); }
 std::size_t Ssimulacra2::height() const { return engine_->height(); }
+
+std::size_t Ssimulacra2::memory_bytes(std::size_t width, std::size_t height, std::size_t threads) {
+    std::vector<Scale> scales = scales_for(width, height, Terms::weighted);
+    if (scales.empty()) return 0;
+    const Schedule schedule = make_schedule(scales, band_rows(threads, width));
+    std::size_t floats = threads * scales[0].stride;  // each thread's product row
+    for (std::size_t s = 0; s < scales.size(); ++s) floats += lay_out(scales[s], schedule, s, nullptr);
+    return floats * sizeof(float);
+}
 
 double Ssimulacra2::score(const std::uint16_t* source, const std::uint16_t* test, std::size_t stride) {
     return engine_->score(source, test, stride);

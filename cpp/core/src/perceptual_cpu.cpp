@@ -40,6 +40,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "vml/run_json.h"
+#include "vml/ssimulacra2.h"
 #include "vml/stats.h"
 #include "vml/score_identity.h"
 #include "vml/size_changes.h"
@@ -60,12 +61,9 @@ constexpr double memory_share = 0.6;
 constexpr std::chrono::milliseconds progress_interval{250};
 
 // The memory of one worker of the app's engines (in_app_schedule) besides
-// its Butteraugli's (Butteraugli::memory_bytes): its copy of the pair (two
-// 16-bit RGB pictures), and its SSIMULACRA2, which keeps only the rows its
-// filters still need, about 3 MB at 3840x2160 or 1920x1080 (measured as the
-// peak working set added by each further worker; here with a margin).
+// its engines' (Butteraugli::memory_bytes, Ssimulacra2::memory_bytes): its
+// copy of the pair, two 16-bit RGB pictures.
 constexpr long long in_app_picture_bytes_per_pixel = 12;
-constexpr long long in_app_ssimulacra2_bytes = 8LL << 20;
 
 // A program's output as Python reads it in text mode: its line endings
 // (CR LF, or a lone CR) as LF, and bytes that are not UTF-8 replaced.
@@ -332,6 +330,20 @@ private:
     std::chrono::steady_clock::time_point reported_{};
 };
 
+// The engines' threads when `workers` pairs at a time share `task_cores`:
+// with both metrics, each pair's SSIMULACRA2 runs on a thread of its own
+// beside its Butteraugli (CpuPairScorer::score); alone, an engine takes the
+// worker's share.
+InAppSchedule schedule_for_workers(long long workers, long long task_cores, bool both_metrics) {
+    const long long share = std::max(1LL, task_cores / workers);
+    InAppSchedule schedule{static_cast<int>(workers), static_cast<std::size_t>(share), static_cast<std::size_t>(share)};
+    if (both_metrics) {
+        schedule.butteraugli_threads = static_cast<std::size_t>(std::max(1LL, share - 1));
+        schedule.ssimulacra2_threads = 1;
+    }
+    return schedule;
+}
+
 }  // namespace
 
 // ----------------------------------------------------------------- public
@@ -342,30 +354,27 @@ InAppSchedule in_app_schedule(int width, int height, const std::vector<std::stri
         std::max(1LL, static_cast<long long>(std::max(1u, cores)) / std::max(1, concurrent_tasks));
     const bool butteraugli = std::find(metrics.begin(), metrics.end(), "butteraugli") != metrics.end();
     const bool ssimulacra2 = std::find(metrics.begin(), metrics.end(), "ssimulacra2") != metrics.end();
-    long long workers = 1;
-    if (butteraugli && ssimulacra2) {
-        workers = task_cores / 6;
-    } else if (butteraugli) {
-        workers = task_cores / 12;
-    } else {
-        workers = task_cores / 2;
-    }
-    workers = std::max(1LL, workers);
+    const bool both = butteraugli && ssimulacra2;
+    InAppSchedule schedule = schedule_for_workers(std::max(1LL, task_cores / (both ? 6 : 12)), task_cores, both);
     if (free_memory) {
         const auto columns = static_cast<std::size_t>(std::max(1, width));
         const auto rows = static_cast<std::size_t>(std::max(1, height));
-        const long long per_worker =
-            static_cast<long long>(columns * rows) * in_app_picture_bytes_per_pixel +
-            (butteraugli ? static_cast<long long>(Butteraugli::memory_bytes(columns, rows, task_cores)) : 0) +
-            (ssimulacra2 ? in_app_ssimulacra2_bytes : 0);
-        const auto share = static_cast<long long>(static_cast<double>(*free_memory) * memory_share /
-                                                  std::max(1, concurrent_tasks));
-        workers = std::max(1LL, std::min(workers, share / per_worker));
+        const auto budget = static_cast<long long>(static_cast<double>(*free_memory) * memory_share /
+                                                   std::max(1, concurrent_tasks));
+        // A worker's engines take memory by their thread counts (their bands
+        // of rows and scratch rows), which change as workers are taken away.
+        const auto worker_bytes = [&](const InAppSchedule& s) {
+            return static_cast<long long>(columns * rows) * in_app_picture_bytes_per_pixel +
+                   (butteraugli ? static_cast<long long>(Butteraugli::memory_bytes(columns, rows, s.butteraugli_threads))
+                                : 0) +
+                   (ssimulacra2 ? static_cast<long long>(Ssimulacra2::memory_bytes(columns, rows, s.ssimulacra2_threads))
+                                : 0);
+        };
+        while (schedule.workers > 1 && schedule.workers * worker_bytes(schedule) > budget) {
+            schedule = schedule_for_workers(schedule.workers - 1, task_cores, both);
+        }
     }
-    // With both metrics, each pair's SSIMULACRA2 runs on a thread of its own
-    // beside its Butteraugli (CpuPairScorer::score).
-    const long long threads = std::max(1LL, task_cores / workers - (butteraugli && ssimulacra2 ? 1 : 0));
-    return InAppSchedule{static_cast<int>(workers), static_cast<std::size_t>(threads)};
+    return schedule;
 }
 
 double parse_score(std::string_view metric, std::string_view output) {
@@ -646,7 +655,8 @@ private:
         std::optional<CpuPairScorer> scorer;
         try {
             scorer.emplace(scoring_.keys, scoring_.source_colour, scoring_.distorted_colour, scoring_.width,
-                           scoring_.height, scoring_.schedule.butteraugli_threads);
+                           scoring_.height, scoring_.schedule.butteraugli_threads,
+                           scoring_.schedule.ssimulacra2_threads);
         } catch (...) {
             fail(std::current_exception());
             return;
@@ -870,8 +880,12 @@ PerceptualTaskOutput score_cpu_task(const PerceptualRequest& request, const std:
     const InAppSchedule schedule =
         in_app_schedule(width, height, keys, request.concurrent_cpu_tasks, platform::logical_cores(), free_memory);
     const bool with_butteraugli = std::find(keys.begin(), keys.end(), "butteraugli") != keys.end();
+    const bool with_ssimulacra2 = std::find(keys.begin(), keys.end(), "ssimulacra2") != keys.end();
     logger.info(join(keys, " and ") + ": " + std::to_string(schedule.workers) + " frame pair" +
                 (schedule.workers == 1 ? "" : "s") + " at a time" +
+                (with_ssimulacra2
+                     ? ", SSIMULACRA2 on " + std::to_string(schedule.ssimulacra2_threads) + " threads each"
+                     : std::string()) +
                 (with_butteraugli
                      ? ", Butteraugli on " + std::to_string(schedule.butteraugli_threads) + " threads each"
                      : std::string()));
