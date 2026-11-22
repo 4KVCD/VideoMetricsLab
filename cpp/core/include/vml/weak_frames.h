@@ -174,6 +174,23 @@ std::string segments_file_suffix(const SegmentRules& rules);
 // start_time, end_time, frames, then <metric>_min, _max and _mean.
 std::string segments_csv(const std::vector<WeakSegment>& segments, const SegmentRules& rules);
 
+// Worst frames `worst` (worst_frames' list, for metric `key`) as JSON: the
+// metric, the number of dips asked for, the frame ranges looked in (empty:
+// all), then "worst_frames", one object per frame, worst first: rank (1 is
+// the worst), frame, time and "scores", every scored metric's score at that
+// frame, in the registry's order (null where it has none).
+nlohmann::ordered_json worst_frames_json(const MetricResultSet& results, const std::string& key,
+                                         const std::vector<WorstFrame>& worst, std::size_t dips,
+                                         const std::vector<FrameInterval>& ranges);
+
+// The same as CSV, a row per frame: rank, frame, time, then each scored
+// metric's score (empty where it has none).
+std::string worst_frames_csv(const MetricResultSet& results, const std::vector<WorstFrame>& worst);
+
+// What an export of worst frames of `key` is named after, before ".json" or
+// ".csv": "<key>.worst" ("vmaf.worst").
+std::string worst_frames_file_suffix(const std::string& key);
+
 // A video in a weak segments report: its name and file, its reference's,
 // and its result.
 struct SegmentsReportVideo {

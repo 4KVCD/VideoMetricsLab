@@ -42,6 +42,7 @@
 #include "file_writes.h"
 #include "frame_compare_panel.h"
 #include "graph_panel.h"
+#include "worst_frames_tab.h"
 #include "i18n.h"
 #include "options_panel.h"
 #include "run_worker.h"
@@ -606,27 +607,28 @@ void MainWindow::build_ui() {
         settings_.graph_metric = key.toStdString();  // the metric chosen, shown again next time
         save_settings();
     });
-    graph_panel_->set_worst_count(settings_.graph_worst_frames);
-    graph_panel_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
-    connect(graph_panel_, &GraphPanel::segments_report_requested, this,
+    tabs_->addTab(new ScrollingPage(graph_panel_), app::tr("Metric Graphs"));
+    // Worst Frames: a video's worst frames and weak segments (issue #24).
+    worst_tab_ = new WorstFramesTab(dialogs_);
+    worst_tab_->set_worst_count(settings_.graph_worst_frames);
+    worst_tab_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
+    connect(worst_tab_, &WorstFramesTab::report_requested, this,
             [this](const SegmentRules& rules) { export_segments_report(rules); });
-    connect(graph_panel_, &GraphPanel::weak_segment_rules_saved, this,
-            [this](const std::string& profile, const SegmentRules& rules) {
-                store_segment_profile(settings_, profile, rules);
-                save_settings();
-                graph_panel_->set_segment_profiles(segment_profiles(settings_),
-                                                   segment_profile_in_use(settings_).name);
-                settings_panel_->show_weak_segment_rules();
-            });
-    connect(graph_panel_, &GraphPanel::worst_count_changed, this, [this](int count) {
+    connect(worst_tab_, &WorstFramesTab::rules_saved, this, [this](const std::string& profile, const SegmentRules& rules) {
+        store_segment_profile(settings_, profile, rules);
+        save_settings();
+        worst_tab_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
+        settings_panel_->show_weak_segment_rules();
+    });
+    connect(worst_tab_, &WorstFramesTab::count_changed, this, [this](int count) {
         settings_.graph_worst_frames = count;
         save_settings();
     });
-    connect(graph_panel_, &GraphPanel::video_compare_requested, this,
+    connect(worst_tab_, &WorstFramesTab::open_requested, this,
             [this](const std::string& identity, int frame, const WorstFrameList& list) {
                 show_in_video_compare(identity, frame, list);
             });
-    tabs_->addTab(new ScrollingPage(graph_panel_), app::tr("Metric Graphs"));
+    tabs_->addTab(new ScrollingPage(worst_tab_), app::tr("Worst Frames"));
     frame_compare_panel_ = new FrameComparePanel([this] { return tools_status_.ffmpeg.path; },
                                                  preview_color_mode_from(settings_.frame_preview_color_mode),
                                                  settings_.compare_decoded_videos);
@@ -662,6 +664,7 @@ void MainWindow::build_ui() {
                                            settings_.export_graph_text);
     };
     graph_panel_->export_colours = export_colours;
+    worst_tab_->export_colours = export_colours;
     // Metric Graphs' statistics menu offers the Videos table's exports.
     graph_panel_->export_items = [this] { return exported_items(settings_); };
     graph_panel_->video_exportable = [this](const std::string& identity) {
@@ -712,9 +715,12 @@ void MainWindow::build_ui() {
     connect(settings_panel_, &SettingsPanel::video_names_changed, this, [this] {
         graph_panel_->set_video_name_rule(video_name_rule(settings_));
         frame_compare_panel_->set_video_name_rule(video_name_rule(settings_));
+        if (tabs_->currentWidget() == worst_tab_) {
+            sync_worst_frames();  // else when it is next opened
+        }
     });
     connect(settings_panel_, &SettingsPanel::weak_segment_rules_changed, this, [this] {
-        graph_panel_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
+        worst_tab_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
     });
     saved_results_panel_ = new SavedResultsPanel(settings_, dialogs_, *file_writes_);
     connect(saved_results_panel_, &SavedResultsPanel::open_requested, this,

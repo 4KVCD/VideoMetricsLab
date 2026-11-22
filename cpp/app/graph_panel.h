@@ -53,7 +53,6 @@ class ChartWidget;
 class FileWrites;
 class FrameControls;
 class VideoColors;
-class WorstFramesPanel;
 
 // Where an XPSNR frame identical to its reference (infinity) is drawn: above
 // every real score, or a perfect frame would dip below merely good ones. For
@@ -259,6 +258,9 @@ public:
         QString label;  // empty: the test video's name
         std::string identity;  // empty: the test video's path
         bool restore = true;
+        // Given by runs() only: the line's name as the window shows it (the
+        // Video names setting: SeriesEntry::shown). add_run ignores it.
+        QString shown;
     };
     void add_run(const Run& run);
     // add_run for each, with the table and the frame range brought up to
@@ -287,12 +289,9 @@ public:
 
     // The metric to show when a run has it (Settings.graph_metric).
     void set_preferred_metric(const std::string& key);
-    // How many dips Worst frames lists (Settings.graph_worst_frames).
-    void set_worst_count(int count);
-    // The weak segment profiles (Settings > Weak segments) and the one in
-    // use, which Weak segments starts from; an open Weak segments dialog
-    // takes them too.
-    void set_segment_profiles(std::vector<SegmentProfile> profiles, std::string in_use);
+    // The frames highlighted (Highlight range), the Worst Frames tab's too;
+    // nothing: none.
+    std::optional<std::pair<int, int>> highlighted_frames() const { return selected_frames(); }
     // Whether any run is shown.
     bool empty() const { return entries_.empty(); }
 
@@ -340,18 +339,6 @@ signals:
     // video's export, or all the videos', of what Settings' Exports include.
     void video_export_requested(const std::string& identity);
     void all_videos_export_requested();
-    // A frame of a line's video to see in Video Compare (Worst frames, Weak
-    // segments): the line's identity, Video Compare's pair; from Worst
-    // frames, its list too, to step through there (else no stops).
-    void video_compare_requested(const std::string& identity, int frame, const vml::app::WorstFrameList& list);
-    // The number of dips Worst frames lists, chosen there.
-    void worst_count_changed(int count);
-    // Weak segments' Save to profile or Save as new profile: the rules to
-    // keep in Settings as that profile's ("" for Default).
-    void weak_segment_rules_saved(const std::string& profile, const vml::SegmentRules& rules);
-    // Weak segments' Export all videos...: the window's report, by these
-    // rules (the dialog's).
-    void segments_report_requested(const vml::SegmentRules& rules);
     // Show removed videos: the rows' lines removed here, to add again with
     // restore (the window has their results).
     void restore_removed_requested();
@@ -410,10 +397,6 @@ private:
         QAction* difference = nullptr;  // while the band shows a difference
     };
     void fill_stats_menu(QMenu& menu, int row, StatsMenu& items) const;
-    // Worst frames brought up to date for the page shown, the lines shown
-    // and the range, while it is open.
-    void refresh_worst_frames();
-    void open_weak_segments();
     void on_file_write_failed(const QString& description, const QString& error);
     void on_file_writes_idle();
 
@@ -442,11 +425,6 @@ private:
     // shows exactly two lines.
     bool difference_on_ = false;
     QCheckBox* difference_box_ = nullptr;
-    // Worst frames (issue #24), beside the pages, shown by its button.
-    WorstFramesPanel* worst_panel_ = nullptr;
-    std::vector<SegmentProfile> segment_profiles_;  // Weak segments' profiles
-    std::string segment_profile_;  // the one in use, which Weak segments starts from
-    QPushButton* worst_button_ = nullptr;
     QPushButton* restore_button_ = nullptr;  // Show removed videos
     QLabel* status_label_ = nullptr;
     QLabel* metric_hint_ = nullptr;

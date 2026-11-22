@@ -215,6 +215,27 @@ TEST(WeakFrames, ExportsAndConditionsRead) {
     }
 }
 
+// Worst frames exported: rank, frame, time and every scored metric's score
+// at the frame, in the registry's order (empty, or null, where it has none).
+TEST(WeakFrames, WorstFramesExportEveryMetricsScore) {
+    MetricResultSet results;
+    results.add(frame_metric("butteraugli", every(1, 19), 1.0F, {{15, 4.5F}}));
+    results.add(frame_metric("vmaf", every(1, 19), 95.0F, {{3, 60.0F}, {15, 40.0F}}));
+    const std::vector<WorstFrame> worst =
+        worst_frames(samples_of(frame_metric("vmaf", every(1, 19), 95.0F, {{3, 60.0F}, {15, 40.0F}})),
+                     MetricDirection::higher_is_better, 10);
+    ASSERT_EQ(worst.size(), 2U);
+    EXPECT_EQ(worst_frames_csv(results, worst),
+              "rank,frame,time,vmaf,butteraugli\n"
+              "1,15,1.5,40.0,4.5\n"
+              "2,3,0.3,60.0,1.0\n");
+    EXPECT_EQ(worst_frames_json(results, "vmaf", worst, 10, {{0, 19}}).dump(),
+              R"({"metric":"vmaf","dips":10,"ranges":[{"first_frame":0,"last_frame":19}],"worst_frames":[)"
+              R"({"rank":1,"frame":15,"time":1.5,"scores":{"vmaf":40.0,"butteraugli":4.5}},)"
+              R"({"rank":2,"frame":3,"time":0.3,"scores":{"vmaf":60.0,"butteraugli":1.0}}]})");
+    EXPECT_EQ(worst_frames_file_suffix("vmaf"), "vmaf.worst");
+}
+
 // The report of several videos: the rules once, then each video's segments
 // with its name, files and counts; as CSV, segments_csv's rows led by the
 // video and its reference (a name with a comma quoted).
@@ -340,7 +361,7 @@ TEST(WeakFrames, PresetsAreProfilesTheAppCanUse) {
 // The window's helpers: a frame's score (a per-frame metric only at its
 // own frames, a per-second one over its second), the run's last frame
 // (the count compared, though the last sample is earlier), and the
-// condition the Weak segments dialog starts from.
+// condition the Worst Frames tab starts from.
 TEST(WeakFrames, ScoreAtLastFrameAndDefaultCondition) {
     const FrameMetricResult vmaf = frame_metric("vmaf", every(2, 8), 90.0F, {{4, NAN}});
     const ScoreSamples frames = samples_of(vmaf);

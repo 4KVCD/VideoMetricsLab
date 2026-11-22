@@ -270,7 +270,7 @@ TEST(SettingsPanel, ExportsAreChosenOneByOne) {
 }
 
 // Settings > Weak segments shows the profile in use and edits it; an edit is
-// saved and told to the window (for Metric Graphs' Weak segments). New...
+// saved and told to the window (for the Worst Frames tab). New...
 // starts a profile from the one shown and puts it in use; From preset loads
 // a preset into the one in use; Rename... and
 // Delete work on the one in use (Default has neither); a name taken is

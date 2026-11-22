@@ -249,3 +249,20 @@ their CSV, for scripts that read JSON.
 
 In Python, `pandas.DataFrame(doc["rows"], columns=doc["columns"])` gives the
 CSV's table.
+
+## Worst frames as JSON and CSV
+
+**Worst frames as JSON...** and **Worst frames as CSV...** on the Worst
+Frames tab (its Worst frames card's Export menu, or a right-click on the
+list) write the dips listed: the metric, the number of dips and the range
+shown there.
+
+| Key | Meaning |
+| --- | --- |
+| `metric` | The metric the dips are of (`vmaf`). |
+| `dips` | How many dips were asked for (10, 25 or 50); fewer are listed where the video has fewer. |
+| `ranges` | The frames looked in, `first_frame` and `last_frame` each (Metric Graphs' highlighted range); empty: the whole video. |
+| `worst_frames` | One object per dip, worst first: `rank` (1 is the worst), `frame`, `time` (seconds, where the frame starts) and `scores`, every scored metric's score at that frame by its key, in the app's order of metrics; `null` where a metric has none there. |
+
+The CSV has a row per dip, in the same order: `rank`, `frame`, `time`, then
+a column per scored metric (blank where it has no score).

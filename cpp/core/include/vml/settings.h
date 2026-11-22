@@ -84,7 +84,7 @@ struct Settings {
     // Calculate metrics (VideoInfo::with_film_grain).
     std::string film_grain_default;
     std::string graph_metric = "vmaf";
-    // How many dips Metric Graphs' Worst frames list shows (10, 25 or 50).
+    // How many dips the Worst Frames tab's Worst frames list shows (10, 25 or 50).
     int graph_worst_frames = 10;
     // Metric Graphs' Weak segments, as last set there (saved_segment_rules,
     // weak_frames.h): its conditions as the command line's --segments writes

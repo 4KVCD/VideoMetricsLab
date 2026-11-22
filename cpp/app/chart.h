@@ -140,6 +140,10 @@ public:
     // nothing shades none.
     void set_highlight(std::optional<std::pair<double, double>> seconds);
     const std::optional<std::pair<double, double>>& highlight() const { return highlight_; }
+    // Shades each of these time ranges as the highlight is (Worst frames'
+    // weak segments), under it: a range both shade is shaded twice.
+    void set_shaded(std::vector<std::pair<double, double>> seconds);
+    const std::vector<std::pair<double, double>>& shaded() const { return shaded_; }
     // Whether Shift+drag selects a time range (range_dragged) rather than
     // panning, as a plain drag still does.
     void set_range_selection(bool on) { range_selection_ = on; }
@@ -197,6 +201,8 @@ private:
     void draw_axes(QPainter& painter, const theme::ChartColours& colours) const;
     void draw_band(QPainter& painter, const QRect& rect, const theme::ChartColours& colours) const;
     void draw_highlight(QPainter& painter, const QRect& rect, const QColor& colour) const;
+    void draw_shade(QPainter& painter, const QRect& rect, const QColor& colour,
+                    const std::pair<double, double>& seconds) const;
     double time_within_data(int px) const;
     // Ticks for `range` drawn in `rect`, about `count` of them.
     std::vector<std::pair<int, QString>> ticks_for(const QRect& rect, std::pair<double, double> range,
@@ -234,6 +240,7 @@ private:
     std::optional<QPoint> pan_origin_;
     std::optional<View> pan_view_;
     std::optional<std::pair<double, double>> highlight_;
+    std::vector<std::pair<double, double>> shaded_;
     bool range_selection_ = false;
     std::optional<double> selection_start_;  // a Shift+drag's first time, while it lasts
     // While the size keeps changing (the window dragged by an edge), the last

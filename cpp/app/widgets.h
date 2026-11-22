@@ -161,6 +161,9 @@ public:
     QString full_text() const { return full_; }
     // Clears the text and the tooltip.
     void clear_text();
+    // Where the text is cut: at its end (the default), or in its middle (a
+    // file name, whose end tells encodes apart).
+    void set_elide_mode(Qt::TextElideMode mode);
 
     QSize minimumSizeHint() const override;
 
@@ -173,6 +176,7 @@ private:
 
     QString full_;
     QString tooltip_;
+    Qt::TextElideMode mode_ = Qt::ElideRight;
 };
 
 // Lines of plain text that change as the pointer moves over a chart (its
@@ -321,6 +325,11 @@ protected:
 private:
     QWidget* page_;
 };
+
+// A table sized to its rows, up to `rows` of them: the tab scrolls, not the
+// table, for a usual number of rows. Made again once the style is set: the
+// header's and rows' heights follow it.
+void fit_table_height(QTableWidget* table, int rows);
 
 // `text` as a tooltip that wraps: Qt shows a plain-text tooltip as one line,
 // however long (some ran the width of the screen), but wraps rich text. A

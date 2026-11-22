@@ -1,8 +1,8 @@
 // Weak segments' rules, edited (weak_frames.h): its conditions (a metric,
 // "is below" or "is above" as the metric's direction says, a threshold and
 // Remove), Add condition, whether any or every condition must hold, the
-// shortest segment and the gap joined across. Metric Graphs' Weak segments
-// dialog and Settings > Weak segments both edit with it.
+// shortest segment and the gap joined across. The Worst Frames tab and
+// Settings > Weak segments both edit with it.
 #pragma once
 
 #include <QWidget>
@@ -26,7 +26,7 @@ class SegmentRulesEditor : public QWidget {
 
 public:
     // Conditions can be on the metrics `keys` (the app's order). With
-    // `at_least_one`, the last condition cannot be removed (the dialog:
+    // `at_least_one`, the last condition cannot be removed (the Worst Frames tab:
     // without one nothing is weak); without, the editor can be empty (no
     // rules saved).
     SegmentRulesEditor(std::vector<std::string> keys, bool at_least_one, QWidget* parent = nullptr);
@@ -45,6 +45,9 @@ public:
     // A further row under the options, aligned with them (Settings' export
     // after each run).
     void add_option_row(const QString& label, QWidget* field);
+    // A field under its label where the two do not fit side by side (the
+    // Worst Frames tab's narrow left column).
+    void wrap_long_options();
 
 signals:
     // A condition or option changed.

@@ -83,6 +83,7 @@ class FrameComparePanel;
 struct FrameComparisonEntry;
 class FillColumnTable;
 class GraphPanel;
+class WorstFramesTab;
 class Notifier;
 class OptionsPanel;
 class QuietTabWidget;
@@ -127,7 +128,16 @@ const std::vector<MetricColumn>& metric_columns();
 const MetricColumn* metric_column_of(int column);
 
 // The window's tabs.
-enum Tab : int { tab_videos, tab_graph, tab_frame_compare, tab_bitrate, tab_bd_rate, tab_saved_results, tab_settings };
+enum Tab : int {
+    tab_videos,
+    tab_graph,
+    tab_worst_frames,
+    tab_frame_compare,
+    tab_bitrate,
+    tab_bd_rate,
+    tab_saved_results,
+    tab_settings
+};
 
 // A run's own line on Metric Graphs: a name no other run has (the Python
 // app's graph_identity, an object of its own).
@@ -505,6 +515,9 @@ private:
     // ------------------------------------------------------- Metric Graphs
     void on_tab_changed(int index);
     void sync_graph();
+    // The Worst Frames tab given the graph's lines and its highlighted
+    // frames, as they are now.
+    void sync_worst_frames();
     void open_or_update_graph(const std::vector<std::shared_ptr<CompletedRun>>& runs, bool show = true);
     // Video Compare at `frame` of the pair `identity` (a graph line's), or
     // why it cannot show it; with Worst frames' `list` to step through, if
@@ -558,7 +571,7 @@ private:
     // result is not one to export.
     std::optional<int> row_of_graph(const std::string& identity) const;
     // Every scored test video's weak segments (scored_videos) by `rules`
-    // (the saved ones, or the Weak segments dialog's), in one JSON or CSV
+    // (the saved ones, or the Worst Frames tab's), in one JSON or CSV
     // file the user names.
     void export_segments_report(const SegmentRules& rules);
     // `videos`' weak segments by `rules` in one JSON or CSV file the user
@@ -890,6 +903,7 @@ private:
     // The videos' colours, shared by the graphs, and Metric Graphs.
     VideoColors* video_colors_ = nullptr;
     GraphPanel* graph_panel_ = nullptr;
+    WorstFramesTab* worst_tab_ = nullptr;
     FrameComparePanel* frame_compare_panel_ = nullptr;
     BitratePanel* bitrate_panel_ = nullptr;
     BdRatePanel* bd_rate_panel_ = nullptr;

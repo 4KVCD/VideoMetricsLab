@@ -236,7 +236,7 @@ signals:
     // calculated again.
     void saved_results_cleared();
     // The weak segment profiles, or the one in use, were edited and saved:
-    // Metric Graphs' Weak segments starts from them.
+    // the Worst Frames tab starts from them.
     void weak_segment_rules_changed();
     // How test videos' names are shown changed (Video names).
     void video_names_changed();
