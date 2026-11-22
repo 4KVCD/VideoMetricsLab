@@ -31,6 +31,7 @@
 #include "dialogs.h"
 #include "results_export.h"
 #include "theme.h"
+#include "video_names.h"
 #include "vml/metrics.h"
 #include "vml/results.h"
 #include "vml/stats.h"
@@ -63,6 +64,8 @@ inline constexpr double xpsnr_infinity_plot_db = 123.0;
 // the figures its table row shows.
 struct SeriesEntry {
     std::shared_ptr<const ComparisonResult> result;
+    // The line's whole name: the video's, and " (without film grain)" where
+    // it was scored so. Exports, file names and tooltips use it.
     QString label;
     QColor color;
     bool visible = true;
@@ -74,7 +77,15 @@ struct SeriesEntry {
     std::map<std::string, std::optional<double>> means;
     // Frames scoring +inf, by metric, where there are any.
     std::map<std::string, long long> identical;
+    // The video's name alone (label without the film grain note), and the
+    // label as the window shows it: the name shortened with the other lines'
+    // (video_names.h). Empty until the panel sets it.
+    QString name;
+    QString shown;
 };
+
+// The label the window shows for the line (SeriesEntry::shown, else its label).
+inline const QString& shown_label(const SeriesEntry& entry) { return entry.shown.isEmpty() ? entry.label : entry.shown; }
 
 // One run's line on one metric's page: its statistics and points (the
 // result's own arrays, or ones made for the line, which `owner` keeps).
@@ -120,6 +131,8 @@ public:
     // panel's order (GraphPanel::apply_order).
     void renumber(const std::map<int, int>& renumbered);
     void set_visible(int series_id, bool visible);
+    // The line's name as shown changed (GraphPanel::refresh_shown_names).
+    void set_label(int series_id, const QString& label);
     const MetricCurve* curve(int series_id) const;
     const std::map<int, MetricCurve>& curves() const { return curves_; }
 
@@ -267,6 +280,8 @@ public:
     // Lists the lines in the order of `identities`, the Videos table's; lines
     // not among them (results added here) follow, in the order they came.
     void set_order(std::vector<std::string> identities);
+    // How the lines' names are shown (Settings > Window > Video names).
+    void set_video_name_rule(const VideoNameRule& rule);
     // The lines' runs, in the table's order.
     std::vector<Run> runs() const;
 
@@ -374,6 +389,9 @@ private:
     bool apply_order();
     void set_visible(int series_id, bool visible);
     void refresh_stats_table();
+    // Every line's SeriesEntry::shown, from the lines there now, and the
+    // pages' lines named so.
+    void refresh_shown_names();
     std::pair<std::vector<QString>, std::vector<std::tuple<QString, QColor, std::vector<QString>>>> export_table();
     void on_add_saved_run();
     void on_export_png();
@@ -403,6 +421,7 @@ private:
     // By series: ids rise as runs are added, and are given again in the
     // order wanted (apply_order).
     std::map<int, SeriesEntry> entries_;
+    VideoNameRule name_rule_;
     // The lines' identities in the order wanted, the Videos table's.
     std::vector<std::string> order_;
     std::set<std::string> suppressed_identities_;

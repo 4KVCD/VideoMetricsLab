@@ -59,6 +59,7 @@ add_library(vml_app STATIC
     stream_records.cpp
     theme.cpp
     video_compare_view.cpp
+    video_names.cpp
     widgets.cpp
     worst_frames_panel.cpp
     zoom.cpp

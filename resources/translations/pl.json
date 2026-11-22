@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Video names:": "Nazwy wideo:",
+  "What tells them apart": "To, co je odróżnia",
+  "First and last characters": "Pierwsze i ostatnie znaki",
+  "Whole names": "Pełne nazwy",
+  "Characters from the start:": "Znaki od początku:",
+  "from the end:": "od końca:",
+  "How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Jak nazwy testowanych wideo są pokazywane w Wykresy metryk i Porównanie wideo. To, co je odróżnia pomija początek i koniec wspólne dla pokazanych wideo: „…CRF 20”, „…CRF 22”. Podpowiedzi, eksporty i nazwy plików zachowują pełną nazwę.",
   "Mocha": "Mokka",
   "Mocha: VML Modern only": "Mokka: tylko VML Modern",
   "Theme": "Motyw",

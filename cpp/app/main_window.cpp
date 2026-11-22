@@ -48,6 +48,7 @@
 #include "settings_panel.h"
 #include "stream_records.h"
 #include "theme.h"
+#include "video_names.h"
 #include "vml/app_log.h"
 #include "vml/append.h"
 #include "vml/ffmpeg_tools.h"
@@ -577,6 +578,7 @@ void MainWindow::build_ui() {
     graph_panel_ = new GraphPanel(video_colors_);
     graph_panel_->dialogs = standard_dialogs(graph_panel_, export_dir);
     graph_panel_->set_preferred_metric(settings_.graph_metric);
+    graph_panel_->set_video_name_rule(video_name_rule(settings_));
     connect(graph_panel_, &GraphPanel::metric_changed, this, [this](const QString& key) {
         settings_.graph_metric = key.toStdString();  // the metric chosen, shown again next time
         save_settings();
@@ -609,6 +611,7 @@ void MainWindow::build_ui() {
         settings_.frame_preview_color_mode = mode.toStdString();  // the colour mode chosen, next time too
         save_settings();
     });
+    frame_compare_panel_->set_video_name_rule(video_name_rule(settings_));
     frame_compare_panel_->set_loop_seconds(settings_.compare_loop_before_ms / 1000.0,
                                            settings_.compare_loop_after_ms / 1000.0);
     connect(frame_compare_panel_, &FrameComparePanel::loop_seconds_changed, this, [this](double before, double after) {
@@ -683,6 +686,10 @@ void MainWindow::build_ui() {
             &FrameComparePanel::set_decoded_videos);
     connect(settings_panel_, &SettingsPanel::ffmpeg_folder_changed, this, [this] { check_ffmpeg(false); });
     connect(settings_panel_, &SettingsPanel::saved_results_cleared, this, [this] { on_saved_results_cleared(); });
+    connect(settings_panel_, &SettingsPanel::video_names_changed, this, [this] {
+        graph_panel_->set_video_name_rule(video_name_rule(settings_));
+        frame_compare_panel_->set_video_name_rule(video_name_rule(settings_));
+    });
     connect(settings_panel_, &SettingsPanel::weak_segment_rules_changed, this, [this] {
         graph_panel_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
     });

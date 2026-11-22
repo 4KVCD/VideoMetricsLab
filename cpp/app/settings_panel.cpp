@@ -27,6 +27,7 @@
 #include <QScopedValueRollback>
 #include <QSignalBlocker>
 #include <QSizePolicy>
+#include <QSpinBox>
 #include <QStyle>
 #include <QStyleOptionComboBox>
 #include <QTabWidget>
@@ -855,6 +856,45 @@ QGroupBox* SettingsPanel::build_window_box() {
     language_row->addWidget(language);
     language_row->addStretch(1);
     window_layout->addLayout(language_row);
+    // Long names that differ only at their ends (an encode's CRF, its
+    // encoder) shortened where the window shows them.
+    video_names = new QComboBox;
+    video_names->addItem(app::tr("What tells them apart"), "differs");
+    video_names->addItem(app::tr("First and last characters"), "ends");
+    video_names->addItem(app::tr("Whole names"), "full");
+    video_names->setCurrentIndex(std::max(0, video_names->findData(text_of(settings_.video_names))));
+    video_names->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    video_names->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    video_names->setToolTip(
+        app::tr("How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves "
+                "out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and "
+                "file names keep the whole name."));
+    connect(video_names, &QComboBox::currentIndexChanged, this, [this] {
+        video_name_ends->setVisible(video_names->currentData().toString() == "ends");
+        on_edited();
+    });
+    video_name_start = new QSpinBox;
+    video_name_start->setRange(0, 200);
+    video_name_start->setValue(std::clamp(settings_.video_name_start, 0, 200));
+    connect(video_name_start, &QSpinBox::valueChanged, this, [this] { on_edited(); });
+    video_name_end = new QSpinBox;
+    video_name_end->setRange(0, 200);
+    video_name_end->setValue(std::clamp(settings_.video_name_end, 0, 200));
+    connect(video_name_end, &QSpinBox::valueChanged, this, [this] { on_edited(); });
+    video_name_ends = new QWidget;
+    auto* ends_row = new QHBoxLayout(video_name_ends);
+    ends_row->setContentsMargins(0, 0, 0, 0);
+    ends_row->addWidget(new QLabel(app::tr("Characters from the start:")));
+    ends_row->addWidget(video_name_start);
+    ends_row->addWidget(new QLabel(app::tr("from the end:")));
+    ends_row->addWidget(video_name_end);
+    video_name_ends->setVisible(video_names->currentData().toString() == "ends");
+    auto* names_row = new QHBoxLayout;
+    names_row->addWidget(new QLabel(app::tr("Video names:")));
+    names_row->addWidget(video_names);
+    names_row->addWidget(video_name_ends);
+    names_row->addStretch(1);
+    window_layout->addLayout(names_row);
     remember_size = new QCheckBox(app::tr("Reopen where and at the size the window was last closed"));
     remember_size->setChecked(settings_.remember_window_size);
     connect(remember_size, &QCheckBox::toggled, this, [this] { on_edited(); });
@@ -1019,6 +1059,10 @@ void SettingsPanel::on_edited() {
         settings_.weak_segment_profile != before.weak_segment_profile) {
         emit weak_segment_rules_changed();
     }
+    if (settings_.video_names != before.video_names || settings_.video_name_start != before.video_name_start ||
+        settings_.video_name_end != before.video_name_end) {
+        emit video_names_changed();
+    }
     if (settings_.ffmpeg_dir != before.ffmpeg_dir) {
         emit ffmpeg_folder_changed();  // after the save: the tools are looked for in the folder saved
     }
@@ -1080,6 +1124,9 @@ void SettingsPanel::read_controls() {
     settings_.theme = theme_buttons->checkedButton()->property("value").toString().toStdString();
     settings_.interface_style = interface_buttons->checkedId() == 1 ? "modern" : "classic";
     settings_.accent_colour = accent_value.toStdString();
+    settings_.video_names = video_names->currentData().toString().toStdString();
+    settings_.video_name_start = video_name_start->value();
+    settings_.video_name_end = video_name_end->value();
     settings_.gpu_metrics_together = gpu_together->isChecked();
     if (gpu_choice != nullptr) {
         settings_.gpu = gpu_choice->currentData().toString().toStdString();

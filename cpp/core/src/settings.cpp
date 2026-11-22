@@ -71,6 +71,9 @@ const std::unordered_map<std::string, Field>& fields() {
         {"theme", &Settings::theme},
         {"interface", &Settings::interface_style},
         {"accent_colour", &Settings::accent_colour},
+        {"video_names", &Settings::video_names},
+        {"video_name_start", &Settings::video_name_start},
+        {"video_name_end", &Settings::video_name_end},
         {"remember_window_size", &Settings::remember_window_size},
         {"window_width", &Settings::window_width},
         {"window_height", &Settings::window_height},
@@ -459,6 +462,9 @@ std::string Settings::text() const {
     data["theme"] = theme;
     data["interface"] = interface_style;
     data["accent_colour"] = accent_colour;
+    data["video_names"] = video_names;
+    data["video_name_start"] = video_name_start;
+    data["video_name_end"] = video_name_end;
     data["remember_window_size"] = remember_window_size;
     data["window_width"] = window_width;
     data["window_height"] = window_height;

@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Video names:": "ชื่อวิดีโอ:",
+  "What tells them apart": "ส่วนที่ทำให้ต่างกัน",
+  "First and last characters": "อักขระแรกและท้าย",
+  "Whole names": "ชื่อเต็ม",
+  "Characters from the start:": "อักขระจากต้น:",
+  "from the end:": "จากท้าย:",
+  "How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "วิธีแสดงชื่อวิดีโอทดสอบใน กราฟเมตริก และ เปรียบเทียบวิดีโอ \"ส่วนที่ทำให้ต่างกัน\" จะละส่วนต้นและส่วนท้ายที่วิดีโอที่แสดงมีร่วมกัน: \"…CRF 20\", \"…CRF 22\" คำแนะนำเครื่องมือ การส่งออก และชื่อไฟล์ยังคงใช้ชื่อเต็ม",
   "Mocha": "มอคค่า",
   "Mocha: VML Modern only": "มอคค่า: VML Modern เท่านั้น",
   "Theme": "ธีม",

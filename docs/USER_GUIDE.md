@@ -124,6 +124,20 @@ newly added videos, and the GPU metrics), **Weak segments**, **Storage** and
 **Settings > General > Window** chooses whether the app reopens the videos it
 had open when it was last closed (off by default).
 
+**Video names** there sets how test videos' names are shown in Metric Graphs
+and Video Compare, where long names that differ only near their ends (an
+encode's CRF, its encoder) would otherwise be cut where they differ:
+
+- **What tells them apart** (the default) leaves out the start and end that
+  the videos shown share, at a word's edge, keeping the word before the first
+  difference: "…CRF 20", "…CRF 22". One video, or videos with nothing shared
+  worth leaving out, show their whole names.
+- **First and last characters** shows each name's first and last so many
+  characters, with "…" between.
+- **Whole names** shows them as they are.
+
+Tooltips, exports and file names always keep the whole name.
+
 **Settings > Appearance** chooses how the window looks; nothing else changes
 with it. **Interface** is a card each, with a picture of it, VML Modern first:
 

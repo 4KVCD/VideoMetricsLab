@@ -438,7 +438,7 @@ void MetricPage::set_frame_curve(int series_id, const SeriesEntry& entry) {
     curve.frames = result->frame;
     curve.times = result->time;
     curve.owner = entry.result;
-    curve.label = entry.label;
+    curve.label = shown_label(entry);
     curve.visible = entry.visible;
     for (const MetricDefinition* metric : frame_metrics()) {
         if (metric == metric_) {
@@ -486,7 +486,7 @@ void MetricPage::set_timeline_curve(int series_id, const SeriesEntry& entry) {
     curve.frames = result->frame;
     curve.times = middles->second;
     curve.owner = middles;
-    curve.label = entry.label;
+    curve.label = shown_label(entry);
     curve.visible = entry.visible;
     curve.starts = starts;
     curves_[series_id] = std::move(curve);
@@ -543,6 +543,16 @@ void MetricPage::set_visible(int series_id, bool visible) {
     fit_hover_label();
     refresh_difference();
     refresh_highlight();
+}
+
+void MetricPage::set_label(int series_id, const QString& label) {
+    const auto found = curves_.find(series_id);
+    if (found == curves_.end() || found->second.label == label) {
+        return;
+    }
+    found->second.label = label;
+    fit_hover_label();
+    refresh_difference();
 }
 
 void MetricPage::set_difference(bool on) {
@@ -991,7 +1001,7 @@ void MetricPage::hover_readout(double x, double y, const std::map<int, SeriesEnt
     for (const auto& [entry, curve, index] : picks) {
         const double value = curve->values[index];
         const int frame = curve->frames[index];
-        const QString prefix = readout_prefix(entry->label, frame, start_time(*curve, index));
+        const QString prefix = readout_prefix(shown_label(*entry), frame, start_time(*curve, index));
         // NaN: the run has the metric but not this frame (subsampled, or a
         // metric that failed on some frames).
         lines.append(readout_row(prefix, std::isnan(value) ? std::nullopt : std::optional(value),
@@ -1033,7 +1043,7 @@ bool MetricPage::frame_readout(int frame, const std::map<int, SeriesEntry>& entr
             // A per-second line: the second the frame is in.
             const auto after = std::upper_bound(curve->frames.begin(), curve->frames.end(), frame);
             if (after == curve->frames.begin()) {
-                lines.append(readout_missing_frame(entry->label, frame));
+                lines.append(readout_missing_frame(shown_label(*entry), frame));
                 continue;
             }
             index = static_cast<std::size_t>(after - curve->frames.begin()) - 1;
@@ -1042,13 +1052,13 @@ bool MetricPage::frame_readout(int frame, const std::map<int, SeriesEntry>& entr
             // to be missing, not shown with a neighbour's score.
             const std::optional<std::size_t> at = index_of_frame(*curve, frame);
             if (!at) {
-                lines.append(readout_missing_frame(entry->label, frame));
+                lines.append(readout_missing_frame(shown_label(*entry), frame));
                 continue;
             }
             index = *at;
         }
         const double value = curve->values[index];
-        const QString prefix = readout_prefix(entry->label, curve->frames[index], start_time(*curve, index));
+        const QString prefix = readout_prefix(shown_label(*entry), curve->frames[index], start_time(*curve, index));
         const auto others = other_values(*curve, frame, index);
         if (std::isnan(value)) {
             lines.append(readout_row(prefix, std::nullopt, others));
@@ -1604,7 +1614,7 @@ void GraphPanel::setup_stats_table() {
 QTableWidgetItem* GraphPanel::series_name_item(const SeriesEntry& entry) const {
     // The first cell: colour square, tick box and name in one, which makes
     // the table the list of lines too.
-    auto* item = new QTableWidgetItem(entry.label);
+    auto* item = new QTableWidgetItem(shown_label(entry));
     item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable | Qt::ItemIsSelectable);
     item->setCheckState(entry.visible ? Qt::Checked : Qt::Unchecked);
     // The colour square is the legend.
@@ -1615,7 +1625,9 @@ QTableWidgetItem* GraphPanel::series_name_item(const SeriesEntry& entry) const {
     font.setBold(true);
     item->setFont(font);
     item->setForeground(theme::readable(entry.color));
-    item->setToolTip(app::tr("Click the color square to change this video's color in both graphs."));
+    const QString hint = app::tr("Click the color square to change this video's color in both graphs.");
+    // The whole name where the cell shows it shortened.
+    item->setToolTip(shown_label(entry) == entry.label ? hint : entry.label + "\n\n" + hint);
     return item;
 }
 
@@ -1766,6 +1778,7 @@ bool GraphPanel::add_series(const Run& run) {
         }
         existing.result = run.result;
         existing.label = label;
+        existing.name = name;
         existing.means = metric_means(*run.result);
         existing.identical = identical_frame_counts(*run.result);
         for (const auto& [key, page] : pages_) {
@@ -1779,6 +1792,7 @@ bool GraphPanel::add_series(const Run& run) {
     for (const auto& [key, page] : pages_) {
         page->set_curve(id, entry);
     }
+    entry.name = name;
     entries_.emplace(id, std::move(entry));
     return true;
 }
@@ -1786,6 +1800,7 @@ bool GraphPanel::add_series(const Run& run) {
 void GraphPanel::series_changed() {
     apply_order();
     select_available_metric();
+    refresh_shown_names();
     refresh_stats_table();
     refresh_page_controls();
 }
@@ -1910,8 +1925,35 @@ void GraphPanel::remove_runs(const std::vector<int>& series_ids, bool suppress) 
         }
     }
     select_available_metric();
+    refresh_shown_names();
     refresh_stats_table();
     refresh_page_controls();
+}
+
+void GraphPanel::set_video_name_rule(const VideoNameRule& rule) {
+    name_rule_ = rule;
+    refresh_shown_names();
+    refresh_stats_table();
+}
+
+void GraphPanel::refresh_shown_names() {
+    std::vector<QString> names;
+    names.reserve(entries_.size());
+    for (const auto& [id, entry] : entries_) {
+        names.push_back(entry.name.isEmpty() ? entry.label : entry.name);
+    }
+    const std::vector<QString> shown = shown_video_names(names, name_rule_);
+    std::size_t index = 0;
+    for (auto& [id, entry] : entries_) {
+        const QString& name = shown[index++];
+        // The film grain note kept: it is not a part of the name.
+        entry.shown = entry.name.isEmpty() || entry.label == entry.name
+                          ? name
+                          : app::tr("{name} (without film grain)", {{"name", name}});
+        for (const auto& [key, page] : pages_) {
+            page->set_label(id, entry.shown);
+        }
+    }
 }
 
 void GraphPanel::set_series_visible(int series_id, bool visible) {

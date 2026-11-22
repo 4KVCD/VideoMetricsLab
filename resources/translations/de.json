@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Video names:": "Videonamen:",
+  "What tells them apart": "Was sie unterscheidet",
+  "First and last characters": "Erste und letzte Zeichen",
+  "Whole names": "Ganze Namen",
+  "Characters from the start:": "Zeichen vom Anfang:",
+  "from the end:": "vom Ende:",
+  "How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Wie die Namen der Testvideos in Metrik-Diagramme und Videovergleich angezeigt werden. Was sie unterscheidet lässt Anfang und Ende weg, die die angezeigten Videos gemeinsam haben: „…CRF 20“, „…CRF 22“. Tooltips, Exporte und Dateinamen behalten den ganzen Namen.",
   "Mocha": "Mokka",
   "Mocha: VML Modern only": "Mokka: nur VML Modern",
   "Theme": "Design",

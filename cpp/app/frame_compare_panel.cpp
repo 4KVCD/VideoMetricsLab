@@ -680,7 +680,9 @@ void FrameComparePanel::set_runs(std::vector<FrameComparisonEntry> entries) {
         video_combo->clear();
         for (const FrameComparisonEntry& entry : entries_) {
             video_combo->addItem(entry.label);
+            video_combo->setItemData(video_combo->count() - 1, entry.label, Qt::ToolTipRole);
         }
+        name_videos();
         if (!entries_.empty()) {
             video_combo->setCurrentIndex(static_cast<int>(current_index_));
         }
@@ -1307,6 +1309,24 @@ void FrameComparePanel::update_enabled_state() {
     color_mode_combo->setEnabled(available);
 }
 
+void FrameComparePanel::set_video_name_rule(const VideoNameRule& rule) {
+    name_rule_ = rule;
+    name_videos();
+    update_labels();
+}
+
+void FrameComparePanel::name_videos() {
+    std::vector<QString> labels;
+    labels.reserve(entries_.size());
+    for (const FrameComparisonEntry& entry : entries_) {
+        labels.push_back(entry.label);
+    }
+    shown_names_ = shown_video_names(labels, name_rule_);
+    for (int index = 0; index < std::min(video_combo->count(), static_cast<int>(shown_names_.size())); ++index) {
+        video_combo->setItemText(index, shown_names_[static_cast<std::size_t>(index)]);
+    }
+}
+
 void FrameComparePanel::update_labels() {
     const FrameComparisonEntry* entry = current_entry();
     if (entry == nullptr) {
@@ -1321,7 +1341,8 @@ void FrameComparePanel::update_labels() {
                         : app::tr("{side} {number} of {count}",
                                   {{"side", app::tr("TEST")}, {"number", current_index_ + 1}, {"count", entries_.size()}});
     const QString name = showing_source_ ? qt_text(platform::path_text(comparison.source_info.path.filename()))
-                                         : entry->label;
+                         : current_index_ < shown_names_.size() ? shown_names_[current_index_]
+                                                                : entry->label;
     // A still FFmpeg makes from the file leaves out H.274's grain where the
     // scores have it (only VVdeC adds it as it should); one from VVdeC's
     // pictures (still_from_the_app) has it, as Video Compare's player does.
