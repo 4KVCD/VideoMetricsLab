@@ -2084,6 +2084,11 @@ std::variant<GpuPlan, std::string> hdr_plan(const RunFrames& run, const VmafOpti
         }
         plan.models.emplace_back("vmaf_hdr", std::string(*file));
         plan.hdr_model_file = std::string(*file);
+        // Which model scores HDR VMAF: Auto's pick for the size compared, or the one chosen.
+        logger.info("HDR VMAF model: " + model_shown(options.model_hdr) +
+                    (options.model_choice_hdr == auto_model_choice
+                         ? " (Auto's choice for " + std::to_string(run.width) + "x" + std::to_string(run.height) + ")"
+                         : " (chosen in the options)"));
         const HdrModelTarget model = hdr_model_target(platform::path_from_text(*file));
         hdr_targets(static_cast<unsigned>(run.width), static_cast<unsigned>(run.height),
                     static_cast<unsigned>(run.width), static_cast<unsigned>(run.height), model);
