@@ -9,6 +9,7 @@ add_library(vml_cli STATIC
     compare.cpp
     devices.cpp
     file_names.cpp
+    gates.cpp
     notify.cpp
     report.cpp
     saved.cpp

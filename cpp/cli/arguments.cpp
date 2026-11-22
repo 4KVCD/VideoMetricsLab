@@ -59,7 +59,8 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--segment-min-frames N]
                                    [--segment-merge-frames N]
                                    [--segments-dir FOLDER]
-                                   [--segments-report FILE] [--run-dir FOLDER]
+                                   [--segments-report FILE] [--require RULES]
+                                   [--fail-on-segments] [--run-dir FOLDER]
                                    [--log-file FILE] [--name TEMPLATE]
                                    [--notify] [-q] [-v]
                                    [--settings FILE | --no-settings]
@@ -394,6 +395,17 @@ R"(  --no-gpu-decode       decode the videos on the CPU
                         report: JSON, or CSV where FILE ends in .csv (a row
                         per segment, led by its video and reference). The
                         fields of --json's path are replaced in it
+  --require RULES       a quality gate: the bars each test video's scores
+                        must reach, such as "vmaf>=95,vmaf.worst_1_percent>=90"
+                        (quoted: < and > are the shell's); a statistic after
+                        the metric: score (the default), median, min, max,
+                        worst_10_percent, worst_5_percent, worst_1_percent or
+                        worst_0.1_percent (CVVDP's but its score: of its
+                        seconds). Repeat it to add rules. A video below a bar
+                        makes the exit code 3; a metric that does not apply
+                        to a video (HDR VMAF of SDR) is left out of its gate
+  --fail-on-segments    a quality gate: a test video with a weak segment, by
+                        --segments, makes the exit code 3
   --run-dir FOLDER      write each video's result to FOLDER as
                         <video>.metrics.json, the file the app's Save
                         analysis results writes and Metric Graphs' Add saved
@@ -1417,6 +1429,17 @@ Parser compare_parser(CompareArguments& parsed) {
                [&parsed](const std::string& value) { parsed.segment_merge_frames = int_from_zero(value); }),
         option({"--segments-dir"}, [&parsed](const std::string& value) { parsed.segments_dir = value; }),
         option({"--segments-report"}, [&parsed](const std::string& value) { parsed.segments_report = value; }),
+        option({"--require"},
+               [&parsed](const std::string& value) {
+                   try {
+                       for (GateRule& rule : read_gate_rules(value)) {
+                           parsed.require.push_back(std::move(rule));
+                       }
+                   } catch (const std::invalid_argument& error) {
+                       throw ArgumentError{error.what()};
+                   }
+               }),
+        flag({"--fail-on-segments"}, parsed.fail_on_segments),
         option({"--run-dir"}, [&parsed](const std::string& value) { parsed.run_dir = value; }),
         option({"--log-file"}, [&parsed](const std::string& value) { parsed.log_file = value; }),
         option({"--name"}, [&parsed](const std::string& value) { parsed.name = value; }),
@@ -1596,6 +1619,9 @@ std::optional<std::string> segment_option_alone(const CompareArguments& argument
     if (arguments.segments_report) {
         return "--segments-report";
     }
+    if (arguments.fail_on_segments) {
+        return "--fail-on-segments";
+    }
     return std::nullopt;
 }
 
@@ -1648,7 +1674,9 @@ Arguments parse_arguments(const std::vector<std::string>& arguments) {
                  }
                  if (const std::optional<std::string> option = segment_option_alone(parsed.compare)) {
                      throw UsageError(std::string(compare_usage) + prog + ": error: argument " + *option +
-                                      ": only with --segments, whose segments it shapes");
+                                      (*option == "--fail-on-segments"
+                                           ? ": only with --segments, whose conditions find the weak segments"
+                                           : ": only with --segments, whose segments it shapes"));
                  }
                  if (parsed.compare.name) {
                      if (const std::optional<std::string> wrong =

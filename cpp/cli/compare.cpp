@@ -1892,6 +1892,24 @@ nlohmann::ordered_json comparison_results(const CompareArguments& arguments, Com
     if (!rules.conditions.empty() && arguments.segments_dir) {
         written = write_segment_files(videos, rules, python_path(*arguments.segments_dir), message, failed) && written;
     }
+    // The quality gate (--require, --fail-on-segments): each video's checks,
+    // which its JSON and the text after the tables give.
+    if (!arguments.require.empty() || arguments.fail_on_segments) {
+        const bool on_segments = arguments.fail_on_segments && !rules.conditions.empty();
+        for (std::size_t v = 0; v < videos.size(); ++v) {
+            TestVideo& video = videos[v];
+            video.checks = gate_checks(video, summaries[v], arguments.require, on_segments ? &rules : nullptr);
+            if (!gate_passed(video.checks)) {
+                std::string failing;
+                for (const GateCheck& check : video.checks) {
+                    if (check.passed && !*check.passed) {
+                        failing += (failing.empty() ? "" : ", ") + check.rule;
+                    }
+                }
+                progress.message(video.name() + ": quality gate FAILED: " + failing);
+            }
+        }
+    }
     // After the CSV files: it says where each one went.
     nlohmann::ordered_json document =
         results_document(comparison.source, videos, summaries, cancelled, difference, &record);
@@ -1908,6 +1926,9 @@ nlohmann::ordered_json comparison_results(const CompareArguments& arguments, Com
     }
     if (!rules.conditions.empty()) {
         tables += "\n" + segments_text(videos, rules, shown_segments);
+    }
+    if (const std::string gates = gate_text(videos); !gates.empty()) {
+        tables += "\n" + gates;
     }
     return document;
 }
@@ -2273,6 +2294,12 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
         print_error(*refused);
         return exit_usage;
     }
+    for (const GateRule& rule : arguments.require) {
+        if (std::find(asked.begin(), asked.end(), rule.metric) == asked.end()) {
+            print_error("--require: " + rule.metric + " is not one of the metrics compared (-m)");
+            return exit_usage;
+        }
+    }
     if (arguments.vship && !vship_build_bundled(vship_build_from(*arguments.vship))) {
         print_error("--vship " + *arguments.vship + ": " +
                     std::string(vship_build_label(vship_build_from(*arguments.vship))) +
@@ -2431,16 +2458,27 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
     const bool written = write_results(arguments, comparisons, cancelled, record,
                                        profile_json(chosen, scores, options_from_settings(arguments, gpu_from_settings)),
                                        fields, *progress);
+    // A video below a --require bar, or with a weak segment (--fail-on-segments): its checks are made as the
+    // results are written.
+    bool gate_failed = false;
+    for (const std::unique_ptr<Comparison>& comparison : comparisons) {
+        if (comparison->planner) {
+            for (const TestVideo& video : comparison->planner->videos) {
+                gate_failed = gate_failed || !gate_passed(video.checks);
+            }
+        }
+    }
     if (arguments.notify) {
         notify_of_run(settings, comparisons, cancelled, every_ok, record.wall_seconds.value_or(0.0), *progress);
     }
     if (test_remuxes && scores.save && !cancelled) {
         record_test_streams(comparisons, cache_folder, *progress, cancel);  // after the results: nothing waits
     }
-    const int exit_code = cancelled              ? exit_cancelled
-                          : input_unread         ? exit_input
-                          : every_ok && written  ? exit_ok
-                                                 : exit_failed;
+    const int exit_code = cancelled               ? exit_cancelled
+                          : input_unread          ? exit_input
+                          : !every_ok || !written ? exit_failed
+                          : gate_failed           ? exit_gate_failed
+                                                  : exit_ok;
     app_log::Logger("vml.cli").info("Command line finished: exit code " + std::to_string(exit_code));
     return exit_code;
 }
