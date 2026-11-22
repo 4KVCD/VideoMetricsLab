@@ -173,10 +173,15 @@ area up to its top edge while the system's frame stays: its shadow, rounded
 corners and resize edges. `TitleBar::attach` gives back the window styles
 Windows' own behaviours look for (double-click to maximize, snapping, the
 taskbar's minimize), and the window's `nativeEvent` hands its messages to
-`TitleBar::native_event`. That answers `WM_NCHITTEST`: the top edge resizes,
-the maximize button is `HTMAXBUTTON` (so Windows 11 shows its snap layouts
-over it, and the button's hover comes as non-client messages), the app's
-buttons are client, the rest is caption. It also shows the system menu for
+`TitleBar::native_event`. That answers `WM_NCHITTEST` for every point of the
+window: the edges resize (unless maximized), the maximize button is
+`HTMAXBUTTON` (so Windows 11 shows its snap layouts over it, and the button's
+hover comes as non-client messages), the bar's other buttons are client, the
+rest of the bar is caption, and the window's contents are client. It must
+answer everywhere: left to Qt, `QWindowsWindow::handleNonClientHitTest`
+makes a mouse press or release of its own for such a window whenever the
+buttons' state has changed (Qt 6.12), so every click came twice, a button's
+menu closed as it opened and double clicks went unseen. It also shows the system menu for
 Alt+Space, the icon and a right-click, with Minimize and Maximize enabled
 (Qt's own menu for Alt+Space would have them off). The bar is made when the
 window is built, so it follows the interface the app started in, and not in
