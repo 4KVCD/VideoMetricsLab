@@ -31,6 +31,7 @@ struct BitrateVideo {
     std::optional<VideoInfo> info;
     std::optional<BitrateData> data;
     std::string error;
+    std::string error_code;  // error's (codes.h)
 };
 
 // --difference: the first video's bitrate minus the second's, from each

@@ -1,5 +1,5 @@
 // Video Compare's tools for looking at a dip (issue #24): stepping through
-// Metric Graphs' Worst frames list, looping playback around a frame, and
+// the Worst Frames tab's Worst frames list, looping playback around a frame, and
 // saving a frame's stills.
 #include <QCheckBox>
 #include <QDoubleSpinBox>
@@ -145,7 +145,7 @@ void FrameComparePanel::add_inspect_row(QBoxLayout* root) {
     next_worst_button = new QPushButton(app::tr("Next worst"));
     connect(next_worst_button, &QPushButton::clicked, this, [this] { step_worst(1); });
     for (QWidget* widget : std::initializer_list<QWidget*>{previous_worst_button, worst_label, next_worst_button}) {
-        widget->setToolTip(app::tr("Steps through the Worst frames list opened from Metric Graphs."));
+        widget->setToolTip(app::tr("Steps through the worst frames listed in the Worst Frames tab."));
         widget->hide();
         row->addWidget(widget);
     }

@@ -62,7 +62,7 @@ add_library(vml_app STATIC
     video_compare_view.cpp
     video_names.cpp
     widgets.cpp
-    worst_frames_panel.cpp
+    worst_frames_tab.cpp
     zoom.cpp
 )
 set_target_properties(vml_app PROPERTIES AUTOMOC ON)

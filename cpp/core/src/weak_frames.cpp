@@ -427,6 +427,61 @@ std::string segments_csv(const std::vector<WeakSegment>& segments, const Segment
     return text;
 }
 
+namespace {
+
+// The metrics `results` has scores of, in the registry's order, with them.
+std::vector<std::pair<std::string, ScoreSamples>> scored_metrics(const MetricResultSet& results) {
+    std::vector<std::pair<std::string, ScoreSamples>> scored;
+    for (const MetricDefinition& definition : metrics()) {
+        if (std::optional<ScoreSamples> samples = score_samples(results, std::string(definition.key))) {
+            scored.emplace_back(std::string(definition.key), *samples);
+        }
+    }
+    return scored;
+}
+
+}  // namespace
+
+Json worst_frames_json(const MetricResultSet& results, const std::string& key, const std::vector<WorstFrame>& worst,
+                       std::size_t dips, const std::vector<FrameInterval>& ranges) {
+    const std::vector<std::pair<std::string, ScoreSamples>> scored = scored_metrics(results);
+    Json range_list = Json::array();
+    for (const FrameInterval& range : ranges) {
+        range_list.push_back(Json{{"first_frame", range.first}, {"last_frame", range.last}});
+    }
+    Json list = Json::array();
+    for (std::size_t i = 0; i < worst.size(); ++i) {
+        Json scores = Json::object();
+        for (const auto& [metric, samples] : scored) {
+            scores[metric] = json_number(score_at(samples, worst[i].frame));
+        }
+        list.push_back(Json{{"rank", i + 1},
+                            {"frame", worst[i].frame},
+                            {"time", worst[i].time},
+                            {"scores", std::move(scores)}});
+    }
+    return Json{{"metric", key}, {"dips", dips}, {"ranges", std::move(range_list)}, {"worst_frames", std::move(list)}};
+}
+
+std::string worst_frames_csv(const MetricResultSet& results, const std::vector<WorstFrame>& worst) {
+    const std::vector<std::pair<std::string, ScoreSamples>> scored = scored_metrics(results);
+    std::string text = "rank,frame,time";
+    for (const auto& [metric, samples] : scored) {
+        text += "," + metric;
+    }
+    text += "\n";
+    for (std::size_t i = 0; i < worst.size(); ++i) {
+        text += std::to_string(i + 1) + "," + std::to_string(worst[i].frame) + "," + python_repr(worst[i].time);
+        for (const auto& [metric, samples] : scored) {
+            text += "," + csv_number(score_at(samples, worst[i].frame));
+        }
+        text += "\n";
+    }
+    return text;
+}
+
+std::string worst_frames_file_suffix(const std::string& key) { return key + ".worst"; }
+
 Json segments_report_json(const std::vector<SegmentsReportVideo>& videos, const SegmentRules& rules) {
     SegmentRules without_ranges = rules;
     without_ranges.ranges.clear();

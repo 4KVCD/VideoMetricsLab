@@ -32,6 +32,7 @@
 #include "vml/bd_rate.h"
 #include "vml/metrics.h"
 #include "vml/platform/system.h"
+#include "widgets.h"
 #include "window_helpers.h"
 
 namespace vml::app {
@@ -92,16 +93,6 @@ QTableWidgetItem* text_item(const QString& text) {
     auto* item = new QTableWidgetItem(text);
     item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     return item;
-}
-
-// A table sized to its rows, up to `rows` of them: the tab scrolls, not the
-// table, for a usual number of sequences.
-void fit_height(QTableWidget* table, int rows) {
-    int height = table->horizontalHeader()->height() + 2 * table->frameWidth();
-    for (int row = 0; row < std::min(rows, table->rowCount()); ++row) {
-        height += table->rowHeight(row);
-    }
-    table->setFixedHeight(height);
 }
 
 // The real dialog for BdRatePanel::choose_videos: a tick list.
@@ -590,14 +581,14 @@ void BdRatePanel::show_heading() {
                  {"count", static_cast<long long>(report_->sequences.size())}}));
 }
 
-void BdRatePanel::fit_to_style() { fit_height(results, visible_result_rows); }
+void BdRatePanel::fit_to_style() { fit_table_height(results, visible_result_rows); }
 
 void BdRatePanel::fill_results() {
     filling_ = true;
     sequence_rows_.clear();
     results->setRowCount(0);
     if (!report_) {
-        fit_height(results, 0);
+        fit_table_height(results, 0);
         filling_ = false;
         return;
     }
@@ -649,7 +640,7 @@ void BdRatePanel::fill_results() {
             results->setCurrentCell(row, 0);
         }
     }
-    fit_height(results, visible_result_rows);
+    fit_table_height(results, visible_result_rows);
     filling_ = false;
 }
 

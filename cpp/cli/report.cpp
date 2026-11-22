@@ -76,18 +76,25 @@ Json display_entry(const TestVideo& target) {
     }
     if (target.for_display_only && !target.notes.empty()) {
         entry["notes"] = target.notes;
+        entry["note_codes"] = target.note_codes;
     }
     const auto cvvdp = std::find_if(target.failures.begin(), target.failures.end(),
                                     [](const auto& failure) { return failure.first == "cvvdp"; });
     std::string reason = cvvdp != target.failures.end() ? cvvdp->second : "";
+    std::string code = cvvdp != target.failures.end() ? target.failure_code("cvvdp") : "";
     if (reason.empty() && entry.at("score").is_null()) {
         // No score, and CVVDP's own failure does not say why: the run's does.
-        reason = !target.error.empty()        ? target.error
-                 : !target.failures.empty() ? target.failures.front().second
-                                            : "";
+        if (!target.error.empty()) {
+            reason = target.error;
+            code = target.error_code;
+        } else if (!target.failures.empty()) {
+            reason = target.failures.front().second;
+            code = target.failure_code(target.failures.front().first);
+        }
     }
     if (!reason.empty()) {
         entry["error"] = reason;
+        entry["error_code"] = code.empty() ? std::string(calculation_failed_code) : code;
     }
     return entry;
 }
@@ -332,6 +339,22 @@ std::string results_table(const VideoInfo& source, const std::vector<TestVideo>&
     return text;
 }
 
+Json error_document(const std::optional<std::string>& reference, const std::string& error, const std::string& code,
+                    const RunRecord* record) {
+    Json document{{"app", "VideoMetricsLab"}, {"version", VML_VERSION}, {"commit", build_commit()},
+                  {"format", results_format}, {"cancelled", false}};
+    if (reference) {
+        document["reference"] = Json{{"path", *reference}};
+    }
+    document["error"] = error;
+    document["error_code"] = code;
+    document[reference ? "videos" : "batch"] = Json::array();
+    if (record != nullptr) {
+        add_run_record(document, *record);
+    }
+    return document;
+}
+
 Json results_document(const VideoInfo& source, const std::vector<TestVideo>& videos,
                       const std::vector<Summaries>& summaries, bool cancelled, const std::optional<Json>& difference,
                       const RunRecord* record) {
@@ -354,9 +377,11 @@ Json results_document(const VideoInfo& source, const std::vector<TestVideo>& vid
         }
         if (!video.error.empty()) {
             entry["error"] = video.error;
+            entry["error_code"] = video.error_code;
         }
         if (!video.notes.empty()) {
             entry["notes"] = video.notes;
+            entry["note_codes"] = video.note_codes;
         }
         if (video.csv_file) {
             entry["csv"] = platform::path_text(*video.csv_file);
@@ -373,10 +398,13 @@ Json results_document(const VideoInfo& source, const std::vector<TestVideo>& vid
         }
         if (!video.failures.empty()) {
             Json failed = Json::object();
+            Json failed_codes = Json::object();
             for (const auto& [key, reason] : video.failures) {
                 failed[key] = reason;
+                failed_codes[key] = video.failure_code(key);
             }
             entry["failed_metrics"] = failed;
+            entry["failed_metric_codes"] = failed_codes;
         }
         if (video.result) {
             const ComparisonResult& result = *video.result;

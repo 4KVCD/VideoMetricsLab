@@ -5,6 +5,8 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstdlib>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <tuple>
@@ -24,6 +26,14 @@
 #include "vml/perceptual_cpu.h"
 #include "vml/platform/system.h"
 #include "vml/vship.h"
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#undef near  // a 16-bit pointer word, which a test below uses as a name
+#endif
 
 namespace vml {
 namespace {
@@ -862,6 +872,26 @@ TEST(Decisions, TheVmafModelIsChosenAsThePythonAppChoosesIt) {
         EXPECT_EQ(model_for_resolution(item["size"][0].get<int>(), item["size"][1].get<int>()),
                   item["model"].get<std::string>());
     }
+}
+
+// An empty VML_RESOURCES names no folder: the models are found where they are
+// with it unset, not in the working folder (PowerShell 7 leaves a variable
+// "removed" with SetEnvironmentVariable($name, $null) set, and empty).
+TEST(Decisions, AnEmptyResourcesVariableIsTakenAsUnset) {
+    const std::optional<std::string> previous = platform::environment_variable("VML_RESOURCES");
+    platform::set_environment_variable("VML_RESOURCES", "");  // removes it
+    const std::filesystem::path unset = resource_folder();
+#ifdef _WIN32
+    SetEnvironmentVariableW(L"VML_RESOURCES", L"");  // set, and empty
+#else
+    setenv("VML_RESOURCES", "", 1);
+#endif
+    const std::optional<std::string> value = platform::environment_variable("VML_RESOURCES");
+    const std::filesystem::path empty = resource_folder();
+    platform::set_environment_variable("VML_RESOURCES", previous.value_or(""));
+    ASSERT_EQ(value, std::optional<std::string>(""));
+    EXPECT_FALSE(unset.empty());
+    EXPECT_EQ(empty, unset);
 }
 
 // D3D11VA decodes on the adapter the app names as it starts (the AMD GPU's):

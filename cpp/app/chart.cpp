@@ -641,6 +641,12 @@ void ChartWidget::draw(QPixmap& pixmap, const theme::ChartColours& colours) cons
     draw_axes(painter, colours);
     const QRect lines = lines_rect();
     const std::optional<QRect> band = band_rect();
+    for (const auto& seconds : shaded_) {
+        draw_shade(painter, lines, colours.highlight, seconds);
+        if (band) {
+            draw_shade(painter, *band, colours.highlight, seconds);
+        }
+    }
     draw_highlight(painter, lines, colours.highlight);
     if (band) {
         draw_highlight(painter, *band, colours.highlight);
@@ -657,13 +663,17 @@ void ChartWidget::draw(QPixmap& pixmap, const theme::ChartColours& colours) cons
 }
 
 void ChartWidget::draw_highlight(QPainter& painter, const QRect& rect, const QColor& colour) const {
-    // The highlighted times' columns of `rect`, at least one pixel wide, so
-    // that a single frame of a long run still shows; nothing out of view.
-    if (!highlight_) {
-        return;
+    if (highlight_) {
+        draw_shade(painter, rect, colour, *highlight_);
     }
-    const int left = std::max(rect.left(), pixel_for_time(highlight_->first));
-    const int right = std::min(rect.right(), pixel_for_time(highlight_->second));
+}
+
+void ChartWidget::draw_shade(QPainter& painter, const QRect& rect, const QColor& colour,
+                             const std::pair<double, double>& seconds) const {
+    // The times' columns of `rect`, at least one pixel wide, so that a
+    // single frame of a long run still shows; nothing out of view.
+    const int left = std::max(rect.left(), pixel_for_time(seconds.first));
+    const int right = std::min(rect.right(), pixel_for_time(seconds.second));
     if (right < rect.left() || left > rect.right()) {
         return;
     }
@@ -857,6 +867,14 @@ void ChartWidget::draw_series(QPainter& painter, const QRect& rect, const ChartS
 }
 
 // ------------------------------------------------------------------- cursor
+
+void ChartWidget::set_shaded(std::vector<std::pair<double, double>> seconds) {
+    if (seconds == shaded_) {
+        return;
+    }
+    shaded_ = std::move(seconds);
+    invalidate();
+}
 
 void ChartWidget::set_highlight(std::optional<std::pair<double, double>> seconds) {
     if (seconds == highlight_) {
