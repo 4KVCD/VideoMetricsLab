@@ -1338,6 +1338,37 @@ void VerticalRow(const Ring& ring, size_t y, size_t ysize, const BlurKernel& ker
   }
 }
 
+// VideoMetricsLab: VerticalRow of rows [y0, y1) into outs[y - y0]. Away from
+// the top and bottom, the rows run strip by strip (each strip's 2 * kHalf +
+// y1 - y0 input row pieces stay in the L1 cache, where a whole row's 2 *
+// kHalf + 1 input rows, about 500 KB for the low frequencies at 4K, do not);
+// each pixel's sum is VerticalRow's. Rows near the top or bottom run one by
+// one, as in VerticalRow.
+template <size_t kHalf>
+void VerticalRows(const Ring& ring, size_t y0, size_t y1, size_t ysize, const BlurKernel& kernel, size_t width,
+                  float* const* outs) {
+  const HWY_FULL(float) d;
+  const size_t lanes = Lanes(d);
+  const size_t strip = std::max<size_t>(128 / lanes, 1) * lanes;  // 512 bytes of each row
+  const size_t middle_end = ysize > kHalf ? ysize - kHalf : 0;   // rows y + kHalf < ysize
+  const size_t middle_y0 = std::clamp(kHalf, y0, y1);
+  const size_t middle_y1 = std::clamp(middle_end, middle_y0, y1);
+  for (size_t y = y0; y < middle_y0; ++y) VerticalRow<kHalf>(ring, y, ysize, kernel, width, outs[y - y0]);
+  const auto pairs = std::make_index_sequence<kHalf>();
+  const auto step = static_cast<ptrdiff_t>(ring.stride);
+  for (size_t x0 = 0; x0 < width; x0 += strip) {
+    const size_t x1 = std::min(width, x0 + strip);
+    for (size_t y = middle_y0; y < middle_y1; ++y) {
+      const float* const first = ring.row(y - kHalf);
+      float* const out = outs[y - y0];
+      for (size_t x = x0; x < x1; x += lanes) {
+        Store(ConvolveMiddle<kHalf>(d, first + x, step, kernel.sk, pairs), d, out + x);
+      }
+    }
+  }
+  for (size_t y = middle_y1; y < y1; ++y) VerticalRow<kHalf>(ring, y, ysize, kernel, width, outs[y - y0]);
+}
+
 // The horizontal pass of row y (`row`) into its slot of `ring`. The slot's
 // columns from xsize to the last whole vector are zeros, so that the
 // vertical pass's padding gets zeros.
@@ -1416,17 +1447,27 @@ void OpsinRow(const StreamFrame& frame, const PictureRows& p, size_t y) {
   for (size_t c = 0; c < 3; ++c) HorizontalRow<16>(xyb[c], xsize, frame.lf_blur, p.at(kLfh, c), y);
 }
 
-// kStageLf: libjxl's SeparateLFAndMF for row y (lf = xyb blurred, mf = xyb -
-// lf, lf converted to vals), then the horizontal pass of mf's blur. The
-// blue mf is needed only by that pass.
-void LfRow(const StreamFrame& frame, const PictureRows& p, size_t y) {
+// The rows of `group`'s plane `plane` for rows [y0, y1) of a chunk.
+struct ChunkRows {
+  float* rows[kStageChunkRows];
+  ChunkRows(const PictureRows& p, Group group, size_t plane, size_t y0, size_t y1) {
+    for (size_t y = y0; y < y1; ++y) rows[y - y0] = p.at(group, plane).row(y);
+  }
+  // Rows `stride` apart from `first` instead (a thread's scratch rows).
+  ChunkRows(float* first, size_t stride, size_t count) {
+    for (size_t i = 0; i < count; ++i) rows[i] = first + i * stride;
+  }
+};
+
+// kStageLf after the blur of row y (lf): mf = xyb - lf, lf converted to vals,
+// then the horizontal pass of mf's blur. The blue mf (in `blue_mf`) is
+// needed only by that pass.
+void LfRest(const StreamFrame& frame, const PictureRows& p, size_t y, float* blue_mf) {
   const HWY_FULL(float) d;
   const size_t xsize = p.level.xsize;
-  const size_t width = VectorColumns(xsize);
-  float* const mf_raw[3] = {p.at(kMfRaw, 0).row(y), p.at(kMfRaw, 1).row(y), ScratchRows(1, p.at(kLf, 0).stride)};
+  float* const mf_raw[3] = {p.at(kMfRaw, 0).row(y), p.at(kMfRaw, 1).row(y), blue_mf};
   for (size_t i = 0; i < 3; ++i) {
-    float* const row_lf = p.at(kLf, i).row(y);
-    VerticalRow<16>(p.at(kLfh, i), y, p.level.ysize, frame.lf_blur, width, row_lf);
+    const float* const row_lf = p.at(kLf, i).row(y);
     const float* const row_xyb = p.at(kXyb, i).row(y);
     for (size_t x = 0; x < xsize; x += Lanes(d)) {
       Store(Sub(Load(d, row_xyb + x), Load(d, row_lf + x)), d, mf_raw[i] + x);
@@ -1448,21 +1489,28 @@ void LfRow(const StreamFrame& frame, const PictureRows& p, size_t y) {
   for (size_t i = 0; i < 3; ++i) HorizontalRow<7>(mf_raw[i], xsize, frame.mf_blur, p.at(kMfh, i), y);
 }
 
-// kStageMf: libjxl's SeparateMFAndHF for row y (mf blurred; for X and Y,
-// hf = mf - the blurred mf and mf's ranges reshaped, then SuppressXByY on hf;
-// blue mf = the blurred mf), then the horizontal pass of hf's blur.
-void MfRow(const StreamFrame& frame, const PictureRows& p, size_t y) {
+// kStageLf: libjxl's SeparateLFAndMF for rows [y0, y1) (lf = xyb blurred,
+// mf = xyb - lf, lf converted to vals), then the horizontal pass of mf's
+// blur: the blurs of all the rows first (VerticalRows), then the rest row by
+// row.
+void LfRows(const StreamFrame& frame, const PictureRows& p, size_t y0, size_t y1) {
+  const size_t width = VectorColumns(p.level.xsize);
+  for (size_t i = 0; i < 3; ++i) {
+    VerticalRows<16>(p.at(kLfh, i), y0, y1, p.level.ysize, frame.lf_blur, width, ChunkRows(p, kLf, i, y0, y1).rows);
+  }
+  float* const blue_mf = ScratchRows(1, p.at(kLf, 0).stride);
+  for (size_t y = y0; y < y1; ++y) LfRest(frame, p, y, blue_mf);
+}
+
+// kStageMf after the blurs of row y's X and Y mf (blurred_x, blurred_y): hf =
+// mf - the blurred mf and mf's ranges reshaped, then SuppressXByY on hf, then
+// the horizontal pass of hf's blur.
+void MfRest(const StreamFrame& frame, const PictureRows& p, size_t y, const float* BUTTERAUGLI_RESTRICT blurred_x,
+            const float* BUTTERAUGLI_RESTRICT blurred_y) {
   const HWY_FULL(float) d;
   static const double kRemoveMfRange = 0.29;
   static const double kAddMfRange = 0.1;
   const size_t xsize = p.level.xsize;
-  const size_t width = VectorColumns(xsize);
-  const size_t stride = p.at(kMf, 0).stride;
-  float* const scratch = ScratchRows(2, stride);
-  float* BUTTERAUGLI_RESTRICT blurred_x = scratch;
-  float* BUTTERAUGLI_RESTRICT blurred_y = scratch + stride;
-  VerticalRow<7>(p.at(kMfh, 0), y, p.level.ysize, frame.mf_blur, width, blurred_x);
-  VerticalRow<7>(p.at(kMfh, 1), y, p.level.ysize, frame.mf_blur, width, blurred_y);
   const float* BUTTERAUGLI_RESTRICT row_raw_x = p.at(kMfRaw, 0).row(y);
   const float* BUTTERAUGLI_RESTRICT row_raw_y = p.at(kMfRaw, 1).row(y);
   float* BUTTERAUGLI_RESTRICT row_mf_x = p.at(kMf, 0).row(y);
@@ -1483,16 +1531,33 @@ void MfRow(const StreamFrame& frame, const PictureRows& p, size_t y) {
 
     Store(SuppressXByY(d, hfx, hfy), d, row_hf_x + x);
   }
-  VerticalRow<7>(p.at(kMfh, 2), y, p.level.ysize, frame.mf_blur, width, p.at(kMf, 2).row(y));
   HorizontalRow<3>(row_hf_x, xsize, frame.hf_blur, p.at(kHfh, 0), y);
   HorizontalRow<3>(row_hf_y, xsize, frame.hf_blur, p.at(kHfh, 1), y);
 }
 
-// kStageHf: libjxl's SeparateHFAndUHF for row y (hf blurred; uhf = hf - the
-// blurred hf; both reshaped), then the masking's input (libjxl's
-// CombineChannelsForMasking and DiffPrecompute) and the horizontal pass of
-// its blur.
-void HfRow(const StreamFrame& frame, const PictureRows& p, size_t y) {
+// kStageMf: libjxl's SeparateMFAndHF for rows [y0, y1) (mf blurred; for X
+// and Y, hf = mf - the blurred mf and mf's ranges reshaped, then SuppressXByY
+// on hf; blue mf = the blurred mf), then the horizontal pass of hf's blur:
+// the blurs of all the rows first, X's and Y's into a thread's scratch rows.
+void MfRows(const StreamFrame& frame, const PictureRows& p, size_t y0, size_t y1) {
+  const size_t width = VectorColumns(p.level.xsize);
+  const size_t stride = p.at(kMf, 0).stride;
+  const size_t count = y1 - y0;
+  float* const scratch = ScratchRows(2 * count, stride);
+  const ChunkRows blurred_x(scratch, stride, count);
+  const ChunkRows blurred_y(scratch + count * stride, stride, count);
+  VerticalRows<7>(p.at(kMfh, 0), y0, y1, p.level.ysize, frame.mf_blur, width, blurred_x.rows);
+  VerticalRows<7>(p.at(kMfh, 1), y0, y1, p.level.ysize, frame.mf_blur, width, blurred_y.rows);
+  VerticalRows<7>(p.at(kMfh, 2), y0, y1, p.level.ysize, frame.mf_blur, width, ChunkRows(p, kMf, 2, y0, y1).rows);
+  for (size_t y = y0; y < y1; ++y) MfRest(frame, p, y, blurred_x.rows[y - y0], blurred_y.rows[y - y0]);
+}
+
+// kStageHf after the blurs of row y's X and Y hf (blurred_x, blurred_y; the
+// first is reused): uhf = hf - the blurred hf, both reshaped, then the
+// masking's input (libjxl's CombineChannelsForMasking and DiffPrecompute)
+// and the horizontal pass of its blur.
+void HfRest(const StreamFrame& frame, const PictureRows& p, size_t y, float* BUTTERAUGLI_RESTRICT blurred_x,
+            const float* BUTTERAUGLI_RESTRICT blurred_y) {
   const HWY_FULL(float) d;
   static const double kRemoveHfRange = 1.5;
   static const double kAddHfRange = 0.132;
@@ -1502,13 +1567,6 @@ void HfRow(const StreamFrame& frame, const PictureRows& p, size_t y) {
   static const double kMulYHf = 2.155;
   static const double kMulYUhf = 2.69313763794;
   const size_t xsize = p.level.xsize;
-  const size_t width = VectorColumns(xsize);
-  const size_t stride = p.at(kHf, 0).stride;
-  float* const scratch = ScratchRows(2, stride);
-  float* BUTTERAUGLI_RESTRICT blurred_x = scratch;
-  float* BUTTERAUGLI_RESTRICT blurred_y = scratch + stride;
-  VerticalRow<3>(p.at(kHfh, 0), y, p.level.ysize, frame.hf_blur, width, blurred_x);
-  VerticalRow<3>(p.at(kHfh, 1), y, p.level.ysize, frame.hf_blur, width, blurred_y);
   const float* BUTTERAUGLI_RESTRICT row_raw_x = p.at(kHfRaw, 0).row(y);
   const float* BUTTERAUGLI_RESTRICT row_raw_y = p.at(kHfRaw, 1).row(y);
   float* BUTTERAUGLI_RESTRICT row_hf_x = p.at(kHf, 0).row(y);
@@ -1563,9 +1621,26 @@ void HfRow(const StreamFrame& frame, const PictureRows& p, size_t y) {
   HorizontalRow<6>(masking, xsize, frame.mask_blur, p.at(kMh, 0), y);
 }
 
-// kStageMaskBlur: the vertical pass of the masking's blur, row y.
-void MaskBlurRow(const StreamFrame& frame, const PictureRows& p, size_t y) {
-  VerticalRow<6>(p.at(kMh, 0), y, p.level.ysize, frame.mask_blur, VectorColumns(p.level.xsize), p.at(kBm, 0).row(y));
+// kStageHf: libjxl's SeparateHFAndUHF for rows [y0, y1) (hf blurred; uhf =
+// hf - the blurred hf; both reshaped), then the masking's input and the
+// horizontal pass of its blur: the blurs of all the rows first, into a
+// thread's scratch rows.
+void HfRows(const StreamFrame& frame, const PictureRows& p, size_t y0, size_t y1) {
+  const size_t width = VectorColumns(p.level.xsize);
+  const size_t stride = p.at(kHf, 0).stride;
+  const size_t count = y1 - y0;
+  float* const scratch = ScratchRows(2 * count, stride);
+  const ChunkRows blurred_x(scratch, stride, count);
+  const ChunkRows blurred_y(scratch + count * stride, stride, count);
+  VerticalRows<3>(p.at(kHfh, 0), y0, y1, p.level.ysize, frame.hf_blur, width, blurred_x.rows);
+  VerticalRows<3>(p.at(kHfh, 1), y0, y1, p.level.ysize, frame.hf_blur, width, blurred_y.rows);
+  for (size_t y = y0; y < y1; ++y) HfRest(frame, p, y, blurred_x.rows[y - y0], blurred_y.rows[y - y0]);
+}
+
+// kStageMaskBlur: the vertical pass of the masking's blur, rows [y0, y1).
+void MaskBlurRows(const StreamFrame& frame, const PictureRows& p, size_t y0, size_t y1) {
+  VerticalRows<6>(p.at(kMh, 0), y0, y1, p.level.ysize, frame.mask_blur, VectorColumns(p.level.xsize),
+                  ChunkRows(p, kBm, 0, y0, y1).rows);
 }
 
 // The six Malta differences, in the order their sums are added to the AC
@@ -1718,17 +1793,22 @@ void CompareRow(const StreamFrame& frame, size_t level_index, size_t y) {
   CombineChannelsToDiffmapRow(mask, dc, ac, frame.params.xmul, xsize, out);
 }
 
-void RunStageRow(const StreamFrame& frame, StageKind kind, size_t level, size_t picture, size_t row) {
+void RunStageRows(const StreamFrame& frame, StageKind kind, size_t level, size_t picture, size_t y0, size_t y1) {
   const PictureRows p{frame.level[level], picture};
   switch (kind) {
-    case kStageOpsin: OpsinRow(frame, p, row); break;
-    case kStageLf: LfRow(frame, p, row); break;
-    case kStageMf: MfRow(frame, p, row); break;
-    case kStageHf: HfRow(frame, p, row); break;
-    case kStageMaskBlur: MaskBlurRow(frame, p, row); break;
-    case kStageMaltaDiffs: MaltaDiffsRow(frame, frame.level[level], row); break;
-    case kStageCompare: CompareRow(frame, level, row); break;
-    default: break;  // the rgb rows are the engine's
+    case kStageLf: LfRows(frame, p, y0, y1); return;
+    case kStageMf: MfRows(frame, p, y0, y1); return;
+    case kStageHf: HfRows(frame, p, y0, y1); return;
+    case kStageMaskBlur: MaskBlurRows(frame, p, y0, y1); return;
+    default: break;
+  }
+  for (size_t row = y0; row < y1; ++row) {
+    switch (kind) {
+      case kStageOpsin: OpsinRow(frame, p, row); break;
+      case kStageMaltaDiffs: MaltaDiffsRow(frame, frame.level[level], row); break;
+      case kStageCompare: CompareRow(frame, level, row); break;
+      default: break;  // the rgb rows are the engine's
+    }
   }
 }
 
@@ -1743,11 +1823,11 @@ HWY_AFTER_NAMESPACE();
 #if HWY_ONCE
 namespace vml::butteraugli {
 
-HWY_EXPORT(RunStageRow);
+HWY_EXPORT(RunStageRows);
 
-void run_stage_row(const StreamFrame& frame, StageKind kind, std::size_t level, std::size_t picture,
-                   std::size_t row) {
-    HWY_DYNAMIC_DISPATCH(RunStageRow)(frame, kind, level, picture, row);
+void run_stage_rows(const StreamFrame& frame, StageKind kind, std::size_t level, std::size_t picture,
+                    std::size_t first, std::size_t end) {
+    HWY_DYNAMIC_DISPATCH(RunStageRows)(frame, kind, level, picture, first, end);
 }
 
 }  // namespace vml::butteraugli

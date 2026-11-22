@@ -145,12 +145,22 @@ struct StreamFrame {
     float* map = nullptr;  // the full resolution's map, `xsize` floats per row
 };
 
-// butteraugli_kernels.cpp, dispatched to the CPU's best instruction set: row
-// `row` of stage `kind` (kStageOpsin to kStageCompare) at resolution `level`
-// for picture `picture` (0 for the pair stages). Reads only rows its inputs
-// have made, writes only its own row.
-void run_stage_row(const StreamFrame& frame, StageKind kind, std::size_t level, std::size_t picture,
-                   std::size_t row);
+// The most rows of a stage with a vertical blur pass (kStageLf to
+// kStageMaskBlur) that one call makes: the pass runs in column strips over
+// all of them, so that its input rows are read from the cache once, not once
+// per output row.
+inline constexpr std::size_t kStageChunkRows = 8;
+
+// Whether stage `kind` makes its rows in chunks of up to kStageChunkRows.
+constexpr bool stage_in_chunks(StageKind kind) { return kind >= kStageLf && kind <= kStageMaskBlur; }
+
+// butteraugli_kernels.cpp, dispatched to the CPU's best instruction set:
+// rows [first, end) of stage `kind` (kStageOpsin to kStageCompare) at
+// resolution `level` for picture `picture` (0 for the pair stages); at most
+// kStageChunkRows rows for a stage in chunks. Reads only rows its inputs
+// have made, writes only its own rows.
+void run_stage_rows(const StreamFrame& frame, StageKind kind, std::size_t level, std::size_t picture,
+                    std::size_t first, std::size_t end);
 
 // butteraugli.cpp: convolve_slow.cc's SlowSeparable5 for one row of a plane
 // too narrow for the vector code, rows[0..4] the input rows y - 2 to y + 2.

@@ -250,14 +250,17 @@ Schedule make_schedule(std::size_t ysize, std::size_t half_ysize, bool has_half,
 }
 
 // The rows each stage makes per step (its band; half of it at half
-// resolution). Each step ends when its slowest row does, so small bands make
-// the threads wait more often: at 4K with both metrics (4 pairs at a time,
-// Butteraugli on 5 threads each beside SSIMULACRA2's), 16 rows were 8% slower
-// than the whole-plane engine, 32 rows 3%, 64 and 128 rows as fast, 128 with
-// 1 GB more rings. A test build with VML_BUTTERAUGLI_BAND_FROM_ENV takes the
-// band from VML_BUTTERAUGLI_BAND, to show that every band gives the same map.
-std::int64_t band_rows() {
-    constexpr std::int64_t kBandRows = 64;
+// resolution), chosen by the engine's thread count. With many threads a small
+// band is faster and keeps the rings small: 4K Butteraugli alone, 2 pairs at
+// a time on 12 threads each, took 21.1 s and 652 MB at peak with 4 rows,
+// 24.0 s and 1,130 MB with 64 (Core Ultra 9 285K, 120 frames). With few threads each step
+// ends when its slowest row does and the threads wait more often: with both
+// metrics, 4 pairs at a time and Butteraugli on 5 threads each, 4 rows took
+// 33.0 s against 30.9 s with 64. A test build with
+// VML_BUTTERAUGLI_BAND_FROM_ENV takes the band from VML_BUTTERAUGLI_BAND, to
+// show that every band gives the same map.
+std::int64_t band_rows(std::size_t threads) {
+    const std::int64_t band = threads >= 8 ? 4 : 64;
 #if defined(VML_BUTTERAUGLI_BAND_FROM_ENV) && defined(_WIN32)
     char* text = nullptr;
     std::size_t length = 0;
@@ -267,7 +270,7 @@ std::int64_t band_rows() {
         if (value >= 2 && value <= 1024) return value;
     }
 #endif
-    return kBandRows;
+    return band;
 }
 
 // Calls fn(level, group, picture, plane, stride, rows, doubled) for each ring
@@ -307,10 +310,12 @@ std::size_t ring_floats(const Schedule& s, std::size_t width, std::size_t levels
 
 }  // namespace
 
-// One row of one stage, for one picture (0 for the pair's stages).
+// Rows [row, row + rows) of one stage, for one picture (0 for the pair's
+// stages): one row, or a chunk for a stage in chunks (stage_in_chunks).
 struct Task {
     std::uint8_t stage;
     std::uint8_t picture;
+    std::uint8_t rows;
     std::uint32_t row;
 };
 
@@ -367,7 +372,7 @@ public:
         frame_.level[0].ysize = height;
         frame_.level[1].xsize = (width + 1) / 2;
         frame_.level[1].ysize = (height + 1) / 2;
-        const Schedule schedule = make_schedule(height, frame_.level[1].ysize, has_half_, band_rows());
+        const Schedule schedule = make_schedule(height, frame_.level[1].ysize, has_half_, band_rows(threads));
         allocate_rings(schedule, has_half_ ? 2 : 1);
         make_tasks(schedule);
     }
@@ -461,9 +466,12 @@ private:
                     std::min(schedule.rows[stage], (k + 1) * schedule.band[stage] - schedule.lag[stage]);
                 const auto kind = static_cast<StageKind>(stage % kStageKinds);
                 const bool per_picture = stage != kSupersample && kind != kStageMaltaDiffs && kind != kStageCompare;
-                for (std::int64_t row = first; row < end; ++row) {
+                const std::int64_t chunk =
+                    stage != kSupersample && stage_in_chunks(kind) ? static_cast<std::int64_t>(kStageChunkRows) : 1;
+                for (std::int64_t row = first; row < end; row += chunk) {
+                    const auto rows = static_cast<std::uint8_t>(std::min(chunk, end - row));
                     for (std::size_t picture = 0; picture < (per_picture ? 2u : 1u); ++picture) {
-                        tasks_.push_back({static_cast<std::uint8_t>(stage), static_cast<std::uint8_t>(picture),
+                        tasks_.push_back({static_cast<std::uint8_t>(stage), static_cast<std::uint8_t>(picture), rows,
                                           static_cast<std::uint32_t>(row)});
                     }
                 }
@@ -481,7 +489,7 @@ private:
         const std::size_t level = task.stage / kStageKinds;
         const auto kind = static_cast<StageKind>(task.stage % kStageKinds);
         if (kind != kStageRgb) {
-            run_stage_row(frame_, kind, level, task.picture, task.row);
+            run_stage_rows(frame_, kind, level, task.picture, task.row, task.row + task.rows);
         } else if (level == 0) {
             rgb_row(task.picture, task.row);
         } else {
@@ -577,9 +585,10 @@ std::size_t Butteraugli::memory_bytes(std::size_t width, std::size_t height, std
     const std::size_t map = width * height * sizeof(float);
     if (width < 8 || height < 8) return map;  // as Engine: no comparison, no rings
     const bool has_half = (width + 1) / 2 >= 8 && (height + 1) / 2 >= 8;
-    const Schedule schedule = make_schedule(height, (height + 1) / 2, has_half, band_rows());
-    // A stage takes at most 7 scratch rows (ScratchRows in butteraugli_kernels.cpp).
-    const std::size_t scratch = threads * 7 * row_floats(width);
+    const Schedule schedule = make_schedule(height, (height + 1) / 2, has_half, band_rows(threads));
+    // A row of a stage takes at most 7 scratch rows, a chunk of kStageMf or
+    // kStageHf rows 2 per row (ScratchRows in butteraugli_kernels.cpp).
+    const std::size_t scratch = threads * std::max<std::size_t>(7, 2 * kStageChunkRows) * row_floats(width);
     return map + (ring_floats(schedule, width, has_half ? 2 : 1) + scratch) * sizeof(float);
 }
 
