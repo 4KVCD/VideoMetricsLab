@@ -268,6 +268,18 @@ Json pass_json(const PassTiming& pass) {
 
 }  // namespace
 
+std::string outcome_code(const MetricOutcome& outcome) {
+    if (outcome.why.empty()) {
+        return "";
+    }
+    if (!outcome.code.empty()) {
+        return outcome.code;
+    }
+    return outcome.status == metric_not_run          ? not_planned_code
+           : outcome.status == metric_not_applicable ? not_applicable_code
+                                                     : calculation_failed_code;
+}
+
 MachineFacts this_machine(const std::string& ffmpeg_path, const std::string& ffmpeg_version) {
     MachineFacts machine;
     machine.os = platform::system_description();
@@ -330,8 +342,9 @@ void add_video_record(Json& entry, const RunFacts* facts, const ComparisonResult
     entry["black_bars"] = black_bars_json(facts->settings, result, facts->started_utc);
     Json status = Json::object();
     for (const auto& [key, outcome] : facts->metrics) {
-        status[key] = outcome.why.empty() ? Json{{"status", outcome.status}}
-                                          : Json{{"status", outcome.status}, {"why", outcome.why}};
+        status[key] = outcome.why.empty()
+                          ? Json{{"status", outcome.status}}
+                          : Json{{"status", outcome.status}, {"why", outcome.why}, {"code", outcome_code(outcome)}};
     }
     entry["metric_status"] = std::move(status);
     Json plans = Json::array();

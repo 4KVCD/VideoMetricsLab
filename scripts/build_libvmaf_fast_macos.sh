@@ -1,17 +1,18 @@
 #!/bin/bash
-# Builds libvmaf-fast's libvmaf.dylib for macOS (arm64) from its release tag
-# and installs it into resources/tools/libvmaf, beside the Windows
-# libvmaf.dll and the libvmaf-fast.json both are built from. libvmaf-fast
-# publishes Windows builds only; this is the build its CI makes on macOS.
+# Builds libvmaf-fast's libvmaf.dylib for macOS (arm64) from the commit the
+# Windows libvmaf.dll is built from (resources/tools/libvmaf/libvmaf-fast.json:
+# its release tag, or during development a commit of the fork's fast branch)
+# and installs it into resources/tools/libvmaf. libvmaf-fast publishes Windows
+# builds only; this is the build its CI makes on macOS. zimg (HDR VMAF's
+# picture conversion) is linked in statically, as on Windows, so the dylib
+# needs only the system's libraries.
 #
-#     scripts/build_libvmaf_fast_macos.sh [VERSION]
+#     scripts/build_libvmaf_fast_macos.sh
 #
-# Needs git, meson and ninja (brew install meson). The dylib is not
+# Needs git, meson, ninja and zimg (brew install meson zimg). The dylib is not
 # committed (.gitignore): the release script runs this.
 set -euo pipefail
 
-version="${1:-v1.3}"
-commit_expected="287766520c60380899bdd021b079d49c9ef9f978"  # libvmaf-fast-v1.3
 deployment_target="14.4"
 
 project="$(cd "$(dirname "$0")/.." && pwd)"
@@ -19,21 +20,40 @@ target="$project/resources/tools/libvmaf"
 work="$(mktemp -d "${TMPDIR:-/tmp}/libvmaf-fast-XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
-# The tag fetched into an empty repository: a shallow clone of an annotated
-# tag (clone --depth 1 --branch) warns that the tag "is not a commit".
-tag="refs/tags/libvmaf-fast-$version"
+pinned() {  # a field of libvmaf-fast.json
+    sed -n "s/.*\"$1\": *\"\{0,1\}\([^\",]*\)\"\{0,1\}.*/\1/p" "$target/libvmaf-fast.json"
+}
+version="$(pinned version)"
+commit_expected="$(pinned commit)"
+# Fetched into an empty repository: a shallow clone of an annotated tag
+# (clone --depth 1 --branch) warns that the tag "is not a commit".
 git init --quiet "$work/src"
-git -C "$work/src" fetch --quiet --depth 1 https://github.com/4KVCD/libvmaf-fast.git "$tag:$tag"
-git -C "$work/src" -c advice.detachedHead=false checkout --quiet "libvmaf-fast-$version"
+if [[ "$(pinned release)" == "true" ]]; then
+    ref="refs/tags/libvmaf-fast-$version"
+    git -C "$work/src" fetch --quiet --depth 1 https://github.com/4KVCD/libvmaf-fast.git "$ref:$ref"
+else
+    git -C "$work/src" fetch --quiet --depth 1 https://github.com/4KVCD/libvmaf-fast.git "$commit_expected"
+fi
+git -C "$work/src" -c advice.detachedHead=false checkout --quiet FETCH_HEAD
 commit="$(git -C "$work/src" rev-parse HEAD)"
-if [[ "$version" == "v1.3" && "$commit" != "$commit_expected" ]]; then
-    echo "libvmaf-fast-$version is commit $commit, expected $commit_expected" >&2
+if [[ "$commit" != "$commit_expected" ]]; then
+    echo "libvmaf-fast $version is commit $commit, libvmaf-fast.json says $commit_expected" >&2
     exit 1
 fi
-if ! grep -q "\"commit\": \"$commit\"" "$target/libvmaf-fast.json"; then
-    echo "resources/tools/libvmaf/libvmaf-fast.json is not commit $commit: install the same version on Windows" >&2
-    exit 1
-fi
+
+# zimg's static library: Homebrew's zimg.pc names -lstdc++ for a static link,
+# which macOS does not have (its C++ library is libc++).
+zimg="$(brew --prefix zimg)"
+zimg_version="$(pkg-config --modversion "$zimg/lib/pkgconfig/zimg.pc")"
+mkdir -p "$work/pkgconfig"
+cat > "$work/pkgconfig/zimg.pc" <<EOF
+Name: zimg
+Description: zimg, linked statically
+Version: $zimg_version
+Cflags: -I$zimg/include
+Libs: $zimg/lib/libzimg.a -lc++
+EOF
+export PKG_CONFIG_PATH="$work/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 
 export MACOSX_DEPLOYMENT_TARGET="$deployment_target"
 # Built with Clang's own floating-point settings, as Homebrew builds FFmpeg's
@@ -44,7 +64,7 @@ export MACOSX_DEPLOYMENT_TARGET="$deployment_target"
 # Windows' to the last digit instead, and differs from Homebrew's FFmpeg's
 # on 3 frames in 24: LibvmafCpu.PsnrSsimAndXpsnrInTheAppAreFfmpegsOwnScores.)
 meson setup "$work/src/libvmaf" "$work/build" --buildtype release -Denable_float=true \
-    -Denable_tests=false -Denable_docs=false -Dbuilt_in_models=true \
+    -Denable_tests=false -Denable_docs=false -Dbuilt_in_models=true -Denable_zimg=true \
     -Dc_args="-arch arm64" -Dcpp_args="-arch arm64" -Dc_link_args="-arch arm64" -Dcpp_link_args="-arch arm64" \
     > "$work/setup.log" || { cat "$work/setup.log" >&2; exit 1; }
 ninja -C "$work/build" > "$work/build.log" || { tail -40 "$work/build.log" >&2; exit 1; }

@@ -72,37 +72,59 @@ calculated in resolution tests.
    **Clear range** goes back to the whole videos. The CSV export always holds
    every frame. **Go to time** moves to the frame shown at a time, as **Go to
    frame** does to a frame.
-   **Worst frames** lists, for one video, the worst frame of each of the
-   shown metric's 10, 25 or 50 worst dips (a frame within 1 s of a worse
-   one is part of its dip), with every metric's score there, within the
-   highlighted range if there is one. Click a row to mark its frame on the
-   graph; double-click it, or **Open in Video Compare**, to see it there.
-   **Weak segments...** lists the stretches where the video's scores fall
-   past thresholds you set (any or every condition, the shortest segment,
-   the gap to join across) and exports them as JSON or CSV, named after the
-   metrics they cover (`<video>.vmaf.segments.json`,
-   `<video>.vmaf+ssimulacra2.segments.csv`). It opens with the weak segment
-   profile in use (see [Weak segment profiles](#weak-segment-profiles)): its
-   conditions on the metrics the video has (else one on the metric shown);
-   **Profile** picks another to start from, and **From preset...** loads
-   one of the built-in presets for a kind of video (animation, grainy film,
-   HDR...; see the table under
+6. Find a video's weak spots in **Worst Frames**. On the left, every video
+   with its number of weak segments and its worst score on the metric shown,
+   so the weakest encode stands out; click one to work on it. Under the
+   videos, the conditions that make a frame weak (thresholds you set, any or
+   every condition, the shortest segment, the gap to join across), with each
+   condition's line under them: how many frames it holds on and how many of
+   them are in the segments, with why any are not (a run shorter than the
+   shortest segment, or, with every condition, a frame where another doesn't
+   hold). On the right, pick the metric in the bar at the top. The graph
+   shows the video's scores with its weak segments shaded and its worst
+   frames dotted. Below it, side by side where the window has room and one
+   above the other where it hasn't:
+   - **Worst frames**: the worst frame of each of the metric's 10, 25 or 50
+     worst dips (a frame within 1 s of a worse one is part of its dip), with
+     the conditions' metrics' scores there; every metric's is in the row's
+     tooltip.
+   - **Weak segments**: the stretches where the conditions hold; with more
+     than one condition and **any condition holds**, the **Weak by** column
+     names those behind each segment.
+
+   Click a row to mark it on the graph; double-click it to see it in Video
+   Compare (a segment from its first frame). Point at the
+   graph and **Details**, under the conditions, tells the frame there: its
+   time, its place among the worst frames, the weak segment it is in and the
+   conditions that hold on it, and every metric's score (a worst frame's dot
+   a few pixels away is taken, so a dip's worst frame is easy to land on).
+   With the pointer elsewhere, it tells the row selected. Only frames
+   in Metric Graphs' highlighted range count, if there is one.
+   The conditions start from the weak segment profile in use (see [Weak
+   segment profiles](#weak-segment-profiles)): its conditions on the metrics
+   the video has (else one on the metric shown). **Profile** picks another
+   to start from, and **From preset** loads one of the built-in presets for
+   a kind of video (animation, grainy film, HDR...; see the table under
    [Weak segment profiles](#weak-segment-profiles)) in place of the
    conditions shown, so you can try another on the fly; a preset with no
-   condition on the video's metrics (HDR without CVVDP scores) is greyed out.
-   What you change or load in the dialog holds for it alone, until **Save to
-   profile** keeps it in the profile picked, or **Save as new profile...** in
-   a new one; a profile's condition on a metric the video doesn't have is
-   kept for videos that do (a preset's, once you've loaded one).
-   **Export all videos...** saves every scored test video's segments by the
-   dialog's conditions in one file (see
-   [Exporting weak segments](#exporting-weak-segments)).
-   Under the summary, each condition's line says how many frames it holds on
-   and how many of them are in the segments listed, with why any are not
-   (a run shorter than the shortest segment, or, with every condition, a
-   frame where another doesn't hold); with more than one condition and
-   **any condition holds**, the **Weak by** column names those behind each
-   segment.
+   condition on the video's metrics (HDR without CVVDP scores) is greyed
+   out. What you change or load here holds until **Save to profile** keeps
+   it in the profile picked, or **Save as new profile** in a new one; a
+   profile's condition on a metric the video doesn't have is kept for videos
+   that do (a preset's, once you've loaded one).
+   Each card's **Export** menu, and a right-click on its list or graph,
+   saves what the tab shows (the metric, the conditions, the dips and the
+   range):
+   - Worst frames: **Worst frames as CSV...** or **as JSON...**, each frame
+     with its rank, time and every metric's score
+     (`<video>.vmaf.worst.csv`; the format is in
+     [RESULTS_JSON.md](RESULTS_JSON.md#worst-frames-as-json-and-csv)).
+   - The graph: **Graph as PNG...**, in Settings' Exported graphs colours.
+   - Weak segments: **Weak segments as JSON...** or **as CSV...**, named
+     after the metrics they cover (`<video>.vmaf.segments.json`,
+     `<video>.vmaf+ssimulacra2.segments.csv`), or every scored test video's
+     in one file (**All videos' weak segments as JSON or CSV...**; see
+     [Exporting weak segments](#exporting-weak-segments)).
 
 **Highlight best/worst results**, under the video table, colours each metric's
 best score green and its worst red among the test videos that have one; a
@@ -124,8 +146,8 @@ newly added videos, and the GPU metrics), **Weak segments**, **Storage** and
 **Settings > General > Window** chooses whether the app reopens the videos it
 had open when it was last closed (off by default).
 
-**Video names** there sets how test videos' names are shown in Metric Graphs
-and Video Compare, where long names that differ only near their ends (an
+**Video names** there sets how test videos' names are shown in Metric Graphs,
+Video Compare and the Worst Frames tab's videos list, where long names that differ only near their ends (an
 encode's CRF, its encoder) would otherwise be cut where they differ:
 
 - **What tells them apart** (the default) leaves out the start and end that
@@ -424,7 +446,7 @@ optional. Use still mode for frame inspection or playback mode for motion.
 - Use the frame/timestamp controls to select a position.
 - **Zoom** shows the frame fitted to the window, or at a size you choose or type in:
   100% is the video's own pixels. Drag a zoomed frame to move it.
-- Opened from Metric Graphs' **Worst frames** list, **Previous worst** and
+- Opened from the Worst Frames tab's **Worst frames** list, **Previous worst** and
   **Next worst** step through that list's frames while its video is shown.
 - **Loop** plays the seconds around the frame you went to (**before** and
   **after** it, 1 s each unless changed) again and again; Play starts them
@@ -589,7 +611,7 @@ $run.videos[0].metrics.vmaf.score
 | `--difference` | With exactly two test videos: the first minus the second as well, frame by frame (CVVDP second by second), paired as **Difference** in Metric Graphs pairs them. The tables end with a difference table (Score: the two scores subtracted; Mean, Min, Max: of the frames' differences; Paired: the frames, or seconds, both have), the JSON gets a `difference` section, and with `--csv` it is written as `<first>_minus_<second>.csv` (the files' names). |
 | `--csv FOLDER` | Write each video's per-frame scores as `<video>.csv`, as the window's per-frame scores export writes them. |
 | `--json FILE` | Also write the results as JSON. `--json -` prints the JSON instead of the tables, for a script to read. |
-| `--batch CSV` | Compare the videos a CSV file lists, in place of REFERENCE and TEST, all in one run (the start-up and the GPU checks once, not once per reference). A row per test video, with the columns `reference` and `test` (a file or a pattern) and, if wanted, `sequence` and any others, which `--scores-csv` keeps; paths are relative to the CSV file's folder. The tables come per reference, and `--json` writes `{"batch": [...]}`, each reference's results as without `--batch`. A reference that cannot be read is said and the others are still compared (exit code 1). Not with `--difference`. |
+| `--batch CSV` | Compare the videos a CSV file lists, in place of REFERENCE and TEST, all in one run (the start-up and the GPU checks once, not once per reference). A row per test video, with the columns `reference` and `test` (a file or a pattern) and, if wanted, `sequence` and any others, which `--scores-csv` keeps; paths are relative to the CSV file's folder. The tables come per reference, and `--json` writes `{"batch": [...]}`, each reference's results as without `--batch`. A reference that cannot be read is said and the others are still compared (exit code 4). Not with `--difference`. |
 | `--scores-csv FILE` | Write each test video's bitrate (`kbps`) and scores to FILE, a row per video, with its `sequence` (the `--batch` row's, else the reference's file name), `test`, `reference` and the `--batch` row's other columns: the file `bdrate --anchor` and `--test` read. A video whose bitrate is not known, or with only a part compared (`--range`, `--duration`), is left out, said. |
 | `--worst N` | After the tables, each metric's N worst dips: the worst frame of each (a frame within 1 s of a worse one is part of its dip), with every metric's score there. |
 | `--segments CONDITIONS` | List the stretches where scores fall past a threshold, such as `"vmaf<90,ssimulacra2<70"` (quoted: `<` and `>` are the shell's; Butteraugli's worst are high: `"butteraugli>2"`). A frame is weak where any of them holds. Frames are numbered from the video's first, as its encoder numbers them; CVVDP is judged second by second. `--segments saved` takes the conditions of the weak segment profile in use in the app's Settings > Weak segments, `--segments profile:NAME` those of profile NAME (any case; `Default` too), and `--segments preset:KEY` those of a preset (see [Weak segment profiles](#weak-segment-profiles)); conditions after it change it: `"preset:grainy-film,vmaf<80"` replaces the preset's VMAF condition (all of those given on a metric replace its conditions on it: `"preset:grainy-film,vmaf<85,vmaf>20"` keeps both), and a metric it has none for is added; those on metrics not compared are left out, and said; the profile's any/every choice, shortest segment and gap apply where the command gives none. |
@@ -621,12 +643,26 @@ system's code page, so a script reads them as UTF-8 (in Python,
 `subprocess.run(..., encoding="utf-8")`); a console is sent every character
 as it is, whatever its code page.
 
-The exit code is 0 when every video got every metric asked for that it can
-have (one it cannot, such as CVVDP with `--subsample`, is left out with a
-note, as in the app), 1 when a video failed or lost a metric, 2 for a wrong
-command (a raw stream that stores no frame rate without `--fps`, or a raw YUV file without `--size`,
-`--pix-fmt` and `--fps`, and `--difference` without two test videos, among them), when FFmpeg cannot be used or when
-there is no test video, and 130 after Ctrl+C.
+The exit code says how the run went, so that a script can act on it without
+reading the text:
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Every video got every metric asked for that applies to it. A metric that does not apply to the videos, such as HDR VMAF of a video that is not PQ (HDR10), is left out with a note and its status `not applicable`, as is a metric ticked by default in the app that cannot be calculated (CVVDP with `--subsample`, say). |
+| 1 | A video failed or lost a metric (a metric asked for by name that cannot be calculated, such as `-m cvvdp` with `--subsample`, counts), or a file asked for could not be written. |
+| 2 | A wrong command: nothing was read or run. Among them a raw stream that stores no frame rate without `--fps`, a raw YUV file without `--size`, `--pix-fmt` and `--fps`, `--difference` without two test videos, patterns that find only the reference, and FFmpeg that cannot be used. |
+| 3 | Reserved for quality gates (a score below a bar the command sets), which are to come: every score asked for is there, but the encode does not reach the bar. Nothing gives it yet. |
+| 4 | An input could not be read: the reference, a test video, a pattern that finds no file, or the `--batch` list. The other videos are still compared, and the JSON says which could not be read. |
+| 130 | Cancelled with Ctrl+C (or Ctrl+Break, or the console window closed). |
+
+When more than one applies, 130 comes first, then 4, then 1. With `--json`,
+the results are written for every code but 2, also when nothing could be
+compared: a reference that cannot be read gives a document with its `error`
+and `error_code` and no videos, and a `--batch` list that cannot be read
+one with an empty `batch`. Each error, failure, note and reason in the JSON
+has a code beside it, a word that stays the same from version to version
+where the text may change; [The results file](RESULTS_JSON.md#codes) lists
+them.
 Ctrl+C stops the run as **Cancel** does; scores that had finished are saved.
 Closing the console window does the same on Windows' classic console.
 
@@ -691,9 +727,12 @@ YUV file has no bitrate to read.
 | `--json FILE` | Also write the results as JSON; `--json -` prints the JSON instead of the table. |
 | `-q`, `--quiet` | No progress, only the results. |
 
-The exit code is 0 when every video was read, 1 when one could not be or a
-file could not be written, 2 for a wrong command (a raw stream that stores no
-frame rate, without `--fps`) or when ffprobe cannot be used, and 130 after Ctrl+C.
+The exit code is 0 when every video was read, 1 when a file could not be
+written, 2 for a wrong command (a raw stream that stores no frame rate,
+without `--fps`) or when ffprobe cannot be used, 4 when a video could not be
+read (a pattern that finds no file, a raw YUV file, which has no packets, or
+a file FFmpeg cannot read: the others are still given, and the JSON's
+`error_code` says which), and 130 after Ctrl+C.
 
 ### BD-rate
 
@@ -749,9 +788,12 @@ medians are over the sequences that have a BD-rate.
 The table is in markdown: a column per metric and rows for the
 mean, the median, each group's mean and median, and each sequence. The exit
 code is 0 when both files were read, n/a cells or not; 1 when the JSON file
-could not be written; 2 for a wrong command or a file that cannot be read
-(no `sequence` or `kbps` column, a cell that is not a number, no sequence in
-both files).
+could not be written; 2 for a wrong command (a `--group-by` column the
+anchor's file does not have, among them); 4 when a file cannot be read or
+gives no BD-rate (no `sequence` or `kbps` column, a cell that is not a
+number, no metric's scores, no sequence in both files), which `--json` then
+writes as `error` and `error_code` (`rates_unreadable`, `no_common_metric`
+or `no_common_sequence`).
 
 `compare --scores-csv` writes these files. For many clips, list each
 encoder's encodes in a `--batch` file and score them in one run:
@@ -954,16 +996,16 @@ which the rules below it edit; **New...** starts a profile from the one
 shown, **Rename...** and **Delete** work on the one in use (**Default**, the
 rules kept before there were profiles, has neither). A profile's name can't
 contain a comma, which separates `--segments`' parts on the command line. The profile in use is
-where Metric Graphs' **Weak segments...** starts, and what the weak segments
+where the Worst Frames tab's conditions start, and what the weak segments
 report, the exports after each run and the command line's `--segments saved`
 follow; `--segments profile:NAME` takes another.
 
 **From preset...** loads a starting point for a kind of video into the
 profile in use, replacing its rules, to adjust as needed; it adds no
 profile. To keep the rules shown as well, make a profile with **New...**
-first, then load the preset into it. Metric Graphs' **Weak segments...**
-has **From preset...** too, which loads a preset into that dialog's
-conditions only, to save from there if you keep it. (The command line takes
+first, then load the preset into it. The Worst Frames tab has **From
+preset** too, which loads a preset into its conditions only, to save from
+there if you keep it. (The command line takes
 a preset as `--segments preset:KEY`.) Any condition makes a frame weak:
 
 | Preset (`KEY`) | Conditions | Shortest segment | Join gap | For |
@@ -981,17 +1023,17 @@ The thresholds are starting points on each metric's scale: VMAF's 0-100
 
 ### Exporting weak segments
 
-The weak segments exports follow the profile in use (or, from the Weak
-segments dialog, the dialog's rules), and are named after the metrics their
-conditions cover. A condition on a metric a video was not scored with is
-left out for that video, as in the dialog and on the command line, also
+The weak segments exports follow the profile in use (or, from the Worst
+frames tab, the conditions shown there), and are named after the metrics
+their conditions cover. A condition on a metric a video was not scored with
+is left out for that video, as in the tab and on the command line, also
 when every condition must hold; the JSON lists it under `left_out`.
 
 - With **Weak segments** ticked in **Settings > Storage > Exports
   include**, **Export all videos'...** in the right-click menus saves every
   test video scored against the reference, by the profile in use, in one
-  report, as JSON and CSV. **Export all videos...** in the Weak segments
-  dialog saves it by the dialog's conditions, saved or not (over the whole
+  report, as JSON and CSV. **All videos' weak segments as JSON or CSV...**
+  in the Worst Frames tab's Weak segments menu saves it by the conditions shown there, saved or not (over the whole
   videos, without a highlighted range), in one file, JSON or CSV as its name
   says.
   The JSON gives the conditions and options, then each video's `name`,

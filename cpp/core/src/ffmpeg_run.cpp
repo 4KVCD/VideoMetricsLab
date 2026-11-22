@@ -494,6 +494,7 @@ ParsedScores gpu_scores(const PairScores& scored, double fps, const VmafOptions&
     ParsedScores scores;
     scores.frame.assign(scored.frames.begin(), scored.frames.end());
     scores.time = times_of(scores.frame, fps);
+    scores.features_on_gpu = scored.features_on_gpu;
     for (const auto& [key, values] : scored.by_metric) {
         std::vector<float>& column = scores.metrics[key];
         for (const double value : values) {
@@ -965,6 +966,7 @@ ParsedScores read_scores(const nlohmann::json& result, const std::filesystem::pa
     ParsedScores scores;
     const auto count = result.at("frames").get<std::size_t>();
     scores.order = result.at("order").get<std::vector<std::string>>();
+    scores.features_on_gpu = result.value("features_on_gpu", std::vector<std::string>{});
     std::ifstream file(folder / scores_file, std::ios::binary);
     scores.frame.resize(count);
     file.read(reinterpret_cast<char*>(scores.frame.data()), static_cast<std::streamsize>(count * sizeof(int)));
@@ -1619,7 +1621,7 @@ nlohmann::json scoring_task(const nlohmann::json& request, const std::filesystem
     if (!file) {
         throw std::runtime_error("The scores could not be written.");
     }
-    return {{"frames", scores.frame.size()}, {"order", scores.order}};
+    return {{"frames", scores.frame.size()}, {"order", scores.order}, {"features_on_gpu", scores.features_on_gpu}};
 }
 
 namespace {
@@ -1701,11 +1703,12 @@ MetricProvenance run_provenance(const std::string& key, const std::string& model
         // The same request as FFmpeg's libvmaf (the scores agree to
         // within 4e-5), made on the GPU by the bundled build: by its
         // CUDA code or the Vulkan port of it, and VMAF v1 with Vulkan on
-        // every GPU.
-        const std::string backend = key == "vmaf_v1" ? "vulkan" : gpu_backend;
+        // every GPU, as HDR VMAF's features (its pictures converted by libvmaf on the CPU).
+        const bool v1_engine = key == "vmaf_v1" || key == "vmaf_hdr";
+        const std::string backend = v1_engine ? "vulkan" : gpu_backend;
         provenance.implementation = "libvmaf/" + backend;
         provenance.compute_backend = "gpu";
-        provenance.implementation_version = key == "vmaf_v1"        ? v1_library_build()
+        provenance.implementation_version = v1_engine               ? v1_library_build()
                                             : backend == "vulkan" ? vulkan_library_build()
                                                                   : cuda_library_build();
     }
@@ -1742,6 +1745,14 @@ void insert_keys(std::set<std::string, std::less<>>& keys, const GpuPlan& plan) 
     for (const auto& [key, model] : plan.models) {
         keys.insert(key);
     }
+}
+
+// Files HDR VMAF's scores (in `scored`) under where its features were calculated: VMAF v1's engine on the GPU, or
+// the bundled libvmaf on the CPU, where HdrScorer fell back to it or was not asked for the GPU.
+void insert_hdr_key(RunScores& scores, const ParsedScores& scored) {
+    const bool on_gpu = std::find(scored.features_on_gpu.begin(), scored.features_on_gpu.end(), "vmaf_hdr") !=
+                        scored.features_on_gpu.end();
+    (on_gpu ? scores.gpu_keys : scores.cpu_keys).insert("vmaf_hdr");
 }
 
 // The plan for the run's VMAF, NEG and VMAF v1 on the GPU, or nothing when the
@@ -1907,6 +1918,11 @@ ParsedScores take_metrics(ParsedScores& scores, const std::vector<std::string>& 
         taken.metrics[key] = std::move(scores.metrics.at(key));
         scores.metrics.erase(key);
         taken.order.push_back(key);
+        if (const auto on_gpu = std::find(scores.features_on_gpu.begin(), scores.features_on_gpu.end(), key);
+            on_gpu != scores.features_on_gpu.end()) {
+            taken.features_on_gpu.push_back(key);
+            scores.features_on_gpu.erase(on_gpu);
+        }
     }
     scores.order = std::move(kept);
     return taken;
@@ -2080,10 +2096,16 @@ std::variant<GpuPlan, std::string> hdr_plan(const RunFrames& run, const VmafOpti
 
 // The log line of HDR VMAF's libvmaf and threads, as a run starts it (HdrScorer logs where its features go).
 void log_hdr_vmaf(const GpuPlan& plan) {
-    logger.info("HDR VMAF in the app: " + cpu_library_build() + ", " + std::to_string(plan.hdr_threads) +
-                " threads, its pictures converted on " +
-                std::to_string(hdr_conversion_threads(std::thread::hardware_concurrency(), plan.hdr_gpu.has_value())) +
-                (plan.hdr_gpu ? " (its features on the GPU where the engine takes them)" : ""));
+    const std::string converters =
+        std::to_string(hdr_conversion_threads(std::thread::hardware_concurrency(), plan.hdr_gpu.has_value()));
+    if (plan.hdr_gpu) {
+        logger.info("HDR VMAF in the app: its features on the GPU where the engine takes them, its pictures "
+                    "converted on " + converters + " CPU threads; " + cpu_library_build() + ", " +
+                    std::to_string(plan.hdr_threads) + " threads");
+    } else {
+        logger.info("HDR VMAF in the app: " + cpu_library_build() + ", " + std::to_string(plan.hdr_threads) +
+                    " threads, its pictures converted on " + converters);
+    }
 }
 
 // HDR VMAF's part of a run (vmaf_hdr.h, `planned` by hdr_plan): scored in the app, in a process of its own where one
@@ -2183,7 +2205,7 @@ std::optional<RunScores> score_hdr_beside(const RunFrames& run, const VmafOption
             scores.parts.push_back(take_metrics(scored, plan_keys(*cpu)));
             insert_keys(scores.cpu_keys, *cpu);
         }
-        scores.cpu_keys.insert("vmaf_hdr");
+        insert_hdr_key(scores, scored);
         if (gpu) {
             scores.parts.push_back(take_metrics(scored, {"vmaf_hdr"}));
             insert_keys(scores.gpu_keys, *gpu);
@@ -2290,7 +2312,7 @@ ComparisonResult score_pair_once(const RunEnvironment& environment, const VideoI
         ParsedScores hdr_part =
             score_hdr(run, hdr_only, *hdr, part_in_sequence(on_progress, parts - 1, parts), on_status);
         if (hdr_part.has("vmaf_hdr")) {
-            scores->cpu_keys.insert("vmaf_hdr");
+            insert_hdr_key(*scores, hdr_part);
         }
         scores->parts.push_back(std::move(hdr_part));
     }

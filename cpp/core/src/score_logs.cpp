@@ -225,6 +225,7 @@ void keep_range(ParsedScores& scores, const FrameRange& range, double fps) {
     }
     ParsedScores kept;
     kept.order = scores.order;
+    kept.features_on_gpu = scores.features_on_gpu;
     for (std::size_t i = 0; i < scores.frame.size(); ++i) {
         const long long frame = scores.frame[i] + range.decode_start;
         if (frame < range.start || (range.end && frame >= *range.end)) {

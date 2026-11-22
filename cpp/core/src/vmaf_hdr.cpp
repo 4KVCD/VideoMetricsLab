@@ -437,7 +437,9 @@ PairScores HdrScorer::finish() {
         s.feed(converter);
     }
     if (s.gpu) {
-        return s.gpu->finish();  // under "vmaf_hdr", each to 6 decimals as below
+        PairScores scores = s.gpu->finish();  // under "vmaf_hdr", each to 6 decimals as below
+        scores.features_on_gpu.emplace_back("vmaf_hdr");
+        return scores;
     }
     check_libvmaf(s.library.read_pictures(s.handles.context, nullptr, nullptr, 0), "Finishing HDR VMAF");
     PairScores scores;

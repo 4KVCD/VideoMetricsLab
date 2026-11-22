@@ -261,7 +261,7 @@ TEST_F(FramePanelTest, TheLoopRowIsCentred) {
     EXPECT_EQ(panel->loop_checkbox->parentWidget()->property("vmlRole").toString(), "card");
 }
 
-// Issue #24: the Worst frames list from Metric Graphs is stepped through
+// Issue #24: the Worst Frames tab's Worst frames list is stepped through
 // while its video is shown, and hidden for another; Export frame as PNG without an
 // export folder says where to choose one.
 TEST_F(FramePanelTest, TheWorstFramesListIsSteppedThroughOnItsVideo) {

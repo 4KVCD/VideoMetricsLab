@@ -20,6 +20,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QPushButton>
+#include <QScreen>
 #include <QSplitter>
 #include <QStyleHints>
 #include <QTableWidgetItem>
@@ -41,6 +42,7 @@
 #include "file_writes.h"
 #include "frame_compare_panel.h"
 #include "graph_panel.h"
+#include "worst_frames_tab.h"
 #include "i18n.h"
 #include "options_panel.h"
 #include "run_worker.h"
@@ -72,6 +74,18 @@ namespace vml::app {
 namespace {
 
 const app_log::Logger logger("vml.main_window");
+
+// The window's size where none was saved: 1440x900, at most 90 % of the
+// screen's room (a 1080p laptop at 150 % has about 1280x690 of it, where
+// 1440x900 opened past its edges). The least size (1050x650) still holds.
+QSize default_window_size(const QScreen* screen) {
+    const QSize preferred(1440, 900);
+    if (screen == nullptr) {
+        return preferred;
+    }
+    const QSize room = screen->availableGeometry().size();
+    return preferred.boundedTo(QSize(room.width() * 9 / 10, room.height() * 9 / 10));
+}
 
 // What is wrong with FFmpeg, one text each.
 QStringList tool_problems(const ToolsStatus& status) {
@@ -150,16 +164,26 @@ MainWindow::MainWindow() {
                 std::string(vship_build_label(default_vship_build(settings_.default_vship_build))) +
                 ", saved results " + (settings_.use_cache ? "reused" : "not reused") + " (" +
                 (settings_.cache_dir.empty() ? std::string("default folder") : settings_.cache_dir) + ")");
-    if (settings_.remember_window_size) {
-        // Where it was closed, maximized if it was (shown so by main's
-        // show()); Qt moves it onto a screen still there. Before a place was
-        // first saved, or if it cannot be read, at the size it was closed at.
-        if (settings_.window_geometry.empty() ||
-            !restoreGeometry(QByteArray::fromBase64(QByteArray::fromStdString(settings_.window_geometry)))) {
-            resize(settings_.window_width, settings_.window_height);
+    // Where it was closed, maximized if it was (shown so by main's show());
+    // Qt moves it onto a screen still there.
+    const bool restored = settings_.remember_window_size && !settings_.window_geometry.empty() &&
+                          restoreGeometry(QByteArray::fromBase64(QByteArray::fromStdString(settings_.window_geometry)));
+    if (!restored) {
+        // Before a place was first saved, or if it cannot be read, at the
+        // size it was closed at; where none was ever saved (the settings'
+        // default size), or none is remembered, at the default for the
+        // screen.
+        const Settings defaults;
+        const bool saved_size = settings_.remember_window_size &&
+                                (settings_.window_width != defaults.window_width ||
+                                 settings_.window_height != defaults.window_height);
+        resize(saved_size ? QSize(settings_.window_width, settings_.window_height) : default_window_size(screen()));
+        // Centred in the screen's room. Qt placed the window for its size
+        // before this resize: on a 4K screen at 175 % a 1440x900 window then
+        // ran 312 px past its right edge and 245 px past its bottom (#173).
+        if (const QScreen* room = screen(); room != nullptr) {
+            move(room->availableGeometry().center() - QPoint(width() / 2, height() / 2));
         }
-    } else {
-        resize(1280, 800);
     }
     // Each video's own settings; the Options panel shows and edits the
     // selected rows' settings, and there is no one global setting.
@@ -583,27 +607,28 @@ void MainWindow::build_ui() {
         settings_.graph_metric = key.toStdString();  // the metric chosen, shown again next time
         save_settings();
     });
-    graph_panel_->set_worst_count(settings_.graph_worst_frames);
-    graph_panel_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
-    connect(graph_panel_, &GraphPanel::segments_report_requested, this,
+    tabs_->addTab(new ScrollingPage(graph_panel_), app::tr("Metric Graphs"));
+    // Worst Frames: a video's worst frames and weak segments (issue #24).
+    worst_tab_ = new WorstFramesTab(dialogs_);
+    worst_tab_->set_worst_count(settings_.graph_worst_frames);
+    worst_tab_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
+    connect(worst_tab_, &WorstFramesTab::report_requested, this,
             [this](const SegmentRules& rules) { export_segments_report(rules); });
-    connect(graph_panel_, &GraphPanel::weak_segment_rules_saved, this,
-            [this](const std::string& profile, const SegmentRules& rules) {
-                store_segment_profile(settings_, profile, rules);
-                save_settings();
-                graph_panel_->set_segment_profiles(segment_profiles(settings_),
-                                                   segment_profile_in_use(settings_).name);
-                settings_panel_->show_weak_segment_rules();
-            });
-    connect(graph_panel_, &GraphPanel::worst_count_changed, this, [this](int count) {
+    connect(worst_tab_, &WorstFramesTab::rules_saved, this, [this](const std::string& profile, const SegmentRules& rules) {
+        store_segment_profile(settings_, profile, rules);
+        save_settings();
+        worst_tab_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
+        settings_panel_->show_weak_segment_rules();
+    });
+    connect(worst_tab_, &WorstFramesTab::count_changed, this, [this](int count) {
         settings_.graph_worst_frames = count;
         save_settings();
     });
-    connect(graph_panel_, &GraphPanel::video_compare_requested, this,
+    connect(worst_tab_, &WorstFramesTab::open_requested, this,
             [this](const std::string& identity, int frame, const WorstFrameList& list) {
                 show_in_video_compare(identity, frame, list);
             });
-    tabs_->addTab(new ScrollingPage(graph_panel_), app::tr("Metric Graphs"));
+    tabs_->addTab(new ScrollingPage(worst_tab_), app::tr("Worst Frames"));
     frame_compare_panel_ = new FrameComparePanel([this] { return tools_status_.ffmpeg.path; },
                                                  preview_color_mode_from(settings_.frame_preview_color_mode),
                                                  settings_.compare_decoded_videos);
@@ -639,6 +664,7 @@ void MainWindow::build_ui() {
                                            settings_.export_graph_text);
     };
     graph_panel_->export_colours = export_colours;
+    worst_tab_->export_colours = export_colours;
     // Metric Graphs' statistics menu offers the Videos table's exports.
     graph_panel_->export_items = [this] { return exported_items(settings_); };
     graph_panel_->video_exportable = [this](const std::string& identity) {
@@ -689,9 +715,12 @@ void MainWindow::build_ui() {
     connect(settings_panel_, &SettingsPanel::video_names_changed, this, [this] {
         graph_panel_->set_video_name_rule(video_name_rule(settings_));
         frame_compare_panel_->set_video_name_rule(video_name_rule(settings_));
+        if (tabs_->currentWidget() == worst_tab_) {
+            sync_worst_frames();  // else when it is next opened
+        }
     });
     connect(settings_panel_, &SettingsPanel::weak_segment_rules_changed, this, [this] {
-        graph_panel_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
+        worst_tab_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
     });
     saved_results_panel_ = new SavedResultsPanel(settings_, dialogs_, *file_writes_);
     connect(saved_results_panel_, &SavedResultsPanel::open_requested, this,

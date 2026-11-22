@@ -54,6 +54,13 @@ nlohmann::ordered_json results_document(const VideoInfo& source, const std::vect
                                         const std::optional<nlohmann::ordered_json>& difference = std::nullopt,
                                         const RunRecord* record = nullptr);
 
+// The results of a run that compared nothing, as --json writes them: why
+// (`error`, and its code, codes.h), with `reference` (its path), no videos
+// and the run's record where there is one; with no reference (the --batch
+// list could not be read), an empty "batch" in place of the videos.
+nlohmann::ordered_json error_document(const std::optional<std::string>& reference, const std::string& error,
+                                      const std::string& code, const RunRecord* record = nullptr);
+
 // Each result's per-frame scores as the window's per-frame CSV export writes them, in
 // `folder`; `message` says what was written and `failed` what could not be
 // or was written under another name (shown with -q too). False if one could

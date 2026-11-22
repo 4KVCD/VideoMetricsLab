@@ -7,11 +7,12 @@
 //     vml-cli devices
 //     vml-cli --version
 //
-// Progress goes to stderr, results to stdout. Exit code 0 when every video
-// got every metric asked for (or was read, for bitrate; the files were read,
-// for bdrate), 1 when one failed,
-// 2 for a wrong command (or one this version cannot do yet), 130 when
-// cancelled with Ctrl+C.
+// Progress goes to stderr, results to stdout. The exit codes (arguments.h):
+// 0 when every video got every metric asked for that applies to it (or was
+// read, for bitrate; the files gave BD-rates, for bdrate), 1 when one failed
+// or a file could not be written, 2 for a wrong command (or one this version
+// cannot do yet), 3 when a quality gate is not met (none yet), 4 when an input
+// could not be read, 130 when cancelled with Ctrl+C.
 #include <csignal>
 #include <exception>
 #include <string>

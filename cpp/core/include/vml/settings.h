@@ -84,7 +84,7 @@ struct Settings {
     // Calculate metrics (VideoInfo::with_film_grain).
     std::string film_grain_default;
     std::string graph_metric = "vmaf";
-    // How many dips Metric Graphs' Worst frames list shows (10, 25 or 50).
+    // How many dips the Worst Frames tab's Worst frames list shows (10, 25 or 50).
     int graph_worst_frames = 10;
     // Metric Graphs' Weak segments, as last set there (saved_segment_rules,
     // weak_frames.h): its conditions as the command line's --segments writes
@@ -148,6 +148,8 @@ struct Settings {
     int video_name_start = 10;
     int video_name_end = 16;
     bool remember_window_size = true;
+    // The size the window was closed at; these defaults stand for none saved
+    // (the window then opens at its default for the screen).
     int window_width = 1280;
     int window_height = 800;
     // Where and how the window was last closed (Qt's saveGeometry, as

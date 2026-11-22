@@ -28,7 +28,7 @@ SegmentRulesEditor::SegmentRulesEditor(std::vector<std::string> keys, bool at_le
     layout->addWidget(new QLabel(app::tr("A frame is weak where:")));
     condition_layout_ = new QVBoxLayout;
     layout->addLayout(condition_layout_);
-    none_ = new QLabel(app::tr("No condition yet: Metric Graphs' Weak segments starts from the metric shown."));
+    none_ = new QLabel(app::tr("No condition yet: the Worst Frames tab starts from the metric shown."));
     theme::style(none_, "color: {muted};");
     none_->setVisible(!at_least_one_);
     layout->addWidget(none_);
@@ -76,6 +76,8 @@ SegmentRulesEditor::SegmentRulesEditor(std::vector<std::string> keys, bool at_le
 }
 
 void SegmentRulesEditor::add_option_row(const QString& label, QWidget* field) { form_->addRow(label, field); }
+
+void SegmentRulesEditor::wrap_long_options() { form_->setRowWrapPolicy(QFormLayout::WrapLongRows); }
 
 void SegmentRulesEditor::set_rules(const SegmentRules& rules) {
     const QScopedValueRollback quiet(quiet_, true);

@@ -92,7 +92,10 @@ std::optional<std::filesystem::path> packaged_resource_folder() {
 }
 
 std::filesystem::path resource_folder() {
-    if (const std::optional<std::string> named = platform::environment_variable("VML_RESOURCES")) {
+    // An empty one names no folder (a script that "removed" it with
+    // PowerShell 7's SetEnvironmentVariable($name, $null) left it so).
+    if (const std::optional<std::string> named = platform::environment_variable("VML_RESOURCES");
+        named && !named->empty()) {
         return platform::path_from_text(*named).make_preferred();
     }
     // A packaged build's; else the repository's, for a build run from its

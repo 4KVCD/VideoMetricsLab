@@ -1,4 +1,4 @@
-// Metric Graphs' Worst frames list as Video Compare steps through it with
+// The Worst Frames tab's Worst frames list as Video Compare steps through it with
 // Previous / Next worst (issue #24).
 #pragma once
 

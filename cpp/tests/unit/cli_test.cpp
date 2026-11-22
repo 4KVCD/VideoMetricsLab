@@ -20,6 +20,7 @@
 #include "batch_file.h"
 #include "bdrate.h"
 #include "bitrate.h"
+#include "common.h"
 #include "compare.h"
 #include "devices.h"
 #include "file_names.h"
@@ -954,6 +955,65 @@ TEST(CommandLine, GpuNamesAGpuThePcHas) {
               "--gpu radeon: more than one GPU here has that in its name: AMD Radeon RX 7900 XTX, AMD Radeon(TM) "
               "Graphics. Give more of the name.");
     EXPECT_EQ(gpu_refusal(std::string("radeon(tm)"), radeons), std::nullopt);
+}
+
+// The automation contract: every error, failure, note and why in the JSON has
+// a code beside it, a run that compared nothing still writes a document, and
+// an input not read is exit code 4, not a wrong command's 2.
+TEST(CommandLine, ErrorsNotesAndWhysComeWithCodes) {
+    std::vector<TestVideo> videos(2);
+    videos[0].path = "Y:/v/missing.mkv";
+    videos[0].error = "it could not be read: no such file";
+    videos[0].error_code = "unreadable";
+    TestVideo& scored = videos[1];
+    scored.path = "Y:/v/a.mkv";
+    scored.metrics = {"psnr"};
+    EXPECT_TRUE(scored.note("colours_guessed", "the reference has no colour tags"));
+    EXPECT_FALSE(scored.note("colours_guessed", "the reference has no colour tags"));  // said once
+    EXPECT_TRUE(scored.note("gpu_fallback", "VMAF fell back to the CPU"));
+    scored.failures = {{"cvvdp", "CVVDP needs every frame"}, {"vmaf", "Vulkan ran out of memory."}};
+    scored.failure_codes["cvvdp"] = "needs_every_frame";
+    RunFacts facts;
+    facts.metrics = {{"psnr", {metric_calculated, ""}},
+                     {"vmaf", {metric_failed, "Vulkan ran out of memory."}},
+                     {"vmaf_hdr", {metric_not_applicable, "HDR VMAF scores PQ (HDR10) video only", "hdr_vmaf_colours"}},
+                     {"cvvdp", {metric_not_run, "no task was planned to calculate it"}}};
+    scored.facts = facts;
+
+    const nlohmann::ordered_json document = results_document(VideoInfo{}, videos, summarize(videos), false);
+    EXPECT_EQ(document["videos"][0]["error_code"], "unreadable");
+    const nlohmann::ordered_json& entry = document["videos"][1];
+    EXPECT_EQ(entry["notes"].size(), 2u);
+    EXPECT_EQ(entry["note_codes"], (nlohmann::ordered_json{"colours_guessed", "gpu_fallback"}));
+    EXPECT_EQ(entry["failed_metric_codes"]["cvvdp"], "needs_every_frame");
+    EXPECT_EQ(entry["failed_metric_codes"]["vmaf"], "calculation_failed");  // the run's own failure
+    const nlohmann::ordered_json& status = entry["metric_status"];
+    EXPECT_FALSE(status["psnr"].contains("code"));
+    EXPECT_EQ(status["vmaf"]["code"], "calculation_failed");
+    EXPECT_EQ(status["vmaf_hdr"]["status"], "not applicable");
+    EXPECT_EQ(status["vmaf_hdr"]["code"], "hdr_vmaf_colours");
+    EXPECT_EQ(status["cvvdp"]["code"], "not_planned");
+
+    const nlohmann::ordered_json unread =
+        error_document(std::string("Y:/v/reference.mkv"), "The reference could not be read", "reference_unreadable");
+    EXPECT_EQ(unread["format"], document["format"]);
+    EXPECT_EQ(unread["reference"]["path"], "Y:/v/reference.mkv");
+    EXPECT_EQ(unread["error_code"], "reference_unreadable");
+    EXPECT_TRUE(unread["videos"].empty());
+    EXPECT_TRUE(error_document(std::nullopt, "--batch: no such file", "batch_unreadable")["batch"].empty());
+
+    const std::filesystem::path temporary =
+        std::filesystem::temp_directory_path() / ("vml_codes_test_" + std::to_string(std::random_device{}()));
+    BdrateArguments rates;
+    rates.anchor = platform::path_text(temporary / "missing.csv");
+    rates.test = rates.anchor;
+    rates.json_path = platform::path_text(temporary / "bdrate.json");
+    rates.quiet = true;
+    EXPECT_EQ(bdrate(rates), exit_input);
+    const Json written = Json::parse(read_whole_file(temporary / "bdrate.json"));
+    EXPECT_EQ(written["format"], "bdrate-1");
+    EXPECT_EQ(written["error_code"], "rates_unreadable");
+    std::filesystem::remove_all(temporary);
 }
 
 }  // namespace
