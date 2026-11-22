@@ -32,6 +32,16 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(VML_BUILD_TESTS "Build the tests" ON)
 
+# Visual Studio's generator compiles one file at a time within a project
+# (MSBuild's /m only builds projects side by side). MSBuild's MultiToolTask
+# compiles the files at the same time, with one limit for all projects
+# together (a compiler per core), as Ninja does; /MP instead would start a
+# compiler per core in every project being built at once. Read when each
+# target is created, so it is set before any.
+if(CMAKE_GENERATOR MATCHES "Visual Studio")
+    set(CMAKE_VS_GLOBALS "UseMultiToolTask=true" "EnforceProcessCountAcrossBuilds=true")
+endif()
+
 # The options every target of ours is compiled with.
 add_library(vml_compile_options INTERFACE)
 if(MSVC)

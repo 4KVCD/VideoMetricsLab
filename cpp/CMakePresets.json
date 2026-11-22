@@ -42,8 +42,8 @@
     }
   ],
   "buildPresets": [
-    { "name": "windows-debug", "configurePreset": "windows", "configuration": "Debug" },
-    { "name": "windows-release", "configurePreset": "windows", "configuration": "Release" },
+    { "name": "windows-debug", "configurePreset": "windows", "configuration": "Debug", "nativeToolOptions": ["/m"] },
+    { "name": "windows-release", "configurePreset": "windows", "configuration": "Release", "nativeToolOptions": ["/m"] },
     { "name": "linux-debug", "configurePreset": "linux", "configuration": "Debug" },
     { "name": "linux-release", "configurePreset": "linux", "configuration": "Release" },
     { "name": "linux-sanitizers-debug", "configurePreset": "linux-sanitizers", "configuration": "Debug" },

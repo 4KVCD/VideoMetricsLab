@@ -17,7 +17,7 @@ $projectDirectory = Split-Path $PSScriptRoot -Parent
 $outputDirectory = Join-Path $projectDirectory 'resources/native'
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 $native = Join-Path $projectDirectory 'native'
-foreach ($build in @(
+$builds = @(
         @{ Name = 'nvdec_frames'; Libraries = @(); Includes = @() },
         @{ Name = 'vpl_frames'; Libraries = @('-ld3d11', '-ldxgi', '-luuid'); Includes = @() },
         @{ Name = 'amf_frames'; Libraries = @('-ld3d11', '-ldxgi', '-luuid')
@@ -25,12 +25,27 @@ foreach ($build in @(
         @{ Name = 'mf_frames'; Libraries = @('-ld3d11', '-ldxgi', '-luuid', '-lmfplat', '-lmfuuid', '-lole32')
             Includes = @('-I', (Join-Path $native 'vulkan')) },
         @{ Name = 'software_frames'; Libraries = @()
-            Includes = @('-I', (Join-Path $native 'ffmpeg/include')) })) {
-    # Reproducible in any folder: no link time, and the image base not made from the output's path (MinGW's ld
-    # picks it from a hash of that path otherwise, which moves every absolute address)
-    & g++ -std=c++17 -O3 -Wall -Wextra -shared -static -s -I $native @($build.Includes) `
-        (Join-Path $native "$($build.Name).cpp") `
-        -o (Join-Path $outputDirectory "$($build.Name).dll") @($build.Libraries) '-Wl,--no-insert-timestamp' `
-        '-Wl,--disable-auto-image-base'
-    if ($LASTEXITCODE -ne 0) { throw "$($build.Name).dll build failed" }
+            Includes = @('-I', (Join-Path $native 'ffmpeg/include')) })
+# The five libraries compile at the same time, one g++ each (a job per library); each one's messages are
+# printed after all have finished, under its name.
+$jobs = foreach ($build in $builds) {
+    Start-Job -ArgumentList $native, $outputDirectory, $build -ScriptBlock {
+        param($native, $outputDirectory, $build)
+        # Reproducible in any folder: no link time, and the image base not made from the output's path (MinGW's
+        # ld picks it from a hash of that path otherwise, which moves every absolute address)
+        & g++ -std=c++17 -O3 -Wall -Wextra -shared -static -s -I $native @($build.Includes) `
+            (Join-Path $native "$($build.Name).cpp") `
+            -o (Join-Path $outputDirectory "$($build.Name).dll") @($build.Libraries) '-Wl,--no-insert-timestamp' `
+            '-Wl,--disable-auto-image-base' 2>&1 | ForEach-Object { "$_" }
+        $LASTEXITCODE  # the job's last output
+    }
 }
+$failed = @()
+foreach ($index in 0..($builds.Count - 1)) {
+    $output = @(Receive-Job -Job $jobs[$index] -Wait)
+    Remove-Job -Job $jobs[$index]
+    $name = $builds[$index].Name
+    $output | Select-Object -SkipLast 1 | ForEach-Object { Write-Host "${name}: $_" }
+    if ($output.Count -eq 0 -or $output[-1] -ne 0) { $failed += "$name.dll" }
+}
+if ($failed) { throw "build failed: $($failed -join ', ')" }
