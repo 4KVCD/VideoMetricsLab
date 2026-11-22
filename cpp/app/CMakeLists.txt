@@ -58,6 +58,7 @@ add_library(vml_app STATIC
     settings_notifications.cpp
     stream_records.cpp
     theme.cpp
+    title_bar.cpp
     video_compare_view.cpp
     video_names.cpp
     widgets.cpp

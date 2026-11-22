@@ -166,6 +166,24 @@ differs is drawn by the style sheet, from a role a widget is given with
 
 Classic draws every role alike, as the system draws the widget.
 
+VML Modern on Windows draws the window's title bar itself (`app/title_bar.h`,
+`TitleBar`, the window's menu widget). Qt's `Qt::ExpandedClientAreaHint`,
+asked for with no title or buttons of Qt's own, gives the app the window's
+area up to its top edge while the system's frame stays: its shadow, rounded
+corners and resize edges. `TitleBar::attach` gives back the window styles
+Windows' own behaviours look for (double-click to maximize, snapping, the
+taskbar's minimize), and the window's `nativeEvent` hands its messages to
+`TitleBar::native_event`. That answers `WM_NCHITTEST`: the top edge resizes,
+the maximize button is `HTMAXBUTTON` (so Windows 11 shows its snap layouts
+over it, and the button's hover comes as non-client messages), the app's
+buttons are client, the rest is caption. It also shows the system menu for
+Alt+Space, the icon and a right-click, with Minimize and Maximize enabled
+(Qt's own menu for Alt+Space would have them off). The bar is made when the
+window is built, so it follows the interface the app started in, and not in
+high-contrast mode, where the system's colours belong. Its three buttons
+(`TitleButtons`: a run's progress, the theme, an update) are VML Modern's on
+every system: in the bar, or at the tab bar's right end where there is none.
+
 When you add to the window:
 
 - **Give a new control its role where one fits.** Most controls need none.

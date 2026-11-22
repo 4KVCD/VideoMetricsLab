@@ -332,6 +332,16 @@ QWidget* SettingsPanel::build_appearance_page() {
     return page;
 }
 
+void SettingsPanel::choose_theme(const QString& value) {
+    for (QAbstractButton* button : theme_buttons->buttons()) {
+        if (button->property("value").toString() == value) {
+            button->setChecked(true);
+            on_edited();
+            return;
+        }
+    }
+}
+
 void SettingsPanel::set_accent(const QString& hex) {
     // The system's (""), a preset's colour, or one of one's own: the
     // matching choice ticked, none for one's own, and its code shown.
