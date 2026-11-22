@@ -47,6 +47,9 @@
   "its address isn't an http or https URL": "ihre Adresse ist keine http- oder https-URL",
   "its address isn't an https URL": "ihre Adresse ist keine https-URL",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "Die Adresse von {service} wird nicht angenommen: Prüfen Sie sie unter Einstellungen > Benachrichtigungen.",
+  "A frame is weak only where every condition holds on it.": "Ein Frame ist nur dort schwach, wo jede Bedingung zutrifft.",
+  "Weak by": "Schwach durch",
+  "{condition}: no frame": "{condition}: kein Frame",
   "Export the difference": "Differenz exportieren",
   "Export the difference as CSV...": "Differenz als CSV exportieren...",
   "Exporting the difference to {path}...": "Differenz wird nach {path} exportiert...",
@@ -1239,6 +1242,11 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "Das Modell der Spalte HDR VMAF (Netflix' mitgelieferte HDR-VMAF-Modelle). „Automatisch“ wählt das 1080p-Modell bei drei Bildschirmhöhen oder bei 4K-Vergleichen das 4K-Modell bei eineinhalb, wie bei VMAF v0.6.1. Nur für PQ-Videos (HDR10)."
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["Läufe kürzer als {count} Frame werden ausgelassen.", "Läufe kürzer als {count} Frames werden ausgelassen."],
+  "{condition}: {count} frame": ["{condition}: {count} Frame", "{condition}: {count} Frames"],
+  "{condition}: {count} frame, in a segment": ["{condition}: {count} Frame, in einem Segment", "{condition}: {count} Frames, alle in Segmenten"],
+  "{condition}: {count} frame, in no segment": ["{condition}: {count} Frame, in keinem Segment", "{condition}: {count} Frames, in keinem Segment"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}: {count} Frame, davon {in} in Segmenten", "{condition}: {count} Frames, davon {in} in Segmenten"],
   "about {count} day": [
    "etwa {count} Tag",
    "etwa {count} Tage"

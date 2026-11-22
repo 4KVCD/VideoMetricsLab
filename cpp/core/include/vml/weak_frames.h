@@ -106,8 +106,20 @@ struct WeakSegment {
     double start_time = 0.0;  // where its first frame starts
     double end_time = 0.0;    // where its last frame ends
     std::vector<SegmentMetric> metrics;  // in the order of the conditions
+    // For each of the rules' conditions, in their order: the frames of the
+    // segment where it holds (what made the segment weak, with "any").
+    std::vector<long long> condition_frames;
 
     int frames() const { return last_frame - first_frame + 1; }
+};
+
+// A condition's frames: where it holds (inside the rules' ranges), and how
+// many of those are in the segments found. They differ where frames were
+// left out: a run shorter than the shortest segment, or, with every
+// condition required, a frame where another did not hold.
+struct ConditionCount {
+    long long holds = 0;
+    long long in_segments = 0;
 };
 
 // The rules Settings keeps (weak_segment_*): each condition as its text
@@ -137,6 +149,13 @@ std::vector<WeakSegment> weak_segments(const ComparisonResult& result, const Seg
 // given, gets those.
 SegmentRules scored_rules(const MetricResultSet& results, const SegmentRules& rules,
                           std::vector<WeakCondition>* left_out = nullptr);
+// For each of the rules' conditions, in their order, its frames
+// (ConditionCount), `segments` being weak_segments' for the same scores and
+// rules. A condition on a metric `results` does not have holds nowhere.
+std::vector<ConditionCount> condition_counts(const MetricResultSet& results, const SegmentRules& rules,
+                                             int last_frame, const std::vector<WeakSegment>& segments);
+std::vector<ConditionCount> condition_counts(const ComparisonResult& result, const SegmentRules& rules,
+                                             const std::vector<WeakSegment>& segments);
 
 // The segments as JSON: the rules used, then one object per segment with
 // first_frame, last_frame, start_time, end_time, frames and each metric's

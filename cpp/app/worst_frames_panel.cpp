@@ -31,6 +31,13 @@ namespace {
 // How many segments the dialog lists; its exports have them all.
 constexpr int listed_segments = 1000;
 
+// A condition as the dialog's rows read it: "VMAF v0.6.1 < 85".
+QString condition_label(const WeakCondition& condition) {
+    const MetricDefinition& metric = metric_definition(condition.key);
+    return qt_text(metric.short_label) + (condition.comparison == '<' ? QStringLiteral(" < ") : QStringLiteral(" > ")) +
+           qt_text(metric.format_value(condition.threshold));
+}
+
 QTableWidgetItem* cell(const QString& text, bool number = true) {
     auto* item = new QTableWidgetItem(text);
     item->setTextAlignment(number ? (Qt::AlignRight | Qt::AlignVCenter) : (Qt::AlignLeft | Qt::AlignVCenter));
@@ -394,6 +401,11 @@ WeakSegmentsDialog::WeakSegmentsDialog(WeakFramesVideo video, const MetricDefini
     summary_ = new QLabel;
     summary_->setWordWrap(true);
     layout->addWidget(summary_);
+    conditions_note_ = new QLabel;
+    conditions_note_->setWordWrap(true);
+    conditions_note_->setObjectName("conditionsNote");
+    theme::style(conditions_note_, "color: {muted};");
+    layout->addWidget(conditions_note_);
     table_ = make_table();
     table_->setMinimumHeight(220);
     connect(table_, &QTableWidget::cellDoubleClicked, this, [this](int row, int) {
@@ -519,7 +531,7 @@ void WeakSegmentsDialog::show_saved_state() {
 }
 
 void WeakSegmentsDialog::refresh() {
-    if (summary_ == nullptr || table_ == nullptr || save_button_ == nullptr) {
+    if (summary_ == nullptr || conditions_note_ == nullptr || table_ == nullptr || save_button_ == nullptr) {
         return;  // still being built
     }
     segments_ = weak_segments(*video_.result, rules());
@@ -541,13 +553,63 @@ void WeakSegmentsDialog::refresh() {
         summary += " " + range_note(range_);
     }
     summary_->setText(summary);
+    show_condition_counts();
     fill_table();
     show_saved_state();
+}
+
+void WeakSegmentsDialog::show_condition_counts() {
+    // Each condition's frames, and how many are in the segments: a condition
+    // whose frames are all left out (a single frame under a shortest segment
+    // of 6, say) made none of the segments listed, which the scores in the
+    // table alone don't tell.
+    const SegmentRules current = rules();
+    const std::vector<ConditionCount> counts = condition_counts(*video_.result, current, segments_);
+    QStringList lines;
+    bool left_out = false;
+    for (std::size_t c = 0; c < counts.size(); ++c) {
+        const QString condition = condition_label(current.conditions[c]);
+        const ConditionCount& count = counts[c];
+        if (count.holds == 0) {
+            lines << app::tr("{condition}: no frame", {{"condition", condition}});
+        } else if (count.in_segments == 0) {
+            lines << ntr("{condition}: {count} frame, in no segment", "{condition}: {count} frames, in no segment",
+                         count.holds, {{"condition", condition}});
+        } else if (count.in_segments == count.holds) {
+            lines << ntr("{condition}: {count} frame, in a segment", "{condition}: {count} frames, all in segments",
+                         count.holds, {{"condition", condition}});
+        } else {
+            lines << ntr("{condition}: {count} frame, {in} of them in segments",
+                         "{condition}: {count} frames, {in} of them in segments", count.holds,
+                         {{"condition", condition}, {"in", count.in_segments}});
+        }
+        left_out = left_out || count.in_segments < count.holds;
+    }
+    // Why frames a condition holds on are in no segment.
+    QStringList why;
+    if (left_out && current.min_frames > 1) {
+        why << ntr("Runs shorter than {count} frame are left out.", "Runs shorter than {count} frames are left out.",
+                   current.min_frames);
+    }
+    if (left_out && current.all && current.conditions.size() > 1) {
+        why << app::tr("A frame is weak only where every condition holds on it.");
+    }
+    if (!why.isEmpty()) {
+        lines << why.join(QLatin1Char(' '));
+    }
+    conditions_note_->setText(lines.join(QLatin1Char('\n')));
 }
 
 void WeakSegmentsDialog::fill_table() {
     const SegmentRules current = rules();
     QStringList headers{app::tr("First"), app::tr("Last"), app::tr("Frames"), app::tr("Start"), app::tr("End")};
+    // Which conditions held in each segment, where there are several and any
+    // of them makes a frame weak: with every one required, each segment's
+    // frames hold them all, and the column would only list them again.
+    const bool weak_by = current.conditions.size() > 1 && !current.all;
+    if (weak_by) {
+        headers.append(app::tr("Weak by"));
+    }
     std::vector<std::string> keys;
     for (const WeakCondition& condition : current.conditions) {
         if (std::find(keys.begin(), keys.end(), condition.key) == keys.end()) {
@@ -570,6 +632,21 @@ void WeakSegmentsDialog::fill_table() {
         table_->setItem(r, 3, cell(time_text(segment.start_time)));
         table_->setItem(r, 4, cell(time_text(segment.end_time)));
         int column = 5;
+        if (weak_by) {
+            QStringList held;
+            QStringList frames;
+            for (std::size_t c = 0; c < current.conditions.size() && c < segment.condition_frames.size(); ++c) {
+                const QString condition = condition_label(current.conditions[c]);
+                if (segment.condition_frames[c] > 0) {
+                    held << condition;
+                }
+                frames << ntr("{condition}: {count} frame", "{condition}: {count} frames",
+                              segment.condition_frames[c], {{"condition", condition}});
+            }
+            QTableWidgetItem* item = cell(held.join(QStringLiteral(", ")), false);
+            item->setToolTip(frames.join(QLatin1Char('\n')));
+            table_->setItem(r, column++, item);
+        }
         for (const SegmentMetric& metric : segment.metrics) {
             const MetricDefinition& definition = metric_definition(metric.key);
             // The worst end: Butteraugli's highest.

@@ -47,6 +47,9 @@
   "its address isn't an http or https URL": "ที่อยู่ไม่ใช่ URL แบบ http หรือ https",
   "its address isn't an https URL": "ที่อยู่ไม่ใช่ URL แบบ https",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "{service} ไม่รับที่อยู่นี้: ตรวจสอบใน การตั้งค่า > การแจ้งเตือน",
+  "A frame is weak only where every condition holds on it.": "เฟรมจะอ่อนก็ต่อเมื่อทุกเงื่อนไขเป็นจริงเท่านั้น",
+  "Weak by": "อ่อนเพราะ",
+  "{condition}: no frame": "{condition}: ไม่มีเฟรม",
   "Export the difference": "ส่งออกผลต่าง",
   "Export the difference as CSV...": "ส่งออกผลต่างเป็น CSV...",
   "Exporting the difference to {path}...": "กำลังส่งออกผลต่างไปที่ {path}...",
@@ -1239,6 +1242,11 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "โมเดลสำหรับคอลัมน์ HDR VMAF (โมเดล HDR VMAF ที่ Netflix ให้มา) อัตโนมัติจะเลือกโมเดล 1080p ที่สามเท่าของความสูงจอ หรือโมเดล 4K ที่ 1.5 เท่าสำหรับการเปรียบเทียบ 4K เหมือน VMAF v0.6.1 สำหรับวิดีโอ PQ (HDR10) เท่านั้น"
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["ช่วงที่สั้นกว่า {count} เฟรมจะถูกตัดออก"],
+  "{condition}: {count} frame": ["{condition}: {count} เฟรม"],
+  "{condition}: {count} frame, in a segment": ["{condition}: {count} เฟรม อยู่ในเซกเมนต์ทั้งหมด"],
+  "{condition}: {count} frame, in no segment": ["{condition}: {count} เฟรม ไม่อยู่ในเซกเมนต์ใดเลย"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}: {count} เฟรม อยู่ในเซกเมนต์ {in} เฟรม"],
   "about {count} day": [
    "ประมาณ {count} วัน"
   ],

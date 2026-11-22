@@ -42,6 +42,9 @@
   "its address isn't an http or https URL": "其地址不是 http 或 https URL",
   "its address isn't an https URL": "其地址不是 https URL",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "{service} 不接受该地址：请在“设置 > 通知”中检查。",
+  "A frame is weak only where every condition holds on it.": "只有每个条件都成立的帧才算弱帧。",
+  "Weak by": "弱于",
+  "{condition}: no frame": "{condition}：没有帧",
   "Export the difference": "导出差值",
   "Export the difference as CSV...": "将差值导出为 CSV...",
   "Exporting the difference to {path}...": "正在将差值导出到 {path}...",
@@ -1239,6 +1242,11 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "HDR VMAF 列使用的模型（Netflix 附带的 HDR VMAF 模型）。“自动”选择 3 倍屏幕高度的 1080p 模型，4K 对比时选择 1.5 倍屏幕高度的 4K 模型，与 VMAF v0.6.1 相同。仅适用于 PQ (HDR10) 视频。"
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["短于 {count} 帧的连续段不计入。"],
+  "{condition}: {count} frame": ["{condition}：{count} 帧"],
+  "{condition}: {count} frame, in a segment": ["{condition}：{count} 帧，全部在片段中"],
+  "{condition}: {count} frame, in no segment": ["{condition}：{count} 帧，不在任何片段中"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}：{count} 帧，其中 {in} 帧在片段中"],
   "about {count} day": [
    "约 {count} 天"
   ],

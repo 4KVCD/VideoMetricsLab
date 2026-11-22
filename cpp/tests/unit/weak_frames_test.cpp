@@ -133,6 +133,43 @@ TEST(WeakFrames, WeakSegmentsFollowTheRules) {
     EXPECT_EQ(spans(segments_for(ranged)), (std::vector<std::pair<int, int>>{{15, 19}, {50, 52}}));
 }
 
+// Which condition made each segment, and each condition's frames: a long dip
+// in VMAF and one frame of SSIMULACRA2 below its threshold, with a shortest
+// segment of 6. The SSIMULACRA2 frame is in no segment, and the counts say
+// so (the scores in the segments' table alone didn't tell why).
+TEST(WeakFrames, EachConditionsFramesAreCounted) {
+    MetricResultSet results;
+    std::vector<std::pair<int, float>> dip;
+    for (int frame = 10; frame < 20; ++frame) {
+        dip.emplace_back(frame, 80.0F);
+    }
+    results.add(frame_metric("vmaf", every(1, 59), 95.0F, dip));
+    results.add(frame_metric("ssimulacra2", every(1, 59), 80.0F, {{40, 55.0F}, {15, 50.0F}}));
+    SegmentRules rules{{{"vmaf", '<', 85.0}, {"ssimulacra2", '<', 60.0}}};
+    rules.min_frames = 6;
+    const std::vector<WeakSegment> segments = weak_segments(results, rules, fps, 59);
+    ASSERT_EQ(segments.size(), 1u);
+    EXPECT_EQ(segments[0].first_frame, 10);
+    EXPECT_EQ(segments[0].condition_frames, (std::vector<long long>{10, 1}));  // frame 15 is weak by both
+    const std::vector<ConditionCount> counts = condition_counts(results, rules, 59, segments);
+    ASSERT_EQ(counts.size(), 2u);
+    EXPECT_EQ(counts[0].holds, 10);
+    EXPECT_EQ(counts[0].in_segments, 10);
+    EXPECT_EQ(counts[1].holds, 2);        // frames 15 and 40
+    EXPECT_EQ(counts[1].in_segments, 1);  // frame 40 alone is shorter than 6
+    // Every condition required: no frame holds both but 15, a run of one.
+    rules.all = true;
+    const std::vector<WeakSegment> none = weak_segments(results, rules, fps, 59);
+    EXPECT_TRUE(none.empty());
+    EXPECT_EQ(condition_counts(results, rules, 59, none)[0].in_segments, 0);
+    // A condition on a metric without scores holds nowhere.
+    rules = SegmentRules{{{"vmaf", '<', 85.0}, {"cvvdp", '<', 9.0}}};
+    const std::vector<WeakSegment> some = weak_segments(results, rules, fps, 59);
+    ASSERT_EQ(some.size(), 1u);
+    EXPECT_EQ(some[0].condition_frames, (std::vector<long long>{10, 0}));
+    EXPECT_EQ(condition_counts(results, rules, 59, some)[1].holds, 0);
+}
+
 // The two exports, and the conditions they are read from.
 TEST(WeakFrames, ExportsAndConditionsRead) {
     SegmentRules rules{{*parse_weak_condition("vmaf<90")}};

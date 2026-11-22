@@ -47,6 +47,9 @@
   "its address isn't an http or https URL": "o endereço dele não é uma URL http ou https",
   "its address isn't an https URL": "o endereço dele não é uma URL https",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "O endereço de {service} não é um que ele aceite: verifique-o em Configurações > Notificações.",
+  "A frame is weak only where every condition holds on it.": "Um quadro só é fraco onde todas as condições valem.",
+  "Weak by": "Fraco por",
+  "{condition}: no frame": "{condition}: nenhum quadro",
   "Export the difference": "Exportar a diferença",
   "Export the difference as CSV...": "Exportar a diferença como CSV...",
   "Exporting the difference to {path}...": "Exportando a diferença para {path}...",
@@ -1239,6 +1242,11 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "O modelo da coluna HDR VMAF (os modelos HDR VMAF incluídos da Netflix). Automático escolhe o modelo 1080p a três alturas de tela, ou o 4K a uma e meia em comparações 4K, como no VMAF v0.6.1. Somente para vídeos PQ (HDR10)."
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["Sequências com menos de {count} quadro são deixadas de fora.", "Sequências com menos de {count} quadros são deixadas de fora."],
+  "{condition}: {count} frame": ["{condition}: {count} quadro", "{condition}: {count} quadros"],
+  "{condition}: {count} frame, in a segment": ["{condition}: {count} quadro, em um segmento", "{condition}: {count} quadros, todos em segmentos"],
+  "{condition}: {count} frame, in no segment": ["{condition}: {count} quadro, em nenhum segmento", "{condition}: {count} quadros, em nenhum segmento"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}: {count} quadro, {in} deles em segmentos", "{condition}: {count} quadros, {in} deles em segmentos"],
   "about {count} day": [
    "cerca de {count} dia",
    "cerca de {count} dias"

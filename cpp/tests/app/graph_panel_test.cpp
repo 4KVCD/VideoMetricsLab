@@ -1063,6 +1063,16 @@ TEST_F(GraphPanelTest, WorstFramesListsTheDipsAndOpensThemInVideoCompare) {
     EXPECT_EQ(dialog->segments()[0].first_frame, 9);
     EXPECT_EQ(dialog->segments()[0].last_frame, 10);
     EXPECT_EQ(dialog->segments()[1].first_frame, 70);
+    // Each condition's frames, said under the count; a "Weak by" column only
+    // with several conditions.
+    auto* note = dialog->findChild<QLabel*>("conditionsNote");
+    ASSERT_NE(note, nullptr);
+    EXPECT_TRUE(note->text().startsWith("VMAF v0.6.1 < 85.00: ")) << note->text().toStdString();
+    auto* segment_table = dialog->findChild<QTableWidget*>();
+    ASSERT_NE(segment_table, nullptr);
+    for (int column = 0; column < segment_table->columnCount(); ++column) {
+        EXPECT_NE(segment_table->horizontalHeaderItem(column)->text(), "Weak by");
+    }
 
     // The exports are named after the metrics they cover, so that one by
     // another metric does not take this one's name.

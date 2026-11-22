@@ -47,6 +47,9 @@
   "its address isn't an http or https URL": "a címe nem http vagy https URL",
   "its address isn't an https URL": "a címe nem https URL",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "A(z) {service} címe nem olyan, amit elfogad: ellenőrizze a Beállítások > Értesítések lapon.",
+  "A frame is weak only where every condition holds on it.": "Egy képkocka csak ott gyenge, ahol minden feltétel teljesül.",
+  "Weak by": "Gyenge ettől",
+  "{condition}: no frame": "{condition}: egy képkocka sem",
   "Export the difference": "Különbség exportálása",
   "Export the difference as CSV...": "Különbség exportálása CSV-ként...",
   "Exporting the difference to {path}...": "A különbség exportálása ide: {path}...",
@@ -1239,6 +1242,11 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "A HDR VMAF oszlop modellje (a Netflix mellékelt HDR VMAF modelljei). Az Automatikus az 1080p modellt választja háromszoros képernyőmagasságnál, 4K összehasonlításnál pedig a 4K modellt másfélszeresnél, akárcsak a VMAF v0.6.1. Csak PQ (HDR10) videókhoz."
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["A(z) {count} képkockánál rövidebb szakaszok kimaradnak.", "A(z) {count} képkockánál rövidebb szakaszok kimaradnak."],
+  "{condition}: {count} frame": ["{condition}: {count} képkocka", "{condition}: {count} képkocka"],
+  "{condition}: {count} frame, in a segment": ["{condition}: {count} képkocka, egy szakaszban", "{condition}: {count} képkocka, mind szakaszokban"],
+  "{condition}: {count} frame, in no segment": ["{condition}: {count} képkocka, egy szakaszban sem", "{condition}: {count} képkocka, egy szakaszban sem"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}: {count} képkocka, ebből {in} szakaszokban", "{condition}: {count} képkocka, ebből {in} szakaszokban"],
   "about {count} day": [
    "kb. {count} nap",
    "kb. {count} nap"

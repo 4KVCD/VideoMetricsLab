@@ -47,6 +47,9 @@
   "its address isn't an http or https URL": "его адрес — не URL http или https",
   "its address isn't an https URL": "его адрес — не URL https",
   "{service}'s address isn't one it takes: check it in Settings > Notifications.": "Адрес {service} не подходит: проверьте его в Настройки > Уведомления.",
+  "A frame is weak only where every condition holds on it.": "Кадр слаб только там, где выполняется каждое условие.",
+  "Weak by": "Слабый по",
+  "{condition}: no frame": "{condition}: ни одного кадра",
   "Export the difference": "Экспорт разницы",
   "Export the difference as CSV...": "Экспорт разницы в CSV...",
   "Exporting the difference to {path}...": "Экспорт разницы в {path}...",
@@ -1239,6 +1242,11 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "Модель столбца HDR VMAF (входящие в комплект модели HDR VMAF от Netflix). «Авто» выбирает модель 1080p для трёх высот экрана или 4K-модель для полутора высот при сравнении 4K, как у VMAF v0.6.1. Только для видео PQ (HDR10)."
  },
  "plurals": {
+  "Runs shorter than {count} frame are left out.": ["Серии короче {count} кадра не учитываются.", "Серии короче {count} кадров не учитываются.", "Серии короче {count} кадров не учитываются."],
+  "{condition}: {count} frame": ["{condition}: {count} кадр", "{condition}: {count} кадра", "{condition}: {count} кадров"],
+  "{condition}: {count} frame, in a segment": ["{condition}: {count} кадр, в сегменте", "{condition}: {count} кадра, все в сегментах", "{condition}: {count} кадров, все в сегментах"],
+  "{condition}: {count} frame, in no segment": ["{condition}: {count} кадр, ни в одном сегменте", "{condition}: {count} кадра, ни в одном сегменте", "{condition}: {count} кадров, ни в одном сегменте"],
+  "{condition}: {count} frame, {in} of them in segments": ["{condition}: {count} кадр, из них {in} в сегментах", "{condition}: {count} кадра, из них {in} в сегментах", "{condition}: {count} кадров, из них {in} в сегментах"],
   "about {count} day": [
    "около {count} дня",
    "около {count} дней",
