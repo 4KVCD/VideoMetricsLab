@@ -45,6 +45,18 @@ std::shared_ptr<const ComparisonResult> vmaf_result(const std::string& name, con
 
 QString header(const QTableWidget& table, int column) { return table.horizontalHeaderItem(column)->text(); }
 
+// Every Export menu's items, as each shows them when opened.
+QList<QAction*> export_items(const WorstFramesTab& tab) {
+    QList<QAction*> items;
+    for (QPushButton* button : tab.findChildren<QPushButton*>()) {
+        if (button->text() == "Export") {
+            emit button->menu()->aboutToShow();
+            items += button->menu()->actions();
+        }
+    }
+    return items;
+}
+
 // The tab with `settings`' profiles, handed back after each save as the
 // window does, and `answers` for the dialogs it asks.
 struct Bench {
@@ -142,7 +154,8 @@ TEST(WorstFramesTab, ListsTheDipsAndTheSegmentsAndOpensThemInVideoCompare) {
     EXPECT_EQ(list.item(0, 0)->text(), "70");
     EXPECT_EQ(tab.segments().size(), 1U);
 
-    // The exports are named after the metrics they cover.
+    // The exports are named after the metrics they cover; each has its
+    // card's Export menu.
     QStringList suggested;
     Dialogs dialogs;
     dialogs.save_file = [&suggested](const QString&, const QString& name, const QString&) {
@@ -151,16 +164,20 @@ TEST(WorstFramesTab, ListsTheDipsAndTheSegmentsAndOpensThemInVideoCompare) {
     };
     Bench exporting(settings, dialogs);
     exporting.tab.set_videos({{"row:a", "a", vmaf_result("a.mkv", values)}});
-    for (QPushButton* button : exporting.tab.findChildren<QPushButton*>()) {
-        if (button->text() == "Export") {
-            for (QAction* action : button->menu()->actions()) {
-                if (action->text().startsWith("Export ") && action->text() != "Export all videos") {
-                    action->trigger();
-                }
-            }
+    QStringList labels;
+    for (QAction* action : export_items(exporting.tab)) {
+        labels.append(action->text());
+        if (action->isEnabled() && !action->text().startsWith("All videos'")) {
+            action->trigger();
         }
     }
-    EXPECT_EQ(suggested, (QStringList{"a.vmaf.segments.json", "a.vmaf.segments.csv"}));
+    labels.sort();
+    EXPECT_EQ(labels, (QStringList{"All videos' weak segments as JSON or CSV...", "Graph as PNG...",
+                                   "Weak segments as CSV...", "Weak segments as JSON...", "Worst frames as CSV...",
+                                   "Worst frames as JSON..."}));
+    suggested.sort();
+    EXPECT_EQ(suggested, (QStringList{"a.vmaf.segments.csv", "a.vmaf.segments.json", "a.vmaf.worst.csv",
+                                      "a.vmaf.worst.json", "a_vmaf.png"}));
 }
 
 TEST(WorstFramesTab, DetailsTellsTheFrameUnderThePointerElseTheRowSelected) {
@@ -271,20 +288,16 @@ TEST(WorstFramesTab, StartsFromAProfileAndSavesOnlyWhenAsked) {
     EXPECT_EQ(bench.saved.size(), 2U);
     EXPECT_EQ(alerted, "Profile not saved");
 
-    // Export all videos asks the window for its report of every video, by
+    // All videos' weak segments asks the window for its report of every video, by
     // the rules shown: unsaved ones too.
     threshold = shown->editor()->findChild<QDoubleSpinBox*>();
     threshold->setValue(85.0);
     std::vector<SegmentRules> reports;
     QObject::connect(shown, &WorstFramesTab::report_requested,
                      [&reports](const SegmentRules& rules) { reports.push_back(rules); });
-    for (QPushButton* button : shown->findChildren<QPushButton*>()) {
-        if (button->text() == "Export") {
-            for (QAction* action : button->menu()->actions()) {
-                if (action->text() == "Export all videos") {
-                    action->trigger();
-                }
-            }
+    for (QAction* action : export_items(*shown)) {
+        if (action->text() == "All videos' weak segments as JSON or CSV...") {
+            action->trigger();
         }
     }
     ASSERT_EQ(reports.size(), 1U);

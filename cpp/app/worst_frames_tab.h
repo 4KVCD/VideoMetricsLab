@@ -16,6 +16,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -24,6 +25,7 @@
 
 #include "dialogs.h"
 #include "segment_rules_editor.h"
+#include "theme.h"
 #include "worst_frame_list.h"
 #include "vml/metrics.h"
 #include "vml/results.h"
@@ -34,6 +36,7 @@
 class QBoxLayout;
 class QComboBox;
 class QLabel;
+class QMenu;
 class QPushButton;
 class QSplitter;
 class QTabBar;
@@ -62,6 +65,10 @@ class WorstFramesTab : public QWidget {
 public:
     // `dialogs` asks where to export and a new profile's name.
     explicit WorstFramesTab(Dialogs dialogs, QWidget* parent = nullptr);
+
+    // Settings' Exported graphs, read at each export of the graph (light
+    // where not set).
+    std::function<theme::ChartColours()> export_colours;
 
     // The videos to choose from (the graph's lines, in their order). The
     // video chosen stays chosen while it is among them; else the first is.
@@ -122,7 +129,16 @@ protected:
 
 private:
     QWidget* build_toolbar();
-    QPushButton* make_export_button();
+    // The quick grabs (what the tab shows: the video, the metric, the
+    // conditions, the dips and the range), each list's and the graph's: the
+    // same items in its card's Export menu and its right-click menu.
+    void fill_worst_menu(QMenu* menu);
+    void fill_graph_menu(QMenu* menu);
+    void fill_segments_menu(QMenu* menu);
+    // An Export button whose menu `fill` fills each time it opens, and the
+    // same menu on a right-click on `view`.
+    QPushButton* export_button(const std::function<void(QMenu*)>& fill);
+    void offer_menu(QWidget* view, const std::function<void(QMenu*)>& fill);
     QWidget* build_conditions();
     QWidget* build_lists();
     // Details, under the conditions: the frame under the pointer, else the
@@ -159,6 +175,10 @@ private:
     void load_preset(const SegmentPreset& preset);
     enum class ExportKind { json, csv };
     void export_segments(ExportKind kind);
+    void export_worst(ExportKind kind);
+    void export_graph();
+    // Writes `text` to `path` (CR LF on Windows), saying so if it cannot.
+    void write_export(const QString& path, const std::string& text);
     // The lists side by side where both fit at their natural widths, else
     // one above the other. Only compares the widths kept by fit_list with
     // the room: called on every resize of the work area.

@@ -112,11 +112,19 @@ calculated in resolution tests.
    it in the profile picked, or **Save as new profile** in a new one; a
    profile's condition on a metric the video doesn't have is kept for videos
    that do (a preset's, once you've loaded one).
-   **Export** saves the video's segments as JSON or CSV, named after the
-   metrics they cover (`<video>.vmaf.segments.json`,
-   `<video>.vmaf+ssimulacra2.segments.csv`), or every scored test video's
-   in one file (**Export all videos**; see
-   [Exporting weak segments](#exporting-weak-segments)).
+   Each card's **Export** menu, and a right-click on its list or graph,
+   saves what the tab shows (the metric, the conditions, the dips and the
+   range):
+   - Worst frames: **Worst frames as CSV...** or **as JSON...**, each frame
+     with its rank, time and every metric's score
+     (`<video>.vmaf.worst.csv`; the format is in
+     [RESULTS_JSON.md](RESULTS_JSON.md#worst-frames-as-json-and-csv)).
+   - The graph: **Graph as PNG...**, in Settings' Exported graphs colours.
+   - Weak segments: **Weak segments as JSON...** or **as CSV...**, named
+     after the metrics they cover (`<video>.vmaf.segments.json`,
+     `<video>.vmaf+ssimulacra2.segments.csv`), or every scored test video's
+     in one file (**All videos' weak segments as JSON or CSV...**; see
+     [Exporting weak segments](#exporting-weak-segments)).
 
 **Highlight best/worst results**, under the video table, colours each metric's
 best score green and its worst red among the test videos that have one; a
@@ -1004,8 +1012,8 @@ when every condition must hold; the JSON lists it under `left_out`.
 - With **Weak segments** ticked in **Settings > Storage > Exports
   include**, **Export all videos'...** in the right-click menus saves every
   test video scored against the reference, by the profile in use, in one
-  report, as JSON and CSV. **Export all videos** in the Worst Frames tab's
-  **Export** menu saves it by the conditions shown there, saved or not (over the whole
+  report, as JSON and CSV. **All videos' weak segments as JSON or CSV...**
+  in the Worst Frames tab's Weak segments menu saves it by the conditions shown there, saved or not (over the whole
   videos, without a highlighted range), in one file, JSON or CSV as its name
   says.
   The JSON gives the conditions and options, then each video's `name`,

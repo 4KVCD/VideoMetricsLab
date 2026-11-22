@@ -641,6 +641,7 @@ void MainWindow::build_ui() {
                                            settings_.export_graph_text);
     };
     graph_panel_->export_colours = export_colours;
+    worst_tab_->export_colours = export_colours;
     // Metric Graphs' statistics menu offers the Videos table's exports.
     graph_panel_->export_items = [this] { return exported_items(settings_); };
     graph_panel_->video_exportable = [this](const std::string& identity) {
