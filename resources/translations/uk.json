@@ -7,6 +7,7 @@
   "Characters from the start:": "Символів з початку:",
   "from the end:": "з кінця:",
   "How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Як назви тестових відео показуються в «Графіки метрик» і «Порівняння відео». «Що їх розрізняє» пропускає спільні для показаних відео початок і кінець: «…CRF 20», «…CRF 22». Підказки, експорт і імена файлів зберігають повну назву.",
+  "PQ (HDR10) videos only: another video fails HDR VMAF alone, with the reason, and its other metrics are calculated as usual.": "Лише відео PQ (HDR10): для іншого відео не вдається лише HDR VMAF, із зазначенням причини, а решта метрик обчислюється як звичайно.",
   "Mocha": "Мока",
   "Mocha: VML Modern only": "Мока: лише VML Modern",
   "Theme": "Тема",

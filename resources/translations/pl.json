@@ -7,6 +7,7 @@
   "Characters from the start:": "Znaki od początku:",
   "from the end:": "od końca:",
   "How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Jak nazwy testowanych wideo są pokazywane w Wykresy metryk i Porównanie wideo. To, co je odróżnia pomija początek i koniec wspólne dla pokazanych wideo: „…CRF 20”, „…CRF 22”. Podpowiedzi, eksporty i nazwy plików zachowują pełną nazwę.",
+  "PQ (HDR10) videos only: another video fails HDR VMAF alone, with the reason, and its other metrics are calculated as usual.": "Tylko wideo PQ (HDR10): dla innego wideo zawodzi tylko HDR VMAF, z podaniem przyczyny, a pozostałe metryki są liczone jak zwykle.",
   "Mocha": "Mokka",
   "Mocha: VML Modern only": "Mokka: tylko VML Modern",
   "Theme": "Motyw",

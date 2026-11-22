@@ -7,6 +7,7 @@
   "Characters from the start:": "Baştan karakter:",
   "from the end:": "sondan:",
   "How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Test videolarının adlarının Metrik grafikleri ve Video karşılaştırma içinde nasıl gösterildiği. Onları ayıran kısım, gösterilen videoların ortak başını ve sonunu atlar: \"…CRF 20\", \"…CRF 22\". İpuçları, dışa aktarımlar ve dosya adları tam adı korur.",
+  "PQ (HDR10) videos only: another video fails HDR VMAF alone, with the reason, and its other metrics are calculated as usual.": "Yalnızca PQ (HDR10) videolar: başka bir videoda yalnızca HDR VMAF, nedeniyle birlikte başarısız olur; diğer ölçümleri her zamanki gibi hesaplanır.",
   "Mocha": "Mocha",
   "Mocha: VML Modern only": "Mocha: yalnızca VML Modern",
   "Theme": "Tema",

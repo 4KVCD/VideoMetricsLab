@@ -16,6 +16,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <initializer_list>
 #include <limits>
 #include <optional>
 #include <set>
@@ -163,6 +164,24 @@ QTimeEdit* new_seconds_edit() {
     return edit;
 }
 
+// The forms' labels as wide as the widest of them, so that their fields start
+// at one edge, as in one form.
+void same_label_width(std::initializer_list<QFormLayout*> forms) {
+    std::vector<QWidget*> labels;
+    int widest = 0;
+    for (QFormLayout* form : forms) {
+        for (int row = 0; row < form->rowCount(); ++row) {
+            if (QLayoutItem* item = form->itemAt(row, QFormLayout::LabelRole); item != nullptr && item->widget()) {
+                labels.push_back(item->widget());
+                widest = std::max(widest, item->widget()->sizeHint().width());
+            }
+        }
+    }
+    for (QWidget* label : labels) {
+        label->setMinimumWidth(widest);
+    }
+}
+
 }  // namespace
 
 OptionsPanel::OptionsPanel(const std::vector<GpuVendor>& gpu_vendors, QWidget* parent)
@@ -188,7 +207,38 @@ OptionsPanel::OptionsPanel(const std::vector<GpuVendor>& gpu_vendors, QWidget* p
         return forms.back();
     };
     build_preparation(add_box(app::tr("Video preparation (calculation only)")));
-    build_metric_settings(add_box(app::tr("Metric-specific settings")));
+    // The middle column: one box in Classic, "Metric-specific settings". In
+    // VML Modern two cards, one above the other: VMAF (its three models and
+    // the frame subsample) and CVVDP (its display), which have nothing in
+    // common but the column (theme::classic_box, theme::container).
+    auto* metric_box = new QGroupBox;
+    theme::classic_box(metric_box, app::tr("Metric-specific settings"));
+    auto* metric_column = new QVBoxLayout(metric_box);
+    if (theme::current_interface() == theme::Interface::modern) {
+        // The cards' tops level with the side boxes' (Modern's box draws
+        // nothing of its own around them).
+        metric_column->setContentsMargins(0, 0, 0, 0);
+    }
+    const auto add_card = [&metric_column, &forms](const QString& title) {
+        QBoxLayout* card_layout = nullptr;
+        metric_column->addWidget(theme::container("card", false, &card_layout));
+        auto* heading = new QLabel(title);
+        theme::set_role(heading, "title");
+        theme::modern_only(heading);
+        card_layout->addWidget(heading);
+        auto* form = new QFormLayout;
+        card_layout->addLayout(form);
+        forms.push_back(form);
+        return form;
+    };
+    QFormLayout* vmaf_form = add_card(QStringLiteral("VMAF"));
+    QFormLayout* cvvdp_form = add_card(QStringLiteral("CVVDP"));
+    metric_column->addStretch(1);
+    columns->addWidget(metric_box, 1);
+    build_metric_settings(vmaf_form);
+    build_cvvdp(cvvdp_form);
+    // One label column across the two, as the one form Classic had.
+    same_label_width({vmaf_form, cvvdp_form});
     build_performance(add_box(app::tr("Performance")), gpu_vendors);
     layout->addLayout(columns);
 
@@ -343,7 +393,7 @@ void OptionsPanel::show_film_grain(const std::vector<FilmGrainVideo>& videos) {
 }
 
 void OptionsPanel::build_metric_settings(QFormLayout* form) {
-    // The VMAF models, the frame subsample, and CVVDP's display.
+    // The VMAF models and the frame subsample (CVVDP's display: build_cvvdp).
     model_combo = new QComboBox;
     for (const ModelChoice& choice : model_choices()) {
         model_combo->addItem(app::tr(choice.name));
@@ -382,8 +432,6 @@ void OptionsPanel::build_metric_settings(QFormLayout* form) {
     subsample_spin->setToolTip(
         app::tr("1 = every frame. Applies to VMAF, PSNR and SSIM. XPSNR is computed every frame; combined runs retain "
                 "values at libvmaf's sampled frames."));
-
-    build_cvvdp(form);
 }
 
 void OptionsPanel::build_cvvdp(QFormLayout* form) {

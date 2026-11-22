@@ -7,6 +7,7 @@
   "Characters from the start:": "先頭からの文字数：",
   "from the end:": "末尾から：",
   "How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "指標グラフと動画比較でのテスト動画名の表示方法。「違いが分かる部分」は、表示中の動画に共通する先頭と末尾を省きます：「…CRF 20」「…CRF 22」。ツールチップ、エクスポート、ファイル名には完全な名前が残ります。",
+  "PQ (HDR10) videos only: another video fails HDR VMAF alone, with the reason, and its other metrics are calculated as usual.": "PQ（HDR10）動画のみ：それ以外の動画では HDR VMAF だけが理由とともに失敗し、ほかの指標は通常どおり計算されます。",
   "Mocha": "モカ",
   "Mocha: VML Modern only": "モカ: VML Modern のみ",
   "Theme": "テーマ",

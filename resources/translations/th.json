@@ -7,6 +7,7 @@
   "Characters from the start:": "อักขระจากต้น:",
   "from the end:": "จากท้าย:",
   "How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "วิธีแสดงชื่อวิดีโอทดสอบใน กราฟเมตริก และ เปรียบเทียบวิดีโอ \"ส่วนที่ทำให้ต่างกัน\" จะละส่วนต้นและส่วนท้ายที่วิดีโอที่แสดงมีร่วมกัน: \"…CRF 20\", \"…CRF 22\" คำแนะนำเครื่องมือ การส่งออก และชื่อไฟล์ยังคงใช้ชื่อเต็ม",
+  "PQ (HDR10) videos only: another video fails HDR VMAF alone, with the reason, and its other metrics are calculated as usual.": "เฉพาะวิดีโอ PQ (HDR10): วิดีโออื่นจะล้มเหลวเฉพาะ HDR VMAF พร้อมเหตุผล และตัวชี้วัดอื่นของวิดีโอนั้นยังคำนวณตามปกติ",
   "Mocha": "มอคค่า",
   "Mocha: VML Modern only": "มอคค่า: VML Modern เท่านั้น",
   "Theme": "ธีม",

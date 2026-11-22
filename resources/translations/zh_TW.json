@@ -7,6 +7,7 @@
   "Characters from the start:": "開頭字元數：",
   "from the end:": "結尾：",
   "How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "測試影片名稱在指標圖表和影片比較中的顯示方式。「區分它們的部分」會省去所顯示影片共有的開頭和結尾：「…CRF 20」「…CRF 22」。提示、匯出和檔案名稱保留完整名稱。",
+  "PQ (HDR10) videos only: another video fails HDR VMAF alone, with the reason, and its other metrics are calculated as usual.": "僅限 PQ（HDR10）影片：其他影片只有 HDR VMAF 會失敗並說明原因，其他指標照常計算。",
   "Mocha": "摩卡",
   "Mocha: VML Modern only": "摩卡：僅限 VML Modern",
   "Theme": "主題",
