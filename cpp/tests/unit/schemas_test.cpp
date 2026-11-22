@@ -17,6 +17,7 @@
 #include "bdrate.h"
 #include "bitrate.h"
 #include "devices.h"
+#include "loop.h"
 #include "report.h"
 #include "saved.h"
 #include "weak_report.h"
@@ -264,6 +265,78 @@ TEST(Schemas, SavedSegmentsOfScoresAreTakenAsCompareTakesThem) {
     ASSERT_EQ(notes.size(), 2U);
     EXPECT_NE(notes[0].find("ssimulacra2<70 is left out"), std::string::npos) << notes[0];
     EXPECT_NE(notes[1].find("the profile has no condition on the metrics here"), std::string::npos) << notes[1];
+}
+
+// target's answers: each sequence's, answered or not (with why), by the
+// rate or a column; the JSON holds to its schema.
+TEST(Schemas, TargetsAreAnsweredAndListed) {
+    RateTable table;
+    table.metric_keys = {"vmaf"};
+    table.columns = {"sequence", "kbps", "vmaf", "crf"};
+    const auto encode = [](const char* sequence, double kbps, std::optional<double> vmaf, const char* crf) {
+        return RateTable::Encode{sequence, kbps, {{"vmaf", vmaf}}, {{"crf", crf}}, ""};
+    };
+    table.encodes = {encode("park", 1000, 90, "30"), encode("park", 2000, 94, "26"), encode("park", 4000, 97, "22"),
+                     encode("park", 3000, std::nullopt, "24"), encode("tree", 900, 91, "x")};
+    TargetArguments arguments;
+    arguments.scores = {"x264.csv"};
+    arguments.metric = "vmaf";
+    arguments.value = 95;
+    const TargetAnswers rate = target_answers(arguments, table);
+    EXPECT_EQ(rate.sequences, 2U);
+    EXPECT_FALSE(rate.all_answered);  // tree has one encode
+    const nlohmann::ordered_json& park = rate.document["sequences"][0];
+    EXPECT_EQ(park["encodes"], 3);  // the one without a score left out, with a warning
+    EXPECT_GT(park["setting"].get<double>(), 2000);
+    EXPECT_LT(park["setting"].get<double>(), 4000);
+    EXPECT_EQ(rate.document["sequences"][1]["why_code"], "too_few_encodes");
+    EXPECT_EQ(rate.warnings.size(), 1U);
+    EXPECT_EQ(schema_errors("target", rate.document), std::vector<std::string>{});
+
+    arguments.by = "crf";
+    arguments.sequence = "park";
+    const TargetAnswers crf = target_answers(arguments, table);
+    EXPECT_EQ(crf.sequences, 1U);
+    EXPECT_TRUE(crf.all_answered);
+    const double setting = crf.document["sequences"][0]["setting"].get<double>();
+    EXPECT_GT(setting, 22);
+    EXPECT_LT(setting, 26);
+    EXPECT_EQ(schema_errors("target", crf.document), std::vector<std::string>{});
+}
+
+// diff matches weak segments by overlapping frames, chained: those of the
+// old run nothing new overlaps are fixed, the new ones nothing old overlaps
+// appeared; its JSON holds to its schema.
+TEST(Schemas, DiffsMatchSegmentsAndHoldToTheirSchema) {
+    const auto segment = [](int first, int last) {
+        WeakSegment made;
+        made.first_frame = first;
+        made.last_frame = last;
+        return made;
+    };
+    const SegmentMatch match = match_segments({segment(0, 3), segment(10, 12), segment(20, 22)},
+                                              {segment(2, 11), segment(30, 31), segment(12, 14)});
+    EXPECT_EQ(match.fixed, std::vector<std::size_t>{2});
+    ASSERT_EQ(match.remaining.size(), 1U);
+    EXPECT_EQ(match.remaining[0].old_segments, (std::vector<std::size_t>{0, 1}));
+    EXPECT_EQ(match.remaining[0].new_segments, (std::vector<std::size_t>{0, 2}));
+    EXPECT_EQ(match.appeared, std::vector<std::size_t>{1});
+
+    const ComparisonResult old_result = *scored_video().result;
+    ComparisonResult new_result = old_result;
+    new_result.distorted = "b.mkv";
+    new_result.metric_results.add(FrameMetricResult{"vmaf", {0, 1, 2}, {0.0, 1 / 24.0, 2 / 24.0}, {95, 90, 70}, {}});
+    const SegmentRules rules{{WeakCondition{"vmaf", '<', 85.0}}};
+    const nlohmann::ordered_json document = diff_json(old_result, "a.metrics.json", new_result, "3fa9c1", rules);
+    const nlohmann::ordered_json& vmaf = document["metrics"]["vmaf"]["stats"];
+    EXPECT_DOUBLE_EQ(vmaf["min"]["change"].get<double>(), 0.0);
+    EXPECT_DOUBLE_EQ(vmaf["median"]["change"].get<double>(), 10.0);
+    EXPECT_TRUE(document["metrics"]["psnr"]["stats"]["max"]["change"].is_null());  // inf to inf
+    EXPECT_EQ(document["segments"]["remaining"][0]["old"], nlohmann::ordered_json::array({0}));
+    EXPECT_EQ(document["segments"]["new"]["segments"][0]["first_frame"], 2);
+    EXPECT_EQ(schema_errors("diff", document), std::vector<std::string>{});
+    EXPECT_EQ(schema_errors("diff", diff_json(old_result, "a", new_result, "b", SegmentRules{})),
+              std::vector<std::string>{});
 }
 
 }  // namespace

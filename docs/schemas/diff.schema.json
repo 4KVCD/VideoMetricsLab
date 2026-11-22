@@ -1,0 +1,301 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/4KVCD/VideoMetricsLab/blob/release/v2.7/docs/schemas/diff.schema.json",
+  "title": "VideoMetricsLab run differences (diff-1)",
+  "description": "diff --json: how a run's scores, and with --segments its weak segments, differ from an earlier run's.",
+  "type": "object",
+  "required": [
+    "app",
+    "version",
+    "commit",
+    "format"
+  ],
+  "properties": {
+    "app": {
+      "const": "VideoMetricsLab"
+    },
+    "version": {
+      "type": "string"
+    },
+    "commit": {
+      "type": "string"
+    },
+    "format": {
+      "const": "diff-1"
+    },
+    "error": {
+      "type": "string"
+    },
+    "error_code": {
+      "const": "run_unreadable"
+    },
+    "old": {
+      "$ref": "#/$defs/run"
+    },
+    "new": {
+      "$ref": "#/$defs/run"
+    },
+    "same_reference": {
+      "type": "boolean"
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "better",
+          "stats"
+        ],
+        "properties": {
+          "better": {
+            "enum": [
+              "higher",
+              "lower"
+            ]
+          },
+          "stats": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/change"
+            }
+          }
+        }
+      }
+    },
+    "only_old": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "only_new": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "segments": {
+      "anyOf": [
+        {
+          "type": "object",
+          "required": [
+            "old",
+            "new",
+            "fixed",
+            "remaining",
+            "appeared"
+          ],
+          "properties": {
+            "old": {
+              "$ref": "#/$defs/segments"
+            },
+            "new": {
+              "$ref": "#/$defs/segments"
+            },
+            "fixed": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            "remaining": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "old",
+                  "new"
+                ],
+                "properties": {
+                  "old": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    }
+                  },
+                  "new": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            },
+            "appeared": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "run": {
+      "type": "object",
+      "required": [
+        "item",
+        "reference",
+        "test",
+        "frames",
+        "fps"
+      ],
+      "properties": {
+        "item": {
+          "type": "string"
+        },
+        "reference": {
+          "type": "string"
+        },
+        "test": {
+          "type": "string"
+        },
+        "frames": {
+          "type": "integer"
+        },
+        "fps": {
+          "type": "number"
+        }
+      }
+    },
+    "change": {
+      "type": "object",
+      "required": [
+        "old",
+        "new",
+        "change"
+      ],
+      "properties": {
+        "old": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "enum": [
+                "inf",
+                "-inf"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "new": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "enum": [
+                "inf",
+                "-inf"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "change": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    },
+    "segments": {
+      "type": "object",
+      "required": [
+        "conditions",
+        "combine",
+        "min_frames",
+        "merge_frames",
+        "ranges",
+        "segments"
+      ],
+      "properties": {
+        "conditions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "left_out": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "combine": {
+          "enum": [
+            "any",
+            "all"
+          ]
+        },
+        "min_frames": {
+          "type": "integer"
+        },
+        "merge_frames": {
+          "type": "integer"
+        },
+        "ranges": {
+          "type": "array"
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "first_frame",
+              "last_frame",
+              "start_time",
+              "end_time",
+              "frames",
+              "metrics",
+              "weak_by",
+              "condition_frames"
+            ],
+            "properties": {
+              "first_frame": {
+                "type": "integer"
+              },
+              "last_frame": {
+                "type": "integer"
+              },
+              "start_time": {
+                "type": "number"
+              },
+              "end_time": {
+                "type": "number"
+              },
+              "frames": {
+                "type": "integer"
+              },
+              "metrics": {
+                "type": "object"
+              },
+              "weak_by": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "condition_frames": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

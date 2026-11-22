@@ -260,6 +260,31 @@ std::vector<const SavedComparison*> saved_named(const std::vector<SavedCompariso
     return found;
 }
 
+ComparisonResult read_comparison(const std::string& item) {
+    const std::filesystem::path path = python_path(item);
+    std::error_code ignored;
+    if (std::filesystem::is_regular_file(path, ignored)) {
+        return load_run(path).first;
+    }
+    if (!is_hex(ascii_lower(item)) || item.size() < show_prefix) {
+        throw std::runtime_error("no such file, nor a saved comparison's ID (at least " +
+                                 std::to_string(show_prefix) + " of its hex digits, saved list gives them)");
+    }
+    const std::vector<SavedComparison> all = list_saved_comparisons(saved_folder());
+    const std::vector<const SavedComparison*> found = saved_named(all, item, show_prefix);
+    if (found.empty()) {
+        throw std::runtime_error("no saved comparison has it (saved list gives them)");
+    }
+    if (found.size() > 1) {
+        throw std::runtime_error("more than one saved comparison's ID begins with it; give more of it");
+    }
+    std::optional<std::pair<ComparisonResult, std::string>> loaded = load_saved_comparison(*found.front());
+    if (!loaded) {
+        throw std::runtime_error("its saved scores could not be read");
+    }
+    return std::move(loaded->first);
+}
+
 std::string saved_list_text(const std::vector<const SavedComparison*>& saved) {
     if (saved.empty()) {
         return "No saved comparisons.\n";

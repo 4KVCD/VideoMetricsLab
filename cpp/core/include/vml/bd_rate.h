@@ -14,6 +14,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace vml {
@@ -48,6 +49,35 @@ BdRateResult bd_rate(std::span<const RatePoint> anchor, std::span<const RatePoin
 // where bd_rate would have no curve (fewer than 2 points, tied scores, a
 // number that is not finite or a rate not above 0).
 std::vector<RatePoint> pchip_curve(std::span<const RatePoint> points, bool lower_is_better, int samples);
+
+// An encode's score with what made it: its rate in kb/s, or a setting such
+// as its CRF.
+struct SettingPoint {
+    double setting = 0;
+    double score = 0;
+};
+
+// Where a curve of encodes reaches a score (setting_for_score).
+struct TargetResult {
+    std::optional<double> setting;  // none when `gap` says why
+    // Beyond the encodes' scores: from the straight line through the two
+    // nearest, rather than between two.
+    bool extrapolated = false;
+    // Indexes into the points: the two encodes either side of the score
+    // (lower score first), or the two it was extrapolated from; for a score
+    // an encode has, that encode twice.
+    std::optional<std::pair<std::size_t, std::size_t>> bracket;
+    BdRateGap gap = BdRateGap::none;
+};
+
+// The setting at which `points`' curve reaches `score`: the curve bd_rate
+// integrates, the setting (its log with `log_setting`, for a rate) against
+// the score, interpolated with PCHIP. Beyond the scores the points have, the
+// straight line through the two nearest goes on to it. The direction of the
+// metric does not matter: the curve is read at a score. Gaps as bd_rate's:
+// fewer than 2 points, tied scores, a number that is not finite (`score`
+// too), or with `log_setting` a setting not above 0.
+TargetResult setting_for_score(std::span<const SettingPoint> points, double score, bool log_setting);
 
 // The PCHIP slopes at each of the points (x ascending, all different), as
 // scipy's PchipInterpolator works them out. Exposed for its test.

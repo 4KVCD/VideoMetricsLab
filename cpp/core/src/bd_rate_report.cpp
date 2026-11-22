@@ -271,7 +271,7 @@ namespace {
 
 // A results document's video as an encode: none where it has no score of
 // the whole file to go with a bitrate.
-std::optional<RateTable::Encode> document_encode(const nlohmann::json& video) {
+std::optional<RateTable::Encode> document_encode(const nlohmann::json& video, const std::string& stat) {
     if (!video.is_object()) {
         return std::nullopt;
     }
@@ -325,7 +325,7 @@ std::optional<RateTable::Encode> document_encode(const nlohmann::json& video) {
             if (found == scores->end() || !found->is_object()) {
                 continue;
             }
-            const auto score = found->find("score");
+            const auto score = found->find(stat);
             if (score != found->end() && score->is_number()) {
                 encode.scores[std::string(metric.key)] = score->get<double>();
             } else if (score != found->end() && score->is_string() && score->get<std::string>() == "inf") {
@@ -356,13 +356,17 @@ RateTable table_of_encodes(std::vector<RateTable::Encode> encodes) {
 
 }  // namespace
 
-RateTable read_rate_file(std::string_view text, const std::string& name) {
+RateTable read_rate_file(std::string_view text, const std::string& name, const std::string& stat) {
     std::string_view rest = text;
     if (rest.starts_with("\xEF\xBB\xBF")) {
         rest.remove_prefix(3);
     }
     const std::size_t first = rest.find_first_not_of(" \t\r\n");
     if (first == std::string_view::npos || rest[first] != '{') {
+        if (stat != "score") {
+            throw std::runtime_error(name + ": a CSV file has one score per metric, not its " + stat +
+                                     ": give a results JSON file or run files");
+        }
         return read_rate_table(text, name);
     }
     std::vector<RateTable::Encode> encodes;
@@ -385,7 +389,7 @@ RateTable read_rate_file(std::string_view text, const std::string& name) {
                     continue;
                 }
                 for (const nlohmann::json& video : *videos) {
-                    if (std::optional<RateTable::Encode> encode = document_encode(video)) {
+                    if (std::optional<RateTable::Encode> encode = document_encode(video, stat)) {
                         encodes.push_back(std::move(*encode));
                     }
                 }
@@ -394,6 +398,12 @@ RateTable read_rate_file(std::string_view text, const std::string& name) {
             // A run file: its one video.
             const std::pair<ComparisonResult, std::string> run = run_from_json(document);
             if (std::optional<RateTable::Encode> encode = rate_encode(run.first)) {
+                if (stat != "score") {
+                    for (auto& [key, score] : encode->scores) {
+                        const std::optional<nlohmann::ordered_json> summary = metric_summary(run.first, key);
+                        score = summary && summary->contains(stat) ? summary_number(summary->at(stat)) : std::nullopt;
+                    }
+                }
                 encodes.push_back(std::move(*encode));
             }
         }

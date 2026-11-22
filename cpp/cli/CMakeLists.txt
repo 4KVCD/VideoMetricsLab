@@ -10,6 +10,7 @@ add_library(vml_cli STATIC
     devices.cpp
     file_names.cpp
     gates.cpp
+    loop.cpp
     notify.cpp
     report.cpp
     saved.cpp

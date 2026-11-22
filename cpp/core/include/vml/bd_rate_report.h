@@ -48,7 +48,11 @@ RateTable read_rate_table(std::string_view text, const std::string& name);
 //   rate_encode makes it.
 // A video of a range, failed or cancelled, or with no bitrate is left out.
 // Throws std::runtime_error, `name` naming the file, when none is left.
-RateTable read_rate_file(std::string_view text, const std::string& name);
+// `stat` picks a JSON file's score: "score" (the one the app shows), or
+// another of its metric summary's statistics ("worst_1_percent",
+// metric_summary's names), null where a metric has none of it; a CSV file
+// has only its scores, and `stat` other than "score" throws for one.
+RateTable read_rate_file(std::string_view text, const std::string& name, const std::string& stat = "score");
 
 // `table` as a CSV file read_rate_table reads back as it is: its columns in
 // their order, numbers in full, an empty cell for a score not had. CR LF

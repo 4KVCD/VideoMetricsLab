@@ -25,6 +25,7 @@
 #include "common.h"
 #include "compare.h"
 #include "devices.h"
+#include "loop.h"
 #include "saved.h"
 #include "vml/gpu_choice.h"
 #include "vml/hardware_decoding.h"
@@ -107,6 +108,10 @@ int main(int argc, char** argv) {
                 return cli::saved(arguments.saved);
             case cli::Command::report:
                 return cli::report(arguments.saved);
+            case cli::Command::target:
+                return cli::target(arguments.target);
+            case cli::Command::diff:
+                return cli::diff(arguments.saved);
             case cli::Command::devices:
                 return cli::devices(chosen.settings, arguments.devices.json_path);
             case cli::Command::none:

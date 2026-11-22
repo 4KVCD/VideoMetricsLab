@@ -169,6 +169,12 @@ TEST(BdRate, ReadsEncodesFromJson) {
               platform::path_from_text(expected.reference).make_preferred());
     EXPECT_DOUBLE_EQ(run.encodes[0].kbps, expected.kbps);
     EXPECT_DOUBLE_EQ(*run.encodes[0].scores.at("vmaf"), *expected.scores.at("vmaf"));
+    // target --stat: a statistic of the summary, of a run file's frames or a
+    // results document's entry (none where it has not got it), not of a CSV.
+    const RateTable lowest = read_rate_file(run_file_text(result, "baseball_q27"), "b.metrics.json", "min");
+    EXPECT_DOUBLE_EQ(*lowest.encodes[0].scores.at("vmaf"), 87.0);
+    EXPECT_FALSE(read_rate_file(document.dump(), "results.json", "min").encodes[0].scores.at("vmaf"));
+    EXPECT_THROW(read_rate_file("sequence,kbps,vmaf\nclip,100,90\n", "a.csv", "min"), std::runtime_error);
 
     // CSV as ever; and a file with nothing to go by says so, by its name.
     EXPECT_EQ(read_rate_file("sequence,kbps,vmaf\nclip,100,90\n", "a.csv").encodes.size(), 1U);
@@ -179,6 +185,43 @@ TEST(BdRate, ReadsEncodesFromJson) {
         EXPECT_TRUE(std::string(error.what()).starts_with("empty.json: ")) << error.what();
     }
     EXPECT_THROW(read_rate_file("{not json", "broken.json"), std::runtime_error);
+}
+
+// target reads the curve bdrate integrates (the log of the rate against the
+// score, PCHIP) at a score: between the two encodes either side, at an
+// encode's own score, or past the ends on the straight line through the two
+// nearest; a setting such as CRF as it is, not its log.
+TEST(BdRate, FindsTheSettingForAScore) {
+    const std::vector<SettingPoint> rates{{2000, 94}, {1000, 90}, {8000, 98.5}, {4000, 97}};  // in any order
+    const TargetResult between = setting_for_score(rates, 95, true);
+    ASSERT_TRUE(between.setting);
+    EXPECT_FALSE(between.extrapolated);
+    EXPECT_EQ(between.bracket, (std::pair<std::size_t, std::size_t>{0, 3}));
+    // The rate bdrate's curve has there: pchip_curve's at 95, its 11th of
+    // 18 points from 90 to 98.5
+    const std::vector<RatePoint> drawn =
+        pchip_curve(curve({2000, 1000, 8000, 4000}, {94, 90, 98.5, 97}), false, 18);
+    ASSERT_DOUBLE_EQ(drawn[10].score, 95);
+    EXPECT_NEAR(*between.setting, drawn[10].kbps, 1e-9);
+
+    const TargetResult exact = setting_for_score(rates, 94, true);
+    EXPECT_NEAR(*exact.setting, 2000, 1e-9);
+    EXPECT_EQ(exact.bracket, (std::pair<std::size_t, std::size_t>{0, 0}));
+
+    const TargetResult past = setting_for_score(rates, 99.25, true);
+    EXPECT_TRUE(past.extrapolated);
+    EXPECT_EQ(past.bracket, (std::pair<std::size_t, std::size_t>{3, 2}));
+    EXPECT_NEAR(*past.setting, 4000 * std::pow(2.0, 1.5), 1e-6);  // 1.5 doublings further
+    EXPECT_NEAR(*setting_for_score(rates, 86, true).setting, 500, 1e-9);  // before the first: one halving
+
+    const std::vector<SettingPoint> crf{{30, 90}, {26, 94}};
+    EXPECT_NEAR(*setting_for_score(crf, 92, false).setting, 28, 1e-12);
+
+    EXPECT_EQ(setting_for_score(std::vector<SettingPoint>{{1000, 90}}, 95, true).gap, BdRateGap::too_few_points);
+    EXPECT_EQ(setting_for_score(std::vector<SettingPoint>{{1000, 90}, {2000, 90}}, 95, true).gap,
+              BdRateGap::tied_scores);
+    EXPECT_EQ(setting_for_score(std::vector<SettingPoint>{{0, 90}, {2000, 94}}, 92, true).gap, BdRateGap::bad_number);
+    EXPECT_TRUE(setting_for_score(std::vector<SettingPoint>{{0, 90}, {2000, 94}}, 92, false).setting);  // CRF 0
 }
 
 // numpy's nanmean and nanmedian.
