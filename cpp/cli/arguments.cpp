@@ -79,6 +79,29 @@ const char* const bitrate_usage = R"(usage: VideoMetricsLab-cli bitrate [-h] [--
                                    VIDEO [VIDEO ...]
 )";
 
+const char* const saved_usage = R"(usage: VideoMetricsLab-cli saved [-h] [--filter TEXT] [--json FILE]
+                                 [--csv FOLDER] [--frames-json FOLDER]
+                                 [--run-dir FOLDER] [--worst N]
+                                 [--segments CONDITIONS]
+                                 [--segments-all | --segments-any]
+                                 [--segment-min-frames N]
+                                 [--segment-merge-frames N]
+                                 [--segments-dir FOLDER]
+                                 [--segments-report FILE] [-q]
+                                 {list,show,delete} [ITEM ...]
+)";
+
+const char* const report_usage = R"(usage: VideoMetricsLab-cli report [-h] [--json FILE] [--csv FOLDER]
+                                  [--frames-json FOLDER] [--run-dir FOLDER]
+                                  [--worst N] [--segments CONDITIONS]
+                                  [--segments-all | --segments-any]
+                                  [--segment-min-frames N]
+                                  [--segment-merge-frames N]
+                                  [--segments-dir FOLDER]
+                                  [--segments-report FILE] [-q]
+                                  RUNFILE [RUNFILE ...]
+)";
+
 const char* const bdrate_usage = R"(usage: VideoMetricsLab-cli bdrate [-h] --anchor FILE --test FILE [-m LIST]
                                   [--group-by COLUMN] [--json FILE] [-q]
 )";
@@ -120,6 +143,12 @@ const char* const examples = R"(examples:
       only JSON on the output, for a script to read
   VideoMetricsLab-cli devices
       what would calculate each metric on this PC
+  VideoMetricsLab-cli saved list --filter encode
+      the saved comparisons of videos named encode..., with their IDs
+  VideoMetricsLab-cli saved show 3fa9c1 --segments "vmaf<90" --json -
+      a saved comparison's scores and weak segments, its videos gone or not
+  VideoMetricsLab-cli report runs\*.metrics.json --worst 5
+      the scores of run files, and each metric's 5 worst dips
 )";
 
 const char* const top_sections = R"(
@@ -129,6 +158,8 @@ positional arguments:
     devices   show FFmpeg and which GPU each metric would use
     bitrate   show videos' bitrate, as the Bitrate Viewer tab
     bdrate    calculate BD-rates from two encoders' rates and scores
+    saved     list, show or delete the saved comparisons, without the videos
+    report    report the scores of run files (.metrics.json)
 
 options:
   -h, --help  show this help message and exit
@@ -447,6 +478,79 @@ options:
   --no-save             read the saved bitrate, but save none
   --no-cache            neither read nor save the saved bitrate
 
+)";
+
+const char* const saved_sections = R"(
+The comparisons the app has saved (Settings > Storage > Saved results, the
+Saved Results tab), without their videos: their files may be gone.
+
+positional arguments:
+  {list,show,delete}    list: every saved comparison, newest first, with its
+                        ID; show: the scores of those ITEM names, as compare
+                        gives them; delete: those ITEM names (asks nothing)
+  ITEM                  a saved comparison's ID, or the first hex digits of
+                        it (at least 6; 12 to delete), or for show a test
+                        video's path: every comparison of that video
+
+options:
+  -h, --help            show this help message and exit
+  --filter TEXT         list: only those whose test video's or reference's
+                        file name has TEXT in it
+  --json FILE           also write the results as JSON to FILE (compare's,
+                        format 2); - prints the JSON instead of the tables
+  --csv FOLDER          write each video's per-frame scores to FOLDER as
+                        <video>.csv
+  --frames-json FOLDER  write them as JSON, <video>.frames.json
+  --run-dir FOLDER      write each video's result as <video>.metrics.json
+  --worst N             after the tables, each metric's N worst dips
+  --segments CONDITIONS
+                        the weak segments where scores fall past these, such
+                        as "vmaf<90,ssimulacra2<70"; or saved, profile:NAME or
+                        preset:KEY, as compare takes them
+  --segments-all        a frame is weak only where every condition holds
+  --segments-any        a frame is weak where any condition holds
+  --segment-min-frames N
+                        leave out segments shorter than N frames (default 1)
+  --segment-merge-frames N
+                        join segments at most N frames apart (default 0)
+  --segments-dir FOLDER
+                        write each video's segments to FOLDER, as compare's
+  --segments-report FILE
+                        write every video's segments to FILE as one report
+  -q, --quiet           only the results
+)";
+
+const char* const report_sections = R"(
+Reports the scores of run files (.metrics.json: compare --run-dir, the
+window's Export > Run file) as compare reports them, without their videos.
+
+positional arguments:
+  RUNFILE               a run file
+
+options:
+  -h, --help            show this help message and exit
+  --json FILE           also write the results as JSON to FILE (compare's,
+                        format 2); - prints the JSON instead of the tables
+  --csv FOLDER          write each video's per-frame scores to FOLDER as
+                        <video>.csv
+  --frames-json FOLDER  write them as JSON, <video>.frames.json
+  --run-dir FOLDER      write each video's result as <video>.metrics.json
+  --worst N             after the tables, each metric's N worst dips
+  --segments CONDITIONS
+                        the weak segments where scores fall past these, such
+                        as "vmaf<90,ssimulacra2<70"; or saved, profile:NAME or
+                        preset:KEY, as compare takes them
+  --segments-all        a frame is weak only where every condition holds
+  --segments-any        a frame is weak where any condition holds
+  --segment-min-frames N
+                        leave out segments shorter than N frames (default 1)
+  --segment-merge-frames N
+                        join segments at most N frames apart (default 0)
+  --segments-dir FOLDER
+                        write each video's segments to FOLDER, as compare's
+  --segments-report FILE
+                        write every video's segments to FILE as one report
+  -q, --quiet           only the results
 )";
 
 const char* const bdrate_sections = R"(
@@ -1347,6 +1451,88 @@ Parser bitrate_parser(BitrateArguments& parsed) {
     return parser;
 }
 
+// The output options of saved show and report, in `parsed`'s own fields.
+std::vector<Action> saved_output_options(CompareArguments& parsed) {
+    return {
+        option({"--json"}, [&parsed](const std::string& value) { parsed.json_path = value; }),
+        option({"--csv"}, [&parsed](const std::string& value) { parsed.csv = value; }),
+        option({"--frames-json"}, [&parsed](const std::string& value) { parsed.frames_json = value; }),
+        option({"--run-dir"}, [&parsed](const std::string& value) { parsed.run_dir = value; }),
+        option({"--worst"}, [&parsed](const std::string& value) { parsed.worst = int_up_to(value, 1000); }),
+        option({"--segments"}, [&parsed](const std::string& value) { read_segments(value, parsed); }),
+        flag({"--segments-all"}, parsed.segments_all),
+        flag({"--segments-any"}, parsed.segments_any),
+        option({"--segment-min-frames"},
+               [&parsed](const std::string& value) {
+                   parsed.segment_min_frames = int_up_to(value, std::numeric_limits<int>::max());
+               }),
+        option({"--segment-merge-frames"},
+               [&parsed](const std::string& value) { parsed.segment_merge_frames = int_from_zero(value); }),
+        option({"--segments-dir"}, [&parsed](const std::string& value) { parsed.segments_dir = value; }),
+        option({"--segments-report"}, [&parsed](const std::string& value) { parsed.segments_report = value; }),
+        flag({"-q", "--quiet"}, parsed.quiet),
+    };
+}
+
+// The saved command's parser, keeping what it reads in `parsed`.
+Parser saved_parser(SavedArguments& parsed) {
+    Parser parser;
+    parser.actions = {
+        help(std::string(saved_usage) + saved_sections + examples),
+        {{}, "{list,show,delete}", Nargs::one, true,
+         [&parsed](const std::vector<std::string>& values) {
+             parsed.action = choice(values.front(), {"list", "show", "delete"});
+         }},
+        {{}, "ITEM", Nargs::one_or_more, false,
+         [&parsed](const std::vector<std::string>& values) { parsed.items = values; }},
+        option({"--filter"}, [&parsed](const std::string& value) { parsed.filter = value; }),
+    };
+    for (Action& action : saved_output_options(parsed.output)) {
+        parser.actions.push_back(std::move(action));
+    }
+    parser.exclusive = {{"--segments-all", "--segments-any"}};
+    return parser;
+}
+
+// The report command's parser.
+Parser report_parser(SavedArguments& parsed) {
+    Parser parser;
+    parser.actions = {
+        help(std::string(report_usage) + report_sections + examples),
+        {{}, "RUNFILE", Nargs::one_or_more, true,
+         [&parsed](const std::vector<std::string>& values) { parsed.items = values; }},
+    };
+    for (Action& action : saved_output_options(parsed.output)) {
+        parser.actions.push_back(std::move(action));
+    }
+    parser.exclusive = {{"--segments-all", "--segments-any"}};
+    return parser;
+}
+
+// Why the saved command's options do not fit its action, or nothing.
+std::optional<std::string> saved_misuse(const SavedArguments& parsed) {
+    const CompareArguments& output = parsed.output;
+    if (parsed.action == "list" && !parsed.items.empty()) {
+        return "list takes no ITEM (--filter narrows it)";
+    }
+    if (parsed.action != "list" && parsed.items.empty()) {
+        return parsed.action + " needs at least one ITEM: a saved comparison's ID (saved list gives them)";
+    }
+    if (parsed.action != "list" && parsed.filter) {
+        return "argument --filter: only with list";
+    }
+    const bool writes = output.csv || output.frames_json || output.run_dir || output.worst ||
+                        !output.segments.empty() || output.segments_saved || output.segments_report ||
+                        output.segments_dir;
+    if (parsed.action != "show" && writes) {
+        return "the scores' options (--csv, --segments...) are show's";
+    }
+    if (parsed.action == "delete" && output.json_path) {
+        return "argument --json: only with list and show";
+    }
+    return std::nullopt;
+}
+
 // The bdrate command's parser, keeping what it reads in `parsed`.
 Parser bdrate_parser(BdrateArguments& parsed) {
     Action anchor = option({"--anchor"}, [&parsed](const std::string& value) { parsed.anchor = value; });
@@ -1446,7 +1632,7 @@ Arguments parse_arguments(const std::vector<std::string>& arguments) {
          [&](const std::vector<std::string>& values) {
              std::string command;
              try {
-                 command = choice(values.front(), {"compare", "devices", "bitrate", "bdrate"});
+                 command = choice(values.front(), {"compare", "devices", "bitrate", "bdrate", "saved", "report"});
              } catch (const ArgumentError& error) {
                  throw ArgumentError{"argument COMMAND: " + error.message};
              }
@@ -1478,6 +1664,21 @@ Arguments parse_arguments(const std::vector<std::string>& arguments) {
                  if (parsed.bitrate.no_adjust_start && !parsed.bitrate.csv) {
                      throw UsageError(std::string(bitrate_usage) + prog +
                                       ": error: argument --no-adjust-start: only with --csv, whose times it sets");
+                 }
+             } else if (command == "saved" || command == "report") {
+                 const bool saved = command == "saved";
+                 parsed.command = saved ? Command::saved : Command::report;
+                 parsed.saved.action = saved ? "" : "report";
+                 const Parser parser = saved ? saved_parser(parsed.saved) : report_parser(parsed.saved);
+                 const char* usage = saved ? saved_usage : report_usage;
+                 const std::string prog = std::string(program) + " " + command;
+                 command_extras = parse_command(parser, usage, prog, rest);
+                 if (const std::optional<std::string> misuse = saved ? saved_misuse(parsed.saved) : std::nullopt) {
+                     throw UsageError(std::string(usage) + prog + ": error: " + *misuse);
+                 }
+                 if (const std::optional<std::string> option = segment_option_alone(parsed.saved.output)) {
+                     throw UsageError(std::string(usage) + prog + ": error: argument " + *option +
+                                      ": only with --segments, whose segments it shapes");
                  }
              } else if (command == "bdrate") {
                  parsed.command = Command::bdrate;

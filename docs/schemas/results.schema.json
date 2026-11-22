@@ -107,6 +107,12 @@
         },
         "error_code": {
           "type": "string"
+        },
+        "read_from": {
+          "enum": [
+            "saved results",
+            "run files"
+          ]
         }
       }
     },

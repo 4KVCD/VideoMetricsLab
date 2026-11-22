@@ -34,6 +34,7 @@ tests hold the app's output to.
 | `"bitrate-1"` | Each video's bitrate | `bitrate --json` | `bitrate.schema.json` |
 | `"bdrate-1"` | BD-rates | `bdrate --json` | `bdrate.schema.json` |
 | `"devices-1"` | Where each metric would be calculated | `devices --json` | `devices.schema.json` |
+| `"saved-list-1"` | The saved comparisons | `saved list --json` | `saved-list.schema.json` |
 
 The results' format is a number, `2`, as it was before the others had one;
 the others are `<kind>-<version>`. A run file (`.metrics.json`) is the app's
@@ -55,6 +56,7 @@ convention.
 | `difference` | Command line with `--difference` only: the first video minus the second. |
 | `log_file` | Command line with `--log-file` only: the log's file, its fields filled in. |
 | `profile` | Command line only: the settings and saved scores the run used (below). |
+| `read_from` | `saved show` and `report` only: `"saved results"` or `"run files"`, where the scores were read without their videos. |
 | `error`, `error_code` | Command line only, when nothing was compared: why, and its [code](#codes). The reference could not be read (`reference_unreadable`): `reference` has only its `path` and `videos` is empty; or the `--batch` list could not be read (`batch_unreadable`): no `reference`, an empty `batch`, and no `run` or `machine`. |
 
 With `--batch`, the command line's `--json` is `{"batch": [...]}`: this document

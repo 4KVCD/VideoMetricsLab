@@ -703,6 +703,43 @@ Closing the console window does the same on Windows' classic console.
 Unlike the app, the command line does not ask before a long SSIMULACRA2 or
 Butteraugli run on the CPU. Text is English whatever the app's language.
 
+### Saved results and run files
+
+The scores the app has saved (the Saved Results tab's, by the window or the
+command line) can be listed, read and deleted without their videos, which may
+be gone:
+
+```powershell
+# Every saved comparison, newest first, with its ID; --filter narrows them by file name
+.\VideoMetricsLab-cli.exe saved list --filter encode
+
+# One comparison's scores, by the first 6 or more hex digits of its ID, as compare gives them
+.\VideoMetricsLab-cli.exe saved show 3fa9c1 --segments "vmaf<90" --worst 5 --json -
+
+# Every comparison of a test video, by its path
+.\VideoMetricsLab-cli.exe saved show encodes\encode.mkv --frames-json scores
+
+# Delete one, by at least 12 hex digits of its ID (it asks nothing)
+.\VideoMetricsLab-cli.exe saved delete 3fa9c1d24b07
+
+# Run files (.metrics.json: compare --run-dir, the window's Export > Run file), reported the same way
+.\VideoMetricsLab-cli.exe report runs\*.metrics.json --segments saved
+```
+
+`saved show` and `report` take compare's outputs: `--json`, `--csv`,
+`--frames-json`, `--run-dir`, `--worst`, `--segments` (with `saved`,
+`profile:NAME` and `preset:KEY`) and its options, `--segments-dir` and
+`--segments-report`. The JSON is compare's results file, its `read_from`
+`"saved results"` or `"run files"`; a video's `settings`, `black_bars`,
+`metric_status`, `decode_plan` and `timings` are `null`, as for a saved run
+the window opens, which does not record them. With several references, it
+is `{"batch": [...]}`, as `compare --batch` writes it. `saved list --json`
+gives each comparison's `id`, `test`, `reference`, `reference_found`,
+`saved_utc`, `bytes` and `metrics` (format `saved-list-1`). The exit code is
+4 for an item that names no saved comparison (or a run file that cannot be
+read), 2 for an ID too short, or one that begins more than one comparison's
+ID to delete.
+
 ### Raw video streams
 
 An encoder's output with no container (`.264`, `.265`, `.hevc`, `.266`,
