@@ -148,6 +148,8 @@ struct Settings {
     int video_name_start = 10;
     int video_name_end = 16;
     bool remember_window_size = true;
+    // The size the window was closed at; these defaults stand for none saved
+    // (the window then opens at its default for the screen).
     int window_width = 1280;
     int window_height = 800;
     // Where and how the window was last closed (Qt's saveGeometry, as
