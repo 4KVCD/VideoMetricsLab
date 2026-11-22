@@ -590,6 +590,8 @@ void BdRatePanel::show_heading() {
                  {"count", static_cast<long long>(report_->sequences.size())}}));
 }
 
+void BdRatePanel::fit_to_style() { fit_height(results, visible_result_rows); }
+
 void BdRatePanel::fill_results() {
     filling_ = true;
     sequence_rows_.clear();

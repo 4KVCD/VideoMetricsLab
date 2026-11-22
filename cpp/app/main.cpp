@@ -13,6 +13,7 @@
 #include <exception>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <thread>
@@ -245,6 +246,8 @@ int main(int argc, char** argv) {
     });
     const Settings settings = Settings::load();
     apply_language(QString::fromStdString(settings.language));
+    // VML Modern's style sheet, set once the window is built (SheetHeld).
+    std::optional<app::theme::SheetHeld> sheet_held(std::in_place);
     // Before the window is built, which reads it to colour itself.
     app::theme::apply_theme(QString::fromStdString(settings.theme));
     app::theme::apply_appearance(app::theme::interface_of(settings.interface_style),
@@ -265,6 +268,8 @@ int main(int argc, char** argv) {
     }
 
     app::MainWindow window;
+    sheet_held.reset();
+    window.fit_to_style();
     window.show();
 #ifdef _WIN32
     direct3d_warmup.reset();

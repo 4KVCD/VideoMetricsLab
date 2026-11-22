@@ -291,10 +291,20 @@ void apply_palette(bool dark) {
 
 // The Modern sheet for `dark`, set on the application if it changed;
 // Classic's none.
+// How many SheetHeld are alive.
+int& sheet_holds() {
+    static int holds = 0;
+    return holds;
+}
+
 void apply_sheet(bool dark) {
     Appearance& applied = appearance();
     const QString sheet =
         applied.ui == Interface::modern ? modern_style_sheet(dark, accent_in_use()) : QString();
+    if (sheet_holds() > 0) {
+        applied.sheet = sheet;  // set when the last SheetHeld goes
+        return;
+    }
     if (sheet != applied.sheet || qApp->styleSheet() != sheet) {
         applied.sheet = sheet;
         qApp->setStyleSheet(sheet);
@@ -562,6 +572,21 @@ void apply_appearance(Interface ui, std::optional<QColor> accent) {
 
 Interface current_interface() { return appearance().ui; }
 
+SheetHeld::SheetHeld() {
+    // A sheet set already is taken off meanwhile: before a window is built
+    // there are few widgets to restyle.
+    if (++sheet_holds() == 1 && QApplication::instance() != nullptr && !qApp->styleSheet().isEmpty()) {
+        qApp->setStyleSheet(QString());
+    }
+}
+
+SheetHeld::~SheetHeld() {
+    if (--sheet_holds() == 0 && appearance().applied && QApplication::instance() != nullptr &&
+        qApp->styleSheet() != appearance().sheet) {
+        qApp->setStyleSheet(appearance().sheet);
+    }
+}
+
 void set_role(QWidget* widget, const char* role) {
     widget->setProperty("vmlRole", QString::fromUtf8(role));
     // A role set after the widget was polished is drawn as it once it is
@@ -615,7 +640,13 @@ void show_for_interface() {
 
 void add_interface_only(QWidget* widget, bool modern) {
     interface_only().push_back({widget, modern});
-    widget->setVisible(modern == (appearance().ui == Interface::modern));
+    // Hidden where it is another interface's, and otherwise left as it is:
+    // shown before it has a parent, as it is when built, a widget is made a
+    // window of its own, and unmade when it is added to one. That cost about
+    // 115 ms of the window's build in VML Modern, 20 ms in Classic.
+    if (modern != (appearance().ui == Interface::modern)) {
+        widget->hide();
+    }
 }
 
 }  // namespace

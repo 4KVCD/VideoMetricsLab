@@ -889,6 +889,11 @@ void MainWindow::build_test_table() {
     }
     header->setStretchLastSection(false);
     distorted_table_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    fit_table_columns();
+}
+
+void MainWindow::fit_table_columns() {
+    QHeaderView* header = distorted_table_->horizontalHeader();
     // Never narrower than the heading needs: an empty table would clip its
     // headings ("Video bitrate" at 65 px showed as "'ideo bitrat").
     std::map<int, int> starting_widths{
@@ -1054,6 +1059,11 @@ void MainWindow::on_default_settings_changed() {
 }
 
 // ------------------------------------------------------------ the update check
+
+void MainWindow::fit_to_style() {
+    fit_table_columns();
+    bd_rate_panel_->fit_to_style();
+}
 
 void MainWindow::check_for_updates() {
     if (!settings_.check_for_updates) {

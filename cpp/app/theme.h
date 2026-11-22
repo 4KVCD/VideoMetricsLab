@@ -127,6 +127,25 @@ void apply_appearance(Interface ui, std::optional<QColor> accent);
 // The interface applied last (Classic until apply_appearance).
 Interface current_interface();
 
+// While one is alive, VML Modern's style sheet is not set on the
+// application (one set already is taken off); when the last goes, the sheet
+// of the interface and colours applied meanwhile is. Not for while a window
+// is shown, which would be drawn without it meanwhile.
+//
+// main holds it while the window is built. With the sheet set, Qt matched
+// each of the window's ~1100 widgets against it about four times as they
+// were built and added to their parents (a new parent polishes a polished
+// widget's subtree again); set once the window is built, it matches each
+// once. Sizes taken from size hints while the window is built are taken
+// again then (MainWindow::fit_to_style).
+class SheetHeld {
+public:
+    SheetHeld();
+    ~SheetHeld();
+    SheetHeld(const SheetHeld&) = delete;
+    SheetHeld& operator=(const SheetHeld&) = delete;
+};
+
 // A widget's role in the Modern interface's style sheet: "primary" (the
 // one action a tab is for, in the accent), "danger" (one that removes
 // something), "quiet" (a lesser one, as text), "card" (a box of its own),

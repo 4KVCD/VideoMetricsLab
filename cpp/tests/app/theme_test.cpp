@@ -53,12 +53,21 @@ TEST(Theme, ModernsLayoutLeavesClassicAsItWas) {
     QBoxLayout* layout = nullptr;
     const std::unique_ptr<QWidget> card(theme::container("card", true, &layout));
     EXPECT_EQ(layout->contentsMargins(), QMargins());
-    QLabel modern;
-    theme::modern_only(&modern);
-    EXPECT_TRUE(modern.isHidden());
-    QLabel classic;
-    theme::classic_only(&classic);
-    EXPECT_FALSE(classic.isHidden());
+    QWidget page;
+    auto* column = new QVBoxLayout(&page);
+    auto* modern = new QLabel;
+    theme::modern_only(modern);
+    auto* classic = new QLabel;
+    theme::classic_only(classic);
+    // Not shown before it has a parent: it would be shown as a window of its
+    // own, made and unmade again as it is added to one (about 40 ms of the
+    // main window's build).
+    EXPECT_FALSE(classic->isVisible());
+    column->addWidget(modern);
+    column->addWidget(classic);
+    page.show();
+    EXPECT_FALSE(modern->isVisible());
+    EXPECT_TRUE(classic->isVisible());
     QGroupBox box;
     theme::classic_box(&box, "Videos");
     EXPECT_EQ(box.title(), "Videos");
