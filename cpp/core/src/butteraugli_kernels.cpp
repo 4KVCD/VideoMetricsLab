@@ -932,20 +932,24 @@ void FuzzyErosionPixel(const float* above, const float* row, const float* below,
   out[x] = ScalarMulAdd(0.25f, min2, ScalarMulAdd(0.45f, min0, 0.3f * min1));
 }
 
+// VideoMetricsLab: MaskY's and MaskDcY's constants, shared with their
+// vector form (MaskVector).
+struct MaskConstants {
+  double offset;
+  double scaler;
+  double mul;
+};
+constexpr MaskConstants kMaskY{0.829591754942, 0.451936922203, 2.5485944793};
+constexpr MaskConstants kMaskDcY{0.20025578522, 3.87449418804, 0.505054525019};
+
 double MaskY(double delta) {
-  static const double offset = 0.829591754942;
-  static const double scaler = 0.451936922203;
-  static const double mul = 2.5485944793;
-  const double c = mul / ScalarMulAdd(scaler, delta, offset);
+  const double c = kMaskY.mul / ScalarMulAdd(kMaskY.scaler, delta, kMaskY.offset);
   const double retval = kGlobalScale * (1.0 + c);
   return retval * retval;
 }
 
 double MaskDcY(double delta) {
-  static const double offset = 0.20025578522;
-  static const double scaler = 3.87449418804;
-  static const double mul = 0.505054525019;
-  const double c = mul / ScalarMulAdd(scaler, delta, offset);
+  const double c = kMaskDcY.mul / ScalarMulAdd(kMaskDcY.scaler, delta, kMaskDcY.offset);
   const double retval = kGlobalScale * (1.0 + c);
   return retval * retval;
 }
@@ -954,11 +958,44 @@ inline float MaskColor(const float color[3], const float mask) {
   return ScalarMulAdd(color[2], mask, ScalarMulAdd(color[0], mask, color[1] * mask));
 }
 
+// MaskY or MaskDcY (their `offset`, `scaler` and `mul`) for a vector of
+// doubles, rounding as the scalar code: the one fused multiply-add where
+// ScalarMulAdd fuses, then separate roundings.
+template <class D>
+HWY_INLINE Vec<D> MaskVector(D dd, Vec<D> delta, const MaskConstants& k) {
+  const auto c = Div(Set(dd, k.mul), ContractedMulAdd(Set(dd, k.scaler), delta, Set(dd, k.offset)));
+  const auto retval = Mul(Set(dd, static_cast<double>(kGlobalScale)), Add(Set(dd, 1.0), c));
+  return Mul(retval, retval);
+}
+
+// MaskColor for vectors of floats.
+template <class V>
+HWY_INLINE V MaskColorVector(V color0, V color1, V color2, V mask) {
+  return ContractedMulAdd(color2, mask, ContractedMulAdd(color0, mask, Mul(color1, mask)));
+}
+
 // Diffmap := sqrt of sum{diff images by multiplied by X and Y/B masks}
-// (libjxl's CombineChannelsToDiffmap, for one row).
+// (libjxl's CombineChannelsToDiffmap, for one row). VideoMetricsLab: the
+// pixels that fill whole vectors run in vectors (as many floats as doubles,
+// for MaskY's and MaskDcY's double divisions), each lane rounding as the
+// scalar code, which does the rest; row_out is not padded.
 void CombineChannelsToDiffmapRow(const float* mask, const float* const block_diff_dc[3],
                                  const float* const block_diff_ac[3], float xmul, size_t xsize, float* row_out) {
-  for (size_t x = 0; x < xsize; ++x) {
+  const ScalableTag<double> dd;
+  const Rebind<float, decltype(dd)> df;  // as many floats as dd has doubles
+  const auto xmul_vector = Set(df, xmul);
+  size_t x = 0;
+  for (; x + Lanes(dd) <= xsize; x += Lanes(dd)) {
+    const auto delta = PromoteTo(dd, LoadU(df, mask + x));
+    const auto maskval = DemoteTo(df, MaskVector(dd, delta, kMaskY));
+    const auto dc_maskval = DemoteTo(df, MaskVector(dd, delta, kMaskDcY));
+    const auto dc = MaskColorVector(Mul(LoadU(df, block_diff_dc[0] + x), xmul_vector), LoadU(df, block_diff_dc[1] + x),
+                                    LoadU(df, block_diff_dc[2] + x), dc_maskval);
+    const auto ac = MaskColorVector(Mul(LoadU(df, block_diff_ac[0] + x), xmul_vector), LoadU(df, block_diff_ac[1] + x),
+                                    LoadU(df, block_diff_ac[2] + x), maskval);
+    StoreU(Sqrt(Add(dc, ac)), df, row_out + x);
+  }
+  for (; x < xsize; ++x) {
     float val = mask[x];
     float maskval = MaskY(val);
     float dc_maskval = MaskDcY(val);

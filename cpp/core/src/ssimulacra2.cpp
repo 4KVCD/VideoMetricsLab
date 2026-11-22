@@ -46,7 +46,7 @@ constexpr std::size_t kPictures = 2;  // the source, then the test picture
 // and n + 4 (libjxl's radius of 5).
 constexpr std::int64_t kBlurAbove = 6;
 constexpr std::int64_t kBlurBelow = 4;
-constexpr std::size_t kColumnStateRows = 6;  // blur_column_step's state
+constexpr std::size_t kColumnStateRows = 6;  // blur_column_steps' state
 
 // The planes blurred per channel (libjxl's mu1, mu2, sigma1_sq, sigma2_sq
 // and sigma12): the edge maps use the first two, the SSIM map all five.
@@ -117,58 +117,6 @@ AlignedRows allocate_floats(std::size_t count) {
     auto* rows = static_cast<float*>(::operator new[](count * sizeof(float), std::align_val_t{64}));
     std::fill_n(rows, count, 0.0f);
     return AlignedRows(rows);
-}
-
-double quartic(double x) {
-    x *= x;
-    x *= x;
-    return x;
-}
-
-// libjxl's SSIMMap for one row of one channel, adding to its two sums.
-void add_ssim_row(const float* m1, const float* m2, const float* s11, const float* s22, const float* s12,
-                  std::size_t width, double* sums) {
-    double sum_mean = sums[0];
-    double sum_quartic = sums[1];
-    for (std::size_t x = 0; x < width; ++x) {
-        const float mu1 = m1[x];
-        const float mu2 = m2[x];
-        const float mu11 = mu1 * mu1;
-        const float mu22 = mu2 * mu2;
-        const float mu12 = mu1 * mu2;
-        // As in libjxl: the square in float, the subtraction in double.
-        const float num_m = static_cast<float>(1.0 - (mu1 - mu2) * (mu1 - mu2));
-        const float num_s = 2 * (s12[x] - mu12) + kC2;
-        const float denom_s = (s11[x] - mu11) + (s22[x] - mu22) + kC2;
-        double d = 1.0 - (num_m * num_s / denom_s);
-        d = std::max(d, 0.0);
-        sum_mean += d;
-        sum_quartic += quartic(d);
-    }
-    sums[0] = sum_mean;
-    sums[1] = sum_quartic;
-}
-
-// libjxl's EdgeDiffMap for one row of one channel, adding to its four sums.
-void add_edge_row(const float* img1, const float* mu1, const float* img2, const float* mu2, std::size_t width,
-                  double* sums) {
-    double artifact_sum = sums[0];
-    double artifact_quartic = sums[1];
-    double detail_lost_sum = sums[2];
-    double detail_lost_quartic = sums[3];
-    for (std::size_t x = 0; x < width; ++x) {
-        const double d1 = (1.0 + std::abs(img2[x] - mu2[x])) / (1.0 + std::abs(img1[x] - mu1[x])) - 1.0;
-        const double artifact = std::max(d1, 0.0);
-        artifact_sum += artifact;
-        artifact_quartic += quartic(artifact);
-        const double detail_lost = std::max(-d1, 0.0);
-        detail_lost_sum += detail_lost;
-        detail_lost_quartic += quartic(detail_lost);
-    }
-    sums[0] = artifact_sum;
-    sums[1] = artifact_quartic;
-    sums[2] = detail_lost_sum;
-    sums[3] = detail_lost_quartic;
 }
 
 // libjxl's Downsample(in, 2, 2) for one output row: each 2x2 block's mean,
@@ -328,7 +276,7 @@ struct Scale {
     Ring xyb[kPictures][kChannels];
     Ring horizontal[kChannels][kQuantities];  // the horizontal blurs
     Ring vertical[kChannels][kQuantities];    // the vertical blurs, by the step that made them
-    float* column_state[kChannels][kQuantities] = {};  // each column strip's 6 rows of blur_column_step's state
+    float* column_state[kChannels][kQuantities] = {};  // each column strip's 6 rows of blur_column_steps' state
     float* zeros = nullptr;
 
     double ssim_sums[kChannels][2] = {};
@@ -488,15 +436,16 @@ std::size_t lay_out(Scale& scale, const Schedule& schedule, std::size_t s, float
     return used;
 }
 
-// A row for the products the horizontal blur reads, one per thread.
-float* product_row(std::size_t stride) {
-    thread_local AlignedRows row;
+// Two rows for the products the horizontal blur reads, each thread's own.
+constexpr std::size_t kProductRows = 2;
+float* product_rows(std::size_t stride) {
+    thread_local AlignedRows rows;
     thread_local std::size_t size = 0;
     if (size < stride) {
-        row = allocate_floats(stride);
+        rows = allocate_floats(kProductRows * stride);
         size = stride;
     }
-    return row.get();
+    return rows.get();
 }
 
 // One task of a step: a row of a scale's rows, a column strip of one
@@ -685,36 +634,50 @@ private:
             if (!scale.blurs(c)) continue;
             const float* img1 = xyb[0][c];
             const float* img2 = xyb[1][c];
-            kernels::blur_row(img1, scale.horizontal[c][kMu1].row(y), scale.width);
-            kernels::blur_row(img2, scale.horizontal[c][kMu2].row(y), scale.width);
+            // The horizontal blurs two rows at a time (blur_rows2): the means,
+            // then the squares; the product alone.
+            kernels::blur_rows2(img1, scale.horizontal[c][kMu1].row(y), img2, scale.horizontal[c][kMu2].row(y),
+                                scale.width);
             if (!scale.ssim_map[c]) continue;
-            float* product = product_row(scale.stride);
-            const std::pair<const float*, const float*> factors[] = {{img1, img1}, {img2, img2}, {img1, img2}};
-            for (std::size_t k = 0; k < 3; ++k) {
-                kernels::multiply_row(factors[k].first, factors[k].second, product, scale.stride);
-                kernels::blur_row(product, scale.horizontal[c][kSigma11 + k].row(y), scale.width);
-            }
+            float* products = product_rows(scale.stride);
+            float* const squares[2] = {products, products + scale.stride};
+            kernels::multiply_row(img1, img1, squares[0], scale.stride);
+            kernels::multiply_row(img2, img2, squares[1], scale.stride);
+            kernels::blur_rows2(squares[0], scale.horizontal[c][kSigma11].row(y), squares[1],
+                                scale.horizontal[c][kSigma22].row(y), scale.width);
+            kernels::multiply_row(img1, img2, products, scale.stride);
+            kernels::blur_row(products, scale.horizontal[c][kSigma12].row(y), scale.width);
         }
     }
 
     // The vertical blur's steps [first, end) of channel c's planes, in one
     // column strip. FastGaussianVertical's input for output row n = m - 4 is
     // the horizontal blur of row m alone up to row 5, then rows m - 10 and
-    // m; past the bottom, a row of zeros stands in for row m.
+    // m; past the bottom, a row of zeros stands in for row m. Up to
+    // kColumnStepsAtOnce steps go to the kernel at once, which keeps the
+    // filters' state in registers between them.
+    static constexpr std::int64_t kColumnStepsAtOnce = 64;
     void blur_columns(Scale& scale, std::size_t c, std::size_t strip, std::int64_t first, std::int64_t end) const {
         const std::size_t x0 = strip * strip_;
         const std::size_t count = std::min(strip_, scale.stride - x0);
         const auto height = static_cast<std::int64_t>(scale.height);
+        const float* tops[kColumnStepsAtOnce];
+        const float* bottoms[kColumnStepsAtOnce];
+        float* outs[kColumnStepsAtOnce];
         for (std::size_t q = 0; q < kQuantities; ++q) {
             if (!scale.uses(c, q)) continue;
             const Ring& horizontal = scale.horizontal[c][q];
             const Ring& vertical = scale.vertical[c][q];
             float* state = scale.column_state[c][q] + kColumnStateRows * x0;
-            for (std::int64_t m = first; m < end; ++m) {
-                const float* bottom = (m < height ? horizontal.row(m) : scale.zeros) + x0;
-                const float* top = m >= kTopBehind ? horizontal.row(m - kTopBehind) + x0 : nullptr;
-                float* out = m >= kWarmUpSteps ? vertical.row(m) + x0 : nullptr;
-                kernels::blur_column_step(top, bottom, state, out, count);
+            for (std::int64_t from = first; from < end; from += kColumnStepsAtOnce) {
+                const std::int64_t steps = std::min(kColumnStepsAtOnce, end - from);
+                for (std::int64_t k = 0; k < steps; ++k) {
+                    const std::int64_t m = from + k;
+                    bottoms[k] = (m < height ? horizontal.row(m) : scale.zeros) + x0;
+                    tops[k] = m >= kTopBehind ? horizontal.row(m - kTopBehind) + x0 : nullptr;
+                    outs[k] = m >= kWarmUpSteps ? vertical.row(m) + x0 : nullptr;
+                }
+                kernels::blur_column_steps(tops, bottoms, state, outs, static_cast<std::size_t>(steps), count);
             }
         }
     }
@@ -726,11 +689,12 @@ private:
         for (std::int64_t n = first; n < end; ++n) {
             const std::int64_t m = n + kWarmUpSteps;
             if (edge) {
-                add_edge_row(scale.xyb[0][c].row(n), blurred[kMu1].row(m), scale.xyb[1][c].row(n),
-                             blurred[kMu2].row(m), scale.width, scale.edge_sums[c]);
+                kernels::add_edge_row(scale.xyb[0][c].row(n), blurred[kMu1].row(m), scale.xyb[1][c].row(n),
+                                      blurred[kMu2].row(m), scale.width, scale.edge_sums[c]);
             } else {
-                add_ssim_row(blurred[kMu1].row(m), blurred[kMu2].row(m), blurred[kSigma11].row(m),
-                             blurred[kSigma22].row(m), blurred[kSigma12].row(m), scale.width, scale.ssim_sums[c]);
+                kernels::add_ssim_row(blurred[kMu1].row(m), blurred[kMu2].row(m), blurred[kSigma11].row(m),
+                                      blurred[kSigma22].row(m), blurred[kSigma12].row(m), scale.width, kC2,
+                                      scale.ssim_sums[c]);
             }
         }
     }
@@ -797,7 +761,7 @@ std::size_t Ssimulacra2::memory_bytes(std::size_t width, std::size_t height, std
     std::vector<Scale> scales = scales_for(width, height, Terms::weighted);
     if (scales.empty()) return 0;
     const Schedule schedule = make_schedule(scales, band_rows(threads, width));
-    std::size_t floats = threads * scales[0].stride;  // each thread's product row
+    std::size_t floats = threads * kProductRows * scales[0].stride;  // each thread's product rows
     for (std::size_t s = 0; s < scales.size(); ++s) floats += lay_out(scales[s], schedule, s, nullptr);
     return floats * sizeof(float);
 }

@@ -31,12 +31,32 @@ void multiply_row(const float* a, const float* b, float* out, std::size_t count)
 // (gauss_blur.cc's FastGaussian1D).
 void blur_row(const float* in, float* out, std::size_t width);
 
-// One output row of libjxl's vertical recursive Gaussian
-// (gauss_blur.cc's VerticalBlock) over `count` columns. Its input is the
-// horizontally blurred row 4 below the output row (`bottom`, a row of zeros
-// past the picture's end) plus, from the output row 6 on, the row 6 above
-// it (`top`, null before). `state` is 6 rows: the three filters' previous
-// two outputs, updated in place. `out` is null while the filter warms up.
-void blur_column_step(const float* top, const float* bottom, float* state, float* out, std::size_t count);
+// blur_row of two rows of the same width, at once where vectors are wide
+// enough for both.
+void blur_rows2(const float* in_a, float* out_a, const float* in_b, float* out_b, std::size_t width);
+
+// `steps` consecutive output rows of libjxl's vertical recursive Gaussian
+// (gauss_blur.cc's VerticalBlock) over `count` columns. Step k's input is
+// the horizontally blurred row 4 below its output row (`bottoms[k]`, a row
+// of zeros past the picture's end) plus, from the output row 6 on, the row
+// 6 above it (`tops[k]`, null before). `state` is 6 rows: the three
+// filters' previous two outputs, updated in place. `outs[k]` is null while
+// the filter warms up.
+void blur_column_steps(const float* const* tops, const float* const* bottoms, float* state, float* const* outs,
+                       std::size_t steps, std::size_t count);
+
+// libjxl's SSIMMap for one row of `width` pixels of one channel (the blurred
+// means m1, m2 and the blurred products s11, s22, s12; `c2` its constant),
+// adding to its two sums (the terms, their fourth powers) in pixel order.
+// It and add_edge_row read whole vectors, up to 7 floats past `width`: the
+// rows must be padded that far.
+void add_ssim_row(const float* m1, const float* m2, const float* s11, const float* s22, const float* s12,
+                  std::size_t width, float c2, double* sums);
+
+// libjxl's EdgeDiffMap for one row of one channel (the pictures and their
+// blurred means), adding to its four sums (artifacts, their fourth powers,
+// detail lost, its fourth powers) in pixel order.
+void add_edge_row(const float* img1, const float* mu1, const float* img2, const float* mu2, std::size_t width,
+                  double* sums);
 
 }  // namespace vml::ssimulacra2_kernels
