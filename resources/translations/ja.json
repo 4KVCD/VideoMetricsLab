@@ -6,7 +6,7 @@
   "Whole names": "完全な名前",
   "Characters from the start:": "先頭からの文字数：",
   "from the end:": "末尾から：",
-  "How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "指標グラフと動画比較でのテスト動画名の表示方法。「違いが分かる部分」は、表示中の動画に共通する先頭と末尾を省きます：「…CRF 20」「…CRF 22」。ツールチップ、エクスポート、ファイル名には完全な名前が残ります。",
+  "How test videos' names are shown in Metric Graphs, Video Compare and Worst Frames. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "指標グラフ、動画比較、最悪のフレームでのテスト動画名の表示方法。「違いが分かる部分」は、表示中の動画に共通する先頭と末尾を省きます：「…CRF 20」「…CRF 22」。ツールチップ、エクスポート、ファイル名には完全な名前が残ります。",
   "Conditions": "条件",
   "Worst Frames": "最悪のフレーム",
   "Keeps these conditions and options in the profile picked, in Settings > Weak segments.": "これらの条件とオプションを、設定 > 弱い区間 の選択したプロファイルに保存します。",

@@ -6,7 +6,7 @@
   "Whole names": "Celé názvy",
   "Characters from the start:": "Znaků od začátku:",
   "from the end:": "od konce:",
-  "How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Jak se názvy testovaných videí zobrazují v Grafy metrik a Porovnání videa. Co je odlišuje vynechá začátek a konec, které mají zobrazená videa společné: \"…CRF 20\", \"…CRF 22\". Popisky, exporty a názvy souborů ponechávají celý název.",
+  "How test videos' names are shown in Metric Graphs, Video Compare and Worst Frames. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Jak se názvy testovaných videí zobrazují v Grafy metrik, Porovnání videa a Nejhorší snímky. Co je odlišuje vynechá začátek a konec, které mají zobrazená videa společné: \"…CRF 20\", \"…CRF 22\". Popisky, exporty a názvy souborů ponechávají celý název.",
   "Conditions": "Podmínky",
   "Worst Frames": "Nejhorší snímky",
   "Keeps these conditions and options in the profile picked, in Settings > Weak segments.": "Uloží tyto podmínky a možnosti do vybraného profilu, v Nastavení > Slabé úseky.",

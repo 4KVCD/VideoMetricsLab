@@ -123,8 +123,9 @@ WorstFramesTab::WorstFramesTab(Dialogs dialogs, QWidget* parent) : QWidget(paren
     videos_table_->setColumnCount(3);
     videos_table_->setHorizontalHeaderLabels({app::tr("Video"), app::tr("Segments"), app::tr("Worst")});
     videos_table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    // A long name cut in its middle: its end (the CRF, the encoder) tells
-    // encodes apart. The whole name is in the tooltip.
+    // Each video as Metric Graphs names it (Settings > General > Window >
+    // Video names). A name still too long is cut in its middle: its end (the
+    // CRF, the encoder) tells encodes apart. The whole name is in the tooltip.
     videos_table_->setTextElideMode(Qt::ElideMiddle);
     connect(videos_table_, &QTableWidget::currentCellChanged, this, [this](int row, int, int, int) {
         if (!building_ && row >= 0 && static_cast<std::size_t>(row) < videos_.size()) {
@@ -432,7 +433,9 @@ void WorstFramesTab::set_videos(std::vector<WeakFramesVideo> videos) {
         const QSignalBlocker blocker(videos_table_);
         videos_table_->setRowCount(static_cast<int>(videos_.size()));
         for (std::size_t i = 0; i < videos_.size(); ++i) {
-            auto* name = cell(videos_[i].label, false);
+            // As Metric Graphs names it (the Video names setting), the
+            // whole name in the tooltip.
+            auto* name = cell(videos_[i].shown.isEmpty() ? videos_[i].label : videos_[i].shown, false);
             name->setToolTip(videos_[i].label);
             videos_table_->setItem(static_cast<int>(i), 0, name);
         }

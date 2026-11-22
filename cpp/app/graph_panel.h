@@ -258,6 +258,9 @@ public:
         QString label;  // empty: the test video's name
         std::string identity;  // empty: the test video's path
         bool restore = true;
+        // Given by runs() only: the line's name as the window shows it (the
+        // Video names setting: SeriesEntry::shown). add_run ignores it.
+        QString shown;
     };
     void add_run(const Run& run);
     // add_run for each, with the table and the frame range brought up to

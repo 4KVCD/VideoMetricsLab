@@ -693,6 +693,9 @@ void MainWindow::build_ui() {
     connect(settings_panel_, &SettingsPanel::video_names_changed, this, [this] {
         graph_panel_->set_video_name_rule(video_name_rule(settings_));
         frame_compare_panel_->set_video_name_rule(video_name_rule(settings_));
+        if (tabs_->currentWidget() == worst_tab_) {
+            sync_worst_frames();  // else when it is next opened
+        }
     });
     connect(settings_panel_, &SettingsPanel::weak_segment_rules_changed, this, [this] {
         worst_tab_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);

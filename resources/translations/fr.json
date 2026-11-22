@@ -6,7 +6,7 @@
   "Whole names": "Noms complets",
   "Characters from the start:": "Caractères du début :",
   "from the end:": "de la fin :",
-  "How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Comment les noms des vidéos de test s'affichent dans Graphiques des métriques et Comparaison vidéo. Ce qui les distingue omet le début et la fin que les vidéos affichées ont en commun : « …CRF 20 », « …CRF 22 ». Les infobulles, les exports et les noms de fichiers gardent le nom complet.",
+  "How test videos' names are shown in Metric Graphs, Video Compare and Worst Frames. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Comment les noms des vidéos de test s'affichent dans Graphiques des métriques, Comparaison vidéo et Pires images. Ce qui les distingue omet le début et la fin que les vidéos affichées ont en commun : « …CRF 20 », « …CRF 22 ». Les infobulles, les exports et les noms de fichiers gardent le nom complet.",
   "Conditions": "Conditions",
   "Worst Frames": "Pires images",
   "Keeps these conditions and options in the profile picked, in Settings > Weak segments.": "Garde ces conditions et options dans le profil choisi, dans Paramètres > Segments faibles.",

@@ -2240,7 +2240,7 @@ void GraphPanel::show_stats_menu(const QPoint& position) {
 std::vector<GraphPanel::Run> GraphPanel::runs() const {
     std::vector<Run> runs;
     for (const auto& [id, entry] : entries_) {
-        runs.push_back({entry.result, entry.label, entry.identity});
+        runs.push_back({entry.result, entry.label, entry.identity, true, entry.shown});
     }
     return runs;
 }

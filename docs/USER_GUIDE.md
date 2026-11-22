@@ -135,8 +135,8 @@ newly added videos, and the GPU metrics), **Weak segments**, **Storage** and
 **Settings > General > Window** chooses whether the app reopens the videos it
 had open when it was last closed (off by default).
 
-**Video names** there sets how test videos' names are shown in Metric Graphs
-and Video Compare, where long names that differ only near their ends (an
+**Video names** there sets how test videos' names are shown in Metric Graphs,
+Video Compare and the Worst Frames tab's videos list, where long names that differ only near their ends (an
 encode's CRF, its encoder) would otherwise be cut where they differ:
 
 - **What tells them apart** (the default) leaves out the start and end that

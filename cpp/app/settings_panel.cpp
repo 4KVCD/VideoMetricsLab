@@ -866,7 +866,8 @@ QGroupBox* SettingsPanel::build_window_box() {
     video_names->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     video_names->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     video_names->setToolTip(
-        app::tr("How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves "
+        app::tr("How test videos' names are shown in Metric Graphs, Video Compare and Worst Frames. What tells them "
+                "apart leaves "
                 "out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and "
                 "file names keep the whole name."));
     connect(video_names, &QComboBox::currentIndexChanged, this, [this] {

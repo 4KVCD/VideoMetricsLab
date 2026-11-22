@@ -51,7 +51,7 @@ void MainWindow::sync_worst_frames() {
     sync_graph();
     std::vector<WeakFramesVideo> videos;
     for (const GraphPanel::Run& run : graph_panel_->runs()) {
-        videos.push_back({run.identity, run.label, run.result});
+        videos.push_back({run.identity, run.label, run.result, run.shown});
     }
     worst_tab_->set_videos(std::move(videos));
     worst_tab_->set_range(graph_panel_->highlighted_frames());

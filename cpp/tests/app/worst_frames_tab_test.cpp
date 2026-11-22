@@ -376,5 +376,19 @@ TEST(WorstFramesTab, KeepsTheChosenVideoWhileItIsRecalculated) {
     EXPECT_EQ(tab.worst_table()->item(0, 2)->text(), "55.00");
 }
 
+TEST(WorstFramesTab, NamesTheVideosAsMetricGraphsDoes) {
+    // The videos list takes Metric Graphs' shown names (the Video names
+    // setting), the whole name in the tooltip; without one, the whole name.
+    Settings settings;
+    Bench bench(settings);
+    const std::vector<float> values(90, 95.0F);
+    bench.tab.set_videos({{"row:a", "Example Show - S01E03 - CRF 20", vmaf_result("a.mkv", values), "…CRF 20"},
+                          {"row:b", "b", vmaf_result("b.mkv", values)}});
+    const QTableWidget* videos = bench.tab.videos_table();
+    EXPECT_EQ(videos->item(0, 0)->text(), "…CRF 20");
+    EXPECT_EQ(videos->item(0, 0)->toolTip(), "Example Show - S01E03 - CRF 20");
+    EXPECT_EQ(videos->item(1, 0)->text(), "b");
+}
+
 }  // namespace
 }  // namespace vml::app
