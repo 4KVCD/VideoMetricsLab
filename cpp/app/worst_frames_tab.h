@@ -121,6 +121,7 @@ protected:
 
 private:
     QWidget* build_toolbar();
+    QPushButton* make_export_button();
     QWidget* build_conditions();
     QWidget* build_lists();
     // The video chosen changed: its metrics in the bar, and the profile's

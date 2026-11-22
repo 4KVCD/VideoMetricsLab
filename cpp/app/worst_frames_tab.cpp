@@ -197,12 +197,17 @@ QWidget* WorstFramesTab::build_toolbar() {
             choose_metric(metric_bar_->tabData(index).toString().toStdString());
         }
     });
-    // The bar takes the room left, its tabs at its left: given only its
+    // The bar takes the whole row, its tabs at its left: given only its
     // size hint, it showed scroll arrows once the selected (semibold) tab
-    // had widened it.
+    // had widened it. Export is in the Weak segments card, what it exports:
+    // here it took the room of a metric, and at 1280 px ten (HDR VMAF's
+    // with the others) needed scroll arrows.
     row->addWidget(metric_bar_, 1);
+    return bar;
+}
 
-
+QPushButton* WorstFramesTab::make_export_button() {
+    // This video's weak segments as JSON or CSV, or every video's in one file.
     auto* export_button = new QPushButton(app::tr("Export"));
     auto* exports = new QMenu(export_button);
     connect(exports->addAction(app::tr("Export JSON")), &QAction::triggered, this,
@@ -217,8 +222,7 @@ QWidget* WorstFramesTab::build_toolbar() {
         emit report_requested(rules);
     });
     export_button->setMenu(exports);
-    row->addWidget(export_button);
-    return bar;
+    return export_button;
 }
 
 QWidget* WorstFramesTab::build_conditions() {
@@ -376,6 +380,7 @@ QWidget* WorstFramesTab::build_lists() {
     theme::set_role(segments_title, "title");
     segments_head->addWidget(segments_title);
     segments_head->addStretch(1);
+    segments_head->addWidget(make_export_button());
     open_button_ = new QPushButton(app::tr("Open in Video Compare"));
     theme::set_role(open_button_, "primary");
     open_button_->setEnabled(false);
