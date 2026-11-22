@@ -22,8 +22,10 @@
 // icon or a right-click on the bar, Minimize and Maximize included.
 #pragma once
 
+#include <QPointF>
 #include <QWidget>
 
+#include <functional>
 #include <optional>
 
 class QAbstractButton;
@@ -74,6 +76,45 @@ private:
     QMenu* theme_menu_ = nullptr;
     QToolButton* update_ = nullptr;
     QString theme_value_;
+};
+
+// A window with Qt::ExpandedClientAreaHint gets each of its mouse presses and
+// releases twice on Windows (Qt 6.12: press, press, release, release, once
+// with Qt's own timestamp and once with Windows'; Windows itself sends one
+// of each). A menu a button opens on its press then closed at once, the
+// second press landing outside it; whatever acts on a press acted twice; and
+// Qt, timing double clicks across both clocks, made none.
+//
+// This filter drops a press or release that repeats the one just before it:
+// the same kind and button at the same place within 100 ms, nothing between.
+// A real click cannot repeat itself so: a release comes between two presses.
+// On `window` (the one with the flag) it also makes the double clicks: Qt's
+// are dropped, and a kept press that follows the last within the system's
+// double-click time and distance is delivered, then a double click, as Qt
+// delivers them. TitleBar::prepare installs it on the application, on the
+// windows' own (QWindow) events.
+class RepeatedMouseFilter : public QObject {
+public:
+    // `now`: milliseconds, from any start (tests give their own).
+    RepeatedMouseFilter(QWidget* window, std::function<qint64()> now, QObject* parent = nullptr);
+    explicit RepeatedMouseFilter(QWidget* window, QObject* parent = nullptr);
+
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
+private:
+    QWidget* window_;
+    std::function<qint64()> now_;
+    bool delivering_ = false;  // sending a press and its double click itself
+    int last_type_ = 0;  // QEvent::Type of the last press or release; 0: none
+    int last_button_ = 0;
+    QPointF last_at_;
+    qint64 last_time_ = 0;
+    // The window's last kept press, for double clicks: counted, if it can
+    // be a double click's first.
+    bool press_counted_ = false;
+    int press_button_ = 0;
+    QPointF press_at_;
+    qint64 press_time_ = 0;
 };
 
 #ifdef _WIN32

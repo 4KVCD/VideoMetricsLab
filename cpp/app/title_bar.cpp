@@ -6,14 +6,17 @@
 #include <QAbstractButton>
 #include <QActionGroup>
 #include <QApplication>
+#include <QElapsedTimer>
 #include <QEvent>
 #include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMainWindow>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QStyleHints>
 #include <QToolButton>
 #include <QWindow>
 
@@ -22,6 +25,7 @@
 #endif
 
 #include <algorithm>
+#include <cmath>
 
 namespace vml::app {
 
@@ -192,6 +196,74 @@ void TitleButtons::set_theme(const QString& theme) {
 
 QWidget* TitleButtons::progress_button() const { return progress_; }
 QWidget* TitleButtons::update_button() const { return update_; }
+
+// ============================================================ repeated clicks
+
+RepeatedMouseFilter::RepeatedMouseFilter(QWidget* window, std::function<qint64()> now, QObject* parent)
+    : QObject(parent), window_(window), now_(std::move(now)) {}
+
+RepeatedMouseFilter::RepeatedMouseFilter(QWidget* window, QObject* parent)
+    : RepeatedMouseFilter(
+          window,
+          [] {
+              static QElapsedTimer clock = [] {
+                  QElapsedTimer started;
+                  started.start();
+                  return started;
+              }();
+              return clock.elapsed();
+          },
+          parent) {}
+
+bool RepeatedMouseFilter::eventFilter(QObject* watched, QEvent* event) {
+    // The windows' own (QWindow) events: each is then delivered to its
+    // widgets once, or not at all.
+    const QEvent::Type type = event->type();
+    if (delivering_ || !watched->isWindowType()) {
+        return false;
+    }
+    const bool on_window = window_ != nullptr && watched == window_->windowHandle();
+    if (type == QEvent::MouseButtonDblClick && on_window) {
+        return true;  // Qt's, which its doubled presses confuse: the window's are made below
+    }
+    if (type != QEvent::MouseButtonPress && type != QEvent::MouseButtonRelease) {
+        return false;
+    }
+    const auto* mouse = static_cast<QMouseEvent*>(event);
+    const qint64 time = now_();
+    const int button = static_cast<int>(mouse->button());
+    const bool repeated = last_type_ == type && last_button_ == button && last_at_ == mouse->globalPosition() &&
+                          time - last_time_ < 100;
+    last_type_ = repeated ? 0 : type;  // after a repeat, a third would be a click of its own
+    last_button_ = button;
+    last_at_ = mouse->globalPosition();
+    last_time_ = time;
+    if (repeated || type != QEvent::MouseButtonPress || !on_window) {
+        return repeated;
+    }
+    // A press that, with the window's last one, makes a double click (by
+    // the system's time and distance): delivered, then the double click,
+    // as Qt itself delivers them. A third press starts again.
+    const QStyleHints* hints = QGuiApplication::styleHints();
+    const QPointF moved = mouse->globalPosition() - press_at_;
+    const bool second = press_counted_ && press_button_ == button && time - press_time_ < hints->mouseDoubleClickInterval() &&
+                        std::abs(moved.x()) <= hints->mouseDoubleClickDistance() &&
+                        std::abs(moved.y()) <= hints->mouseDoubleClickDistance();
+    press_counted_ = !second;
+    press_button_ = button;
+    press_at_ = mouse->globalPosition();
+    press_time_ = time;
+    if (!second) {
+        return false;
+    }
+    delivering_ = true;
+    QCoreApplication::sendEvent(watched, event);
+    QMouseEvent twice(QEvent::MouseButtonDblClick, mouse->position(), mouse->scenePosition(), mouse->globalPosition(),
+                      mouse->button(), mouse->buttons(), mouse->modifiers(), mouse->pointingDevice());
+    QCoreApplication::sendEvent(watched, &twice);
+    delivering_ = false;
+    return true;
+}
 
 #ifdef _WIN32
 
@@ -366,6 +438,10 @@ void TitleBar::prepare() {
     // The bar goes where Qt's own would have been: the window's contents
     // are not kept below it (Qt's safe area, for a bar of its own).
     window_->setAttribute(Qt::WA_ContentsMarginsRespectsSafeArea, false);
+    // With that flag, Qt delivers each mouse press and release twice
+    // (RepeatedMouseFilter): the second of each is dropped, app-wide, as
+    // the window's menus and pop-ups are windows of their own.
+    qApp->installEventFilter(new RepeatedMouseFilter(window_, qApp));
 }
 
 void TitleBar::attach() {
