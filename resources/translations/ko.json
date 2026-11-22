@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "그래프를 가리키면 프레임의 점수가 표시됩니다. 목록에서 행을 선택할 수도 있습니다. 행을 두 번 클릭하면 영상 비교에서 열립니다.",
+  "Double-click the row to open it in Video Compare.": "행을 두 번 클릭하면 영상 비교에서 열립니다.",
   "Worst frames as CSV...": "가장 나쁜 프레임을 CSV로...",
   "Worst frames as JSON...": "가장 나쁜 프레임을 JSON으로...",
   "Graph as PNG...": "그래프를 PNG로...",
@@ -8,7 +10,6 @@
   "All videos' weak segments as JSON or CSV...": "모든 영상의 약한 구간을 JSON 또는 CSV로...",
   "Export worst frames": "가장 나쁜 프레임 내보내기",
   "Details": "세부 정보",
-  "Point at the graph for a frame's scores, or select a row in the lists.": "그래프를 가리키면 프레임의 점수가 표시됩니다. 목록에서 행을 선택할 수도 있습니다.",
   "Worst frame {rank} of {count}": "최악 프레임 {rank} / {count}",
   "In weak segment {first} to {last}": "약한 구간 {first}~{last} 안",
   "No condition holds": "해당하는 조건 없음",
@@ -1093,7 +1094,6 @@
   "Last": "마지막",
   "Not in Video Compare": "영상 비교에 없음",
   "Only the selected frames, {first} to {last}.": "선택한 프레임만, {first}~{last}.",
-  "Open in Video Compare": "영상 비교에서 열기",
   "Remove": "제거",
   "Shortest segment (frames):": "가장 짧은 구간(프레임):",
   "Start": "시작",

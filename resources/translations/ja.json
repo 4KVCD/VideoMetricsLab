@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "グラフを指すとフレームのスコアを表示します。リストの行を選択することもできます。行をダブルクリックすると動画比較で開きます。",
+  "Double-click the row to open it in Video Compare.": "行をダブルクリックすると動画比較で開きます。",
   "Worst frames as CSV...": "最悪のフレームを CSV 形式で...",
   "Worst frames as JSON...": "最悪のフレームを JSON 形式で...",
   "Graph as PNG...": "グラフを PNG 形式で...",
@@ -8,7 +10,6 @@
   "All videos' weak segments as JSON or CSV...": "すべての動画の弱い区間を JSON または CSV 形式で...",
   "Export worst frames": "最悪のフレームをエクスポート",
   "Details": "詳細",
-  "Point at the graph for a frame's scores, or select a row in the lists.": "グラフを指すとフレームのスコアを表示します。リストの行を選択することもできます。",
   "Worst frame {rank} of {count}": "最悪フレーム {rank} / {count}",
   "In weak segment {first} to {last}": "弱い区間 {first}～{last} 内",
   "No condition holds": "該当する条件なし",
@@ -1093,7 +1094,6 @@
   "Last": "最後",
   "Not in Video Compare": "動画比較にありません",
   "Only the selected frames, {first} to {last}.": "選択したフレーム（{first}～{last}）のみ。",
-  "Open in Video Compare": "動画比較で開く",
   "Remove": "削除",
   "Shortest segment (frames):": "最短の区間（フレーム）：",
   "Start": "開始",

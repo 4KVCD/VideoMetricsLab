@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "Trỏ vào biểu đồ để xem điểm của một khung hình, hoặc chọn một hàng trong danh sách. Nhấp đúp vào một hàng để mở trong So sánh video.",
+  "Double-click the row to open it in Video Compare.": "Nhấp đúp vào hàng này để mở trong So sánh video.",
   "Worst frames as CSV...": "Khung tệ nhất dạng CSV...",
   "Worst frames as JSON...": "Khung tệ nhất dạng JSON...",
   "Graph as PNG...": "Biểu đồ dạng PNG...",
@@ -8,7 +10,6 @@
   "All videos' weak segments as JSON or CSV...": "Đoạn yếu của mọi video dạng JSON hoặc CSV...",
   "Export worst frames": "Xuất các khung tệ nhất",
   "Details": "Chi tiết",
-  "Point at the graph for a frame's scores, or select a row in the lists.": "Trỏ vào biểu đồ để xem điểm của một khung hình, hoặc chọn một hàng trong danh sách.",
   "Worst frame {rank} of {count}": "Khung hình tệ nhất {rank} / {count}",
   "In weak segment {first} to {last}": "Trong đoạn yếu {first} đến {last}",
   "No condition holds": "Không có điều kiện nào đúng",
@@ -1093,7 +1094,6 @@
   "Last": "Cuối",
   "Not in Video Compare": "Không có trong So sánh video",
   "Only the selected frames, {first} to {last}.": "Chỉ các khung đã chọn, từ {first} đến {last}.",
-  "Open in Video Compare": "Mở trong So sánh video",
   "Remove": "Gỡ",
   "Shortest segment (frames):": "Đoạn ngắn nhất (khung):",
   "Start": "Bắt đầu",

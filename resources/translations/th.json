@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "ชี้ที่กราฟเพื่อดูคะแนนของเฟรม หรือเลือกแถวในรายการ ดับเบิลคลิกแถวเพื่อเปิดในเปรียบเทียบวิดีโอ",
+  "Double-click the row to open it in Video Compare.": "ดับเบิลคลิกแถวนี้เพื่อเปิดในเปรียบเทียบวิดีโอ",
   "Worst frames as CSV...": "เฟรมที่แย่ที่สุดเป็น CSV...",
   "Worst frames as JSON...": "เฟรมที่แย่ที่สุดเป็น JSON...",
   "Graph as PNG...": "กราฟเป็น PNG...",
@@ -8,7 +10,6 @@
   "All videos' weak segments as JSON or CSV...": "ช่วงที่อ่อนของทุกวิดีโอเป็น JSON หรือ CSV...",
   "Export worst frames": "ส่งออกเฟรมที่แย่ที่สุด",
   "Details": "รายละเอียด",
-  "Point at the graph for a frame's scores, or select a row in the lists.": "ชี้ที่กราฟเพื่อดูคะแนนของเฟรม หรือเลือกแถวในรายการ",
   "Worst frame {rank} of {count}": "เฟรมที่แย่ที่สุด {rank} จาก {count}",
   "In weak segment {first} to {last}": "อยู่ในช่วงอ่อน {first} ถึง {last}",
   "No condition holds": "ไม่มีเงื่อนไขใดเป็นจริง",
@@ -1093,7 +1094,6 @@
   "Last": "สุดท้าย",
   "Not in Video Compare": "ไม่อยู่ในเปรียบเทียบวิดีโอ",
   "Only the selected frames, {first} to {last}.": "เฉพาะเฟรมที่เลือก {first} ถึง {last}",
-  "Open in Video Compare": "เปิดในเปรียบเทียบวิดีโอ",
   "Remove": "นำออก",
   "Shortest segment (frames):": "ช่วงที่สั้นที่สุด (เฟรม):",
   "Start": "เริ่ม",

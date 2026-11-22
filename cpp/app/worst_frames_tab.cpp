@@ -397,10 +397,12 @@ QWidget* WorstFramesTab::build_details() {
     auto* title = new QLabel(app::tr("Details"));
     theme::set_role(title, "title");
     column->addWidget(title);
-    details_hint_ = new QLabel(app::tr("Point at the graph for a frame's scores, or select a row in the lists."));
+    // Under the readout, what to do next: before anything is chosen, how to
+    // choose; with a row chosen, that a double-click opens it in Video
+    // Compare (the lists' only way there).
+    details_hint_ = new QLabel;
     details_hint_->setWordWrap(true);
     theme::style(details_hint_, "color: {muted};");
-    column->addWidget(details_hint_);
     details_ = new QLabel;
     details_->setObjectName("worstDetailsText");
     details_->setTextFormat(Qt::PlainText);
@@ -415,6 +417,7 @@ QWidget* WorstFramesTab::build_details() {
     details_->setMinimumHeight(2 * QFontMetrics(font).lineSpacing());
     details_->hide();
     column->addWidget(details_);
+    column->addWidget(details_hint_);
     return card;
 }
 
@@ -466,7 +469,6 @@ QWidget* WorstFramesTab::build_lists() {
                 chart_->set_cursor_time(found->time);
             }
         }
-        open_button_->setEnabled(true);
         show_details();
     });
     connect(worst_table_, &QTableWidget::cellDoubleClicked, this, [this](int, int) { open_selected(); });
@@ -486,11 +488,6 @@ QWidget* WorstFramesTab::build_lists() {
     segments_head->addWidget(segments_title);
     segments_head->addStretch(1);
     segments_head->addWidget(export_button([this](QMenu* menu) { fill_segments_menu(menu); }));
-    open_button_ = new QPushButton(app::tr("Open in Video Compare"));
-    theme::set_role(open_button_, "primary");
-    open_button_->setEnabled(false);
-    connect(open_button_, &QPushButton::clicked, this, [this] { open_selected(); });
-    segments_head->addWidget(open_button_);
     segments->addLayout(segments_head);
     segments_table_ = make_table();
     offer_menu(segments_table_, [this](QMenu* menu) { fill_segments_menu(menu); });
@@ -510,7 +507,6 @@ QWidget* WorstFramesTab::build_lists() {
             chart_->set_cursor_time(std::nullopt);
             chart_->bring_into_view(segment.start_time);
         }
-        open_button_->setEnabled(true);
         show_details();
     });
     connect(segments_table_, &QTableWidget::cellDoubleClicked, this, [this](int, int) { open_selected(); });
@@ -803,7 +799,6 @@ void WorstFramesTab::refresh() {
     fill_segments();
     refresh_videos_table();
     refresh_chart();
-    open_button_->setEnabled(false);
     show_details();
 }
 
@@ -1167,7 +1162,8 @@ void WorstFramesTab::show_details() {
     if (hover_frame_) {
         text = frame_details(*hover_frame_);
     }
-    if (text.isEmpty()) {
+    const bool hovering = !text.isEmpty();
+    if (!hovering) {
         if (const QList<QTableWidgetItem*> rows = worst_table_->selectedItems(); !rows.isEmpty()) {
             if (const std::optional<int> frame = worst_frame_of_row(rows.front()->row())) {
                 text = frame_details(*frame);
@@ -1181,7 +1177,10 @@ void WorstFramesTab::show_details() {
     }
     details_->setText(text);
     details_->setVisible(!text.isEmpty());
-    details_hint_->setVisible(text.isEmpty());
+    details_hint_->setText(text.isEmpty() ? app::tr("Point at the graph for a frame's scores, or select a row in the "
+                                                    "lists. Double-click a row to open it in Video Compare.")
+                                          : app::tr("Double-click the row to open it in Video Compare."));
+    details_hint_->setVisible(!hovering);
 }
 
 QString WorstFramesTab::frame_details(int frame) const {

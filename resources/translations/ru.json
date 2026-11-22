@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "Наведите указатель на график, чтобы увидеть оценки кадра, или выберите строку в списках. Дважды щёлкните строку, чтобы открыть её в «Сравнении видео».",
+  "Double-click the row to open it in Video Compare.": "Дважды щёлкните строку, чтобы открыть её в «Сравнении видео».",
   "Worst frames as CSV...": "Худшие кадры в CSV...",
   "Worst frames as JSON...": "Худшие кадры в JSON...",
   "Graph as PNG...": "График в PNG...",
@@ -8,7 +10,6 @@
   "All videos' weak segments as JSON or CSV...": "Слабые участки всех видео в JSON или CSV...",
   "Export worst frames": "Экспорт худших кадров",
   "Details": "Подробности",
-  "Point at the graph for a frame's scores, or select a row in the lists.": "Наведите указатель на график, чтобы увидеть оценки кадра, или выберите строку в списках.",
   "Worst frame {rank} of {count}": "Худший кадр {rank} из {count}",
   "In weak segment {first} to {last}": "В слабом участке с {first} по {last}",
   "No condition holds": "Ни одно условие не выполняется",
@@ -1093,7 +1094,6 @@
   "Last": "Последний",
   "Not in Video Compare": "Нет в «Сравнении видео»",
   "Only the selected frames, {first} to {last}.": "Только выбранные кадры, с {first} по {last}.",
-  "Open in Video Compare": "Открыть в «Сравнении видео»",
   "Remove": "Убрать",
   "Shortest segment (frames):": "Самый короткий участок (кадры):",
   "Start": "Начало",

@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "Wskaż wykres, aby zobaczyć wyniki klatki, lub zaznacz wiersz na listach. Kliknij dwukrotnie wiersz, aby otworzyć go w Porównaniu wideo.",
+  "Double-click the row to open it in Video Compare.": "Kliknij dwukrotnie wiersz, aby otworzyć go w Porównaniu wideo.",
   "Worst frames as CSV...": "Najgorsze klatki jako CSV...",
   "Worst frames as JSON...": "Najgorsze klatki jako JSON...",
   "Graph as PNG...": "Wykres jako PNG...",
@@ -8,7 +10,6 @@
   "All videos' weak segments as JSON or CSV...": "Słabe odcinki wszystkich filmów jako JSON lub CSV...",
   "Export worst frames": "Eksportuj najgorsze klatki",
   "Details": "Szczegóły",
-  "Point at the graph for a frame's scores, or select a row in the lists.": "Wskaż wykres, aby zobaczyć wyniki klatki, lub zaznacz wiersz na listach.",
   "Worst frame {rank} of {count}": "Najgorsza klatka {rank} z {count}",
   "In weak segment {first} to {last}": "W słabym odcinku od {first} do {last}",
   "No condition holds": "Żaden warunek nie jest spełniony",
@@ -1093,7 +1094,6 @@
   "Last": "Ostatnia",
   "Not in Video Compare": "Brak w Porównaniu wideo",
   "Only the selected frames, {first} to {last}.": "Tylko zaznaczone klatki, od {first} do {last}.",
-  "Open in Video Compare": "Otwórz w Porównaniu wideo",
   "Remove": "Usuń",
   "Shortest segment (frames):": "Najkrótszy odcinek (klatki):",
   "Start": "Początek",

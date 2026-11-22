@@ -112,8 +112,8 @@ public:
     bool lists_side_by_side() const;
 
 signals:
-    // A row double-clicked, or Open in Video Compare: that frame of that
-    // video, with Worst frames' list to step through (none for a segment).
+    // A row double-clicked: that frame of that video, with Worst frames'
+    // list to step through (none for a segment).
     void open_requested(const std::string& identity, int frame, const vml::app::WorstFrameList& list);
     // Save to profile, or Save as new profile: the profile's name ("" for
     // Default) and rules_to_save(), for Settings.
@@ -221,7 +221,6 @@ private:
     QPushButton* preset_button_ = nullptr;
     QPushButton* save_button_ = nullptr;
     QPushButton* save_new_button_ = nullptr;
-    QPushButton* open_button_ = nullptr;
     SegmentRulesEditor* editor_ = nullptr;
     QWidget* editor_holder_ = nullptr;
     QLabel* saved_note_ = nullptr;

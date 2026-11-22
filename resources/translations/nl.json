@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "Wijs de grafiek aan voor de scores van een frame, of selecteer een rij in de lijsten. Dubbelklik op een rij om die te openen in Video vergelijken.",
+  "Double-click the row to open it in Video Compare.": "Dubbelklik op de rij om die te openen in Video vergelijken.",
   "Worst frames as CSV...": "Slechtste frames als CSV...",
   "Worst frames as JSON...": "Slechtste frames als JSON...",
   "Graph as PNG...": "Grafiek als PNG...",
@@ -8,7 +10,6 @@
   "All videos' weak segments as JSON or CSV...": "Zwakke segmenten van alle video's als JSON of CSV...",
   "Export worst frames": "Slechtste frames exporteren",
   "Details": "Details",
-  "Point at the graph for a frame's scores, or select a row in the lists.": "Wijs de grafiek aan voor de scores van een frame, of selecteer een rij in de lijsten.",
   "Worst frame {rank} of {count}": "Slechtste frame {rank} van {count}",
   "In weak segment {first} to {last}": "In zwak segment {first} tot {last}",
   "No condition holds": "Geen voorwaarde geldt",
@@ -1093,7 +1094,6 @@
   "Last": "Laatste",
   "Not in Video Compare": "Niet in Video vergelijken",
   "Only the selected frames, {first} to {last}.": "Alleen de geselecteerde frames, {first} tot {last}.",
-  "Open in Video Compare": "Openen in Video vergelijken",
   "Remove": "Verwijderen",
   "Shortest segment (frames):": "Kortste segment (frames):",
   "Start": "Begin",

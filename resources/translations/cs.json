@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "Najeďte na graf pro skóre snímku, nebo vyberte řádek v seznamech. Dvojklikem na řádek ho otevřete v Porovnání videa.",
+  "Double-click the row to open it in Video Compare.": "Dvojklikem na řádek ho otevřete v Porovnání videa.",
   "Worst frames as CSV...": "Nejhorší snímky jako CSV...",
   "Worst frames as JSON...": "Nejhorší snímky jako JSON...",
   "Graph as PNG...": "Graf jako PNG...",
@@ -8,7 +10,6 @@
   "All videos' weak segments as JSON or CSV...": "Slabé úseky všech videí jako JSON nebo CSV...",
   "Export worst frames": "Exportovat nejhorší snímky",
   "Details": "Podrobnosti",
-  "Point at the graph for a frame's scores, or select a row in the lists.": "Najeďte na graf pro skóre snímku, nebo vyberte řádek v seznamech.",
   "Worst frame {rank} of {count}": "Nejhorší snímek {rank} z {count}",
   "In weak segment {first} to {last}": "Ve slabém úseku {first} až {last}",
   "No condition holds": "Žádná podmínka neplatí",
@@ -1093,7 +1094,6 @@
   "Last": "Poslední",
   "Not in Video Compare": "Není v Porovnání videa",
   "Only the selected frames, {first} to {last}.": "Jen vybrané snímky, {first} až {last}.",
-  "Open in Video Compare": "Otevřít v Porovnání videa",
   "Remove": "Odebrat",
   "Shortest segment (frames):": "Nejkratší úsek (snímky):",
   "Start": "Začátek",

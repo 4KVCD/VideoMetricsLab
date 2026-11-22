@@ -92,8 +92,8 @@ calculated in resolution tests.
      than one condition and **any condition holds**, the **Weak by** column
      names those behind each segment.
 
-   Click a row to mark it on the graph; double-click it, or **Open in Video
-   Compare**, to see it there (a segment from its first frame). Point at the
+   Click a row to mark it on the graph; double-click it to see it in Video
+   Compare (a segment from its first frame). Point at the
    graph and **Details**, under the conditions, tells the frame there: its
    time, its place among the worst frames, the weak segment it is in and the
    conditions that hold on it, and every metric's score (a worst frame's dot

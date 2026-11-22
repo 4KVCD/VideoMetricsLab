@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "Aponte para o gráfico para ver as pontuações de um quadro, ou selecione uma linha nas listas. Clique duas vezes em uma linha para abri-la em Comparar vídeos.",
+  "Double-click the row to open it in Video Compare.": "Clique duas vezes na linha para abri-la em Comparar vídeos.",
   "Worst frames as CSV...": "Piores quadros como CSV...",
   "Worst frames as JSON...": "Piores quadros como JSON...",
   "Graph as PNG...": "Gráfico como PNG...",
@@ -8,7 +10,6 @@
   "All videos' weak segments as JSON or CSV...": "Segmentos fracos de todos os vídeos como JSON ou CSV...",
   "Export worst frames": "Exportar piores quadros",
   "Details": "Detalhes",
-  "Point at the graph for a frame's scores, or select a row in the lists.": "Aponte para o gráfico para ver as pontuações de um quadro, ou selecione uma linha nas listas.",
   "Worst frame {rank} of {count}": "Pior quadro {rank} de {count}",
   "In weak segment {first} to {last}": "No segmento fraco de {first} a {last}",
   "No condition holds": "Nenhuma condição se aplica",
@@ -1093,7 +1094,6 @@
   "Last": "Último",
   "Not in Video Compare": "Não está em Comparar vídeos",
   "Only the selected frames, {first} to {last}.": "Só os quadros selecionados, de {first} a {last}.",
-  "Open in Video Compare": "Abrir em Comparar vídeos",
   "Remove": "Remover",
   "Shortest segment (frames):": "Segmento mais curto (quadros):",
   "Start": "Início",

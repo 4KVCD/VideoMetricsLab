@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "Bir karenin puanları için grafiğin üzerine gelin veya listelerden bir satır seçin. Bir satırı Video karşılaştırma'da açmak için çift tıklayın.",
+  "Double-click the row to open it in Video Compare.": "Satırı Video karşılaştırma'da açmak için çift tıklayın.",
   "Worst frames as CSV...": "En kötü kareler CSV olarak...",
   "Worst frames as JSON...": "En kötü kareler JSON olarak...",
   "Graph as PNG...": "Grafik PNG olarak...",
@@ -8,7 +10,6 @@
   "All videos' weak segments as JSON or CSV...": "Tüm videoların zayıf bölümleri JSON veya CSV olarak...",
   "Export worst frames": "En kötü kareleri dışa aktar",
   "Details": "Ayrıntılar",
-  "Point at the graph for a frame's scores, or select a row in the lists.": "Bir karenin puanları için grafiğin üzerine gelin veya listelerden bir satır seçin.",
   "Worst frame {rank} of {count}": "En kötü kare {rank} / {count}",
   "In weak segment {first} to {last}": "{first}–{last} zayıf bölümünde",
   "No condition holds": "Hiçbir koşul sağlanmıyor",
@@ -1093,7 +1094,6 @@
   "Last": "Son",
   "Not in Video Compare": "Video karşılaştırmada yok",
   "Only the selected frames, {first} to {last}.": "Yalnızca seçili kareler, {first} - {last}.",
-  "Open in Video Compare": "Video karşılaştırmada aç",
   "Remove": "Kaldır",
   "Shortest segment (frames):": "En kısa bölüm (kare):",
   "Start": "Başlangıç",

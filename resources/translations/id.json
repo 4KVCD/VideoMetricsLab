@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "Arahkan ke grafik untuk skor sebuah frame, atau pilih baris di daftar. Klik dua kali sebuah baris untuk membukanya di Bandingkan video.",
+  "Double-click the row to open it in Video Compare.": "Klik dua kali baris ini untuk membukanya di Bandingkan video.",
   "Worst frames as CSV...": "Bingkai terburuk sebagai CSV...",
   "Worst frames as JSON...": "Bingkai terburuk sebagai JSON...",
   "Graph as PNG...": "Grafik sebagai PNG...",
@@ -8,7 +10,6 @@
   "All videos' weak segments as JSON or CSV...": "Segmen lemah semua video sebagai JSON atau CSV...",
   "Export worst frames": "Ekspor bingkai terburuk",
   "Details": "Detail",
-  "Point at the graph for a frame's scores, or select a row in the lists.": "Arahkan ke grafik untuk skor sebuah frame, atau pilih baris di daftar.",
   "Worst frame {rank} of {count}": "Frame terburuk {rank} dari {count}",
   "In weak segment {first} to {last}": "Dalam segmen lemah {first} sampai {last}",
   "No condition holds": "Tidak ada kondisi yang terpenuhi",
@@ -1093,7 +1094,6 @@
   "Last": "Terakhir",
   "Not in Video Compare": "Tidak ada di Bandingkan video",
   "Only the selected frames, {first} to {last}.": "Hanya bingkai yang dipilih, {first} sampai {last}.",
-  "Open in Video Compare": "Buka di Bandingkan video",
   "Remove": "Hapus",
   "Shortest segment (frames):": "Segmen terpendek (bingkai):",
   "Start": "Mulai",

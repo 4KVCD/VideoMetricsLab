@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "指向圖表可查看某影格的分數，或在清單中選取一列。按兩下一列可在影片比較中開啟。",
+  "Double-click the row to open it in Video Compare.": "按兩下該列可在影片比較中開啟。",
   "Worst frames as CSV...": "最差影格匯出為 CSV...",
   "Worst frames as JSON...": "最差影格匯出為 JSON...",
   "Graph as PNG...": "圖表匯出為 PNG...",
@@ -8,7 +10,6 @@
   "All videos' weak segments as JSON or CSV...": "所有影片的弱片段匯出為 JSON 或 CSV...",
   "Export worst frames": "匯出最差影格",
   "Details": "詳細資訊",
-  "Point at the graph for a frame's scores, or select a row in the lists.": "指向圖表可查看某影格的分數，或在清單中選取一列。",
   "Worst frame {rank} of {count}": "最差影格 {rank} / {count}",
   "In weak segment {first} to {last}": "位於弱片段 {first} 至 {last}",
   "No condition holds": "沒有符合的條件",
@@ -1093,7 +1094,6 @@
   "Last": "末格",
   "Not in Video Compare": "不在影片比較中",
   "Only the selected frames, {first} to {last}.": "僅所選影格，{first} 到 {last}。",
-  "Open in Video Compare": "在影片比較中開啟",
   "Remove": "移除",
   "Shortest segment (frames):": "最短片段（影格）：",
   "Start": "開始",
