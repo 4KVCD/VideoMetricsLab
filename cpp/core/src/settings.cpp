@@ -68,6 +68,8 @@ const std::unordered_map<std::string, Field>& fields() {
         {"skipped_update_version", &Settings::skipped_update_version},
         {"language", &Settings::language},
         {"theme", &Settings::theme},
+        {"interface", &Settings::interface_style},
+        {"accent_colour", &Settings::accent_colour},
         {"remember_window_size", &Settings::remember_window_size},
         {"window_width", &Settings::window_width},
         {"window_height", &Settings::window_height},
@@ -453,6 +455,8 @@ std::string Settings::text() const {
     data["skipped_update_version"] = skipped_update_version;
     data["language"] = language;
     data["theme"] = theme;
+    data["interface"] = interface_style;
+    data["accent_colour"] = accent_colour;
     data["remember_window_size"] = remember_window_size;
     data["window_width"] = window_width;
     data["window_height"] = window_height;

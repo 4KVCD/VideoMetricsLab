@@ -52,6 +52,20 @@ GraphPanel::Run scored_run(const std::string& reference, long long bits_per_seco
 // first sequence), Copy as markdown and Export CSV as the command line's
 // text; then scored videos added (one without a bitrate refused, one with
 // a whole file's rate warned of), and Clear.
+// VML Modern's roles: the options a toolbar, the results and the chart each
+// a card, the heading the results' title, each side's Clear quiet.
+TEST(BdRatePanel, ItsPartsHaveTheirRoles) {
+    BdRatePanel panel([] { return std::vector<GraphPanel::Run>{}; });
+    const auto role = [](const QWidget* widget) { return widget->property("vmlRole").toString(); };
+    EXPECT_EQ(role(panel.group_combo->parentWidget()), "toolbar");
+    EXPECT_EQ(role(panel.results->parentWidget()), "card");
+    EXPECT_EQ(role(panel.heading_label->parentWidget()), "card");
+    EXPECT_EQ(role(panel.chart->parentWidget()), "card");
+    EXPECT_EQ(role(panel.anchor.clear_button), "quiet");
+    EXPECT_EQ(role(panel.test.clear_button), "quiet");
+    EXPECT_EQ(role(panel.heading_label), "title");
+}
+
 TEST(BdRatePanel, ShowsTheBdRatesOfTwoEncoders) {
     QTemporaryDir folder;
     ASSERT_TRUE(folder.isValid());

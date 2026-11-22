@@ -393,11 +393,20 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
     qRegisterMetaType<DetectedCrops>();
     auto* root = new QVBoxLayout(this);
 
-    add_video_row(root);
-    add_colour_row(root);
+    // The rows above the view, a toolbar of their own in VML Modern; the
+    // controls under it (playback, the timeline, the loop) a card. In
+    // Classic the rows as they were (theme::container).
+    QBoxLayout* top_layout = nullptr;
+    QWidget* top_bar = theme::container("toolbar", false, &top_layout);
+    add_video_row(top_layout);
+    add_colour_row(top_layout);
+    root->addWidget(top_bar);
     add_view(root);
-    add_seek_rows(root);
-    add_inspect_row(root);
+    QBoxLayout* controls_layout = nullptr;
+    QWidget* controls = theme::container("card", false, &controls_layout);
+    add_seek_rows(controls_layout);
+    add_inspect_row(controls_layout);
+    root->addWidget(controls);
     add_labels(root);
     make_timers();
 
@@ -412,7 +421,7 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
 
 // The test video's row: the previous and next buttons, the list, and the
 // zoom.
-void FrameComparePanel::add_video_row(QVBoxLayout* root) {
+void FrameComparePanel::add_video_row(QBoxLayout* root) {
     auto* top = new QHBoxLayout;
     previous_video_button = new QPushButton(QString::fromUtf8("\xE2\x86\x90"));  // ←
     previous_video_button->setToolTip(app::tr("Previous test video (Left arrow)"));
@@ -440,7 +449,7 @@ void FrameComparePanel::add_video_row(QVBoxLayout* root) {
     top->addWidget(previous_video_button);
     top->addWidget(video_combo, 1);
     top->addWidget(next_video_button);
-    top->addSpacing(12);
+    top->addWidget(theme::separator(12));
     top->addWidget(new QLabel(app::tr("Zoom:")));
     top->addWidget(zoom_combo);
     root->addLayout(top);
@@ -448,7 +457,7 @@ void FrameComparePanel::add_video_row(QVBoxLayout* root) {
 
 // The colours' row: the HDR preview's mode and the reference's playback
 // size, the colour status, and Advanced info.
-void FrameComparePanel::add_colour_row(QVBoxLayout* root) {
+void FrameComparePanel::add_colour_row(QBoxLayout* root) {
     auto* color_row = new QHBoxLayout;
     color_mode_combo = new QComboBox;
     color_mode_combo->addItem(app::tr("Display-aware (recommended)"), "display_aware");
@@ -495,6 +504,7 @@ void FrameComparePanel::add_colour_row(QVBoxLayout* root) {
         combo->view()->setMinimumWidth(full);
     }
     color_row->addWidget(color_status_label, 1);
+    color_row->addWidget(theme::separator(0));
     advanced_info_button = new QPushButton(app::tr("Advanced info"));
     advanced_info_button->setToolTip(app::tr("Playback details will appear here when a video is loaded."));
     color_row->addWidget(advanced_info_button);
@@ -518,9 +528,10 @@ void FrameComparePanel::add_view(QVBoxLayout* root) {
 }
 
 // Play, the audio, the frame and timestamp steps, and the timeline.
-void FrameComparePanel::add_seek_rows(QVBoxLayout* root) {
+void FrameComparePanel::add_seek_rows(QBoxLayout* root) {
     auto* seek = new QHBoxLayout;
     play_button = new PlayPauseButton;
+    theme::set_role(play_button, "primary");  // the tab's own action (VML Modern)
     connect(play_button, &QPushButton::clicked, this, [this] { on_play_clicked(); });
     audio_checkbox = new QCheckBox(app::tr("Audio"));
     audio_checkbox->setToolTip(app::tr(
@@ -547,7 +558,7 @@ void FrameComparePanel::add_seek_rows(QVBoxLayout* root) {
     connect(next_frame_button, &QPushButton::clicked, this, [this] { set_frame(frame_ + 1); });
     seek->addWidget(play_button);
     seek->addWidget(audio_checkbox);
-    seek->addSpacing(12);
+    seek->addWidget(theme::separator(12));
     seek->addWidget(previous_frame_button);
     seek->addWidget(new QLabel(app::tr("Frame:")));
     seek->addWidget(frame_spin);
@@ -851,6 +862,13 @@ void FrameComparePanel::cancel() {
 void FrameComparePanel::showEvent(QShowEvent* event) {
     // Watches the window's keys and moves, and shows the current pair.
     QWidget::showEvent(event);
+    if (zoom_combo->minimumWidth() == 0) {
+        // Zoom's text box's own margins on top of its widest item: the box's
+        // size leaves them out, and its text box then scrolled the item
+        // along, cutting off the "F" of "Fit to window" (VML Modern). Its
+        // size as drawn now, the style sheet applied.
+        zoom_combo->setMinimumWidth(zoom_combo->sizeHint().width() + 6);
+    }
     on_screen_ = true;
     release_timer_->stop();
     if (!window_filters_installed_) {

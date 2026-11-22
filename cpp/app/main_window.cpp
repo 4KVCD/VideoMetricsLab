@@ -713,18 +713,37 @@ void MainWindow::build_ui() {
 }
 
 QWidget* MainWindow::build_files_panel() {
-    files_box_ = new QGroupBox(app::tr("Videos"));
+    // Classic: one box, framed and titled. VML Modern: no box, a card for
+    // the reference and one for the test videos, the table's buttons a
+    // footer along its bottom (theme::classic_box, theme::container: Classic
+    // lays out as it did).
+    files_box_ = new QGroupBox;
+    theme::classic_box(files_box_, app::tr("Videos"));
     auto* files_layout = new QVBoxLayout(files_box_);
 
-    add_reference_row(files_layout);
+    QBoxLayout* reference_layout = nullptr;
+    files_layout->addWidget(theme::container("card", false, &reference_layout));
+    add_reference_row(reference_layout);
+    auto* tests_card = new QWidget;
+    tests_card->setObjectName("testsCard");
+    theme::set_role(tests_card, "card");
+    auto* tests_layout = new QVBoxLayout(tests_card);
+    tests_layout->setContentsMargins(0, 0, 0, 0);
+    QBoxLayout* table_area = nullptr;
+    tests_layout->addWidget(theme::container("padding", false, &table_area), 1);
     // One block, heading row and table, with no spacing between them.
     auto* table_block = new QVBoxLayout;
     table_block->setSpacing(0);
     table_block->addLayout(build_table_heading());
     build_test_table();
     table_block->addWidget(distorted_table_, 1);
-    files_layout->addLayout(table_block, 1);
-    const std::vector<QWidget*> file_buttons = add_file_buttons(files_layout);
+    table_area->addLayout(table_block, 1);
+    QBoxLayout* footer = nullptr;
+    QWidget* footer_strip = theme::container("footer", true, &footer);
+    footer_strip->setObjectName("testsFooter");
+    tests_layout->addWidget(footer_strip);
+    files_layout->addWidget(tests_card, 1);
+    const std::vector<QWidget*> file_buttons = add_file_buttons(footer);
 
     // Frozen during a run one control at a time. Don't disable the whole box:
     // a disabled QGroupBox disables its children, the table's scroll bar
@@ -736,9 +755,16 @@ QWidget* MainWindow::build_files_panel() {
 }
 
 // The reference's row: its path, Browse..., and what it is.
-void MainWindow::add_reference_row(QVBoxLayout* layout) {
-    layout->addWidget(new QLabel(app::tr("Reference video:")));
+void MainWindow::add_reference_row(QBoxLayout* layout) {
+    auto* classic_label = new QLabel(app::tr("Reference video:"));
+    theme::classic_only(classic_label);
+    layout->addWidget(classic_label);
     auto* source_row = new QHBoxLayout;
+    auto* title = new QLabel(app::tr("Reference"));
+    theme::set_role(title, "title");
+    title->setContentsMargins(0, 0, 10, 0);
+    theme::modern_only(title);
+    source_row->addWidget(title);
     // A path can be pasted or typed in (Enter, or leaving the box, reads it),
     // and a file dropped on it from a file manager.
     source_edit_ = new QLineEdit;
@@ -768,6 +794,11 @@ QHBoxLayout* MainWindow::build_table_heading() {
     connect(metrics_button_, &QPushButton::clicked, this,
             [this] { show_metrics_menu(metrics_button_->mapToGlobal(metrics_button_->rect().bottomLeft())); });
     auto* table_heading = new QHBoxLayout;
+    auto* title = new QLabel(app::tr("Test videos"));  // VML Modern's: the card's title
+    theme::set_role(title, "title");
+    title->setContentsMargins(0, 0, 10, 0);  // its gap to the hint, gone with it in Classic
+    theme::modern_only(title);
+    table_heading->addWidget(title, 0, Qt::AlignBottom);
     auto* table_hint = new QLabel(
         app::tr("Test videos to compare against the reference. Check rows to calculate; select rows to edit their "
                 "settings below. Metric header shortcuts apply to all rows.") +
@@ -776,6 +807,7 @@ QHBoxLayout* MainWindow::build_table_heading() {
     // Wrapped where it does not fit: on one line, in a longer language, it
     // set the window's minimum width.
     table_hint->setWordWrap(true);
+    theme::set_role(table_hint, "hint");  // VML Modern: muted beside the card's title
     table_heading->addWidget(table_hint, 1, Qt::AlignBottom);
     table_heading->addWidget(metrics_button_, 0, Qt::AlignBottom);
     return table_heading;
@@ -821,6 +853,8 @@ void MainWindow::build_test_table() {
             [this](const QPoint& position) { show_metrics_menu(metric_header_->mapToGlobal(position)); });
     apply_metric_visibility();
 
+    // A selected row's best and worst scores keep their green and red (Highlight best/worst results).
+    distorted_table_->setItemDelegate(new MarkedCellDelegate(distorted_table_));
     distorted_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     distorted_table_->setSelectionMode(QAbstractItemView::ExtendedSelection);
     distorted_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -855,6 +889,11 @@ void MainWindow::build_test_table() {
     }
     header->setStretchLastSection(false);
     distorted_table_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    fit_table_columns();
+}
+
+void MainWindow::fit_table_columns() {
+    QHeaderView* header = distorted_table_->horizontalHeader();
     // Never narrower than the heading needs: an empty table would clip its
     // headings ("Video bitrate" at 65 px showed as "'ideo bitrat").
     std::map<int, int> starting_widths{
@@ -872,8 +911,7 @@ void MainWindow::build_test_table() {
 
 // The buttons under the table, and Highlight best/worst. Returns the
 // buttons a run freezes.
-std::vector<QWidget*> MainWindow::add_file_buttons(QVBoxLayout* layout) {
-    auto* buttons = new QHBoxLayout;
+std::vector<QWidget*> MainWindow::add_file_buttons(QBoxLayout* buttons) {
     auto* add_button = new QPushButton(app::tr("Add files"));
     connect(add_button, &QPushButton::clicked, this, [this] { on_add_distorted(); });
     auto* add_resample_button = new QPushButton(app::tr("Add resolution test"));
@@ -882,8 +920,10 @@ std::vector<QWidget*> MainWindow::add_file_buttons(QVBoxLayout* layout) {
                 "up -- no separate test file needed."));
     connect(add_resample_button, &QPushButton::clicked, this, [this] { on_add_resample_test(); });
     auto* remove_button = new QPushButton(app::tr("Remove selected"));
+    theme::set_role(remove_button, "quiet");  // VML Modern: read as text, not a button's frame
     connect(remove_button, &QPushButton::clicked, this, [this] { on_remove_distorted(); });
     remove_all_button_ = new QPushButton(app::tr("Remove all"));
+    theme::set_role(remove_all_button_, "quiet");
     connect(remove_all_button_, &QPushButton::clicked, this, [this] { on_remove_all_distorted(); });
     // A saved run's file read into the table: a row of its own, as Add files
     // adds one. Frozen during a run with the files: a saved run can bring a
@@ -893,6 +933,7 @@ std::vector<QWidget*> MainWindow::add_file_buttons(QVBoxLayout* layout) {
     buttons->addWidget(add_button);
     buttons->addWidget(add_resample_button);
     buttons->addWidget(load_button_);
+    buttons->addWidget(theme::separator(0));  // adding | removing (Modern's line)
     buttons->addWidget(remove_button);
     buttons->addWidget(remove_all_button_);
     buttons->addStretch(1);
@@ -900,7 +941,7 @@ std::vector<QWidget*> MainWindow::add_file_buttons(QVBoxLayout* layout) {
     highlight_check_->setChecked(settings_.highlight_best_worst);
     connect(highlight_check_, &QCheckBox::toggled, this, [this](bool on) { on_highlight_toggled(on); });
     buttons->addWidget(highlight_check_);
-    buttons->addSpacing(12);
+    buttons->addWidget(theme::separator(12));
     // The rows' exports, one menu made as it opens (fill_videos_export_menu),
     // as Saved Results' Export: usable during a run, as the right-click
     // menu's are.
@@ -909,7 +950,6 @@ std::vector<QWidget*> MainWindow::add_file_buttons(QVBoxLayout* layout) {
     connect(export_menu, &QMenu::aboutToShow, this, [this, export_menu] { fill_videos_export_menu(*export_menu); });
     export_button_->setMenu(export_menu);
     buttons->addWidget(export_button_);
-    layout->addLayout(buttons);
     best_worst_timer_ = new QTimer(this);
     best_worst_timer_->setSingleShot(true);
     best_worst_timer_->setInterval(0);
@@ -924,6 +964,7 @@ QWidget* MainWindow::build_run_panel() {
 
     auto* run_row = new QHBoxLayout;
     run_button_ = new QPushButton(app::tr("Calculate metrics"));
+    theme::set_role(run_button_, "primary");  // the tab's own action (VML Modern)
     connect(run_button_, &QPushButton::clicked, this, [this] { on_run_clicked(); });
     pause_button_ = new QPushButton(app::tr("Pause"));
     pause_button_->setEnabled(false);
@@ -1018,6 +1059,11 @@ void MainWindow::on_default_settings_changed() {
 }
 
 // ------------------------------------------------------------ the update check
+
+void MainWindow::fit_to_style() {
+    fit_table_columns();
+    bd_rate_panel_->fit_to_style();
+}
 
 void MainWindow::check_for_updates() {
     if (!settings_.check_for_updates) {

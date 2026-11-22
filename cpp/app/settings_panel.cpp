@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
+#include <QButtonGroup>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDateTime>
@@ -99,11 +100,11 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
     connect(&file_writes_, &FileWrites::became_idle, this, [this] { on_file_writes_idle(); });
     auto* layout = new QVBoxLayout(this);
     // Shown while metrics are calculated (set_run_active).
-    run_lock_note = new QLabel(QStringLiteral("\U0001F512 ") +
-                               app::tr("Metrics are being calculated: the ffmpeg folder, the saved results' folder and "
-                                       "Clear saved results are locked until the run ends, because the run uses them. "
-                                       "Everything else can be changed now."));
+    // A padlock before it in Classic; in VML Modern a tinted strip (the
+    // notice role), its text alone (set_run_active).
+    run_lock_note = new QLabel;
     run_lock_note->setObjectName("runLockNote");
+    theme::set_role(run_lock_note, "notice");
     run_lock_note->setWordWrap(true);
     theme::style(run_lock_note, "color: {muted};");
     run_lock_note->hide();
@@ -116,6 +117,8 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
     sections->setObjectName("settingsSections");
     sections->setDocumentMode(true);
     keep_focus_on_tab_click(sections);  // a section clicked focuses none of its boxes
+    theme::set_role(sections, "segmented");  // VML Modern: a row of pills
+    theme::set_role(sections->tabBar(), "segmented");
     const auto add_section = [this](const QString& name, std::initializer_list<QGroupBox*> boxes) {
         auto* page = new QWidget;
         auto* page_layout = new QVBoxLayout(page);
@@ -129,6 +132,7 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
         sections->addTab(page, name);
     };
     add_section(app::tr("General"), {build_ffmpeg_box(), build_window_box(), build_compare_box()});
+    sections->addTab(build_appearance_page(), app::tr("Appearance"));
     add_section(app::tr("Metrics"), {build_defaults_box(), build_gpu_box()});
     add_section(app::tr("Weak segments"), {build_weak_segments_box()});
     add_section(app::tr("Storage"), {build_storage_box()});
@@ -190,6 +194,7 @@ QGroupBox* SettingsPanel::build_storage_box() {
 
     cache_summary = new QLabel;
     auto* clear_cache = new QPushButton(app::tr("Clear saved results"));
+    theme::set_role(clear_cache, "danger");
     connect(clear_cache, &QPushButton::clicked, this, [this] { clear_saved_results(); });
     auto* summary_row = new QHBoxLayout;
     summary_row->addWidget(cache_summary, 1);
@@ -612,7 +617,7 @@ QGroupBox* SettingsPanel::build_defaults_box() {
     auto* defaults_layout = new QVBoxLayout(defaults_box);
     auto* hint = new QLabel(app::tr("These are only a starting point -- each video's own settings are "
                                     "edited in the Videos tab."));
-    theme::style(hint, "color: {muted}; font-style: italic;");
+    theme::style(hint, "color: {muted}; font-style: {hint_style};");
     defaults_layout->addWidget(hint);
     default_gpu = new QCheckBox(app::tr("Use GPU decoding"));
     default_gpu->setChecked(settings_.default_gpu_decode);
@@ -849,25 +854,6 @@ QGroupBox* SettingsPanel::build_window_box() {
     language_row->addWidget(language);
     language_row->addStretch(1);
     window_layout->addLayout(language_row);
-    // Light or dark, at once; "Same as Windows" (macOS) also follows the
-    // system changing while the app is open.
-    theme = new QComboBox;
-#ifdef __APPLE__
-    theme->addItem(app::tr("Same as macOS"), "");
-#else
-    theme->addItem(app::tr("Same as Windows"), "");
-#endif
-    theme->addItem(app::tr("Light"), "light");
-    theme->addItem(app::tr("Dark"), "dark");
-    theme->setCurrentIndex(std::max(0, theme->findData(text_of(settings_.theme))));
-    theme->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    theme->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    connect(theme, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
-    auto* theme_row = new QHBoxLayout;
-    theme_row->addWidget(new QLabel(app::tr("Theme:")));
-    theme_row->addWidget(theme);
-    theme_row->addStretch(1);
-    window_layout->addLayout(theme_row);
     remember_size = new QCheckBox(app::tr("Reopen where and at the size the window was last closed"));
     remember_size->setChecked(settings_.remember_window_size);
     connect(remember_size, &QCheckBox::toggled, this, [this] { on_edited(); });
@@ -1035,10 +1021,14 @@ void SettingsPanel::on_edited() {
     if (settings_.ffmpeg_dir != before.ffmpeg_dir) {
         emit ffmpeg_folder_changed();  // after the save: the tools are looked for in the folder saved
     }
+    const bool classic_later = settings_.interface_style != before.interface_style &&
+                               theme::interface_of(settings_.interface_style) == theme::Interface::classic &&
+                               theme::current_interface() == theme::Interface::modern;
     status->setText(error                                     ? tr_message(text_of(*error))
                     : settings_.language != before.language ? app::tr("Settings saved. The new language shows when "
                                                                        "the app is next started.")
-                                                             : app::tr("Settings saved."));
+                    : classic_later ? app::tr("Settings saved. VML Classic shows when the app is next started.")
+                                    : app::tr("Settings saved."));
     if (settings_.ffmpeg_dir != before.ffmpeg_dir || settings_.cache_dir != before.cache_dir) {
         refresh_status();
     }
@@ -1086,7 +1076,9 @@ void SettingsPanel::read_controls() {
     }
     settings_.check_for_updates = check_updates->isChecked();
     settings_.language = language->currentData().toString().toStdString();
-    settings_.theme = theme->currentData().toString().toStdString();
+    settings_.theme = theme_buttons->checkedButton()->property("value").toString().toStdString();
+    settings_.interface_style = interface_buttons->checkedId() == 1 ? "modern" : "classic";
+    settings_.accent_colour = accent_value.toStdString();
     settings_.gpu_metrics_together = gpu_together->isChecked();
     if (gpu_choice != nullptr) {
         settings_.gpu = gpu_choice->currentData().toString().toStdString();
@@ -1118,12 +1110,29 @@ void SettingsPanel::set_run_active(bool active) {
             widget->setToolTip(widget->property("unlockedToolTip").toString());
         }
     }
+    if (active) {
+        const QString text = app::tr("Metrics are being calculated: the ffmpeg folder, the saved results' folder and "
+                                     "Clear saved results are locked until the run ends, because the run uses them. "
+                                     "Everything else can be changed now.");
+        run_lock_note->setText(theme::current_interface() == theme::Interface::modern
+                                   ? text
+                                   : QStringLiteral("\U0001F512 ") + text);
+    }
     run_lock_note->setVisible(active);
 }
 
 void SettingsPanel::apply_global_changes(const Settings& before) {
     if (settings_.theme != before.theme) {
         theme::apply_theme(text_of(settings_.theme));  // the window's changeEvent follows
+        if (accent_value.isEmpty()) {
+            set_accent(QString());  // the accent box shows the one in use now (Mocha's amber, or the system's)
+        }
+    }
+    // VML Modern at once, its accent too; VML Classic, chosen while Modern
+    // is shown, at the next start (theme::apply_appearance; the status says so).
+    if ((settings_.interface_style != before.interface_style || settings_.accent_colour != before.accent_colour) &&
+        theme::interface_of(settings_.interface_style) == theme::Interface::modern) {
+        theme::apply_appearance(theme::Interface::modern, theme::accent_of(settings_.accent_colour));
     }
 }
 

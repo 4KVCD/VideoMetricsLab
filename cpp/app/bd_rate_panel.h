@@ -42,6 +42,9 @@ public:
 
     // The results table's colours again, for the theme now in use.
     void refresh_theme();
+    // The results table's height again, from its heading's and rows' heights
+    // now (MainWindow::fit_to_style).
+    void fit_to_style();
     // The scored videos added take the scores of their lines as they are now:
     // a line scored again has others. A video no longer listed keeps those it
     // had, which are still its: a list is often cleared between the anchor's

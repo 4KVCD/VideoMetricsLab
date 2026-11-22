@@ -172,7 +172,7 @@ OptionsPanel::OptionsPanel(const std::vector<GpuVendor>& gpu_vendors, QWidget* p
     // what affects scores.
     auto* layout = new QVBoxLayout(this);
     target_label = new QLabel;
-    theme::style(target_label, "color: {muted}; font-style: italic;");
+    theme::style(target_label, "color: {muted}; font-style: {hint_style};");
     target_label->setWordWrap(true);
     layout->addWidget(target_label);
 
@@ -195,7 +195,7 @@ OptionsPanel::OptionsPanel(const std::vector<GpuVendor>& gpu_vendors, QWidget* p
     auto* metrics_hint = new QLabel(
         app::tr("Cropping, scaling and film grain here affect scores. Video Compare's tone mapping and playback "
                 "resolution are display-only settings and do not change calculated metrics."));
-    theme::style(metrics_hint, "color: {muted}; font-style: italic;");
+    theme::style(metrics_hint, "color: {muted}; font-style: {hint_style};");
     metrics_hint->setWordWrap(true);
     layout->addWidget(metrics_hint);
     layout->addStretch(1);
@@ -283,7 +283,7 @@ void OptionsPanel::build_preparation(QFormLayout* form) {
     form->addRow(range_label, range_row);
     range_frames_note = new QLabel(app::tr("CVVDP scores whole seconds: its range is rounded to the nearest second."));
     range_frames_note->setWordWrap(true);
-    theme::style(range_frames_note, "color: {muted}; font-style: italic;");
+    theme::style(range_frames_note, "color: {muted}; font-style: {hint_style};");
     form->addRow(QString(), range_frames_note);
     // Seconds until a row in frames is shown. Hidden, not show_range_unit():
     // shown before the form has a parent, a field would be a window.

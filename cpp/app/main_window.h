@@ -58,6 +58,7 @@
 
 class QCheckBox;
 class QGroupBox;
+class QBoxLayout;
 class QHBoxLayout;
 class QLabel;
 class QLineEdit;
@@ -252,6 +253,14 @@ public:
     // window never uses the network.
     void check_for_updates();
 
+    // Sizes the window takes from its widgets' size hints when it is built,
+    // taken again: called by main once VML Modern's style sheet is set,
+    // after the window is built (theme::SheetHeld), so that they are the
+    // sheet's (its headings' padding and weight): the Videos table's
+    // starting column widths and BD-rate's results table. Before the window
+    // is shown: the column widths are the starting ones again.
+    void fit_to_style();
+
 protected:
     void changeEvent(QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
@@ -261,11 +270,13 @@ private:
     // ------------------------------------------------------------ the window
     void build_ui();
     QWidget* build_files_panel();
+    // The Videos table's columns at least as wide as their headings.
+    void fit_table_columns();
     // build_files_panel's parts.
-    void add_reference_row(QVBoxLayout* layout);
+    void add_reference_row(QBoxLayout* layout);
     QHBoxLayout* build_table_heading();
     void build_test_table();
-    std::vector<QWidget*> add_file_buttons(QVBoxLayout* layout);
+    std::vector<QWidget*> add_file_buttons(QBoxLayout* buttons);
     QWidget* build_run_panel();
     void theme_changed();
     void apply_theme_colours();

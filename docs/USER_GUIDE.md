@@ -89,7 +89,8 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
    [Exporting weak segments](#exporting-weak-segments)).
 
 **Highlight best/worst results**, under the video table, colours each metric's
-best score green and its worst red among the test videos that have one.
+best score green and its worst red among the test videos that have one; a
+selected row keeps them, with the selection drawn along their edges.
 
 **Also score CVVDP on...**, under the Options panel's display presets, scores
 CVVDP on further displays in the same run: pick a display, and each selected
@@ -104,9 +105,28 @@ and how many test videos Video Compare decodes), **Metrics** (the defaults for
 newly added videos, and the GPU metrics), **Weak segments**, **Storage** and
 **Notifications** (see [Notifications](#notifications)).
 
-**Settings > General > Window** chooses the theme (the system's, Light or Dark)
-and whether the app reopens the videos it had open when it was last closed (off
-by default).
+**Settings > General > Window** chooses whether the app reopens the videos it
+had open when it was last closed (off by default).
+
+**Settings > Appearance** chooses how the window looks; nothing else changes
+with it. **Interface** is a card each, with a picture of it, VML Modern first:
+
+- **VML Modern** (the default): boxes as cards, each tab's main action
+  (**Calculate metrics**, **Open in Metric Graphs**, **Play**, **Calculate
+  bitrate**) in the accent colour, actions that delete in red, and ticked
+  boxes and the selection in the accent.
+- **VML Classic**: the window as it was before VML Modern, in the system's
+  own controls.
+
+VML Modern shows at once; VML Classic, chosen while VML Modern is shown, when
+the app is next started. **Accent**, usable with VML Modern, is the system's
+(**Same as Windows**), one of six colours, a colour picked with **Custom...**,
+or one typed as `#RRGGBB` in the box beside it; text on it is dark or light,
+whichever reads. VML Classic keeps the system's accent. **Theme** is the
+system's (**Same as Windows**), **Light**, **Dark** or **Mocha**. **Mocha** is
+dark chocolate browns with cream text, and an amber accent while the accent
+is **Same as Windows** (after the Solar Dusk palette); it is VML Modern's
+alone, and VML Classic shows it as **Dark**.
 
 While metrics are calculated, Settings stays open, but the ffmpeg folder, the
 saved results' folder and **Clear saved results** are locked until the run
@@ -792,12 +812,14 @@ says so when it would delete any such, and **Settings > Storage > Clear saved
 results** keeps them, with their videos' saved bitrate, saying how many it
 kept; delete them here.
 
-**Saved scores** lists the selected comparison's scores: each metric's score
-for the whole video, as Metric Graphs' table shows it, then when and how it
-was made (GPU or CPU, the program, the VMAF model by its version, the CVVDP
-display).
+**Saved scores** shows the selected comparison's scores: each metric's score
+for the whole video, as Metric Graphs' table shows it, and when and how it was
+made (GPU or CPU, the program, the VMAF model by its version, the CVVDP
+display). In VML Modern each metric is a tile, five to a row, its score in
+large type; in VML Classic a line each, two metrics a row.
 Where a metric has more than one (CVVDP for two displays; SSIMULACRA2 on the
-GPU and the CPU), the newest is used unless another is picked there. A score
+GPU and the CPU), a list picks one: the newest is used unless another is
+picked (in VML Modern the tile's score follows the pick). A score
 the Videos tab would not use, and would calculate again (one made by an
 older version that read these videos wrongly, say), is marked "out of date"
 and is not used: not opened, exported or offered to pick.

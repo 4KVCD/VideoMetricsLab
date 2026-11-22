@@ -370,7 +370,7 @@ MetricPage::MetricPage(const MetricDefinition& metric, QWidget* parent)
                                         "header before running to see it here.",
                                         {{"label", qt_text(metric.label)}}));
     no_data_label_->setAlignment(Qt::AlignCenter);
-    theme::style(no_data_label_, "color: {faint}; font-style: italic; padding: 12px;");
+    theme::style(no_data_label_, "color: {faint}; font-style: {hint_style}; padding: 12px;");
     no_data_label_->setVisible(false);
     layout->addWidget(no_data_label_);
 
@@ -1229,11 +1229,14 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     tabs_ = new QuietTabWidget;
     // The metric tabs' own look: the native one can make the selected tab
     // hard to tell from the others.
-    tabs_->tabBar()->setStyleSheet(QStringLiteral(
-        "QTabBar::tab { padding: 7px 16px; margin-right: 3px; background: palette(button); "
-        "color: palette(button-text); border: 1px solid palette(mid); border-bottom: 3px solid transparent; }"
-        "QTabBar::tab:selected { background: palette(highlight); color: palette(highlighted-text); "
-        "border-bottom: 3px solid palette(highlighted-text); font-weight: bold; }"));
+    // In VML Modern, a row of pills (the segmented role) instead.
+    theme::style_classic(tabs_->tabBar(), QStringLiteral(
+        "QTabBar::tab {{ padding: 7px 16px; margin-right: 3px; background: palette(button); "
+        "color: palette(button-text); border: 1px solid palette(mid); border-bottom: 3px solid transparent; }}"
+        "QTabBar::tab:selected {{ background: palette(highlight); color: palette(highlighted-text); "
+        "border-bottom: 3px solid palette(highlighted-text); font-weight: bold; }}"));
+    theme::set_role(tabs_->tabBar(), "segmented");
+    theme::set_role(tabs_, "segmented");
     const std::span<const MetricDefinition> all = metrics();
     tabs_->addTab(build_page(all.front()), qt_text(all.front().label));
     for (std::size_t i = 1; i < all.size(); ++i) {
@@ -1244,7 +1247,13 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     // divider between them can be dragged.
     auto* middle = new QSplitter(Qt::Horizontal);
     middle->setChildrenCollapsible(false);
-    middle->addWidget(tabs_);
+    // VML Modern: the metrics' pills, the chart and its readout one card,
+    // as the stats are; Classic: the tabs as they were (theme::container).
+    QBoxLayout* graph_layout = nullptr;
+    QWidget* graph_card = theme::container("card", false, &graph_layout);
+    graph_card->setObjectName("graphCard");
+    graph_layout->addWidget(tabs_);
+    middle->addWidget(graph_card);
     worst_panel_ = new WorstFramesPanel;
     worst_panel_->hide();
     connect(worst_panel_, &WorstFramesPanel::frame_clicked, this, [this](int frame) { on_frame_requested(frame); });
@@ -1370,8 +1379,11 @@ void GraphPanel::select_available_metric() {
 }
 
 QWidget* GraphPanel::build_action_bar() {
-    // The buttons under the graph: add saved results, export, go to a frame.
+    // The buttons under the graph, a toolbar of its own in VML Modern, in
+    // groups a line apart: add saved results and export; go to a frame and
+    // the range; the view (Difference, Worst frames).
     auto* bar = new QWidget;
+    theme::set_role(bar, "toolbar");
     auto* layout = new QHBoxLayout(bar);
     // A run file's line on the graph, whatever its reference, the Videos
     // table left as it is (the Videos tab's Import run file... adds a row).
@@ -1388,9 +1400,9 @@ QWidget* GraphPanel::build_action_bar() {
     auto* png_button = new QPushButton(app::tr("Export graph as PNG"));
     connect(png_button, &QPushButton::clicked, this, [this] { on_export_png(); });
     layout->addWidget(png_button);
-    layout->addSpacing(16);
+    layout->addWidget(theme::separator(16));
     layout->addWidget(frame_controls_);  // made in the constructor
-    layout->addSpacing(16);
+    layout->addWidget(theme::separator(16));
     // Usable once a page shows two lines (refresh_page_controls).
     difference_box_ = new QCheckBox(app::tr("Difference"));
     difference_box_->setEnabled(false);

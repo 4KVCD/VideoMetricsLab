@@ -205,11 +205,13 @@ QGroupBox* BdRatePanel::build_side(Side& side, const QString& title) {
     side.import_button = new QPushButton(app::tr("Import CSV/JSON\xE2\x80\xA6"));
     side.import_button->setToolTip(app::tr(import_tooltip));
     side.clear_button = new QPushButton(app::tr("Clear"));
+    theme::set_role(side.clear_button, "quiet");  // VML Modern: read as text, a line apart
     connect(side.add_videos_button, &QPushButton::clicked, this, [this, &side] { on_add_videos(side); });
     connect(side.import_button, &QPushButton::clicked, this, [this, &side] { on_import(side); });
     connect(side.clear_button, &QPushButton::clicked, this, [this, &side] { on_clear(side); });
     buttons->addWidget(side.add_videos_button);
     buttons->addWidget(side.import_button);
+    buttons->addWidget(theme::separator(0));
     buttons->addWidget(side.clear_button);
     buttons->addStretch(1);
     layout->addLayout(buttons);
@@ -219,7 +221,10 @@ QGroupBox* BdRatePanel::build_side(Side& side, const QString& title) {
 
 // Group by, the warnings, Export CSV and Copy as markdown.
 void BdRatePanel::add_options_row(QVBoxLayout* root) {
-    auto* row = new QHBoxLayout;
+    // A toolbar of its own in VML Modern; in Classic the row as it was.
+    QBoxLayout* row = nullptr;
+    QWidget* bar = theme::container("toolbar", true, &row);
+    bar->setObjectName("options_bar");
     row->addWidget(new QLabel(app::tr("Group by:")));
     group_combo = new QComboBox;
     group_combo->setToolTip(app::tr("A mean and median for each value of this column of the anchor's CSV files."));
@@ -235,16 +240,22 @@ void BdRatePanel::add_options_row(QVBoxLayout* root) {
     connect(copy_button, &QPushButton::clicked, this, [this] { on_copy(); });
     row->addWidget(export_button);
     row->addWidget(copy_button);
-    root->addLayout(row);
+    root->addWidget(bar);
     refresh_group_choices();
 }
 
 // The heading and the table: a column per metric, a row per summary and
 // sequence.
 void BdRatePanel::add_results(QVBoxLayout* root) {
+    // The heading over its table, one card in VML Modern, the heading its
+    // title; in Classic as they were.
+    QBoxLayout* layout = nullptr;
+    QWidget* card = theme::container("card", false, &layout);
+    card->setObjectName("results_card");
     heading_label = new QLabel;
     heading_label->setWordWrap(true);
-    root->addWidget(heading_label);
+    theme::set_role(heading_label, "title");
+    layout->addWidget(heading_label);
     results = new QTableWidget(0, 1 + static_cast<int>(metrics().size()));
     QStringList labels{QString()};
     for (const MetricDefinition& metric : metrics()) {
@@ -261,11 +272,16 @@ void BdRatePanel::add_results(QVBoxLayout* root) {
         results->horizontalHeader()->setSectionResizeMode(column, QHeaderView::ResizeToContents);
     }
     connect(results, &QTableWidget::currentCellChanged, this, [this](int row) { on_results_row(row); });
-    root->addWidget(results);
+    layout->addWidget(results);
+    root->addWidget(card);
 }
 
 // The chosen sequence's name, the metric to draw, and the chart.
 void BdRatePanel::add_chart(QVBoxLayout* root) {
+    // The chosen sequence, its metric and the chart, one card in VML Modern.
+    QBoxLayout* layout = nullptr;
+    QWidget* card = theme::container("card", false, &layout);
+    card->setObjectName("chart_card");
     auto* row = new QHBoxLayout;
     sequence_label = new QLabel;
     QFont bold = sequence_label->font();
@@ -279,10 +295,11 @@ void BdRatePanel::add_chart(QVBoxLayout* root) {
     connect(metric_combo, &QComboBox::currentIndexChanged, this, [this] { refresh_chart(); });
     row->addWidget(metric_combo);
     row->addStretch(1);
-    root->addLayout(row);
+    layout->addLayout(row);
     chart = new RateCurveChart;
     chart->setMinimumHeight(300);
-    root->addWidget(chart);
+    layout->addWidget(chart);
+    root->addWidget(card);
 }
 
 void BdRatePanel::refresh_theme() {
@@ -572,6 +589,8 @@ void BdRatePanel::show_heading() {
                  {"anchor", side_name(anchor)},
                  {"count", static_cast<long long>(report_->sequences.size())}}));
 }
+
+void BdRatePanel::fit_to_style() { fit_height(results, visible_result_rows); }
 
 void BdRatePanel::fill_results() {
     filling_ = true;

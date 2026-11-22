@@ -1,6 +1,7 @@
 // The Settings tab while metrics are calculated: it stays open, with only
 // what a running calculation uses locked, and a note saying so.
 #include <QApplication>
+#include <QButtonGroup>
 #include <QCheckBox>
 #include <QLabel>
 #include <QComboBox>
@@ -8,6 +9,7 @@
 #include <QListWidget>
 #include <QMenu>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QScrollBar>
 #include <QSpinBox>
 #include <QStackedWidget>
@@ -53,7 +55,7 @@ TEST(SettingsPanel, ARunLocksOnlyWhatItUsesAndSaysSo) {
     ASSERT_TRUE(ffmpeg && saved_results && clear && note);
     QLineEdit* export_folder = nullptr;
     for (QLineEdit* edit : panel.findChildren<QLineEdit*>()) {
-        if (edit != ffmpeg && edit != saved_results) {
+        if (edit != ffmpeg && edit != saved_results && edit != panel.accent_hex) {
             export_folder = edit;
         }
     }
@@ -67,6 +69,8 @@ TEST(SettingsPanel, ARunLocksOnlyWhatItUsesAndSaysSo) {
     EXPECT_TRUE(clear->toolTip().contains("Locked while metrics are calculated"));
     EXPECT_TRUE(export_folder->isEnabled());
     EXPECT_TRUE(note->isVisibleTo(&panel));
+    EXPECT_TRUE(note->text().startsWith(QStringLiteral("\U0001F512 Metrics are being calculated")));  // Classic's padlock
+    EXPECT_EQ(note->property("vmlRole").toString(), "notice");
 
     panel.set_run_active(false);
     EXPECT_TRUE(ffmpeg->isEnabled());
@@ -90,7 +94,8 @@ TEST(SettingsPanel, SubTabsHoldTheSettings) {
     for (int index = 0; index < panel.sections->count(); ++index) {
         names.push_back(panel.sections->tabText(index));
     }
-    EXPECT_EQ(names, (std::vector<QString>{"General", "Metrics", "Weak segments", "Storage", "Notifications"}));
+    EXPECT_EQ(names,
+              (std::vector<QString>{"General", "Appearance", "Metrics", "Weak segments", "Storage", "Notifications"}));
     const auto section_of = [&panel](const QWidget* control) {
         for (int index = 0; index < panel.sections->count(); ++index) {
             if (panel.sections->widget(index)->isAncestorOf(control)) {
@@ -100,7 +105,8 @@ TEST(SettingsPanel, SubTabsHoldTheSettings) {
         return QString();
     };
     EXPECT_EQ(section_of(panel.ffmpeg_edit), "General");
-    EXPECT_EQ(section_of(panel.theme), "General");
+    EXPECT_EQ(section_of(panel.theme_buttons->buttons().front()), "Appearance");
+    EXPECT_EQ(section_of(panel.accent_hex), "Appearance");
     EXPECT_EQ(section_of(panel.decoded_videos), "General");
     EXPECT_EQ(section_of(panel.default_gpu), "Metrics");
     EXPECT_EQ(section_of(panel.gpu_together), "Metrics");
@@ -173,6 +179,65 @@ TEST(SettingsPanel, NotificationServicesAreListedAndTickedEitherWay) {
 // (JSON, CSV); and a .zip or loose files; After each run: on or off, and
 // where (only to choose while on).
 // Each edit is saved.
+// Settings > Appearance shows the interface, the accent and light or dark
+// chosen, and saves each as it is picked: the interface by its card, the
+// accent by a disc, a code typed, or the system's (its code then shown),
+// light or dark by its segment. The accent's choices are usable only while
+// VML Modern is picked. (VML Modern is not picked here: applied, it would be
+// every later test's style.)
+TEST(SettingsPanel, AppearanceSavesEachChoice) {
+    Settings settings;
+    settings.interface_style = "modern";
+    settings.accent_colour = "#4f8fe8";
+    FileWrites writes;
+    const Dialogs dialogs = standard_dialogs(nullptr);
+    SettingsPanel panel(settings, writes, [] { return ToolsStatus{}; }, dialogs);
+    EXPECT_EQ(panel.interface_buttons->checkedId(), 1);
+    ASSERT_NE(panel.accent_buttons->checkedButton(), nullptr);
+    EXPECT_EQ(panel.accent_buttons->checkedButton()->property("hex").toString(), "#4f8fe8");
+    EXPECT_EQ(panel.accent_hex->text(), "#4F8FE8");
+    EXPECT_TRUE(panel.accent_controls->isEnabled());
+    for (QAbstractButton* choice : panel.accent_buttons->buttons()) {
+        // Every colour in a disc's sheet filled in: one left as {name} drops its rule (the ring).
+        EXPECT_FALSE(choice->styleSheet().contains(QRegularExpression(R"(\{[a-z_]+\})")))
+            << choice->styleSheet().toStdString();
+    }
+
+    panel.interface_buttons->button(0)->click();
+    EXPECT_EQ(settings.interface_style, "classic");
+    EXPECT_FALSE(panel.accent_controls->isEnabled());
+    // Usable again by hand: picking VML Modern would apply it.
+    panel.accent_controls->setEnabled(true);
+
+    panel.accent_hex->setText("123ABC");
+    emit panel.accent_hex->editingFinished();
+    EXPECT_EQ(settings.accent_colour, "#123abc");
+    EXPECT_EQ(panel.accent_buttons->checkedButton(), nullptr);  // one of one's own: no disc
+    EXPECT_EQ(panel.accent_hex->text(), "#123ABC");
+    panel.accent_hex->setText("#12");
+    emit panel.accent_hex->editingFinished();
+    EXPECT_EQ(settings.accent_colour, "#123abc");  // not a colour: kept
+    EXPECT_EQ(panel.accent_hex->text(), "#123ABC");
+
+    QAbstractButton* system = panel.findChild<QAbstractButton*>("systemAccent");
+    ASSERT_NE(system, nullptr);
+    system->click();
+    EXPECT_EQ(settings.accent_colour, "");
+    EXPECT_EQ(panel.accent_hex->text(), QApplication::palette().color(QPalette::Accent).name().toUpper());
+
+    const QList<QAbstractButton*> modes = panel.theme_buttons->buttons();
+    ASSERT_EQ(modes.size(), 4);  // the system's, Light, Dark, Mocha
+    EXPECT_TRUE(modes[0]->isChecked());
+    modes[1]->click();
+    EXPECT_EQ(settings.theme, "light");
+    modes[2]->click();
+    EXPECT_EQ(settings.theme, "dark");
+    modes[3]->click();
+    EXPECT_EQ(settings.theme, "mocha");
+    modes[0]->click();
+    EXPECT_EQ(settings.theme, "");
+}
+
 TEST(SettingsPanel, ExportsAreChosenOneByOne) {
     Settings settings;
     settings.export_items = {"graphs"};

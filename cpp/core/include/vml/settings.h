@@ -130,6 +130,13 @@ struct Settings {
     std::string skipped_update_version;
     std::string language;
     std::string theme;
+    // The window's interface: "modern" (VML Modern: cards, grouped
+    // toolbars, one accent button per tab; the default, also for a settings
+    // file from before there was a choice) or "classic" (the system's own
+    // controls); anything else is classic.
+    std::string interface_style = "modern";
+    // The accent colour, "#rrggbb", or "" for the system's.
+    std::string accent_colour;
     bool remember_window_size = true;
     int window_width = 1280;
     int window_height = 800;

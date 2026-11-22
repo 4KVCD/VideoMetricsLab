@@ -124,10 +124,16 @@ TEST_F(BitratePanelTest, AFileReadFillsItsRowAndEachGraph) {
     // Export graph as PNG is in the footer under the graph, beside Go to
     // frame, as on Metric Graphs.
     EXPECT_EQ(panel->export_button->text().toStdString(), "Export graph as PNG");
+    // (In a toolbar of its own: its place is taken in the panel's terms.)
     panel->resize(1200, 800);
     panel->layout()->activate();
-    EXPECT_GT(panel->export_button->geometry().top(), panel->chart->geometry().bottom());
-    EXPECT_LT(panel->export_button->geometry().right(), panel->frame_controls->geometry().left());
+    panel->export_button->parentWidget()->layout()->activate();
+    const auto in_panel = [&panel](const QWidget* widget) {
+        return QRect(widget->mapTo(panel.get(), QPoint(0, 0)), widget->size());
+    };
+    EXPECT_GT(in_panel(panel->export_button).top(), in_panel(panel->chart).bottom());
+    EXPECT_LT(in_panel(panel->export_button).right(), in_panel(panel->frame_controls).left());
+    EXPECT_EQ(panel->export_button->parentWidget()->property("vmlRole").toString().toStdString(), "toolbar");
 
     analyzed(*panel, path, two_seconds(path));
     EXPECT_EQ(cell(*panel, 0, col_duration).toStdString(), "0:00:02.00");

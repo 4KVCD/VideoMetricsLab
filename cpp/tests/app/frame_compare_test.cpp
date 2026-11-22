@@ -254,6 +254,11 @@ TEST_F(FramePanelTest, TheLoopRowIsCentred) {
     EXPECT_LE(centre_offset(panel->previous_worst_button, panel->save_still_button), 2);
     panel->cycle_distorted(1);  // the list's video no longer shown: the loop alone, centred again
     EXPECT_LE(centre_offset(panel->loop_checkbox, panel->save_still_button), 2);
+    // VML Modern: the rows above the view a toolbar, the controls under it a card.
+    EXPECT_EQ(panel->video_combo->parentWidget()->property("vmlRole").toString(), "toolbar");
+    EXPECT_EQ(panel->color_mode_combo->parentWidget()->property("vmlRole").toString(), "toolbar");
+    EXPECT_EQ(panel->play_button->parentWidget()->property("vmlRole").toString(), "card");
+    EXPECT_EQ(panel->loop_checkbox->parentWidget()->property("vmlRole").toString(), "card");
 }
 
 // Issue #24: the Worst frames list from Metric Graphs is stepped through

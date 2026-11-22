@@ -45,6 +45,7 @@ class QSpacerItem;
 class QSpinBox;
 class QStackedWidget;
 class QTimer;
+class QBoxLayout;
 class QVBoxLayout;
 
 namespace vml::app {
@@ -364,12 +365,12 @@ private:
 
     // The constructor's parts: the panel's rows, top to bottom, added to
     // `root`, and its timers.
-    void add_video_row(QVBoxLayout* root);
-    void add_colour_row(QVBoxLayout* root);
+    void add_video_row(QBoxLayout* root);
+    void add_colour_row(QBoxLayout* root);
     void add_view(QVBoxLayout* root);
-    void add_seek_rows(QVBoxLayout* root);
+    void add_seek_rows(QBoxLayout* root);
     void add_labels(QVBoxLayout* root);
-    void add_inspect_row(QVBoxLayout* root);
+    void add_inspect_row(QBoxLayout* root);
     void make_timers();
     // Issue #24's tools (frame_compare_inspect.cpp).
     void step_worst(int direction);

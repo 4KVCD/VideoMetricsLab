@@ -52,6 +52,16 @@ From the repository root, after changing a script or the window's text:
 git diff --check
 ```
 
+`vml_appearance_tests` draws the window in VML Classic and VML Modern. It
+checks that every widget's role is one the style sheet styles. Modern dark
+needs a platform that takes the app's dark, so offscreen it is skipped. To
+save every tab in each interface as PNGs for a review, from `cpp`:
+
+```powershell
+$env:VML_TEST_ON_SCREEN = '1'; $env:VML_UI_SNAPSHOTS = 'C:\path\to\snapshots'
+build\windows\tests\Release\vml_appearance_tests.exe
+```
+
 Tests run offscreen and isolate settings and saved scores. Preserve that
 isolation in new tests. Some tests run actual FFmpeg encodes; do not replace
 those with mocked success merely to make CI green. Hardware playback, HDR,
@@ -71,7 +81,9 @@ architecture guide](docs/ARCHITECTURE.md).
 - For bug fixes, check that the new test fails without the fix.
 - Treat persistence/cache changes as deliberate behavior changes and document them.
 - Document new settings and any changes to score interpretation.
-- Include screenshots for UI changes, using generated or shareable media.
+- Include screenshots for UI changes, using generated or shareable media:
+  before and after, in VML Classic and VML Modern. Give new controls their
+  role ([the window's interfaces](docs/ARCHITECTURE.md#the-windows-interfaces)).
 - Report skipped tests and hardware-dependent checks you could not perform.
 
 Do not commit private media, user result caches, local settings, binaries or

@@ -63,6 +63,8 @@ const std::map<std::string, std::function<Json(const Settings&)>>& settings_by_k
         {"skipped_update_version", [](const Settings& s) { return Json(s.skipped_update_version); }},
         {"language", [](const Settings& s) { return Json(s.language); }},
         {"theme", [](const Settings& s) { return Json(s.theme); }},
+        {"interface", [](const Settings& s) { return Json(s.interface_style); }},
+        {"accent_colour", [](const Settings& s) { return Json(s.accent_colour); }},
         {"remember_window_size", [](const Settings& s) { return Json(s.remember_window_size); }},
         {"window_width", [](const Settings& s) { return Json(s.window_width); }},
         {"window_height", [](const Settings& s) { return Json(s.window_height); }},
@@ -161,6 +163,19 @@ TEST(Settings, ExportsCarryOverTheOldAfterRunChoices) {
     EXPECT_EQ(saved.find("auto_export"), std::string::npos);
     EXPECT_NE(saved.find("\"export_items\": [\n    \"results\"\n  ]"), std::string::npos);
     EXPECT_NE(saved.find("\"export_formats\": [\n    \"csv\"\n  ]"), std::string::npos);
+}
+
+// VML Modern is the default interface, for a settings file from before
+// there was a choice too; one that picked VML Classic keeps it.
+TEST(Settings, ModernIsTheDefaultInterface) {
+    const test::Folder folder;
+    const auto load = [&folder](const std::string& text) {
+        std::ofstream(folder / "settings.json", std::ios::binary) << text;
+        return Settings::load_from(folder / "settings.json");
+    };
+    EXPECT_EQ(Settings{}.interface_style, "modern");
+    EXPECT_EQ(load(R"({"theme": "dark"})").interface_style, "modern");
+    EXPECT_EQ(load(R"({"interface": "classic"})").interface_style, "classic");
 }
 
 // Exports as the first v2.7 builds saved them, results by format: Results in

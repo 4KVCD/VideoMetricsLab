@@ -91,8 +91,40 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
     panel.layout()->activate();
     EXPECT_EQ(table.height(), height);
     EXPECT_EQ(panel.score_choice("vmaf"), nullptr);  // one score: nothing to pick
-    // Each line starts with the score itself, as Metric Graphs shows it,
-    // before how it was made.
+    // In VML Modern a tile a metric: its score itself, large, as Metric
+    // Graphs shows it, and how it was made under it.
+    panel.set_tiles(true);
+    for (const std::string key : {"vmaf", "psnr"}) {
+        const QString name = QString::fromStdString(key);
+        const auto* score = panel.findChild<QLabel*>("score_" + name);
+        const auto* made = panel.findChild<QLabel*>("made_" + name);
+        ASSERT_NE(score, nullptr) << key;
+        ASSERT_NE(made, nullptr) << key;
+        EXPECT_EQ(score->text().toStdString(),
+                  find_metric(key)->format_value(result.metric_results.frame(key)->aggregate()));
+        EXPECT_GT(score->font().pointSizeF(), made->font().pointSizeF());
+        EXPECT_TRUE(made->text().contains("CPU") || made->text().contains("GPU")) << made->text().toStdString();
+        EXPECT_TRUE(panel.findChild<QWidget*>("tile_" + name)->isAncestorOf(score));
+    }
+    // A tile too narrow for how its score was made: two lines at most, the
+    // rest cut to "…", the whole in the tooltip (VMAF v1's ran past the
+    // tile's bottom).
+    {
+        const int width = panel.width();
+        panel.resize(420, panel.height());
+        panel.layout()->activate();
+        QCoreApplication::processEvents();
+        const auto* made = panel.findChild<QLabel*>("made_vmaf");
+        ASSERT_NE(made, nullptr);
+        EXPECT_LE(made->text().count('\n'), 1) << made->text().toStdString();
+        EXPECT_TRUE(made->text().endsWith(QChar(0x2026))) << made->text().toStdString();
+        EXPECT_TRUE(made->toolTip().contains("CPU") || made->toolTip().contains("GPU"));
+        EXPECT_LE(made->geometry().bottom(), made->parentWidget()->contentsRect().bottom());
+        panel.resize(width, panel.height());
+    }
+    // In VML Classic two metrics a row, as before: each line starts with the
+    // score itself, before how it was made.
+    panel.set_tiles(false);
     for (const std::string key : {"vmaf", "psnr"}) {
         const std::string score =
             find_metric(key)->format_value(result.metric_results.frame(key)->aggregate()) + " \xC2\xB7 ";
@@ -100,7 +132,12 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
         for (const QLabel* label : panel.findChildren<QLabel*>()) {
             found = found || label->text().startsWith(QString::fromStdString(score));
         }
-        EXPECT_TRUE(found) << key << ": no line starts with " << score;
+        std::string seen;
+        for (const QLabel* label : panel.findChildren<QLabel*>()) {
+            seen += "[" + label->text().toStdString() + "] ";
+        }
+        EXPECT_TRUE(found) << key << ": no line starts with " << score << " in " << seen;
+        EXPECT_EQ(panel.findChild<QWidget*>("tile_" + QString::fromStdString(key)), nullptr);
     }
     const std::vector<LoadedSavedResult> read = panel.selected_results();
     ASSERT_EQ(read.size(), 1U);
@@ -430,7 +467,9 @@ TEST(SavedResultsPanel, ClickingARowKeepsTheListWhereItWas) {
 
 TEST(SavedResultsPanel, AFewScoresSitAtTheTopOfTheBox) {
     // The box is as tall as every metric needs: a comparison of one metric
-    // has its row at the top, not spread down the spare height.
+    // has its tile at the top, not spread down the spare height. With two
+    // scores of it, the tile's list picks one, and its score shown large
+    // follows.
     SavedComparison one;
     one.folder = std::filesystem::path("saved") / "one";
     one.label = "one";
@@ -450,7 +489,17 @@ TEST(SavedResultsPanel, AFewScoresSitAtTheTopOfTheBox) {
     QCoreApplication::processEvents();
     QComboBox* combo = panel.score_choice("vmaf");
     ASSERT_NE(combo, nullptr);
-    EXPECT_LE(combo->geometry().top(), 2);
+    EXPECT_LE(combo->geometry().top(), 2);  // VML Classic's row
+    panel.set_tiles(true);
+    panel.layout()->activate();
+    QCoreApplication::processEvents();
+    combo = panel.score_choice("vmaf");
+    ASSERT_NE(combo, nullptr);
+    const QWidget* tile = panel.findChild<QWidget*>("tile_vmaf");
+    ASSERT_NE(tile, nullptr);
+    EXPECT_TRUE(tile->isAncestorOf(combo));
+    EXPECT_LE(tile->geometry().top(), 2);
+    EXPECT_GE(tile->width(), 100);  // a fifth of the box, not squeezed
 }
 
 // The header's menu: every column ticked, unticking one hides it and ticking

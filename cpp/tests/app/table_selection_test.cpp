@@ -1,14 +1,18 @@
 // A new test video's row is selected when no row is, so that the Options
 // panel shows its settings at once (FillColumnTable::select_row_if_none_is,
 // called as the window adds test videos).
+#include <QColor>
 #include <QCoreApplication>
+#include <QImage>
 #include <QItemSelectionModel>
 #include <QSignalSpy>
+#include <QTableWidget>
 #include <QTest>
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <vector>
 
 #include "widgets.h"
@@ -123,6 +127,40 @@ TEST(TableSelection, ARowStaysSelectedWhileThereAreRows) {
     table.setRowCount(0);
     QCoreApplication::processEvents();
     EXPECT_TRUE(selected_rows(table).empty());
+}
+
+// With Highlight best/worst results ticked, a selected row's best and worst
+// cells keep their green and red, the selection a tint over them; a cell
+// with no colour is selected as before. Without the delegate the selection
+// filled every cell of the row, hiding the marks.
+TEST(TableSelection, ASelectedRowKeepsItsBestAndWorstColours) {
+    QTableWidget table(1, 2);
+    table.setSelectionBehavior(QAbstractItemView::SelectRows);
+    table.setItemDelegate(new MarkedCellDelegate(&table));
+    const QColor green(0, 160, 0);
+    table.setItem(0, 0, new QTableWidgetItem);
+    table.setItem(0, 1, new QTableWidgetItem);
+    table.item(0, 0)->setData(Qt::BackgroundRole, green);
+    table.item(0, 1)->setData(Qt::BackgroundRole, QColor(0, 0, 0, 0));  // as apply_best_worst clears one
+    table.resize(400, 200);
+    table.show();
+    table.selectRow(0);
+    QCoreApplication::processEvents();
+    const QImage shot = table.viewport()->grab().toImage();
+    const QRect cell = table.visualRect(table.model()->index(0, 0));
+    const QRect plain = table.visualRect(table.model()->index(0, 1));
+    const QColor selected = shot.pixelColor(plain.center());
+    // The marked cell's middle is its green, as it is unselected; its top
+    // edge is the selection's colour, as the plain selected cell shows it.
+    // (The style blends an item's background a little.)
+    const QColor middle = shot.pixelColor(cell.right() - 3, cell.center().y());
+    EXPECT_LE(std::abs(middle.red() - green.red()) + std::abs(middle.green() - green.green()) +
+                  std::abs(middle.blue() - green.blue()),
+              40);
+    const QColor edge = shot.pixelColor(cell.right() - 3, cell.top());
+    EXPECT_LE(std::abs(edge.red() - selected.red()) + std::abs(edge.green() - selected.green()) +
+                  std::abs(edge.blue() - selected.blue()),
+              6);
 }
 
 }  // namespace
