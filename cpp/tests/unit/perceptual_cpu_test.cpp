@@ -122,20 +122,32 @@ TEST(PerceptualCpu, WritesEachVideosPicturesIntoItsPipe) {
     const std::vector<std::vector<std::string>> commands =
         rgb_stream_commands("ffmpeg", source, test, options, crop, std::nullopt, 2, "test-pipe", "source-pipe");
     ASSERT_EQ(commands.size(), 2u);
-    // FFmpeg's usual start, the video's file as the one input, then its chain
-    // into its pipe.
+    // FFmpeg's usual start, the video's file as the one input (decoded on 8
+    // threads), then its chain into its pipe, with one packet queued for it.
     const auto check = [](const std::vector<std::string>& command, const std::string& path, const std::string& chain,
                           const std::string& pipe) {
         const std::vector<std::string> start{"ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "level+info",
                                              "-nostats", "-y"};
-        const std::vector<std::string> end{"-filter_complex", chain, "-map", "[frames]", "-fps_mode", "passthrough",
-                                           "-flush_packets", "1", "-f", "rawvideo", "-pix_fmt", "rgb48le", pipe};
-        ASSERT_GT(command.size(), start.size() + 2 + end.size());
-        EXPECT_EQ(std::vector<std::string>(command.begin(), command.begin() + 7), start);
-        EXPECT_EQ(std::vector<std::string>(command.end() - 13, command.end()), end);
-        EXPECT_EQ(*(command.end() - 15), "-i");
-        EXPECT_EQ(*(command.end() - 14), input_path(path));
-        EXPECT_EQ(std::count(command.begin(), command.end(), "-i"), 1);
+        const std::vector<std::string> input{"-threads", "8", "-noautorotate", "-i", input_path(path)};
+        const std::vector<std::string> end{"-filter_complex",
+                                           chain,
+                                           "-map",
+                                           "[frames]",
+                                           "-fps_mode",
+                                           "passthrough",
+                                           "-flush_packets",
+                                           "1",
+                                           "-thread_queue_size",
+                                           "1",
+                                           "-f",
+                                           "rawvideo",
+                                           "-pix_fmt",
+                                           "rgb48le",
+                                           pipe};
+        std::vector<std::string> expected = start;
+        expected.insert(expected.end(), input.begin(), input.end());
+        expected.insert(expected.end(), end.begin(), end.end());
+        EXPECT_EQ(command, expected);
     };
     check(commands[0], "test.mkv", test_chain, "test-pipe");
     check(commands[1], "source.mkv", source_chain, "source-pipe");

@@ -434,6 +434,17 @@ std::string image_filtergraph(const VideoInfo& source_info, const VideoInfo& dis
 
 namespace {
 
+// FFmpeg's decoder threads for a video file. Its default, a frame thread
+// per core up to 16, keeps a picture and a decoder's buffers per thread
+// (about 50 MB each at 4K) while the engines score far slower than even
+// 8 threads decode.
+constexpr const char* decoder_threads = "8";
+
+// The packets FFmpeg's muxer may queue. Its default, 8, is 8 whole pictures
+// (50 MB each at 4K) waiting while the app's pipe is full, which already
+// holds the frames read ahead (pipe_frames).
+constexpr const char* muxer_queue_packets = "1";
+
 // FFmpeg's options for reading `video`: its feed's input where the app feeds
 // its pictures (grain_feed.h), else its file's, from `seek`.
 std::vector<std::string> input_options(const VideoInfo& video, const std::optional<std::vector<std::string>>& fed,
@@ -442,7 +453,7 @@ std::vector<std::string> input_options(const VideoInfo& video, const std::option
         return *fed;
     }
     std::vector<std::string> input = with_seek(video.decode_options(), seek);
-    input.insert(input.end(), {as_stored, "-i", input_path(video.path)});
+    input.insert(input.end(), {"-threads", decoder_threads, as_stored, "-i", input_path(video.path)});
     return input;
 }
 
@@ -467,7 +478,8 @@ std::vector<std::vector<std::string>> rgb_stream_commands(
         std::vector<std::string> made = command_start(ffmpeg);
         append(made, reading);
         made.insert(made.end(), {"-filter_complex", graph, "-map", "[frames]", "-fps_mode", "passthrough",
-                                 "-flush_packets", "1", "-f", "rawvideo", "-pix_fmt", "rgb48le", pipe});
+                                 "-flush_packets", "1", "-thread_queue_size", muxer_queue_packets, "-f", "rawvideo",
+                                 "-pix_fmt", "rgb48le", pipe});
         return made;
     };
     return {command(input_options(distorted, distorted_fed, options.range_seeks.distorted),
