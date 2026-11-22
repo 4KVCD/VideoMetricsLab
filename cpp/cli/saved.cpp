@@ -4,6 +4,7 @@
 #include <cctype>
 #include <filesystem>
 #include <map>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <utility>
@@ -121,10 +122,7 @@ bool report_groups(SavedArguments arguments, std::vector<Group>& groups, const s
     }
     asked = in_metric_order(asked);
     if (output.segments_saved) {
-        for (const std::string& condition : take_saved_segments(output, Settings::load(), asked)) {
-            message("note: --segments " + segments_source(output) + ": " + condition +
-                    " is left out: no video here has its metric");
-        }
+        take_saved_segments_of_scores(output, Settings::load(), asked, message);
     }
     if (const std::optional<std::string> refused = segments_refusal(output.segments, asked)) {
         throw UsageError(*refused);
@@ -210,6 +208,27 @@ std::string metrics_text(const SavedComparison& comparison) {
 }
 
 }  // namespace
+
+void take_saved_segments_of_scores(CompareArguments& output, const Settings& settings,
+                                   const std::vector<std::string>& asked,
+                                   const std::function<void(const std::string&)>& message) {
+    std::optional<WeakCondition> fallback;
+    std::vector<std::string> left_out;
+    try {
+        left_out = take_saved_segments(output, settings, asked, &fallback);
+    } catch (const std::invalid_argument& error) {
+        throw UsageError(error.what());  // as compare: the message, exit code 2
+    }
+    for (const std::string& condition : left_out) {
+        message("note: --segments " + segments_source(output) + ": " + condition +
+                " is left out: no video here has its metric");
+    }
+    if (fallback) {
+        message("note: --segments " + segments_source(output) +
+                ": the profile has no condition on the metrics here, so " + fallback->text() +
+                " is taken, as the Worst Frames tab starts (a condition given after it takes its place)");
+    }
+}
 
 std::string saved_id(const SavedComparison& comparison) { return platform::path_text(comparison.folder.filename()); }
 

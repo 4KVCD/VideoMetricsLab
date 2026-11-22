@@ -7,6 +7,7 @@
 #pragma once
 
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -15,6 +16,7 @@
 
 #include "arguments.h"
 #include "vml/saved_results.h"
+#include "vml/settings.h"
 
 namespace vml::cli {
 
@@ -37,6 +39,16 @@ std::vector<const SavedComparison*> saved_named(const std::vector<SavedCompariso
 // when it was saved, its size and its metrics, newest first.
 std::string saved_list_text(const std::vector<const SavedComparison*>& saved);
 nlohmann::ordered_json saved_list_json(const std::vector<const SavedComparison*>& saved);
+
+// --segments saved (profile:NAME, preset:KEY) for saved show and report:
+// the conditions taken from `settings` into `output` as compare takes them
+// (take_saved_segments), with its notes said by `message`: conditions left
+// out, on metrics none of the videos has (`asked`), and the condition a
+// profile with none on them takes. Throws UsageError where compare exits 2
+// with the message (no such preset, or a preset with no condition left).
+void take_saved_segments_of_scores(CompareArguments& output, const Settings& settings,
+                                   const std::vector<std::string>& asked,
+                                   const std::function<void(const std::string&)>& message);
 
 // Runs the saved command; returns the exit code: 0; 1 when a file asked for
 // could not be written, or a comparison could not be read or deleted; 2 for
