@@ -12,6 +12,7 @@
 #include <QCoreApplication>
 #include <QImage>
 #include <QLabel>
+#include <QLayout>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMouseEvent>
@@ -536,6 +537,32 @@ TEST_F(GraphPanelTest, TheReadoutFollowsTheLinesShown) {
     tick_row(panel, id_of(panel, "a"), false);
     EXPECT_FALSE(readout(vmaf).contains(QStringLiteral("Δ"))) << readout(vmaf).toStdString();
     EXPECT_TRUE(lines_fit()) << readout(vmaf).toStdString();
+}
+
+// A readout over a long-named video: its line is cut at the edge, not made
+// the chart's least width. It was, which widened the tab past the window
+// (the tab scrolled sideways) and left Worst frames' divider nowhere to go.
+TEST_F(GraphPanelTest, ALongReadoutDoesNotWidenTheTab) {
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    const QString name(400, QLatin1Char('W'));  // far wider than the hint the readout starts with
+    panel.add_run({shared(vmaf_result(name.toStdString() + ".mkv", std::vector<float>(10, 90.0F))), name, {}, true});
+    MetricPage& vmaf = page(panel, "vmaf");
+    vmaf.chart().resize(800, 400);
+    const auto least_width = [&vmaf] {
+        vmaf.layout()->activate();
+        return vmaf.minimumSizeHint().width();
+    };
+    const int before = least_width();
+    vmaf.on_hover(5 / 30.0, 1000.0, entries(panel));
+    ASSERT_TRUE(readout(vmaf).contains(name));
+    const auto* label = vmaf.findChild<ReadoutLabel*>();
+    ASSERT_NE(label, nullptr);
+    const int text_width = QFontMetrics(label->font()).horizontalAdvance(name);
+    EXPECT_LT(label->minimumSizeHint().width(), text_width / 4);
+    EXPECT_LT(least_width(), std::max(before, text_width / 4));
+    // Its preferred width still fits the text, where there is room.
+    EXPECT_GT(label->sizeHint().width(), text_width);
 }
 
 // XPSNR's infinity in the readout's Δ, as in the band: in both, no

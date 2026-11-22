@@ -455,7 +455,16 @@ QSize ReadoutLabel::sizeHint() const {
         .expandedTo(minimumSize());
 }
 
-QSize ReadoutLabel::minimumSizeHint() const { return sizeHint(); }  // as QLabel's, for text that does not wrap
+QSize ReadoutLabel::minimumSizeHint() const {
+    // As tall as the text, but no wider than its indent and margins: a long
+    // line (a long file name in it) is cut at the edge, not made the least
+    // width of the page. As QLabel's, it was the text's whole width, so a
+    // readout over a long-named video widened the Metric Graphs tab past
+    // the window: the tab scrolled sideways, and Worst frames' divider could
+    // not be dragged, the chart's side being at its least width already.
+    const QMargins margins = contentsMargins();
+    return QSize(indent_ + trailing_ + margins.left() + margins.right(), sizeHint().height());
+}
 
 void ReadoutLabel::paintEvent(QPaintEvent* /*event*/) {
     // As QLabel paints plain text; the background is filled already.
