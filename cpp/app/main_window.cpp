@@ -73,7 +73,6 @@ namespace {
 
 const app_log::Logger logger("vml.main_window");
 
-// What is wrong with FFmpeg, one text each.
 // The window's size where none was saved: 1440x900, at most 90 % of the
 // screen's room (a 1080p laptop at 150 % has about 1280x690 of it, where
 // 1440x900 opened past its edges). The least size (1050x650) still holds.
@@ -86,6 +85,7 @@ QSize default_window_size(const QScreen* screen) {
     return preferred.boundedTo(QSize(room.width() * 9 / 10, room.height() * 9 / 10));
 }
 
+// What is wrong with FFmpeg, one text each.
 QStringList tool_problems(const ToolsStatus& status) {
     QStringList problems;
     for (const std::string& problem : status.problems()) {
@@ -160,21 +160,26 @@ MainWindow::MainWindow() {
                 std::string(vship_build_label(default_vship_build(settings_.default_vship_build))) +
                 ", saved results " + (settings_.use_cache ? "reused" : "not reused") + " (" +
                 (settings_.cache_dir.empty() ? std::string("default folder") : settings_.cache_dir) + ")");
-    if (settings_.remember_window_size) {
-        // Where it was closed, maximized if it was (shown so by main's
-        // show()); Qt moves it onto a screen still there. Before a place was
-        // first saved, or if it cannot be read, at the size it was closed at;
-        // where none was ever saved (the settings' default size), at the
-        // default for the screen.
-        if (settings_.window_geometry.empty() ||
-            !restoreGeometry(QByteArray::fromBase64(QByteArray::fromStdString(settings_.window_geometry)))) {
-            const Settings defaults;
-            const bool saved_size = settings_.window_width != defaults.window_width ||
-                                    settings_.window_height != defaults.window_height;
-            resize(saved_size ? QSize(settings_.window_width, settings_.window_height) : default_window_size(screen()));
+    // Where it was closed, maximized if it was (shown so by main's show());
+    // Qt moves it onto a screen still there.
+    const bool restored = settings_.remember_window_size && !settings_.window_geometry.empty() &&
+                          restoreGeometry(QByteArray::fromBase64(QByteArray::fromStdString(settings_.window_geometry)));
+    if (!restored) {
+        // Before a place was first saved, or if it cannot be read, at the
+        // size it was closed at; where none was ever saved (the settings'
+        // default size), or none is remembered, at the default for the
+        // screen.
+        const Settings defaults;
+        const bool saved_size = settings_.remember_window_size &&
+                                (settings_.window_width != defaults.window_width ||
+                                 settings_.window_height != defaults.window_height);
+        resize(saved_size ? QSize(settings_.window_width, settings_.window_height) : default_window_size(screen()));
+        // Centred in the screen's room. Qt placed the window for its size
+        // before this resize: on a 4K screen at 175 % a 1440x900 window then
+        // ran 312 px past its right edge and 245 px past its bottom (#173).
+        if (const QScreen* room = screen(); room != nullptr) {
+            move(room->availableGeometry().center() - QPoint(width() / 2, height() / 2));
         }
-    } else {
-        resize(default_window_size(screen()));
     }
     // Each video's own settings; the Options panel shows and edits the
     // selected rows' settings, and there is no one global setting.
