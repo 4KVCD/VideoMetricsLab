@@ -19,8 +19,8 @@
 // answers Windows' hit test for every point of the window: the edges, the
 // bar, the maximize button (so that hovering it opens Windows 11's snap
 // layouts) and the rest. Left to Qt, that hit test made a mouse press or
-// release of its own beside Windows' (Qt 6.12), so that every click came
-// twice. native_event also draws the maximize button's
+// release of its own beside Windows' (Qt 6.12, QTBUG-152532), so that every
+// click came twice. native_event also draws the maximize button's
 // hover and press, and shows the system menu for Alt+Space, a click on the
 // icon or a right-click on the bar, Minimize and Maximize included.
 #pragma once

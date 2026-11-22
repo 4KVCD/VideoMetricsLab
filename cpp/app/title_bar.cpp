@@ -391,8 +391,8 @@ int TitleBar::hit_test(QPoint native) const {
     // answered by QWindowsWindow::handleNonClientHitTest, which makes a
     // mouse press or release of its own wherever the buttons' state has
     // changed since it last looked (GetAsyncKeyState), besides the one
-    // Windows sends: every click came twice (Qt 6.12; AetherSDR's PR #6328
-    // found the same).
+    // Windows sends: every click came twice (Qt 6.12, QTBUG-152532;
+    // AetherSDR's PR #6328 found the same).
     const HWND hwnd = hwnd_of(window_);
     POINT point{native.x(), native.y()};
     ScreenToClient(hwnd, &point);

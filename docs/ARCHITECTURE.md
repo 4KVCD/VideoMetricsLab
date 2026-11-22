@@ -180,7 +180,7 @@ hover comes as non-client messages), the bar's other buttons are client, the
 rest of the bar is caption, and the window's contents are client. It must
 answer everywhere: left to Qt, `QWindowsWindow::handleNonClientHitTest`
 makes a mouse press or release of its own for such a window whenever the
-buttons' state has changed (Qt 6.12), so every click came twice, a button's
+buttons' state has changed (Qt 6.12, QTBUG-152532), so every click came twice, a button's
 menu closed as it opened and double clicks went unseen. It also shows the system menu for
 Alt+Space, the icon and a right-click, with Minimize and Maximize enabled
 (Qt's own menu for Alt+Space would have them off). The bar is made when the
