@@ -601,7 +601,7 @@ void ChartWidget::paintEvent(QPaintEvent* /*event*/) {
     // that a high-DPI pixmap's pixels are not taken for logical ones.
     painter.drawPixmap(0, 0, *cache_);
     if (const std::optional<int> x = cursor_pixel()) {
-        painter.setPen(QPen(theme::chart_colours(cache_dark_).crosshair, 1));
+        painter.setPen(QPen(theme::chart_colours().crosshair, 1));
         const QRect plot = plot_rect();
         painter.drawLine(*x, plot.top(), *x, plot.bottom());
     }
@@ -612,14 +612,14 @@ void ChartWidget::rebuild_cache() {
     // for every step of a zoom or a pan takes 2.7 of the 4.3 ms a 1570x536
     // chart takes to draw (175% display scaling), most of it to get 10 MB of
     // memory from Windows; drawn over, 0.27 ms.
-    cache_dark_ = theme::is_dark();
+    cache_look_ = theme::look();
     const double ratio = devicePixelRatioF();
     const QSize size(static_cast<int>(std::ceil(width() * ratio)), static_cast<int>(std::ceil(height() * ratio)));
     if (!cache_ || cache_->size() != size || cache_->devicePixelRatioF() != ratio) {
         cache_.emplace(size);
         cache_->setDevicePixelRatio(ratio);
     }
-    draw(*cache_, theme::chart_colours(cache_dark_));
+    draw(*cache_, theme::chart_colours());  // the look in use's (Mocha's browns, Paper's card)
     cache_stale_ = false;
     ++renders_;
 }
@@ -709,7 +709,7 @@ void ChartWidget::draw_band(QPainter& painter, const QRect& rect, const theme::C
 bool ChartWidget::cache_matches_display() const {
     // Whether the kept drawing still fits the size, pixel ratio and theme.
     const double ratio = devicePixelRatioF();
-    return cache_ && cache_dark_ == theme::is_dark() && cache_->devicePixelRatioF() == ratio &&
+    return cache_ && cache_look_ == theme::look() && cache_->devicePixelRatioF() == ratio &&
            cache_->width() == static_cast<int>(std::ceil(width() * ratio)) &&
            cache_->height() == static_cast<int>(std::ceil(height() * ratio));
 }

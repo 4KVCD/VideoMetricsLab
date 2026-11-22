@@ -249,11 +249,13 @@ int main(int argc, char** argv) {
     // VML Modern's style sheet, set once the window is built (SheetHeld).
     std::optional<app::theme::SheetHeld> sheet_held(std::in_place);
     // Before the window is built, which reads it to colour itself.
-    app::theme::apply_theme(QString::fromStdString(settings.theme));
+    app::theme::apply_theme(QString::fromStdString(settings.theme), QString::fromStdString(settings.light_look),
+                            QString::fromStdString(settings.dark_look));
     app::theme::apply_appearance(app::theme::interface_of(settings.interface_style),
                                  app::theme::accent_of(settings.accent_colour));
     app_log::write(app_log::Level::info, "vml.main",
-                   "Theme: " + (settings.theme.empty() ? "as " + system_name : settings.theme));
+                   "Theme: " + (settings.theme.empty() ? "as " + system_name : settings.theme) + " (looks " +
+                       settings.light_look + ", " + settings.dark_look + ")");
     // The first probes load Vship and start the GPU's driver, which takes
     // seconds; started now, they are usually done before a run is asked for.
     // The window never waits for them (window_helpers.h), but a run does

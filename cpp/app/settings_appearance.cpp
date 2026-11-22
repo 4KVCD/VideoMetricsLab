@@ -275,45 +275,105 @@ QWidget* SettingsPanel::build_appearance_page() {
     });
     grid->addWidget(accent_controls, 0, 1);
 
-    grid->addWidget(row_name(app::tr("Theme"), app::tr("Mocha: VML Modern only")), 1, 0);
-    auto* modes = new QWidget;
-    modes->setObjectName("themeModes");
-    theme::set_role(modes, "segments");
-    auto* modes_row = new QHBoxLayout(modes);
-    modes_row->setContentsMargins(3, 3, 3, 3);
-    modes_row->setSpacing(2);
-    theme_buttons = new QButtonGroup(this);
-    const std::pair<QString, QString> choices[] = {
-#ifdef __APPLE__
-        {app::tr("Same as macOS"), ""},
-#else
-        {app::tr("Same as Windows"), ""},
-#endif
-        {app::tr("Light"), "light"},
-        {app::tr("Dark"), "dark"},
-        {app::tr("Mocha"), "mocha"},
+    // The theme: light, dark or the system's, each drawn in VML Modern in
+    // the look picked for it below.
+    struct Choice {
+        QString name;
+        QString value;
+        QString tip;
     };
-    for (const auto& [name, value] : choices) {
-        auto* mode = new QPushButton(name);
-        mode->setCheckable(true);
-        mode->setProperty("value", value);
-        mode->setChecked(QString::fromStdString(settings_.theme) == value);
-        if (value == "mocha") {
-            mode->setToolTip(app::tr("Dark chocolate browns with an amber accent. VML Classic shows Dark."));
+    // A row of segments, one per choice, the one `current` names ticked
+    // (else the first).
+    const auto segments = [this](const char* object_name, QButtonGroup*& group, const std::vector<Choice>& choices,
+                                 const std::string& current, bool swatches) {
+        auto* row = new QWidget;
+        row->setObjectName(object_name);
+        theme::set_role(row, "segments");
+        auto* layout = new QHBoxLayout(row);
+        layout->setContentsMargins(3, 3, 3, 3);
+        layout->setSpacing(2);
+        group = new QButtonGroup(this);
+        for (const Choice& choice : choices) {
+            auto* button = new QPushButton(choice.name);
+            button->setCheckable(true);
+            button->setProperty("value", choice.value);
+            button->setChecked(QString::fromStdString(current) == choice.value);
+            button->setToolTip(choice.tip);
+            if (swatches) {
+                const QPixmap swatch = theme::look_swatch(choice.value, 18);
+                button->setIcon(QIcon(swatch));
+                button->setIconSize(swatch.deviceIndependentSize().toSize());
+            }
+            group->addButton(button);
+            layout->addWidget(button);
         }
-        theme_buttons->addButton(mode);
-        modes_row->addWidget(mode);
-    }
-    if (theme_buttons->checkedButton() == nullptr) {
-        theme_buttons->buttons().front()->setChecked(true);  // an unknown setting: the system's
-    }
+        if (group->checkedButton() == nullptr) {
+            group->buttons().front()->setChecked(true);  // an unknown setting: the first
+        }
+        auto* line = new QHBoxLayout;
+        line->addWidget(row);
+        line->addStretch(1);
+        return line;
+    };
+    grid->addWidget(row_name(app::tr("Theme"), QString()), 1, 0);
+    grid->addLayout(segments("themeModes", theme_buttons,
+                             {
+#ifdef __APPLE__
+                                 {app::tr("Same as macOS"), "", QString()},
+#else
+                                 {app::tr("Same as Windows"), "", QString()},
+#endif
+                                 {app::tr("Light"), "light", QString()},
+                                 {app::tr("Dark"), "dark", QString()},
+                             },
+                             settings_.theme, false),
+                    1, 1);
+    look_controls = new QWidget;
+    auto* looks_grid = new QGridLayout(look_controls);
+    looks_grid->setContentsMargins(0, 0, 0, 0);
+    looks_grid->setHorizontalSpacing(20);
+    looks_grid->setVerticalSpacing(14);
+    looks_grid->setColumnMinimumWidth(0, 180);
+    looks_grid->setColumnStretch(1, 1);
+    looks_grid->addWidget(row_name(app::tr("Light look"), app::tr("VML Modern only")), 0, 0);
+    looks_grid->addLayout(
+        segments("lightLooks", light_look_buttons,
+                 {
+                     {app::tr("Light"), "light", QString()},
+                     {app::tr("Dim"), "dim", app::tr("Light, a step darker throughout, for less glare. VML Classic shows Light.")},
+                     {app::tr("Paper"), "paper", app::tr("Dim, warmed a little, like unbleached paper. VML Classic shows Light.")},
+                     {app::tr("Desert"), "desert",
+                      app::tr("Warm cream with dark text and edges and a burnt-orange accent, after Windows' Desert "
+                              "contrast theme. VML Classic shows Light.")},
+                 },
+                 settings_.light_look, true),
+        0, 1);
+    looks_grid->addWidget(row_name(app::tr("Dark look"), app::tr("VML Modern only")), 1, 0);
+    looks_grid->addLayout(
+        segments("darkLooks", dark_look_buttons,
+                 {
+                     {app::tr("Dark"), "dark", QString()},
+                     {app::tr("Mocha"), "mocha",
+                      app::tr("Dark chocolate browns with an amber accent. VML Classic shows Dark.")},
+                     {app::tr("Joker"), "joker",
+                      app::tr("Plum purples with a vivid green accent. VML Classic shows Dark.")},
+                 },
+                 settings_.dark_look, true),
+        1, 1);
+    grid->addWidget(look_controls, 2, 0, 1, 2);
     // The accent's first choice names what no accent gives: the system's,
-    // or, in a theme with an accent of its own (Mocha's amber), the theme's.
+    // or, in a look with an accent of its own (Mocha's amber, Joker's green,
+    // Desert's burnt orange), the look's. The look is the one the theme picked shows; for
+    // the system's, the one the window shows now.
     const auto name_system_accent = [this, system_accent] {
-        const QAbstractButton* theme = theme_buttons->checkedButton();
-        if (theme != nullptr && theme->property("value").toString() == "mocha") {
+        const QString mode = theme_buttons->checkedButton()->property("value").toString();
+        const bool dark = mode == "dark" || (mode.isEmpty() && theme::is_dark());
+        const QString look = (dark ? dark_look_buttons : light_look_buttons)->checkedButton()->property("value").toString();
+        if (theme::look_accent(look)) {
             system_accent->setText(app::tr("Theme default"));
-            system_accent->setToolTip(app::tr("The theme's own accent: Mocha's amber."));
+            system_accent->setToolTip(look == "mocha"   ? app::tr("The theme's own accent: Mocha's amber.")
+                                      : look == "joker" ? app::tr("The theme's own accent: Joker's green.")
+                                                        : app::tr("The theme's own accent: Desert's burnt orange."));
         } else {
 #ifdef __APPLE__
             system_accent->setText(app::tr("Same as macOS"));
@@ -324,20 +384,18 @@ QWidget* SettingsPanel::build_appearance_page() {
         }
     };
     name_system_accent();
-    connect(theme_buttons, &QButtonGroup::buttonClicked, this, [this, name_system_accent] {
-        name_system_accent();
-        on_edited();
-    });
-    auto* modes_line = new QHBoxLayout;
-    modes_line->addWidget(modes);
-    modes_line->addStretch(1);
-    grid->addLayout(modes_line, 1, 1);
+    for (QButtonGroup* group : {theme_buttons, light_look_buttons, dark_look_buttons}) {
+        connect(group, &QButtonGroup::buttonClicked, this, [this, name_system_accent] {
+            name_system_accent();
+            on_edited();
+        });
+    }
 
     auto* footnote = new QLabel(app::tr("Text on an accent button is dark or light, whichever reads on it. Exported "
                                         "graphs keep their own colors (Storage > Exported graphs)."));
     footnote->setWordWrap(true);
     theme::style(footnote, "color: {muted};");
-    grid->addWidget(footnote, 2, 1);
+    grid->addWidget(footnote, 3, 1);
     page_layout->addWidget(look_box);
     page_layout->addStretch(1);
 
@@ -345,8 +403,10 @@ QWidget* SettingsPanel::build_appearance_page() {
     // while it is picked.
     set_accent(QString::fromStdString(settings_.accent_colour).toLower());
     accent_controls->setEnabled(modern);
+    look_controls->setEnabled(modern);
     connect(interface_buttons, &QButtonGroup::idClicked, this, [this](int id) {
         accent_controls->setEnabled(id == 1);
+        look_controls->setEnabled(id == 1);
         on_edited();
     });
     return page;

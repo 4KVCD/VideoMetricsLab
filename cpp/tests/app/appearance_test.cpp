@@ -35,6 +35,7 @@
 #include <string>
 #include <vector>
 
+#include "chart.h"
 #include "main_window.h"
 #include "theme.h"
 
@@ -150,7 +151,7 @@ protected:
     // drawn as its rule says, a style sheet Qt reads, and the window's tabs
     // drawn in it.
     static void check_modern(bool dark, bool mocha = false) {
-        theme::apply_theme(mocha ? "mocha" : dark ? "dark" : "light");
+        theme::apply_theme(dark || mocha ? "dark" : "light", "light", mocha ? "mocha" : "dark");
         std::vector<std::string> warnings = warnings_while([] {
             theme::apply_appearance(theme::Interface::modern, accent);
         });
@@ -299,12 +300,47 @@ TEST_F(Appearance, ModernMocha) {
     EXPECT_EQ(QApplication::palette().color(QPalette::Accent), accent);  // the one chosen
     theme::apply_appearance(theme::Interface::modern, std::nullopt);
     EXPECT_EQ(QApplication::palette().color(QPalette::Accent), theme::mocha_accent());
-    // Back to Dark: Modern's own dark colours, at once.
-    theme::apply_theme("dark");
+    // Back to Dark's own look: Modern's own dark colours, at once.
+    theme::apply_theme("dark", "light", "dark");
     EXPECT_FALSE(theme::is_mocha());
     EXPECT_EQ(QApplication::palette().color(QPalette::Base), theme::modern_colour("card", true));
     EXPECT_NE(theme::modern_colour("card", true), QColor("#251c16"));
     EXPECT_NE(QApplication::palette().color(QPalette::Accent), theme::mocha_accent());  // the system's again
+}
+
+// Light's looks: Dim's and Desert's colours in place of Light's, Desert's
+// burnt orange while no accent is chosen; Light's own again, at once, when
+// its look is Light; and Classic has none.
+TEST_F(Appearance, ModernLightLooks) {
+    theme::apply_theme("light", "dim", "dark");
+    theme::apply_appearance(theme::Interface::modern, std::nullopt);
+    if (theme::is_dark()) {
+        GTEST_SKIP() << "This platform does not take the app's light.";
+    }
+    EXPECT_EQ(theme::look(), "dim");
+    EXPECT_EQ(QApplication::palette().color(QPalette::Base), QColor("#e4e4e4"));
+    EXPECT_EQ(theme::chart_colours().background, QColor("#e4e4e4"));
+    EXPECT_EQ(theme::chart_colours(false).background, QColor("white"));  // exported light graphs keep theirs
+    // A graph is drawn in the look too, and again when the look changes.
+    ChartWidget chart;
+    chart.resize(200, 120);
+    EXPECT_EQ(chart.grab().toImage().pixelColor(2, 2), QColor("#e4e4e4"));
+    theme::apply_theme("light", "desert", "dark");
+    EXPECT_EQ(chart.grab().toImage().pixelColor(2, 2), QColor("#fffaef"));
+    EXPECT_EQ(theme::look(), "desert");
+    EXPECT_EQ(QApplication::palette().color(QPalette::Base), QColor("#fffaef"));
+    EXPECT_EQ(QApplication::palette().color(QPalette::Accent), QColor("#903909"));
+    EXPECT_EQ(theme::color("link"), QColor("#1c5e75"));
+    theme::apply_appearance(theme::Interface::modern, accent);
+    EXPECT_EQ(QApplication::palette().color(QPalette::Accent), accent);  // the one chosen
+    theme::apply_appearance(theme::Interface::modern, std::nullopt);
+    theme::apply_theme("light", "mocha", "desert");  // each side's own looks only
+    EXPECT_EQ(theme::look(), "light");
+    theme::apply_theme("light", "light", "dark");
+    EXPECT_EQ(theme::look(), "light");
+    EXPECT_EQ(QApplication::palette().color(QPalette::Base), theme::modern_colour("card", false));
+    EXPECT_EQ(theme::modern_colour("card", false), QColor("#ffffff"));
+    EXPECT_NE(QApplication::palette().color(QPalette::Accent), QColor("#903909"));  // the system's again
 }
 
 }  // namespace

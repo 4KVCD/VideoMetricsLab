@@ -23,6 +23,7 @@
 #include <string>
 
 class QBoxLayout;
+class QPixmap;
 class QFrame;
 class QGroupBox;
 class QTableWidgetItem;
@@ -44,12 +45,27 @@ struct ChartColours {
 // Whether the window is drawn in dark colours now (Mocha's too).
 bool is_dark();
 
-// Whether the window is drawn in Mocha's colours now: Settings.theme "mocha",
-// in VML Modern (in Classic, Mocha is Dark).
+// The look the window is drawn in now: Settings' light_look or dark_look
+// ("light", "dim", "paper" or "desert"; "dark", "mocha" or "joker"), whichever its
+// light or dark asks for, in VML Modern. Classic has no looks: "light" or
+// "dark".
+QString look();
+
+// Whether the window is drawn in Mocha's colours now (look() "mocha").
 bool is_mocha();
 
 // Mocha's accent, used while no accent is chosen (Solar Dusk's amber).
 QColor mocha_accent();
+
+// A look's own accent, used while no accent is chosen (Mocha's amber,
+// Joker's green, Desert's burnt orange); none for a look that takes the
+// system's.
+std::optional<QColor> look_accent(const QString& look);
+
+// A small picture of a look for Settings' look buttons: a card of its,
+// `size` pixels square, with a line of its text and one of its accent (or
+// muted text), and a gap after it for the button's text.
+QPixmap look_swatch(const QString& look, int size);
 
 // A named colour for the theme in use (or for dark or light, if given).
 QColor color(const char* name, std::optional<bool> dark = std::nullopt);
@@ -91,10 +107,12 @@ void recolour(QTableWidgetItem* item);
 // colours when the sheet is applied.
 void refresh();
 
-// Asks Qt for Settings.theme's colours: "light", "dark", "mocha" (dark, in
-// VML Modern's chocolate browns and amber, after the Solar Dusk palette), or
-// "" for Windows' own.
-void apply_theme(const QString& theme);
+// Asks Qt for Settings.theme's colours, "light", "dark" or "" for Windows'
+// own, and, in VML Modern, draws light in `light_look`'s and dark in
+// `dark_look`'s (look()); an unknown look is Light's or Dark's own. "mocha"
+// (a theme before there were looks) is dark in Mocha's look.
+void apply_theme(const QString& theme, const QString& light_look = QStringLiteral("light"),
+                 const QString& dark_look = QStringLiteral("dark"));
 
 // The window's interface (Settings > Window > Interface).
 //

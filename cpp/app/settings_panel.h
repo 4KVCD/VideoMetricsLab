@@ -165,6 +165,9 @@ public:
     QWidget* modern_preview = nullptr;
     QString accent_value;
     QButtonGroup* theme_buttons = nullptr;
+    QButtonGroup* light_look_buttons = nullptr;  // Settings.light_look's
+    QButtonGroup* dark_look_buttons = nullptr;   // Settings.dark_look's
+    QWidget* look_controls = nullptr;            // both, VML Modern's alone
     // How test videos' names are shown (video_names.h), and for "ends" how
     // many characters of each end.
     QComboBox* video_names = nullptr;

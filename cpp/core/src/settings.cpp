@@ -71,6 +71,8 @@ const std::unordered_map<std::string, Field>& fields() {
         {"theme", &Settings::theme},
         {"interface", &Settings::interface_style},
         {"accent_colour", &Settings::accent_colour},
+        {"light_look", &Settings::light_look},
+        {"dark_look", &Settings::dark_look},
         {"video_names", &Settings::video_names},
         {"video_name_start", &Settings::video_name_start},
         {"video_name_end", &Settings::video_name_end},
@@ -364,6 +366,10 @@ Settings Settings::load_from(const std::filesystem::path& path) {
             }
         }
     }
+    if (settings.theme == "mocha") {  // a theme before there were looks
+        settings.theme = "dark";
+        settings.dark_look = "mocha";
+    }
     if (!data.contains("export_items")) {
         carry_over_auto_export(settings);
     } else if (!data.contains("export_formats")) {
@@ -462,6 +468,8 @@ std::string Settings::text() const {
     data["theme"] = theme;
     data["interface"] = interface_style;
     data["accent_colour"] = accent_colour;
+    data["light_look"] = light_look;
+    data["dark_look"] = dark_look;
     data["video_names"] = video_names;
     data["video_name_start"] = video_name_start;
     data["video_name_end"] = video_name_end;

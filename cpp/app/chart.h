@@ -229,7 +229,7 @@ private:
     std::pair<double, double> band_range_{-1.0, 1.0};  // fitted once, when the band is set
     std::optional<QPixmap> cache_;
     bool cache_stale_ = true;  // to be drawn again before it is shown
-    bool cache_dark_ = false;  // the theme the cache was drawn in
+    QString cache_look_;       // the look the cache was drawn in (theme::look)
     int renders_ = 0;          // how many times the cache has been drawn (for the tests)
     // The crosshair's time, not its pixel column: worked out at each paint
     // (cursor_pixel), it stays on its frame when the chart is resized,
