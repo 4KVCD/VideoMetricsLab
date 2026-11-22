@@ -48,6 +48,7 @@ convention.
 | `app`, `version`, `commit` | The program that wrote the file, its version and its build's commit (`-dirty`: built with uncommitted changes). |
 | `format` | `2`. |
 | `cancelled` | Command line only: whether the run was cancelled. A cancelled run's videos hold the scores it finished. |
+| `timed_out` | Command line with `--timeout` or `--video-timeout` only: whether either stopped the run or a video. |
 | `run` | The run the scores come from (below). |
 | `machine` | The machine that scored them (below). |
 | `summary_rules` | How each score and statistic is worked out from the frames (below). |
@@ -251,6 +252,7 @@ does not know as the general case (an error, a failure, a note).
 | `no_metric` | `error_code` | None of the metrics asked for can be calculated for the video. |
 | `not_comparable` | `error_code` | The two videos cannot be compared as asked (their lengths differ, say). |
 | `run_failed` | `error_code` | The video's run failed as a whole. |
+| `timed_out` | `error_code`, `failed_metric_codes`, `metric_status` | `--video-timeout` stopped the video's run: what it had not finished. |
 | `reference_unreadable` | `error_code` | The reference could not be read. |
 | `no_test_video` | `error_code` | `--batch`: the reference's rows find only it. |
 | `batch_unreadable` | `error_code` | The `--batch` list could not be read. |

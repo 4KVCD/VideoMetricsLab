@@ -640,6 +640,10 @@ $run.videos[0].metrics.vmaf.score
 | `--notify` | Send a notification as the run ends, as **Settings > Notifications** in the app say: to the services on there, with its message, for the outcomes and run lengths it is on for (see [Notifications](#notifications)). Whether it was sent, or why not, is said on the progress lines (a problem with `-q` too); the exit code is the run's either way. On macOS and Linux it needs `curl`, which sends it. |
 | `-q`, `--quiet` | No progress, only the results. |
 | `-v`, `--verbose` | The app's log as well. |
+| `--progress text\|jsonl` | `text`: progress lines for a person (the default). `jsonl`: a JSON object a line on the error stream, for a program to read, `-q` or not (below). |
+| `--timeout SECONDS` | Cancel the run after SECONDS (whole seconds, or H:MM:SS) from the command's start, as Ctrl+C does: what finished is given and saved, the JSON says `"cancelled": true, "timed_out": true`, and the exit code is 124. Reached while the videos are read or the results written, it ends the command at once (exit code 124, no results), as Ctrl+C does then. |
+| `--video-timeout SECONDS` | Stop a video whose run takes more than SECONDS from its start (a further `--cvvdp-display`'s run counts as its own); the other videos go on. What it had not finished fails with the code `timed_out`, and the exit code is 124. |
+| `--cancel-on-stdin-eof` | Cancel the run, as Ctrl+C does, when the standard input ends. For a program that starts this one and cannot send it Ctrl+C: it keeps the input open, and closes it to cancel. Not with an input that is empty from the start (`< NUL`), which would cancel at once. |
 | `--settings FILE` | Read the settings from FILE (a `settings.json`, such as a copy of the app's, kept with a script) in place of the app's. Every option left out takes its value from it, as it would from the app's. It is never written; a FILE that is not there or is not JSON is an input not read (exit code 4). |
 | `--no-settings` | Take every setting at its default, as a new install has them, whatever the app's settings say: the same command gives the same run on any PC. |
 | `--cache-dir FOLDER` | Read and save the saved scores (and the black bars found) in FOLDER, in place of the folder Settings > Storage names. |
@@ -679,6 +683,24 @@ system's code page, so a script reads them as UTF-8 (in Python,
 `subprocess.run(..., encoding="utf-8")`); a console is sent every character
 as it is, whatever its code page.
 
+A note that is the same for several videos (no colour tags, say) is said
+once, with the videos it is of. With `--progress jsonl`, every line on the
+error stream is a JSON object: its `event`, then `seconds` since the command
+started, then what the event says:
+
+| `event` | What it says |
+| --- | --- |
+| `note` | A note on how videos are scored (as their JSON's `notes`): `code`, `text`, and the `videos` it is of. Notes found while the videos are read come before `run_started`. |
+| `run_started` | The run starts: how many `jobs` (a job is a video, or a further `--cvvdp-display` of one). |
+| `video_started` | A job starts: its `job` (from 0) and its video's `path` (and `cvvdp_display` for a further display). |
+| `progress` | A job's figures, at most once a second: `job`, `path` and its `tasks`, each with its `metrics`, `state` (`starting`, `waiting`, `running`, `done`, `failed`), the frames `done` of `total` and `fps`. |
+| `video_done` | A job ended: `job`, `path`, `status` (`done`, `partial`, `failed`, `cancelled` or `timed_out`) and its line as `text`. |
+| `message`, `problem` | Any other progress line, as `text`; a `problem` is one `-q` would still show. |
+| `run_done` | Last, once the command got as far as reading its videos: its `exit_code`, and whether it was `cancelled` and `timed_out`. |
+
+A reader should skip events and keys it does not know: later versions may
+add some.
+
 The exit code says how the run went, so that a script can act on it without
 reading the text:
 
@@ -689,9 +711,10 @@ reading the text:
 | 2 | A wrong command: nothing was read or run. Among them a raw stream that stores no frame rate without `--fps`, a raw YUV file without `--size`, `--pix-fmt` and `--fps`, `--difference` without two test videos, patterns that find only the reference, and FFmpeg that cannot be used. |
 | 3 | A quality gate failed: every score asked for is there, but a test video misses a `--require` bar or has a weak segment with `--fail-on-segments`. |
 | 4 | An input could not be read: the reference, a test video, a pattern that finds no file, or the `--batch` list. The other videos are still compared, and the JSON says which could not be read. |
-| 130 | Cancelled with Ctrl+C (or Ctrl+Break, or the console window closed). |
+| 124 | Timed out: `--timeout` cancelled the run, or `--video-timeout` stopped a video. |
+| 130 | Cancelled with Ctrl+C (or Ctrl+Break, the console window closed, or the end of the standard input with `--cancel-on-stdin-eof`). |
 
-When more than one applies, 130 comes first, then 4, then 1, then 3. With `--json`,
+When more than one applies, 130 comes first, then 124, then 4, then 1, then 3. With `--json`,
 the results are written for every code but 2, also when nothing could be
 compared: a reference that cannot be read gives a document with its `error`
 and `error_code` and no videos, and a `--batch` list that cannot be read
@@ -700,7 +723,12 @@ has a code beside it, a word that stays the same from version to version
 where the text may change; [The results file](RESULTS_JSON.md#codes) lists
 them.
 Ctrl+C stops the run as **Cancel** does; scores that had finished are saved.
-Closing the console window does the same on Windows' classic console.
+Closing the console window does the same on Windows' classic console. A
+program that starts this one can send it Ctrl+Break (on Windows, start it in
+a new process group: in Python, `creationflags=subprocess.CREATE_NEW_PROCESS_GROUP`
+and `send_signal(signal.CTRL_BREAK_EVENT)`), or use `--cancel-on-stdin-eof`.
+Ending it outright (End task, `TerminateProcess`) ends the FFmpeg and other
+programs it started too, but gives no results.
 
 Unlike the app, the command line does not ask before a long SSIMULACRA2 or
 Butteraugli run on the CPU. Text is English whatever the app's language.

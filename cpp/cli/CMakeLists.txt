@@ -13,6 +13,7 @@ add_library(vml_cli STATIC
     notify.cpp
     report.cpp
     saved.cpp
+    watch.cpp
     weak_report.cpp
 )
 target_include_directories(vml_cli PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

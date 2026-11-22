@@ -17,8 +17,8 @@ namespace vml::cli {
 
 inline constexpr const char* program = "VideoMetricsLab-cli";
 // The exit codes, as the user guide's command line section lists them. When
-// more than one applies: cancelled, then an input not read, then a failure,
-// then a quality gate.
+// more than one applies: cancelled, then timed out, then an input not read,
+// then a failure, then a quality gate.
 inline constexpr int exit_ok = 0;
 inline constexpr int exit_failed = 1;  // a video or a metric failed, or a file could not be written
 inline constexpr int exit_usage = 2;   // a wrong command: nothing was read or run
@@ -28,6 +28,8 @@ inline constexpr int exit_gate_failed = 3;
 // An input could not be read: the reference, a test video, a pattern that
 // finds no file, the --batch list, bdrate's files; the others are still done.
 inline constexpr int exit_input = 4;
+// --timeout or --video-timeout stopped the run, or a video's (timeout's own code).
+inline constexpr int exit_timeout = 124;
 inline constexpr int exit_cancelled = 130;
 
 // Which settings a command takes and where its saved scores are: options of
@@ -131,6 +133,14 @@ struct CompareArguments {
     bool notify = false;
     bool quiet = false;
     bool verbose = false;
+    // --progress: "text" (lines for a person) or "jsonl" (Progress::event: a JSON object a line, for a program).
+    std::string progress = "text";
+    // --timeout: whole seconds the command may take, from its start; past them it is cancelled (exit_timeout).
+    std::optional<long long> timeout;
+    // --video-timeout: whole seconds each video's run may take, from its start; past them it alone is stopped.
+    std::optional<long long> video_timeout;
+    // --cancel-on-stdin-eof: the end of standard input cancels the run, as Ctrl+C does.
+    bool cancel_on_stdin_eof = false;
 };
 
 // The bitrate command's arguments.
