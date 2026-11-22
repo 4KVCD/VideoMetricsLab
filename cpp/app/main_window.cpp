@@ -20,6 +20,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QPushButton>
+#include <QScreen>
 #include <QSplitter>
 #include <QStyleHints>
 #include <QTableWidgetItem>
@@ -73,6 +74,18 @@ namespace {
 const app_log::Logger logger("vml.main_window");
 
 // What is wrong with FFmpeg, one text each.
+// The window's size where none was saved: 1440x900, at most 90 % of the
+// screen's room (a 1080p laptop at 150 % has about 1280x690 of it, where
+// 1440x900 opened past its edges). The least size (1050x650) still holds.
+QSize default_window_size(const QScreen* screen) {
+    const QSize preferred(1440, 900);
+    if (screen == nullptr) {
+        return preferred;
+    }
+    const QSize room = screen->availableGeometry().size();
+    return preferred.boundedTo(QSize(room.width() * 9 / 10, room.height() * 9 / 10));
+}
+
 QStringList tool_problems(const ToolsStatus& status) {
     QStringList problems;
     for (const std::string& problem : status.problems()) {
@@ -150,13 +163,18 @@ MainWindow::MainWindow() {
     if (settings_.remember_window_size) {
         // Where it was closed, maximized if it was (shown so by main's
         // show()); Qt moves it onto a screen still there. Before a place was
-        // first saved, or if it cannot be read, at the size it was closed at.
+        // first saved, or if it cannot be read, at the size it was closed at;
+        // where none was ever saved (the settings' default size), at the
+        // default for the screen.
         if (settings_.window_geometry.empty() ||
             !restoreGeometry(QByteArray::fromBase64(QByteArray::fromStdString(settings_.window_geometry)))) {
-            resize(settings_.window_width, settings_.window_height);
+            const Settings defaults;
+            const bool saved_size = settings_.window_width != defaults.window_width ||
+                                    settings_.window_height != defaults.window_height;
+            resize(saved_size ? QSize(settings_.window_width, settings_.window_height) : default_window_size(screen()));
         }
     } else {
-        resize(1280, 800);
+        resize(default_window_size(screen()));
     }
     // Each video's own settings; the Options panel shows and edits the
     // selected rows' settings, and there is no one global setting.
