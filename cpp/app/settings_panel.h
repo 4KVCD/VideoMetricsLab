@@ -165,6 +165,12 @@ public:
     QWidget* modern_preview = nullptr;
     QString accent_value;
     QButtonGroup* theme_buttons = nullptr;
+    // How test videos' names are shown (video_names.h), and for "ends" how
+    // many characters of each end.
+    QComboBox* video_names = nullptr;
+    QWidget* video_name_ends = nullptr;
+    QSpinBox* video_name_start = nullptr;
+    QSpinBox* video_name_end = nullptr;
     QCheckBox* remember_size = nullptr;
     QCheckBox* remember_videos = nullptr;
     QCheckBox* check_updates = nullptr;
@@ -232,6 +238,8 @@ signals:
     // The weak segment profiles, or the one in use, were edited and saved:
     // Metric Graphs' Weak segments starts from them.
     void weak_segment_rules_changed();
+    // How test videos' names are shown changed (Video names).
+    void video_names_changed();
 
 private:
     QGroupBox* build_ffmpeg_box();

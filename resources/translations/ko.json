@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Video names:": "영상 이름:",
+  "What tells them apart": "서로 다른 부분",
+  "First and last characters": "처음과 마지막 글자",
+  "Whole names": "전체 이름",
+  "Characters from the start:": "앞에서부터 글자 수:",
+  "from the end:": "끝에서부터:",
+  "How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "지표 그래프와 영상 비교에서 테스트 영상 이름을 표시하는 방식입니다. '서로 다른 부분'은(는) 표시된 영상들이 공유하는 앞부분과 끝부분을 생략합니다: \"…CRF 20\", \"…CRF 22\". 툴팁, 내보내기, 파일 이름에는 전체 이름이 유지됩니다.",
   "Mocha": "모카",
   "Mocha: VML Modern only": "모카: VML Modern 전용",
   "Theme": "테마",

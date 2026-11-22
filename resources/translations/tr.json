@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Video names:": "Video adları:",
+  "What tells them apart": "Onları ayıran kısım",
+  "First and last characters": "İlk ve son karakterler",
+  "Whole names": "Tam adlar",
+  "Characters from the start:": "Baştan karakter:",
+  "from the end:": "sondan:",
+  "How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Test videolarının adlarının Metrik grafikleri ve Video karşılaştırma içinde nasıl gösterildiği. Onları ayıran kısım, gösterilen videoların ortak başını ve sonunu atlar: \"…CRF 20\", \"…CRF 22\". İpuçları, dışa aktarımlar ve dosya adları tam adı korur.",
   "Mocha": "Mocha",
   "Mocha: VML Modern only": "Mocha: yalnızca VML Modern",
   "Theme": "Tema",

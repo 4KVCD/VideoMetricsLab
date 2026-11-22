@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Video names:": "أسماء الفيديوهات:",
+  "What tells them apart": "ما يميّزها",
+  "First and last characters": "الأحرف الأولى والأخيرة",
+  "Whole names": "الأسماء كاملة",
+  "Characters from the start:": "أحرف من البداية:",
+  "from the end:": "من النهاية:",
+  "How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "كيف تُعرض أسماء فيديوهات الاختبار في رسوم المقاييس ومقارنة الفيديو. «ما يميّزها» يحذف البداية والنهاية المشتركتين بين الفيديوهات المعروضة: \"…CRF 20\"، \"…CRF 22\". تحتفظ التلميحات والتصديرات وأسماء الملفات بالاسم كاملًا.",
   "Mocha": "موكا",
   "Mocha: VML Modern only": "موكا: VML Modern فقط",
   "Theme": "السمة",

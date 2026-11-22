@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Video names:": "Názvy videí:",
+  "What tells them apart": "Co je odlišuje",
+  "First and last characters": "První a poslední znaky",
+  "Whole names": "Celé názvy",
+  "Characters from the start:": "Znaků od začátku:",
+  "from the end:": "od konce:",
+  "How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Jak se názvy testovaných videí zobrazují v Grafy metrik a Porovnání videa. Co je odlišuje vynechá začátek a konec, které mají zobrazená videa společné: \"…CRF 20\", \"…CRF 22\". Popisky, exporty a názvy souborů ponechávají celý název.",
   "Mocha": "Moka",
   "Mocha: VML Modern only": "Moka: jen VML Modern",
   "Theme": "Motiv",

@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Video names:": "Videónevek:",
+  "What tells them apart": "Ami megkülönbözteti őket",
+  "First and last characters": "Első és utolsó karakterek",
+  "Whole names": "Teljes nevek",
+  "Characters from the start:": "Karakter az elejéről:",
+  "from the end:": "a végéről:",
+  "How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Hogyan jelennek meg a tesztvideók nevei a(z) Metrikagrafikonok és Videó-összehasonlítás lapon. A(z) Ami megkülönbözteti őket kihagyja a megjelenített videók közös elejét és végét: „…CRF 20”, „…CRF 22”. Az elemleírások, az exportok és a fájlnevek a teljes nevet tartják meg.",
   "Mocha": "Mokka",
   "Mocha: VML Modern only": "Mokka: csak VML Modern",
   "Theme": "Téma",

@@ -26,6 +26,7 @@
 
 #include "display_hdr.h"
 #include "frame_drag.h"
+#include "video_names.h"
 #include "worst_frame_list.h"
 #include "vml/cancel.h"
 #include "vml/frame_extract.h"
@@ -248,6 +249,8 @@ public:
 
     // The pairs to choose from, keeping the one shown if it is still there.
     void set_runs(std::vector<FrameComparisonEntry> entries);
+    // How the videos' names are shown (Settings > Window > Video names).
+    void set_video_name_rule(const VideoNameRule& rule);
     const FrameComparisonEntry* current_entry() const;
     // Shows frame `frame`.
     void set_frame(long long frame);
@@ -397,6 +400,8 @@ private:
     void sync_seek_widgets();
     void update_enabled_state();
     void update_labels();
+    // shown_names_ from the entries, and the video list's names so.
+    void name_videos();
     void update_frame_line();
     void update_color_status();
     QString score_text(const FrameComparisonEntry& entry) const;
@@ -434,6 +439,9 @@ private:
     std::function<std::string()> ffmpeg_;
     int decoded_videos_;
     std::vector<FrameComparisonEntry> entries_;
+    // Each entry's label as shown (video_names.h), in entries_' order.
+    std::vector<QString> shown_names_;
+    VideoNameRule name_rule_;
     std::size_t current_index_ = 0;
     long long frame_ = 0;
     bool showing_source_ = false;

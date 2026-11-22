@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Video names:": "Tên video:",
+  "What tells them apart": "Phần phân biệt chúng",
+  "First and last characters": "Ký tự đầu và cuối",
+  "Whole names": "Tên đầy đủ",
+  "Characters from the start:": "Số ký tự từ đầu:",
+  "from the end:": "từ cuối:",
+  "How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Cách hiển thị tên video thử nghiệm trong Biểu đồ chỉ số và So sánh video. Phần phân biệt chúng bỏ phần đầu và phần cuối mà các video đang hiển thị có chung: \"…CRF 20\", \"…CRF 22\". Chú giải, bản xuất và tên tệp vẫn giữ tên đầy đủ.",
   "Mocha": "Mocha",
   "Mocha: VML Modern only": "Mocha: chỉ VML Modern",
   "Theme": "Chủ đề",

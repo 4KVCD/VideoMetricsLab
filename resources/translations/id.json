@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Video names:": "Nama video:",
+  "What tells them apart": "Yang membedakannya",
+  "First and last characters": "Karakter pertama dan terakhir",
+  "Whole names": "Nama lengkap",
+  "Characters from the start:": "Karakter dari awal:",
+  "from the end:": "dari akhir:",
+  "How test videos' names are shown in Metric Graphs and Video Compare. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Cara nama video uji ditampilkan di Grafik metrik dan Bandingkan video. Yang membedakannya menghilangkan awal dan akhir yang sama pada video yang ditampilkan: \"…CRF 20\", \"…CRF 22\". Tooltip, ekspor, dan nama file tetap memakai nama lengkap.",
   "Mocha": "Moka",
   "Mocha: VML Modern only": "Moka: hanya VML Modern",
   "Theme": "Tema",

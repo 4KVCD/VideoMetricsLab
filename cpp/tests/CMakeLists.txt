@@ -142,6 +142,7 @@ if(TARGET vml_app)
         app/table_selection_test.cpp
         app/theme_test.cpp
         app/tool_tips_test.cpp
+        app/video_names_test.cpp
         app/vship_names_test.cpp
         unit/reference.cpp
         unit/test_videos.cpp

@@ -139,6 +139,14 @@ struct Settings {
     std::string interface_style = "modern";
     // The accent colour, "#rrggbb", or "" for the system's.
     std::string accent_colour;
+    // How the window shows a test video's name (video_names.h): "differs"
+    // (what tells the videos shown apart, their shared start and end left
+    // out), "ends" (its first video_name_start and last video_name_end
+    // characters) or "full". Tooltips, exports and file names keep the
+    // whole name.
+    std::string video_names = "differs";
+    int video_name_start = 10;
+    int video_name_end = 16;
     bool remember_window_size = true;
     int window_width = 1280;
     int window_height = 800;
