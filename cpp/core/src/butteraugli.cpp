@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <stdexcept>
+#include <utility>
 
 #include "butteraugli_image.h"
 
@@ -98,7 +99,16 @@ void blur(RowPool& pool, const ImageF& in, float sigma, BlurTemp* temp, ImageF* 
         separable5(pool, in, weights, out);
         return;
     }
-    separable_blur(pool, in, kernel.data(), len / 2, temp->plane(in), out);
+    // separable_blur works in column strips that read their neighbours'
+    // columns, so a blur in place goes into temp's plane, which then trades
+    // buffers with out.
+    if (&in == out) {
+        ImageF* const blurred = temp->plane(in);
+        separable_blur(pool, in, kernel.data(), len / 2, temp, blurred);
+        std::swap(*blurred, *out);
+        return;
+    }
+    separable_blur(pool, in, kernel.data(), len / 2, temp, out);
 }
 
 namespace {

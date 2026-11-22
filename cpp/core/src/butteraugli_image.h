@@ -125,12 +125,27 @@ struct PsychoImage {
 };
 
 // The separable blurs' plane between their two passes, kept between calls.
+// The columns of one strip of separable_blur, and the rows of one strip's
+// ring: two copies of the last 2 * 16 + 1 rows of the longest kernel.
+inline constexpr std::size_t kBlurStripColumns = 256;
+inline constexpr std::size_t kBlurRingRows = 2 * (2 * 16 + 1);
+
+// blur's scratch: the strips' rings, and a plane for a blur in place.
 struct BlurTemp {
     ImageF* plane(const ImageF& in) {
         temp.ensure(in.xsize(), in.ysize());
         return &temp;
     }
+    // A ring of kBlurRingRows rows per strip of a plane `xsize` wide. Its
+    // rows are ImageF rows of kBlurStripColumns, whose padding (one more
+    // 64-byte line) keeps their distance off a power of two.
+    ImageF* rings(std::size_t xsize) {
+        const std::size_t strips = (xsize + kBlurStripColumns - 1) / kBlurStripColumns;
+        ring_rows.ensure(kBlurStripColumns, strips * kBlurRingRows);
+        return &ring_rows;
+    }
     ImageF temp;
+    ImageF ring_rows;
 };
 
 // Planes of the level's size that the masking overwrites (its inputs and
@@ -188,9 +203,9 @@ void mask_psycho_image(RowPool& pool, const PsychoImage& pi0, const PsychoImage&
                        const MaskScratch& scratch, ImageF* mask, ImageF* diff_ac);
 void combine_channels_to_diffmap(RowPool& pool, const ImageF& mask, const Image3F& block_diff_dc, const Image3F& block_diff_ac,
                                  float xmul, ImageF* result);
-// libjxl's Blur for a kernel of 2 * half + 1 taps (half 3, 6, 7 or 16):
-// in to temp (in's size) to out, which may be in.
-void separable_blur(RowPool& pool, const ImageF& in, const float* kernel, std::size_t half, ImageF* temp,
+// libjxl's Blur for a kernel of 2 * half + 1 taps (half 3, 6, 7 or 16), in
+// to out (not in), through temp's rings.
+void separable_blur(RowPool& pool, const ImageF& in, const float* kernel, std::size_t half, BlurTemp* temp,
                     ImageF* out);
 
 }  // namespace vml::butteraugli

@@ -1633,10 +1633,17 @@ void OpsinDynamicsImage(RowPool& pool, const Image3F& rgb, const ButteraugliPara
 // VideoMetricsLab's form of libjxl's Blur for its 7, 13, 15 and 33 tap
 // kernels. libjxl convolves the rows and writes the result transposed, then
 // does the same again, so that its second pass convolves the columns; here
-// a horizontal pass (ConvolveRowsHorizontal) and a vertical pass
-// (ConvolveRowsVertical) work on planes the right way round, so that both
-// run in vectors across a row with plain loads and stores, without the
-// transposes. Every output pixel gets libjxl's operations in libjxl's order
+// a horizontal pass (ConvolveRowSegment) and a vertical pass
+// (ConvolveRingRow) work on rows the right way round, so that both run in
+// vectors across a row with plain loads and stores, without the transposes.
+// They run on strips of kBlurStripColumns columns, each from the top of the
+// picture to the bottom (BlurStrip): a row's horizontal pass, for the
+// strip's columns only, goes into a ring of the last 2 * kHalf + 1 rows, and
+// the vertical pass of the row kHalf above it follows at once. The ring
+// stays in the core's cache, where a whole temporary plane went out to
+// memory and back (with many copies of Butteraugli at once, the blurs
+// waited on memory most of the time). Every output pixel gets libjxl's
+// operations in libjxl's order
 // (its ConvolutionWithTranspose, scalar code): away from the borders the
 // kHalf mirrored pairs of the pre-scaled kernel, (a + b) * weight, go
 // round-robin into four sums, then centre * weight + sum0 + sum1 + sum2
@@ -1697,82 +1704,113 @@ inline float BorderScale(const float* kernel, size_t half, size_t pos, size_t si
   return 1.0f / weight;
 }
 
-// Rows [y0, y1) of the horizontal pass. The row padding of `out` is set to
-// zero, so that the vertical pass's lanes past the last pixel compute zeros.
+// The horizontal pass of columns [x0, x1) of one row into dst (dst[0] is
+// column x0). Columns below kHalf and from xsize - kHalf on are near a
+// border (both, in a row narrower than the kernel); the decision is the
+// picture's, not the strip's.
 template <size_t kHalf>
-void ConvolveRowsHorizontal(const ImageF& in, const float* kernel, const float* sk, size_t y0, size_t y1,
-                            ImageF* out) {
+void ConvolveRowSegment(const float* row, size_t xsize, const float* kernel, const float* sk, size_t x0, size_t x1,
+                        float* dst) {
   const HWY_FULL(float) d;
   const size_t lanes = Lanes(d);
-  const size_t xsize = in.xsize();
-  // Columns [0, border1) and [border2, xsize) are near a border (the two
-  // overlap in a picture narrower than the kernel).
-  const size_t border1 = std::min(xsize, kHalf);
   const size_t border2 = xsize > kHalf ? xsize - kHalf : 0;
+  const size_t middle_begin = std::min(std::max(x0, kHalf), x1);
+  const size_t middle_end = std::max(middle_begin, std::min(x1, border2));
+  const auto border_pixel = [&](size_t x) {
+    size_t first, last;
+    const float scale = BorderScale(kernel, kHalf, x, xsize, &first, &last);
+    float sum = 0.0f;
+    for (size_t j = first; j <= last; ++j) sum += row[j] * kernel[j + kHalf - x];
+    dst[x - x0] = sum * scale;
+  };
   const auto pairs = std::make_index_sequence<kHalf>();
-  for (size_t y = y0; y < y1; ++y) {
-    const float* row = in.ConstRow(y);
-    float* row_out = out->Row(y);
-    const auto border_pixel = [&](size_t x) {
-      size_t first, last;
-      const float scale = BorderScale(kernel, kHalf, x, xsize, &first, &last);
-      float sum = 0.0f;
-      for (size_t j = first; j <= last; ++j) sum += row[j] * kernel[j + kHalf - x];
-      row_out[x] = sum * scale;
-    };
-    for (size_t x = 0; x < border1; ++x) border_pixel(x);
-    size_t x = kHalf;
-    for (; x + lanes <= border2; x += lanes) {
-      StoreU(ConvolveMiddle<kHalf>(d, row + x - kHalf, 1, sk, pairs), d, row_out + x);
+  size_t x = x0;
+  for (; x < middle_begin; ++x) border_pixel(x);
+  for (; x + lanes <= middle_end; x += lanes) {
+    StoreU(ConvolveMiddle<kHalf>(d, row + x - kHalf, 1, sk, pairs), d, dst + (x - x0));
+  }
+  for (; x < middle_end; ++x) dst[x - x0] = ConvolveMiddlePixel<kHalf>(row + x - kHalf, sk);
+  for (; x < x1; ++x) border_pixel(x);
+}
+
+// The vertical pass of row y of a strip, `width` columns (whole vectors),
+// from the strip's ring: 2 * (2 * kHalf + 1) rows `stride` apart, in which
+// rows r % kRows and r % kRows + kRows both hold row r's horizontal pass, so
+// that rows y - kHalf to y + kHalf lie one stride apart from row
+// (y - kHalf) % kRows on, as the plane's rows did.
+template <size_t kHalf>
+void ConvolveRingRow(const float* ring, size_t stride, size_t y, size_t ysize, const float* kernel, const float* sk,
+                     size_t width, float* row_out) {
+  constexpr size_t kRows = 2 * kHalf + 1;
+  const HWY_FULL(float) d;
+  const size_t lanes = Lanes(d);
+  if (y >= kHalf && y + kHalf < ysize) {
+    const float* first = ring + (y - kHalf) % kRows * stride;
+    const auto pairs = std::make_index_sequence<kHalf>();
+    for (size_t x = 0; x < width; x += lanes) {
+      Store(ConvolveMiddle<kHalf>(d, first + x, static_cast<ptrdiff_t>(stride), sk, pairs), d, row_out + x);
     }
-    for (; x < border2; ++x) row_out[x] = ConvolveMiddlePixel<kHalf>(row + x - kHalf, sk);
-    for (x = std::max(border1, border2); x < xsize; ++x) border_pixel(x);
-    std::fill(row_out + xsize, row_out + out->PixelsPerRow(), 0.0f);
+    return;
+  }
+  size_t first, last;
+  const auto scale = Set(d, BorderScale(kernel, kHalf, y, ysize, &first, &last));
+  for (size_t x = 0; x < width; x += lanes) {
+    auto sum = Zero(d);
+    for (size_t j = first; j <= last; ++j) {
+      sum = Add(sum, Mul(Load(d, ring + j % kRows * stride + x), Set(d, kernel[j + kHalf - y])));
+    }
+    Store(Mul(sum, scale), d, row_out + x);
   }
 }
 
-// Rows [y0, y1) of the vertical pass: the second transposed pass's work on
-// column y of the transposed plane, done on row y, a vector of columns at a
-// time (lanes past the last pixel land in the row padding).
+// Columns [x0, x1) of the blur, top to bottom, through `ring` (see
+// ConvolveRingRow). Row y is written once rows up to y + kHalf are in.
 template <size_t kHalf>
-void ConvolveRowsVertical(const ImageF& in, const float* kernel, const float* sk, size_t y0, size_t y1,
-                          ImageF* out) {
+void BlurStrip(const ImageF& in, const float* kernel, const float* sk, size_t x0, size_t x1, float* ring,
+               size_t stride, ImageF* out) {
+  constexpr size_t kRows = 2 * kHalf + 1;
   const HWY_FULL(float) d;
   const size_t lanes = Lanes(d);
   const size_t xsize = in.xsize();
   const size_t ysize = in.ysize();
-  const ptrdiff_t stride = static_cast<ptrdiff_t>(in.PixelsPerRow());
-  const auto pairs = std::make_index_sequence<kHalf>();
-  for (size_t y = y0; y < y1; ++y) {
-    float* row_out = out->Row(y);
-    if (y >= kHalf && y + kHalf < ysize) {
-      const float* first = in.ConstRow(y - kHalf);
-      for (size_t x = 0; x < xsize; x += lanes) {
-        Store(ConvolveMiddle<kHalf>(d, first + x, stride, sk, pairs), d, row_out + x);
-      }
-      continue;
+  // The vertical pass runs on whole vectors; the ring's columns past the
+  // picture's last are zeros, so that out's padding gets zeros as before.
+  const size_t width = (x1 - x0 + lanes - 1) / lanes * lanes;
+  size_t next_out = 0;
+  for (size_t r = 0; r < ysize; ++r) {
+    float* const slot = ring + r % kRows * stride;
+    ConvolveRowSegment<kHalf>(in.ConstRow(r), xsize, kernel, sk, x0, x1, slot);
+    std::fill(slot + (x1 - x0), slot + width, 0.0f);
+    std::copy(slot, slot + width, slot + kRows * stride);
+    for (; next_out + kHalf <= r; ++next_out) {
+      ConvolveRingRow<kHalf>(ring, stride, next_out, ysize, kernel, sk, width, out->Row(next_out) + x0);
     }
-    size_t first, last;
-    const auto scale = Set(d, BorderScale(kernel, kHalf, y, ysize, &first, &last));
-    for (size_t x = 0; x < xsize; x += lanes) {
-      auto sum = Zero(d);
-      for (size_t j = first; j <= last; ++j) {
-        sum = Add(sum, Mul(Load(d, in.ConstRow(j) + x), Set(d, kernel[j + kHalf - y])));
-      }
-      Store(Mul(sum, scale), d, row_out + x);
-    }
+  }
+  for (; next_out < ysize; ++next_out) {
+    ConvolveRingRow<kHalf>(ring, stride, next_out, ysize, kernel, sk, width, out->Row(next_out) + x0);
   }
 }
 
+// The strips are independent, so the pool's threads take them; a band of
+// strips uses the ring of its first.
 template <size_t kHalf>
-void SeparableBlurT(RowPool& pool, const ImageF& in, const float* kernel, const float* sk, ImageF* temp,
+void SeparableBlurT(RowPool& pool, const ImageF& in, const float* kernel, const float* sk, ImageF* rings,
                     ImageF* out) {
-  pool.run(in.ysize(), [&](size_t y0, size_t y1) { ConvolveRowsHorizontal<kHalf>(in, kernel, sk, y0, y1, temp); });
-  pool.run(in.ysize(), [&](size_t y0, size_t y1) { ConvolveRowsVertical<kHalf>(*temp, kernel, sk, y0, y1, out); });
+  const size_t xsize = in.xsize();
+  const size_t strips = (xsize + kBlurStripColumns - 1) / kBlurStripColumns;
+  pool.run(strips, [&](size_t s0, size_t s1) {
+    float* const ring = rings->Row(s0 * kBlurRingRows);
+    for (size_t s = s0; s < s1; ++s) {
+      const size_t x0 = s * kBlurStripColumns;
+      BlurStrip<kHalf>(in, kernel, sk, x0, std::min(xsize, x0 + kBlurStripColumns), ring, rings->PixelsPerRow(),
+                       out);
+    }
+  });
 }
 
-// `kernel` has 2 * half + 1 taps; `temp` has in's size, and out may be in.
-void SeparableBlur(RowPool& pool, const ImageF& in, const float* kernel, size_t half, ImageF* temp, ImageF* out) {
+// `kernel` has 2 * half + 1 taps; out is not in.
+void SeparableBlur(RowPool& pool, const ImageF& in, const float* kernel, size_t half, BlurTemp* temp, ImageF* out) {
+  ImageF* const rings = temp->rings(in.xsize());
   // libjxl's scale of the taps away from the borders: 1 / their sum.
   float weight_no_border = 0.0f;
   for (size_t j = 0; j < 2 * half + 1; ++j) weight_no_border += kernel[j];
@@ -1780,10 +1818,10 @@ void SeparableBlur(RowPool& pool, const ImageF& in, const float* kernel, size_t 
   float sk[17];  // the scaled kernel's centre and left half (half <= 16)
   for (size_t i = 0; i <= half; ++i) sk[i] = kernel[i] * scale_no_border;
   switch (half) {
-    case 3: SeparableBlurT<3>(pool, in, kernel, sk, temp, out); break;
-    case 6: SeparableBlurT<6>(pool, in, kernel, sk, temp, out); break;
-    case 7: SeparableBlurT<7>(pool, in, kernel, sk, temp, out); break;
-    case 16: SeparableBlurT<16>(pool, in, kernel, sk, temp, out); break;
+    case 3: SeparableBlurT<3>(pool, in, kernel, sk, rings, out); break;
+    case 6: SeparableBlurT<6>(pool, in, kernel, sk, rings, out); break;
+    case 7: SeparableBlurT<7>(pool, in, kernel, sk, rings, out); break;
+    case 16: SeparableBlurT<16>(pool, in, kernel, sk, rings, out); break;
     default: break;  // blur takes no other length
   }
 }
@@ -1856,7 +1894,7 @@ void combine_channels_to_diffmap(RowPool& pool, const ImageF& mask, const Image3
     HWY_DYNAMIC_DISPATCH(CombineChannelsToDiffmap)(pool, mask, block_diff_dc, block_diff_ac, xmul, result);
 }
 
-void separable_blur(RowPool& pool, const ImageF& in, const float* kernel, std::size_t half, ImageF* temp,
+void separable_blur(RowPool& pool, const ImageF& in, const float* kernel, std::size_t half, BlurTemp* temp,
                     ImageF* out) {
     HWY_DYNAMIC_DISPATCH(SeparableBlur)(pool, in, kernel, half, temp, out);
 }
