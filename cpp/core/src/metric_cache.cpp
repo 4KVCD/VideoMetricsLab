@@ -41,6 +41,7 @@
 #include "vml/python_text.h"
 #include "vml/result_json.h"
 #include "vml/score_identity.h"
+#include "vml/settings.h"
 #include "vml/sha256.h"
 #include "vml/vship.h"
 
@@ -1161,7 +1162,7 @@ std::optional<LoadedMetric> load_metric(const std::filesystem::path& directory, 
 }  // namespace cache_parts
 
 std::filesystem::path default_cache_dir() {
-    return platform::home_directory() / ".videometricslab" / "results_cache";
+    return app_data_folder() / "results_cache";
 }
 
 std::string recipe_hash(const std::filesystem::path& source, const std::filesystem::path& distorted,

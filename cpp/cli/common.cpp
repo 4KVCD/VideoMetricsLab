@@ -7,12 +7,60 @@
 #include <stdexcept>
 #include <system_error>
 
+#include "compare.h"
 #include "vml/export_csv.h"
 #include "vml/geometry.h"
+#include "vml/metric_cache.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
 
 namespace vml::cli {
+
+ChosenSettings choose_settings(const ProfileArguments& profile) {
+    ChosenSettings chosen;
+    if (profile.no_settings) {
+        chosen.settings = Settings::defaults();
+        chosen.from = "defaults";
+    } else if (profile.settings_file) {
+        const std::filesystem::path file = std::filesystem::absolute(python_path(*profile.settings_file));
+        try {
+            chosen.settings = Settings::load_checked(file);
+        } catch (const std::runtime_error& error) {
+            throw SettingsUnreadable(std::string("--settings: ") + error.what());
+        }
+        chosen.from = "file";
+        chosen.file = file;
+    } else {
+        chosen.settings = Settings::load();
+        std::error_code missing;
+        if (std::filesystem::is_regular_file(Settings::file(), missing)) {
+            chosen.file = Settings::file();
+        }
+    }
+    return chosen;
+}
+
+SavedScoresUse saved_scores_use(const ProfileArguments& profile, const Settings& settings) {
+    SavedScoresUse use;
+    use.folder = profile.cache_dir ? std::filesystem::absolute(python_path(*profile.cache_dir))
+                                   : settings.cache_dir_path().value_or(default_cache_dir());
+    use.read = !profile.no_cache;
+    use.save = !profile.no_cache && !profile.no_save;
+    return use;
+}
+
+nlohmann::ordered_json profile_json(const ChosenSettings& chosen, const SavedScoresUse& saved,
+                                    const std::vector<std::string>& from_settings) {
+    using Json = nlohmann::ordered_json;
+    const bool used = saved.read || saved.save;
+    return Json{{"settings", chosen.from},
+                {"settings_file", chosen.file ? Json(platform::path_text(*chosen.file)) : Json(nullptr)},
+                {"app_data_folder", platform::path_text(app_data_folder())},
+                {"options_from_settings", from_settings},
+                {"saved_scores", Json{{"folder", used ? Json(platform::path_text(saved.folder)) : Json(nullptr)},
+                                      {"read", saved.read},
+                                      {"save", saved.save}}}};
+}
 
 namespace {
 

@@ -131,7 +131,9 @@ def run_cases(out: Path, app: Path, names: list[str], seed_app: Path | None = No
                 data = Path(profile) / ".videometricslab"
                 data.mkdir()
                 (data / "settings.json").write_text(json.dumps(case["settings"]), encoding="utf-8")
-            environment = {**os.environ, "USERPROFILE": profile, "HOME": profile, **case.get("environment", {})}
+            # (VML_HOME empty: a profile named there would take the place of the home's)
+            environment = {**os.environ, "USERPROFILE": profile, "HOME": profile, "VML_HOME": "",
+                           **case.get("environment", {})}
             for number, seed in enumerate(case.get("seeds", ()), 1):
                 seed_videos = [str(clips / case["reference"]), *(str(clips / name)
                                                                  for name in seed.get("tests", case["tests"]))]

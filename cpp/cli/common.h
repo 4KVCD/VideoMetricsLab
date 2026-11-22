@@ -15,12 +15,51 @@
 
 #include <nlohmann/json.hpp>
 
+#include "arguments.h"
 #include "vml/platform/console.h"
 #include "vml/python_text.h"
 #include "vml/run_line.h"
+#include "vml/settings.h"
 #include "vml/video.h"
 
 namespace vml::cli {
+
+// The settings a command runs with, and where they came from: the profile's
+// settings.json (app_data_folder()), the file --settings names, or every
+// setting at its default (--no-settings).
+struct ChosenSettings {
+    Settings settings;
+    std::string from = "profile";  // "profile", "file" or "defaults"
+    std::optional<std::filesystem::path> file;  // the file read; none for the defaults or a profile with none
+};
+
+// The --settings file could not be read (exit_input): the message says why.
+class SettingsUnreadable : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
+// The settings `profile` asks for. Throws SettingsUnreadable for a --settings
+// file that is not there or not JSON. Only the profile's own are read as the
+// window reads them (Settings::load, which makes its folder).
+ChosenSettings choose_settings(const ProfileArguments& profile);
+
+// The saved scores' folder (or the saved bitrate's) and what the command may
+// do with it: --cache-dir, else the settings' folder, else the default; read
+// unless --no-cache (and, for scores, --recalculate or the settings' "use
+// saved results" off), saved unless --no-save or --no-cache.
+struct SavedScoresUse {
+    std::filesystem::path folder;
+    bool read = true;
+    bool save = true;
+};
+SavedScoresUse saved_scores_use(const ProfileArguments& profile, const Settings& settings);
+
+// The JSON's "profile" section: where the settings came from, the app's own
+// folder, the options left out that the settings filled in
+// (`from_settings`), and the saved scores' folder and use.
+nlohmann::ordered_json profile_json(const ChosenSettings& chosen, const SavedScoresUse& saved,
+                                    const std::vector<std::string>& from_settings);
 
 // A file's name, without its folder, as the reports show it.
 std::string name_of(const std::filesystem::path& path);

@@ -603,6 +603,11 @@ $run.videos[0].metrics.vmaf.score
 | `--notify` | Send a notification as the run ends, as **Settings > Notifications** in the app say: to the services on there, with its message, for the outcomes and run lengths it is on for (see [Notifications](#notifications)). Whether it was sent, or why not, is said on the progress lines (a problem with `-q` too); the exit code is the run's either way. On macOS and Linux it needs `curl`, which sends it. |
 | `-q`, `--quiet` | No progress, only the results. |
 | `-v`, `--verbose` | The app's log as well. |
+| `--settings FILE` | Read the settings from FILE (a `settings.json`, such as a copy of the app's, kept with a script) in place of the app's. Every option left out takes its value from it, as it would from the app's. It is never written; a FILE that is not there or is not JSON is an input not read (exit code 4). |
+| `--no-settings` | Take every setting at its default, as a new install has them, whatever the app's settings say: the same command gives the same run on any PC. |
+| `--cache-dir FOLDER` | Read and save the saved scores (and the black bars found) in FOLDER, in place of the folder Settings > Storage names. |
+| `--no-save` | Read the saved scores, but save nothing to them: no scores, black bars or records of remuxes or moved files. For a trial whose scores should not be kept. |
+| `--no-cache` | Neither read nor save the saved scores: every metric is calculated, and nothing is kept. Not with `--no-save` or `--cache-dir`. |
 
 `compare --help` lists the same with examples. The last column of each
 video's table says where a score was calculated: a metric asked for on the
@@ -614,6 +619,22 @@ notes). A Vship pass whose FFmpeg fails to give it the videos' frames is
 first made once more with the app's own Vship, with no note: only a second failure
 falls back. The app lists the fallbacks under **GPU fallbacks** in the
 tooltip of the video's name.
+
+Options left out take the app's settings, as the window last saved them,
+so a script that runs where someone also uses the app can get other
+metrics, another GPU or another Vship from one day to the next. To hold a
+run to settings of its own, give `--settings FILE` (a copy of
+`settings.json` kept with the script) or `--no-settings` (the defaults);
+`devices` takes them too. The JSON's `profile` says where the run's
+settings came from and which options left out they filled in (see [The
+results file](RESULTS_JSON.md)). These change the settings only: the saved
+scores, the GPU checks and the logs stay in the app's folder,
+`.videometricslab` in your home folder, unless `--cache-dir` or
+`--no-cache` says otherwise. To move all of it, set the environment
+variable `VML_HOME` to a folder: the app's own files (settings, saved
+results, logs, GPU checks) are kept there in place of `.videometricslab`, a
+profile of its own. The window takes `VML_HOME` too, so a window started
+with it set shows that profile's settings and saved results.
 
 Progress is written to the error stream and results to the output stream, so
 `--json -` can be piped. Piped or redirected, both are UTF-8 whatever the
@@ -704,6 +725,8 @@ YUV file has no bitrate to read.
 | `--difference` | With exactly two videos: the first's bitrate minus the second's as well, as the tab's **Difference** pairs them, from each stream's start. The table ends with the averages' difference (in Mb/s and %) and the mean, lowest and highest of the seconds both have (paired by number), the JSON gets a `difference` section, and with `--csv` it is written as `<first>_minus_<second>_bitrate_frames.csv` (each of the first's frames' size in bytes minus the second's frame of that number), `_bitrate_seconds.csv` and `_bitrate_gops.csv` (kb/s over time); a cell is empty where only one video has the frame or the time. |
 | `--json FILE` | Also write the results as JSON; `--json -` prints the JSON instead of the table. |
 | `-q`, `--quiet` | No progress, only the results. |
+| `--settings FILE`, `--no-settings` | The settings (FFmpeg's folder, the saved results' folder), as `compare` takes them. |
+| `--cache-dir FOLDER`, `--no-save`, `--no-cache` | Where the saved bitrate is, and whether it is read and saved, as `compare`'s saved scores. |
 
 The exit code is 0 when every video was read, 1 when a file could not be
 written, 2 for a wrong command (a raw stream that stores no frame rate,

@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "arguments.h"
+#include "common.h"
 #include "vml/cvvdp.h"
 #include "vml/options.h"
 #include "vml/platform/system.h"
@@ -30,8 +31,20 @@
 
 namespace vml::cli {
 
-// Runs the compare command; returns the exit code.
-int compare(const CompareArguments& arguments);
+// Runs the compare command with `chosen` settings; returns the exit code.
+// `gpu_from_settings`: the GPU scored on is the settings' (no --gpu, and
+// none named in the environment).
+int compare(const CompareArguments& arguments, const ChosenSettings& chosen, bool gpu_from_settings);
+
+// The options left out of the command that the settings fill in, as they are
+// written (--metrics, --vship...): whether or not the run uses them.
+std::vector<std::string> options_from_settings(const CompareArguments& arguments, bool gpu_from_settings);
+
+// --json: the error document (error_document) of a run that compared
+// nothing, as its results would be written (to standard output for "-"):
+// the --batch list or the --settings file not read. Nothing where the path
+// has a field that needs the videos, which name_paths refuses.
+void write_error_json(const CompareArguments& arguments, const std::string& error, const std::string& code);
 
 // The options the window's row would hold for these choices: the command's,
 // else the app's (Settings).

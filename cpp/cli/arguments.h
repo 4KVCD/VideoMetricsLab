@@ -27,8 +27,20 @@ inline constexpr int exit_gate_failed = 3;
 inline constexpr int exit_input = 4;
 inline constexpr int exit_cancelled = 130;
 
+// Which settings a command takes and where its saved scores are: options of
+// compare, bitrate and devices (the cache ones not of devices).
+struct ProfileArguments {
+    // --settings: the settings file read in place of the profile's, never written.
+    std::optional<std::string> settings_file;
+    bool no_settings = false;  // --no-settings: every setting at its default (Settings::defaults)
+    std::optional<std::string> cache_dir;  // --cache-dir: the saved scores' folder in place of the settings'
+    bool no_save = false;   // --no-save: saved scores read, nothing saved
+    bool no_cache = false;  // --no-cache: saved scores neither read nor saved
+};
+
 // The compare command's arguments.
 struct CompareArguments {
+    ProfileArguments profile;
     std::vector<std::string> command_line;  // every word given, for the results' record
     std::optional<std::string> reference;  // none with --batch
     std::vector<std::string> tests;  // files, or patterns such as encodes\*.mkv; none with --batch
@@ -114,6 +126,7 @@ struct CompareArguments {
 
 // The bitrate command's arguments.
 struct BitrateArguments {
+    ProfileArguments profile;
     std::vector<std::string> videos;  // files, or patterns such as encodes\*.mkv
     std::optional<double> fps;        // a raw stream's frame rate, in place of what it stores
     std::optional<std::string> csv;   // the folder for each video's CSV files
@@ -133,6 +146,11 @@ struct BdrateArguments {
     bool quiet = false;
 };
 
+// The devices command's arguments.
+struct DevicesArguments {
+    ProfileArguments profile;  // its settings only
+};
+
 enum class Command { none, compare, devices, bitrate, bdrate };
 
 struct Arguments {
@@ -140,6 +158,7 @@ struct Arguments {
     // Help or the version was asked for: print this and exit 0.
     std::optional<std::string> print_and_exit;
     CompareArguments compare;
+    DevicesArguments devices;
     BitrateArguments bitrate;
     BdrateArguments bdrate;
 };
