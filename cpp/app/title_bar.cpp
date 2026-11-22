@@ -126,17 +126,7 @@ TitleButtons::TitleButtons(QWidget* parent) : QWidget(parent) {
     theme_->setStyleSheet(QStringLiteral("QToolButton::menu-indicator { image: none; width: 0; }"));
     theme_menu_ = new QMenu(theme_);
     auto* choices = new QActionGroup(theme_menu_);
-    const std::pair<QString, QString> themes[] = {
-#ifdef __APPLE__
-        {app::tr("Same as macOS"), ""},
-#else
-        {app::tr("Same as Windows"), ""},
-#endif
-        {app::tr("Light"), "light"},
-        {app::tr("Dark"), "dark"},
-        {app::tr("Mocha"), "mocha"},
-    };
-    for (const auto& [name, value] : themes) {
+    for (const auto& [name, value] : theme::theme_choices()) {  // Settings > Appearance's
         QAction* action = theme_menu_->addAction(name);
         action->setCheckable(true);
         action->setData(value);
@@ -346,6 +336,13 @@ TitleBar::TitleBar(QMainWindow* window) : QWidget(window), window_(window) {
     minimize_->setAccessibleName(app::tr("Minimize"));
     connect(minimize_, &QAbstractButton::clicked, window_, &QWidget::showMinimized);
     maximize_ = new CaptionButton(maximize_glyph, false, this);
+    // A click on it with the pointer comes as the window's non-client
+    // messages (native_event: it is HTMAXBUTTON to Windows) and never reaches
+    // Qt as a click; this is for everything else that presses it: Narrator,
+    // Voice Access and other UI Automation clients (InvokePattern), which
+    // click it as they do Minimize and Close.
+    connect(maximize_, &QAbstractButton::clicked, window_,
+            [this] { window_->isMaximized() ? window_->showNormal() : window_->showMaximized(); });
     close_ = new CaptionButton(close_glyph, true, this);
     close_->setToolTip(app::tr("Close"));
     close_->setAccessibleName(app::tr("Close"));
