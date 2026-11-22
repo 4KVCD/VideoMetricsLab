@@ -340,7 +340,7 @@ TEST(WeakFrames, PresetsAreProfilesTheAppCanUse) {
 // The window's helpers: a frame's score (a per-frame metric only at its
 // own frames, a per-second one over its second), the run's last frame
 // (the count compared, though the last sample is earlier), and the
-// condition the Weak segments dialog starts from.
+// condition the Worst Frames tab starts from.
 TEST(WeakFrames, ScoreAtLastFrameAndDefaultCondition) {
     const FrameMetricResult vmaf = frame_metric("vmaf", every(2, 8), 90.0F, {{4, NAN}});
     const ScoreSamples frames = samples_of(vmaf);

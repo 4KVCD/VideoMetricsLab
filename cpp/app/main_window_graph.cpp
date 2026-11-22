@@ -1,6 +1,7 @@
 // The window's side of Metric Graphs (the Python app's _sync_graph,
 // _open_or_update_graph): the rows' results on the graph.
 #include "main_window.h"
+#include "worst_frames_tab.h"
 
 #include <QTabWidget>
 
@@ -25,6 +26,8 @@ void MainWindow::on_tab_changed(int index) {
     // The tab just opened, brought up to date.
     if (index == tab_graph) {
         sync_graph();
+    } else if (index == tab_worst_frames) {
+        sync_worst_frames();
     } else if (index == tab_frame_compare) {
         sync_frame_compare();
     } else if (index == tab_saved_results) {
@@ -40,6 +43,27 @@ void MainWindow::on_tab_changed(int index) {
     if (index == tab_graph || index == tab_bitrate) {
         frame_compare_panel_->prepare_playback();
     }
+}
+
+void MainWindow::sync_worst_frames() {
+    // The graph's lines, every row's result among them (sync_graph), as
+    // the tab's videos, and the frames highlighted there.
+    sync_graph();
+    std::vector<WeakFramesVideo> videos;
+    for (const GraphPanel::Run& run : graph_panel_->runs()) {
+        videos.push_back({run.identity, run.label, run.result});
+    }
+    worst_tab_->set_videos(std::move(videos));
+    worst_tab_->set_range(graph_panel_->highlighted_frames());
+}
+
+void MainWindow::open_worst_frames(const std::string& key) {
+    if (tabs_->currentIndex() == tab_worst_frames) {
+        sync_worst_frames();
+    } else {
+        tabs_->setCurrentIndex(tab_worst_frames);  // on_tab_changed: sync_worst_frames
+    }
+    worst_tab_->show_video({}, key, graph_panel_->highlighted_frames());
 }
 
 void MainWindow::sync_graph() {

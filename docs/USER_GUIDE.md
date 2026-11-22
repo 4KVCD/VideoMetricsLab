@@ -72,37 +72,48 @@ calculated in resolution tests.
    **Clear range** goes back to the whole videos. The CSV export always holds
    every frame. **Go to time** moves to the frame shown at a time, as **Go to
    frame** does to a frame.
-   **Worst frames** lists, for one video, the worst frame of each of the
-   shown metric's 10, 25 or 50 worst dips (a frame within 1 s of a worse
-   one is part of its dip), with every metric's score there, within the
-   highlighted range if there is one. Click a row to mark its frame on the
-   graph; double-click it, or **Open in Video Compare**, to see it there.
-   **Weak segments...** lists the stretches where the video's scores fall
-   past thresholds you set (any or every condition, the shortest segment,
-   the gap to join across) and exports them as JSON or CSV, named after the
-   metrics they cover (`<video>.vmaf.segments.json`,
-   `<video>.vmaf+ssimulacra2.segments.csv`). It opens with the weak segment
-   profile in use (see [Weak segment profiles](#weak-segment-profiles)): its
-   conditions on the metrics the video has (else one on the metric shown);
-   **Profile** picks another to start from, and **From preset...** loads
-   one of the built-in presets for a kind of video (animation, grainy film,
-   HDR...; see the table under
+   **Worst frames** opens the Worst Frames tab on the metric shown, with the
+   highlighted range if there is one (step 6).
+6. Find a video's weak spots in **Worst Frames**. On the left, every video
+   with its number of weak segments and its worst score on the metric shown,
+   so the weakest encode stands out; click one to work on it. Under the
+   videos, the conditions that make a frame weak (thresholds you set, any or
+   every condition, the shortest segment, the gap to join across), with each
+   condition's line under them: how many frames it holds on and how many of
+   them are in the segments, with why any are not (a run shorter than the
+   shortest segment, or, with every condition, a frame where another doesn't
+   hold). On the right, pick the metric in the bar at the top. The graph
+   shows the video's scores with its weak segments shaded and its worst
+   frames dotted. Below it, side by side where the window has room and one
+   above the other where it hasn't:
+   - **Worst frames**: the worst frame of each of the metric's 10, 25 or 50
+     worst dips (a frame within 1 s of a worse one is part of its dip), with
+     the conditions' metrics' scores there; every metric's is in the row's
+     tooltip.
+   - **Weak segments**: the stretches where the conditions hold; with more
+     than one condition and **any condition holds**, the **Weak by** column
+     names those behind each segment.
+
+   Click a row to mark it on the graph; double-click it, or **Open in Video
+   Compare**, to see it there (a segment from its first frame). Only frames
+   in Metric Graphs' highlighted range count, if there is one.
+   The conditions start from the weak segment profile in use (see [Weak
+   segment profiles](#weak-segment-profiles)): its conditions on the metrics
+   the video has (else one on the metric shown). **Profile** picks another
+   to start from, and **From preset** loads one of the built-in presets for
+   a kind of video (animation, grainy film, HDR...; see the table under
    [Weak segment profiles](#weak-segment-profiles)) in place of the
    conditions shown, so you can try another on the fly; a preset with no
-   condition on the video's metrics (HDR without CVVDP scores) is greyed out.
-   What you change or load in the dialog holds for it alone, until **Save to
-   profile** keeps it in the profile picked, or **Save as new profile...** in
-   a new one; a profile's condition on a metric the video doesn't have is
-   kept for videos that do (a preset's, once you've loaded one).
-   **Export all videos...** saves every scored test video's segments by the
-   dialog's conditions in one file (see
+   condition on the video's metrics (HDR without CVVDP scores) is greyed
+   out. What you change or load here holds until **Save to profile** keeps
+   it in the profile picked, or **Save as new profile** in a new one; a
+   profile's condition on a metric the video doesn't have is kept for videos
+   that do (a preset's, once you've loaded one).
+   **Export** saves the video's segments as JSON or CSV, named after the
+   metrics they cover (`<video>.vmaf.segments.json`,
+   `<video>.vmaf+ssimulacra2.segments.csv`), or every scored test video's
+   in one file (**Export all videos**; see
    [Exporting weak segments](#exporting-weak-segments)).
-   Under the summary, each condition's line says how many frames it holds on
-   and how many of them are in the segments listed, with why any are not
-   (a run shorter than the shortest segment, or, with every condition, a
-   frame where another doesn't hold); with more than one condition and
-   **any condition holds**, the **Weak by** column names those behind each
-   segment.
 
 **Highlight best/worst results**, under the video table, colours each metric's
 best score green and its worst red among the test videos that have one; a
@@ -424,7 +435,7 @@ optional. Use still mode for frame inspection or playback mode for motion.
 - Use the frame/timestamp controls to select a position.
 - **Zoom** shows the frame fitted to the window, or at a size you choose or type in:
   100% is the video's own pixels. Drag a zoomed frame to move it.
-- Opened from Metric Graphs' **Worst frames** list, **Previous worst** and
+- Opened from the Worst Frames tab's **Worst frames** list, **Previous worst** and
   **Next worst** step through that list's frames while its video is shown.
 - **Loop** plays the seconds around the frame you went to (**before** and
   **after** it, 1 s each unless changed) again and again; Play starts them
@@ -954,16 +965,16 @@ which the rules below it edit; **New...** starts a profile from the one
 shown, **Rename...** and **Delete** work on the one in use (**Default**, the
 rules kept before there were profiles, has neither). A profile's name can't
 contain a comma, which separates `--segments`' parts on the command line. The profile in use is
-where Metric Graphs' **Weak segments...** starts, and what the weak segments
+where the Worst Frames tab's conditions start, and what the weak segments
 report, the exports after each run and the command line's `--segments saved`
 follow; `--segments profile:NAME` takes another.
 
 **From preset...** loads a starting point for a kind of video into the
 profile in use, replacing its rules, to adjust as needed; it adds no
 profile. To keep the rules shown as well, make a profile with **New...**
-first, then load the preset into it. Metric Graphs' **Weak segments...**
-has **From preset...** too, which loads a preset into that dialog's
-conditions only, to save from there if you keep it. (The command line takes
+first, then load the preset into it. The Worst Frames tab has **From
+preset** too, which loads a preset into its conditions only, to save from
+there if you keep it. (The command line takes
 a preset as `--segments preset:KEY`.) Any condition makes a frame weak:
 
 | Preset (`KEY`) | Conditions | Shortest segment | Join gap | For |
@@ -981,17 +992,17 @@ The thresholds are starting points on each metric's scale: VMAF's 0-100
 
 ### Exporting weak segments
 
-The weak segments exports follow the profile in use (or, from the Weak
-segments dialog, the dialog's rules), and are named after the metrics their
-conditions cover. A condition on a metric a video was not scored with is
-left out for that video, as in the dialog and on the command line, also
+The weak segments exports follow the profile in use (or, from the Worst
+frames tab, the conditions shown there), and are named after the metrics
+their conditions cover. A condition on a metric a video was not scored with
+is left out for that video, as in the tab and on the command line, also
 when every condition must hold; the JSON lists it under `left_out`.
 
 - With **Weak segments** ticked in **Settings > Storage > Exports
   include**, **Export all videos'...** in the right-click menus saves every
   test video scored against the reference, by the profile in use, in one
-  report, as JSON and CSV. **Export all videos...** in the Weak segments
-  dialog saves it by the dialog's conditions, saved or not (over the whole
+  report, as JSON and CSV. **Export all videos** in the Worst Frames tab's
+  **Export** menu saves it by the conditions shown there, saved or not (over the whole
   videos, without a highlighted range), in one file, JSON or CSV as its name
   says.
   The JSON gives the conditions and options, then each video's `name`,

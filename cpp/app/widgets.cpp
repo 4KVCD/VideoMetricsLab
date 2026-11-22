@@ -352,6 +352,11 @@ void ElidedLabel::clear_text() {
 
 QSize ElidedLabel::minimumSizeHint() const { return {0, QLabel::minimumSizeHint().height()}; }
 
+void ElidedLabel::set_elide_mode(Qt::TextElideMode mode) {
+    mode_ = mode;
+    fit();
+}
+
 void ElidedLabel::resizeEvent(QResizeEvent* event) {
     QLabel::resizeEvent(event);
     fit();
@@ -367,7 +372,7 @@ void ElidedLabel::fit() {
     // Not cut until shown and laid out: before that the width is a
     // placeholder, not the room the line will have.
     const QString shown =
-        !isVisible() || width <= 0 ? full_ : fontMetrics().elidedText(full_, Qt::ElideRight, width);
+        !isVisible() || width <= 0 ? full_ : fontMetrics().elidedText(full_, mode_, width);
     QLabel::setText(shown);
     const bool cut = shown != full_;
     setToolTip(cut ? full_ + (tooltip_.isEmpty() ? QString() : "\n\n" + tooltip_) : tooltip_);
@@ -838,6 +843,17 @@ bool WheelPastValueBoxes::eventFilter(QObject* watched, QEvent* event) {
 
 // A plain line of a tooltip longer than this many characters is wrapped.
 constexpr int tool_tip_line = 70;
+
+void fit_table_height(QTableWidget* table, int rows) {
+    // The header's hint, not its height: before the table is first shown its
+    // header has not been laid out yet.
+    const QHeaderView* header = table->horizontalHeader();
+    int height = (header->isHidden() ? 0 : header->sizeHint().height()) + 2 * table->frameWidth();
+    for (int row = 0; row < std::min(rows, table->rowCount()); ++row) {
+        height += table->rowHeight(row);
+    }
+    table->setFixedHeight(height);
+}
 
 QString wrapped_tool_tip(const QString& text) {
     if (text.size() <= tool_tip_line || Qt::mightBeRichText(text)) {

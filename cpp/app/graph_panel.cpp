@@ -13,7 +13,6 @@
 #include <QPixmap>
 #include <QPushButton>
 #include <QScrollBar>
-#include <QSplitter>
 #include <QTabBar>
 #include <QTableWidget>
 #include <QTableWidgetItem>
@@ -36,7 +35,6 @@
 #include "theme.h"
 #include "widgets.h"
 #include "window_helpers.h"
-#include "worst_frames_panel.h"
 #include "vml/difference.h"
 #include "vml/export_csv.h"
 #include "vml/film_grain_scoring.h"
@@ -1253,29 +1251,13 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
         tabs_->addTab(new QWidget, qt_text(all[i].label));  // built when first shown
     }
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
-    // Worst frames beside the pages, hidden until its button shows it; the
-    // divider between them can be dragged.
-    auto* middle = new QSplitter(Qt::Horizontal);
-    middle->setChildrenCollapsible(false);
     // VML Modern: the metrics' pills, the chart and its readout one card,
     // as the stats are; Classic: the tabs as they were (theme::container).
     QBoxLayout* graph_layout = nullptr;
     QWidget* graph_card = theme::container("card", false, &graph_layout);
     graph_card->setObjectName("graphCard");
     graph_layout->addWidget(tabs_);
-    middle->addWidget(graph_card);
-    worst_panel_ = new WorstFramesPanel;
-    worst_panel_->hide();
-    connect(worst_panel_, &WorstFramesPanel::frame_clicked, this, [this](int frame) { on_frame_requested(frame); });
-    connect(worst_panel_, &WorstFramesPanel::open_requested, this, [this](const std::string& identity, int frame) {
-        emit video_compare_requested(identity, frame, worst_panel_->shown_list());
-    });
-    connect(worst_panel_, &WorstFramesPanel::count_changed, this, [this](int count) { emit worst_count_changed(count); });
-    connect(worst_panel_, &WorstFramesPanel::segments_requested, this, [this] { open_weak_segments(); });
-    middle->addWidget(worst_panel_);
-    middle->setStretchFactor(0, 3);
-    middle->setStretchFactor(1, 1);
-    root->addWidget(middle, 1);
+    root->addWidget(graph_card, 1);
     root->addWidget(build_action_bar());
 
     // Exports finish later: said here, not in a dialog taking the focus.
@@ -1425,63 +1407,13 @@ QWidget* GraphPanel::build_action_bar() {
     layout->addWidget(difference_box_);
     layout->addSpacing(16);
     worst_button_ = new QPushButton(app::tr("Worst frames"));
-    worst_button_->setCheckable(true);
-    worst_button_->setToolTip(app::tr("Lists the worst frame of each of the worst dips of the metric shown, to look "
-                                      "at in Video Compare, and the stretches where scores fall past a threshold, "
-                                      "to export."));
-    connect(worst_button_, &QPushButton::toggled, this, [this](bool on) {
-        worst_panel_->setVisible(on);
-        refresh_worst_frames();
-    });
+    worst_button_->setToolTip(app::tr("Opens the Worst Frames tab on the metric shown: the worst frame of each of "
+                                      "its worst dips, and the stretches where scores fall past a threshold."));
+    connect(worst_button_, &QPushButton::clicked, this,
+            [this] { emit worst_frames_requested(QString::fromLatin1(current_metric().key)); });
     layout->addWidget(worst_button_);
     layout->addStretch(1);
     return bar;
-}
-
-void GraphPanel::set_worst_count(int count) { worst_panel_->set_count(count); }
-
-void GraphPanel::refresh_worst_frames() {
-    if (worst_panel_->isHidden()) {
-        return;  // brought up to date when shown
-    }
-    const MetricDefinition& metric = current_metric();
-    std::vector<WeakFramesVideo> videos;
-    for (const auto& [id, entry] : entries_) {  // in the table's order
-        if (entry.visible && score_samples(entry.result->metric_results, std::string(metric.key))) {
-            videos.push_back({entry.identity, entry.label, entry.result});
-        }
-    }
-    worst_panel_->set_view(metric, std::move(videos), selected_frames());
-}
-
-void GraphPanel::set_segment_profiles(std::vector<SegmentProfile> profiles, std::string in_use) {
-    segment_profiles_ = std::move(profiles);
-    segment_profile_ = std::move(in_use);
-    // The dialog is not modal: Settings can change them while it is open.
-    for (WeakSegmentsDialog* dialog : findChildren<WeakSegmentsDialog*>()) {
-        dialog->set_profiles(segment_profiles_, segment_profile_);
-    }
-}
-
-void GraphPanel::open_weak_segments() {
-    // The video Worst frames shows, on its metric, within the range.
-    const WeakFramesVideo* video = worst_panel_->chosen_video();
-    if (video == nullptr) {
-        return;
-    }
-    auto* dialog = new WeakSegmentsDialog(*video, current_metric(), selected_frames(), segment_profiles_,
-                                          segment_profile_, dialogs, this);
-    dialog->setAttribute(Qt::WA_DeleteOnClose);
-    // Save as default: kept for the next time, here and in Settings.
-    connect(dialog, &WeakSegmentsDialog::rules_saved, this,
-            [this](const std::string& profile, const SegmentRules& rules) {
-                emit weak_segment_rules_saved(profile, rules);  // the window hands the profiles back
-            });
-    connect(dialog, &WeakSegmentsDialog::report_requested, this,
-            [this](const SegmentRules& rules) { emit segments_report_requested(rules); });
-    connect(dialog, &WeakSegmentsDialog::open_requested, this,
-            [this](const std::string& identity, int frame) { emit video_compare_requested(identity, frame, {}); });
-    dialog->show();
 }
 
 void GraphPanel::on_frame_requested(int frame) {
@@ -2066,9 +1998,6 @@ void GraphPanel::refresh_stats_table() {
     }
     populating_stats_ = false;
     cap_panel_heights();
-    // Every change the table follows (lines, the page, the range) changes
-    // what Worst frames lists.
-    refresh_worst_frames();
 }
 
 // -------------------------------------------------------------- exports
