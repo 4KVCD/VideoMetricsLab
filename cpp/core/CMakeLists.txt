@@ -11,8 +11,6 @@ add_library(vml_core
     src/bitrate_store.cpp
     src/black_bars_rule.cpp
     src/build_info.cpp
-    src/butteraugli.cpp
-    src/butteraugli_kernels.cpp
     src/cancel.cpp
     src/colour.cpp
     src/cpu_pair_scorer.cpp
@@ -44,7 +42,6 @@ add_library(vml_core
     src/host_frames.cpp
     src/isolated.cpp
     src/job_runner.cpp
-    src/jxl_linear.cpp
     src/libvmaf.cpp
     src/libvmaf_cpu.cpp
     src/metric_cache.cpp
@@ -80,8 +77,6 @@ add_library(vml_core
     src/size_changes.cpp
     src/soundtrack_clock.cpp
     src/splot_library.cpp
-    src/ssimulacra2.cpp
-    src/ssimulacra2_kernels.cpp
     src/stats.cpp
     src/temp_files.cpp
     src/time_format.cpp
@@ -100,6 +95,57 @@ target_include_directories(vml_core PUBLIC include)
 # The engines' vector code includes itself once per instruction set through
 # Highway's foreach_target.h, by its name alone (HWY_TARGET_INCLUDE).
 target_include_directories(vml_core PRIVATE src)
+
+# The SSIMULACRA2 and Butteraugli engines. MSVC has no per-function target
+# attributes, so the AVX2 code Highway compiles in a file built without
+# /arch:AVX2 comes out slow; clang-cl compiles it as AVX2 code (4K frame, one
+# thread, Core Ultra 9 285K: SSIMULACRA2 376.8 -> 266.9 ms, Butteraugli
+# 919.9 -> 707.2 ms). Its objects link with MSVC's, and its scores are
+# bit-identical to MSVC's: no fused multiply-adds the source does not ask
+# for (-ffp-contract=off), and the same instruction sets as MSVC's build
+# (AVX2 and SSE2: MSVC's Highway compiles no AVX-512, SSE4 or SSSE3 code).
+# Without clang-cl (LLVM's installer, or Visual Studio's "C++ Clang tools"),
+# MSVC compiles them: same scores, slower.
+set(vml_engine_sources
+    src/butteraugli.cpp src/butteraugli_kernels.cpp src/jxl_linear.cpp src/ssimulacra2.cpp
+    src/ssimulacra2_kernels.cpp)
+if(MSVC AND NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    find_program(VML_CLANG_CL clang-cl
+        HINTS "$ENV{ProgramFiles}/LLVM/bin" "$ENV{LOCALAPPDATA}/Programs/LLVM/bin"
+        DOC "clang-cl, for the SSIMULACRA2 and Butteraugli engines' vector code (core/CMakeLists.txt)")
+endif()
+if(VML_CLANG_CL)
+    # Files compiled one at a time by custom commands otherwise (CMake 3.27+).
+    if(POLICY CMP0147)
+        cmake_policy(SET CMP0147 NEW)
+    endif()
+    cmake_path(SET vml_hwy_dir NORMALIZE "${PROJECT_SOURCE_DIR}/third_party/highway")
+    foreach(source IN LISTS vml_engine_sources)
+        cmake_path(GET source STEM name)
+        set(object ${CMAKE_CURRENT_BINARY_DIR}/clang/$<CONFIG>/${name}.obj)
+        set(depfile ${CMAKE_CURRENT_BINARY_DIR}/clang/$<CONFIG>/${name}.d)
+        add_custom_command(OUTPUT ${object}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/clang/$<CONFIG>
+            COMMAND ${VML_CLANG_CL} /nologo /c /std:c++20 /EHsc /permissive- /utf-8 /W4 /WX
+                /clang:-ffp-contract=off
+                "/DHWY_DISABLED_TARGETS=(HWY_AVX3|(HWY_AVX3-1)|HWY_SSE4|HWY_SSSE3)"
+                /I ${CMAKE_CURRENT_SOURCE_DIR}/include /I ${CMAKE_CURRENT_SOURCE_DIR}/src /imsvc ${vml_hwy_dir}
+                "$<IF:$<CONFIG:Debug>,/MDd;/Od;/Z7,/MD;/O2;/DNDEBUG>"
+                /clang:-MD /clang:-MF${depfile} /Fo${object} ${CMAKE_CURRENT_SOURCE_DIR}/${source}
+            MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/${source}
+            DEPFILE ${depfile}
+            COMMENT "clang-cl ${source}"
+            COMMAND_EXPAND_LISTS VERBATIM)
+        target_sources(vml_core PRIVATE ${object})
+    endforeach()
+else()
+    if(MSVC AND NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        message(WARNING "clang-cl not found: MSVC compiles the SSIMULACRA2 and Butteraugli engines, with the "
+            "same scores but slower (core/CMakeLists.txt). Install LLVM (winget install LLVM.LLVM) and "
+            "delete CMakeCache.txt, or set VML_CLANG_CL.")
+    endif()
+    target_sources(vml_core PRIVATE ${vml_engine_sources})
+endif()
 # The app's version, for every part of it: shown, compared by the update
 # check with GitHub's latest release, and written into what the app saves
 # (vml/build_info.h).

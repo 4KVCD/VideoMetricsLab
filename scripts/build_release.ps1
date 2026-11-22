@@ -115,6 +115,14 @@ try {
     if (-not $qtFolder -or $qtFolder -like '*-NOTFOUND') {
         throw 'CMake did not find Qt 6 (6.5 or newer, with Concurrent, Network and Widgets), so the window cannot be built: name its folder with -QtPath'
     }
+    # Without clang-cl, MSVC compiles the SSIMULACRA2 and Butteraugli engines:
+    # the same scores, but slower (cpp/core/CMakeLists.txt). A release ships
+    # the fast build.
+    $clang = Select-String -Path (Join-Path $buildFolder 'CMakeCache.txt') -Pattern '^VML_CLANG_CL:[A-Z]+=(.+)$' |
+        ForEach-Object { $_.Matches[0].Groups[1].Value } | Select-Object -First 1
+    if (-not $clang -or $clang -like '*-NOTFOUND' -or $clang -eq 'OFF') {
+        throw 'CMake did not find clang-cl, which compiles the SSIMULACRA2 and Butteraugli engines of a release: install LLVM (winget install LLVM.LLVM), delete VML_CLANG_CL from build/windows/CMakeCache.txt, and run this again'
+    }
     Invoke-Program 'Building' { cmake --build --preset windows-release --target VideoMetricsLab vml-cli }
 } finally {
     Pop-Location
