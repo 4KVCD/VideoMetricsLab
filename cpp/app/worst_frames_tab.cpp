@@ -8,6 +8,7 @@
 #include <QMenu>
 #include <QPushButton>
 #include <QEvent>
+#include <QScopeGuard>
 #include <QScrollBar>
 #include <QSizePolicy>
 #include <QSplitter>
@@ -714,7 +715,6 @@ void WorstFramesTab::refresh() {
     refresh_videos_table();
     refresh_chart();
     open_button_->setEnabled(false);
-    arrange_lists();
 }
 
 void WorstFramesTab::refresh_videos_table() {
@@ -723,10 +723,15 @@ void WorstFramesTab::refresh_videos_table() {
     const SegmentRules current = rules();
     std::vector<FrameInterval> ranges = current.ranges;
     const QSignalBlocker blocker(videos_table_);
+    const WeakFramesVideo* chosen = chosen_video();
     for (std::size_t i = 0; i < videos_.size(); ++i) {
         const WeakFramesVideo& video = videos_[i];
         const int row = static_cast<int>(i);
-        const std::size_t count = editor_ != nullptr ? weak_segments(*video.result, current).size() : 0;
+        // The chosen video's are segments_, found by refresh with these rules
+        // a moment ago: not found again (about 3.5 ms for a two-hour film).
+        const std::size_t count = editor_ == nullptr  ? 0
+                                  : &video == chosen ? segments_.size()
+                                                     : weak_segments(*video.result, current).size();
         videos_table_->setItem(row, 1, cell(QString::number(count)));
         QString worst;
         if (metric_ != nullptr) {
@@ -795,6 +800,8 @@ void WorstFramesTab::refresh_chart() {
 }
 
 void WorstFramesTab::fill_worst() {
+    // Its columns fitted to what it shows, on every way out, emptied too.
+    const auto fitted = qScopeGuard([this] { fit_list(worst_table_, worst_width_); });
     worst_table_->clearContents();
     worst_table_->setRowCount(0);
     worst_.clear();
@@ -933,6 +940,7 @@ void WorstFramesTab::fill_segments() {
             segments_table_->setItem(r, column++, cell(qt_text(definition.format_value(metric.mean))));
         }
     }
+    fit_list(segments_table_, segments_width_);
 }
 
 void WorstFramesTab::show_condition_counts() {
@@ -1093,18 +1101,21 @@ void WorstFramesTab::arrange_lists() {
     if (lists_layout_ == nullptr || work_ == nullptr) {
         return;
     }
-    // The columns fitted to what they show now (a header resizes them only
-    // when it is next laid out).
-    for (QTableWidget* table : {worst_table_, segments_table_}) {
-        table->horizontalHeader()->resizeSections(QHeaderView::ResizeToContents);
-    }
     const int room = work_->width();
     const int padding = 60;  // two cards' margins and the gap between them
-    const int needed = natural_width(worst_table_) + natural_width(segments_table_) + padding;
+    const int needed = worst_width_ + segments_width_ + padding;
     const QBoxLayout::Direction direction = needed <= room ? QBoxLayout::LeftToRight : QBoxLayout::TopToBottom;
     if (lists_layout_->direction() != direction) {
         lists_layout_->setDirection(direction);
     }
+}
+
+void WorstFramesTab::fit_list(QTableWidget* table, int& width) {
+    // Measuring every cell: 27 ms for a 1000-row list (the segments listed at
+    // most) on a Core Ultra 9 285K, so not on every resize (#180).
+    table->horizontalHeader()->resizeSections(QHeaderView::ResizeToContents);
+    width = natural_width(table);
+    arrange_lists();
 }
 
 bool WorstFramesTab::eventFilter(QObject* watched, QEvent* event) {

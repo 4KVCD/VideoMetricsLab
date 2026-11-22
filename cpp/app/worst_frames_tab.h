@@ -143,8 +143,13 @@ private:
     enum class ExportKind { json, csv };
     void export_segments(ExportKind kind);
     // The lists side by side where both fit at their natural widths, else
-    // one above the other.
+    // one above the other. Only compares the widths kept by fit_list with
+    // the room: called on every resize of the work area.
     void arrange_lists();
+    // `table`'s columns fitted to what it shows now, its natural width kept
+    // in `width`, then arrange_lists: where its contents change (fill_worst,
+    // fill_segments), not on a resize, which leaves them as they are.
+    void fit_list(QTableWidget* table, int& width);
     // The videos list as tall as its rows, up to five: most score one to
     // three videos at a time.
     void fit_videos_height();
@@ -191,6 +196,8 @@ private:
     QSplitter* split_ = nullptr;
     ChartWidget* chart_ = nullptr;
     QBoxLayout* lists_layout_ = nullptr;
+    int worst_width_ = 0;     // the Worst frames table's natural width (fit_list)
+    int segments_width_ = 0;  // the Weak segments table's
     QWidget* worst_card_ = nullptr;
     QWidget* segments_card_ = nullptr;
     QComboBox* count_combo_ = nullptr;
