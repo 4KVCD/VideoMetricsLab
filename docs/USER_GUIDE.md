@@ -49,14 +49,18 @@ calculated in resolution tests.
 4. Choose **Calculate metrics**. Optional two-job parallelism can help on large
    CPUs, but increases resource use and is not always faster.
 5. Inspect per-frame curves in **Metric Graphs**. Click a metric's mean column
-   to show its detailed statistics. **Export graph as PNG** saves the graph
-   shown; right-click the statistics to export the videos' results, per-frame
-   scores and more (see [Exporting from the right-click
-   menus](#exporting-from-the-right-click-menus)).
+   to show its detailed statistics. **Export**, at the right end of the
+   bar under the graph, saves all the videos' results, per-frame scores and
+   more (see [Exporting from the right-click
+   menus](#exporting-from-the-right-click-menus)), and what the page shows:
+   **Graph as PNG...**, **Statistics as CSV...** or **as JSON...** (the
+   table as shown, the frame range's when one is highlighted). Right-click
+   the statistics for the same, with a row's video's export too, or the
+   graph for **Graph as PNG...**.
    With two videos shown, **Difference** draws the first minus the second,
    frame by frame, in a band under the graph with its own scale. With it on,
-   the statistics' right-click menu offers **Export the difference as
-   CSV...**: every metric's difference, as `<first>_minus_<second>.csv` (the
+   **Export** and the right-click menus offer **Difference as CSV...**:
+   every metric's difference, as `<first>_minus_<second>.csv` (the
    videos' labels), in the per-frame scores' columns: a cell is blank where
    either video lacks the frame or the metric.
    To look at one part of the videos (a scene you re-encoded, say), enter its
@@ -482,9 +486,10 @@ With two videos shown, **Difference** draws the first minus the second in a
 band under the graph with its own scale: frame by frame in the frame view, and
 at each moment in the second and GOP views (where two encodes' GOPs differ,
 each moment's GOP bitrate is subtracted).
-Under the graph, **Export graph as PNG**, **Go to frame** and **Go to time**,
-and the range from frame or from time, work as on Metric Graphs: the table
-then gives the range's figures. A time is the first video shown's, from its
+Under the graph, **Go to frame** and **Go to time**, and the range from
+frame or from time, work as on Metric Graphs: the table then gives the
+range's figures. **Export**, at the bar's right end, or a right-click on the
+graph, saves it: **Graph as PNG...**. A time is the first video shown's, from its
 start when **Adjust stream start time to zero** is ticked.
 The command line's `bitrate` command (below) reads the same numbers.
 Each file's reading is saved with the saved results and is not read again:
@@ -506,8 +511,9 @@ median for each value of a column of the anchor's CSV files, such as
 `class`. Click a sequence to draw its rate curves for the metric chosen:
 bitrate on a log scale, a dot per encode, and the scores both curves cover
 shaded, the range the BD-rate averages over. **Copy as markdown** copies the
-table as the command line prints it; **Export CSV…** saves every number in
-full. The numbers are the command line's `bdrate`.
+table as the command line prints it; **Export > Table as CSV...**, or a
+right-click on the table, saves every number in full, named after the two
+encoders. The numbers are the command line's `bdrate`.
 
 ## Command line
 
@@ -903,7 +909,7 @@ tab.
 
 **Export > Graphs as ZIP...** in the Videos box saves the graphs of the
 test videos scored against the reference (the selected ones, or all) as one
-`.zip` file of PNG images, drawn as Metric Graphs' and the Bitrate Viewer's **Export graph as PNG** draw
+`.zip` file of PNG images, drawn as Metric Graphs' and the Bitrate Viewer's **Graph as PNG...** draw
 them:
 
 - each test video's graph of every metric it has: `<video> - <metric>.png`;

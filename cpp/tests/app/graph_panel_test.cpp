@@ -31,6 +31,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -68,6 +69,7 @@ protected:
         emit box.editingFinished();
     }
     static QString stats_hint(const GraphPanel& panel) { return panel.stats_hint_->text(); }
+    static void export_statistics(GraphPanel& panel, bool json) { panel.export_statistics(json); }
     // The statistics' right-click menu for the line labelled `label`: its
     // items' texts, in order, and those it offers disabled.
     static QStringList stats_menu(GraphPanel& panel, const QString& label, QStringList* disabled = nullptr) {
@@ -306,9 +308,10 @@ TEST_F(GraphPanelTest, ExportsTheDifferenceTheBandShows) {
                     {shared(vmaf_result("b.mkv", {85.0F, 82.0F, 60.0F})), "b (saved)", {}, true},
                     {shared(c), "c", {}, true}});
     page(panel, "vmaf");
-    EXPECT_TRUE(stats_menu(panel, "a (saved)").isEmpty());
+    const QStringList statistics{"Statistics as CSV...", "Statistics as JSON..."};
+    EXPECT_EQ(stats_menu(panel, "a (saved)"), statistics);
     difference_box(panel).setChecked(true);
-    EXPECT_EQ(stats_menu(panel, "a (saved)"), QStringList{"Export the difference as CSV..."});
+    EXPECT_EQ(stats_menu(panel, "a (saved)"), statistics + QStringList{"Difference as CSV..."});
     const test::Folder folder;
     QString suggested;
     panel.dialogs.save_file = [&](const QString&, const QString& name, const QString&) {
@@ -330,9 +333,9 @@ TEST_F(GraphPanelTest, ExportsTheDifferenceTheBandShows) {
     EXPECT_TRUE(difference[2].starts_with("1,0.033333,-2.0,,")) << difference[2];
     EXPECT_TRUE(difference[3].starts_with("2,0.066667,10.0,,")) << difference[3];
 
-    // Off: nothing to export.
+    // Off: no difference to export.
     difference_box(panel).setChecked(false);
-    EXPECT_TRUE(stats_menu(panel, "a (saved)").isEmpty());
+    EXPECT_EQ(stats_menu(panel, "a (saved)"), statistics);
     suggested.clear();
     export_difference(panel);
     EXPECT_TRUE(suggested.isEmpty());
@@ -382,29 +385,56 @@ TEST_F(GraphPanelTest, ExportsStartInTheExportFolder) {
 // line's video's own, where the window can export it (a line of a saved run
 // loaded has no row: none), and all the videos', each named after what
 // Settings' Exports include; off where nothing is ticked, and all the
-// videos' while there is no run to export.
+// videos' while there is no run to export. Then the quick grabs of the
+// table as shown, CSV and JSON (docs/ARCHITECTURE.md, "Exports").
 TEST_F(GraphPanelTest, TheStatisticsMenuOffersTheVideosExports) {
     VideoColors colors;
     GraphPanel panel(&colors);
     panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F, 80.0F})), "a", "row-a", true},
                     {shared(vmaf_result("b.mkv", {85.0F, 75.0F})), "b", "loaded-b", true}});
-    // Before the window says what it can export: nothing to offer.
-    EXPECT_TRUE(stats_menu(panel, "a").isEmpty());
+    // Before the window says what it can export: the table's own alone.
+    const QStringList statistics{"Statistics as CSV...", "Statistics as JSON..."};
+    EXPECT_EQ(stats_menu(panel, "a"), statistics);
+    const test::Folder folder;
+    QString suggested;
+    panel.dialogs.save_file = [&](const QString&, const QString& name, const QString&) {
+        suggested = name;
+        return QString::fromStdString(platform::path_text(folder / name.toStdString()));
+    };
+    export_statistics(panel, false);
+    // Named as Graph as PNG names its file: of two lines, after the reference.
+    EXPECT_TRUE(suggested.endsWith("_vmaf_statistics.csv")) << suggested.toStdString();
+    std::ifstream csv(folder / suggested.toStdString(), std::ios::binary);
+    std::string header;
+    std::getline(csv, header);
+    EXPECT_TRUE(header.starts_with("Series,Mean,Median,StDev,Min,Max,")) << header;
+    std::string first;
+    std::getline(csv, first);
+    EXPECT_TRUE(first.starts_with("a,85.00,")) << first;
+    export_statistics(panel, true);
+    std::ifstream json(folder / suggested.toStdString(), std::ios::binary);
+    const std::string text((std::istreambuf_iterator<char>(json)), std::istreambuf_iterator<char>());
+    EXPECT_NE(text.find("\"metric\": \"vmaf\""), std::string::npos) << text;
+    EXPECT_NE(text.find("\"frames\": null"), std::string::npos) << text;
     std::vector<std::string> items{"results", "graphs", "weak_segments"};
     bool run = true;
     panel.export_items = [&items] { return items; };
     panel.video_exportable = [](const std::string& identity) { return identity == "row-a"; };
     panel.videos_exportable = [&run] { return run; };
     EXPECT_EQ(stats_menu(panel, "a"), (QStringList{"Export this video's results, graphs and weak segments...",
-                                                   "Export all videos' results, graphs and weak segments..."}));
-    EXPECT_EQ(stats_menu(panel, "b"), QStringList{"Export all videos' results, graphs and weak segments..."});
-    EXPECT_EQ(stats_menu(panel, "nowhere"), QStringList{"Export all videos' results, graphs and weak segments..."});
+                                                   "Export all videos' results, graphs and weak segments..."} +
+                                       statistics));
+    EXPECT_EQ(stats_menu(panel, "b"),
+              QStringList{"Export all videos' results, graphs and weak segments..."} + statistics);
+    EXPECT_EQ(stats_menu(panel, "nowhere"),
+              QStringList{"Export all videos' results, graphs and weak segments..."} + statistics);
     items = {"results", "frames"};
     EXPECT_EQ(stats_menu(panel, "a"), (QStringList{"Export this video's results and per-frame scores...",
-                                                   "Export all videos' results and per-frame scores..."}));
+                                                   "Export all videos' results and per-frame scores..."} +
+                                       statistics));
     items = {"results"};
     EXPECT_EQ(stats_menu(panel, "a"),
-              (QStringList{"Export this video's results...", "Export all videos' results..."}));
+              (QStringList{"Export this video's results...", "Export all videos' results..."} + statistics));
     run = false;
     QStringList disabled;
     stats_menu(panel, "a", &disabled);
@@ -413,7 +443,8 @@ TEST_F(GraphPanelTest, TheStatisticsMenuOffersTheVideosExports) {
     disabled.clear();
     EXPECT_EQ(stats_menu(panel, "a", &disabled),
               (QStringList{"Export: nothing is ticked in Settings > Storage > Exports include",
-                           "Export: nothing is ticked in Settings > Storage > Exports include"}));
+                           "Export: nothing is ticked in Settings > Storage > Exports include"} +
+               statistics));
     EXPECT_EQ(disabled.size(), 2);
 }
 
