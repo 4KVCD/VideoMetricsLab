@@ -268,26 +268,31 @@ std::string run_file_text(const ComparisonResult& result, const std::string& lab
             metrics.push_back(metric_to_dict(*sequence));
         }
     }
-    const Json payload{{"format_version", format_version},
-                       {"label", label.empty() ? platform::path_text(result.distorted.stem()) : label},
-                       {"source", python_path_text(result.source)},
-                       {"distorted", python_path_text(result.distorted)},
-                       {"fps", result.fps},
-                       {"model", result.model},
-                       {"model_choice", optional_text(result.model_choice)},
-                       {"model_v1", result.model_v1},
-                       {"model_choice_v1", optional_text(result.model_choice_v1)},
-                       {"source_crop", crop_to_dict(result.source_crop)},
-                       {"distorted_crop", crop_to_dict(result.distorted_crop)},
-                       {"source_info", video_info_to_dict(result.source_info)},
-                       {"distorted_info", video_info_to_dict(result.distorted_info)},
-                       {"scale_direction", scale_direction_value(result.scale_direction)},
-                       {"scale_algorithm", result.scale_algorithm},
-                       {"resample_target", resample_target_to_dict(result.resample_target)},
-                       {"compared_frame_count", result.compared_frame_count},
-                       {"metric_results", std::move(metrics)},
-                       // The build that saved the file (its scores say which made them)
-                       {"saved_by", build_stamp()}};
+    Json payload{{"format_version", format_version},
+                 {"label", label.empty() ? platform::path_text(result.distorted.stem()) : label},
+                 {"source", python_path_text(result.source)},
+                 {"distorted", python_path_text(result.distorted)},
+                 {"fps", result.fps},
+                 {"model", result.model},
+                 {"model_choice", optional_text(result.model_choice)},
+                 {"model_v1", result.model_v1},
+                 {"model_choice_v1", optional_text(result.model_choice_v1)}};
+    if (result.model_choice_hdr) {
+        // Only with HDR VMAF, so every other run file stays as it was.
+        payload["model_hdr"] = result.model_hdr;
+        payload["model_choice_hdr"] = *result.model_choice_hdr;
+    }
+    payload["source_crop"] = crop_to_dict(result.source_crop);
+    payload["distorted_crop"] = crop_to_dict(result.distorted_crop);
+    payload["source_info"] = video_info_to_dict(result.source_info);
+    payload["distorted_info"] = video_info_to_dict(result.distorted_info);
+    payload["scale_direction"] = scale_direction_value(result.scale_direction);
+    payload["scale_algorithm"] = result.scale_algorithm;
+    payload["resample_target"] = resample_target_to_dict(result.resample_target);
+    payload["compared_frame_count"] = result.compared_frame_count;
+    payload["metric_results"] = std::move(metrics);
+    // The build that saved the file (its scores say which made them)
+    payload["saved_by"] = build_stamp();
     return python_json_line(payload);
 }
 
@@ -356,6 +361,12 @@ std::pair<ComparisonResult, std::string> run_from_json(const nlohmann::json& dat
         result.model_v1 = python_truthy(model_v1) ? model_v1.get<std::string>() : std::string();
         const nlohmann::json choice_v1 = data.value("model_choice_v1", nlohmann::json());
         result.model_choice_v1 = choice_v1.is_null() ? std::nullopt : std::optional(choice_v1.get<std::string>());
+        if (const nlohmann::json model_hdr = data.value("model_hdr", nlohmann::json()); model_hdr.is_string()) {
+            result.model_hdr = model_hdr.get<std::string>();
+        }
+        if (const nlohmann::json choice_hdr = data.value("model_choice_hdr", nlohmann::json()); choice_hdr.is_string()) {
+            result.model_choice_hdr = choice_hdr.get<std::string>();
+        }
         // A file that does not count its frames counts those its scores
         // have, as the Python app's ComparisonResult does.
         if (const FrameScores frames = frame_scores_from_results(result.metric_results);

@@ -87,6 +87,7 @@ add_library(vml_core
     src/vship_run.cpp
     src/weak_frames.cpp
     src/vmaf_cuda.cpp
+    src/vmaf_hdr.cpp
     src/vmaf_v1_gpu.cpp
     src/vmaf_vulkan.cpp
     src/zip_archive.cpp

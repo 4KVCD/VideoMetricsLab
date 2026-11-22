@@ -36,6 +36,16 @@ models (1080p, phone, 4K, and high-frame-rate variants). VMAF v1 requires an
 FFmpeg build linked against a libvmaf version that supports the v1 feature set;
 older FFmpeg packages will report a clear model/feature error and should use a
 v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
+
+**HDR VMAF** scores PQ (HDR10) videos with Netflix's HDR VMAF models (1080p,
+phone, 4K, and high-frame-rate variants), chosen in **HDR VMAF model**. It is
+off by default: tick its column to score it. Both videos are converted to the
+model's ICtCp form on the CPU; its features are then calculated on the GPU when
+VMAF runs on the GPU (else on the CPU), with the same scores. It uses the same
+decode of each video as VMAF on the GPU and PSNR, SSIM and XPSNR in the app
+(where they cannot share a decode, it decodes the videos once more). A video that is not PQ is refused, with
+the reason in its log; its other metrics are still scored. It is not
+calculated in resolution tests.
 4. Choose **Calculate metrics**. Optional two-job parallelism can help on large
    CPUs, but increases resource use and is not always faster.
 5. Inspect per-frame curves in **Metric Graphs**. Click a metric's mean column
@@ -527,9 +537,10 @@ $run.videos[0].metrics.vmaf.score
 
 | Option | Meaning |
 | --- | --- |
-| `-m`, `--metrics LIST` | Comma-separated: `vmaf`, `vmaf_neg`, `vmaf_v1`, `psnr`, `ssim`, `xpsnr`, `ssimulacra2`, `butteraugli`, `cvvdp`, or `all`. Left out: the metrics a video added to the app starts with. |
+| `-m`, `--metrics LIST` | Comma-separated: `vmaf`, `vmaf_neg`, `vmaf_v1`, `vmaf_hdr`, `psnr`, `ssim`, `xpsnr`, `ssimulacra2`, `butteraugli`, `cvvdp`, or `all` (every one but `vmaf_hdr`, which scores PQ (HDR10) videos only). Left out: the metrics a video added to the app starts with. |
 | `--model auto\|standard\|4k\|FILE` | VMAF v0.6.1's model. `auto` uses the 4K model for a 4K comparison. |
 | `--model-v1 MODEL` | VMAF v1's model, as the Options panel's **VMAF v1 model**: `auto` (the one for the size frames are compared at), or a bundled one by its name: `vmaf_v1_3d0h`, `vmaf_v1_5d0h` (1080p), `vmaf_v1_1d5h_2160`, `vmaf_v1_3d0h_2160` (4K), or their high frame rate models `vmaf_v1_hfr_3d0h`, `vmaf_v1_hfr_5d0h`, `vmaf_v1_hfr_1d5h_2160`, `vmaf_v1_hfr_3d0h_2160`. |
+| `--model-hdr MODEL` | HDR VMAF's model, as the Options panel's **HDR VMAF model**: `auto` (the one for the size frames are compared at), or a bundled one by its name: `hdr_vmaf_3d0h`, `hdr_vmaf_5d0h` (1080p), `hdr_vmaf_1d5h_2160`, `hdr_vmaf_3d0h_2160` (4K), or their high frame rate models `hdr_vmaf_hfr_3d0h`, `hdr_vmaf_hfr_5d0h`, `hdr_vmaf_hfr_1d5h_2160`, `hdr_vmaf_hfr_3d0h_2160`. |
 | `--black-bars auto\|source\|none` | Detect and cut black bars; `source`: cut the source's only and compare the test video's full frame (an encode cropped when it was made), as the Options panel's **Source only (test video already cropped)**, which takes the scores saved by `auto` where `auto` compared the test video's full frame too; or compare whole pictures. |
 | `--scale-to test\|reference` | Which video's size the other is scaled to when they differ. |
 | `--scaler bicubic\|bilinear\|lanczos\|spline` | Scaling algorithm. |
@@ -679,7 +690,7 @@ files.
 Each file is a CSV file, or a JSON file (below). A CSV file has a header
 row and a row per encode. The
 `sequence` and `kbps` columns are needed; a column named by a metric's key
-(`vmaf`, `vmaf_neg`, `vmaf_v1`, `psnr`, `ssim`, `xpsnr`, `ssimulacra2`,
+(`vmaf`, `vmaf_neg`, `vmaf_v1`, `vmaf_hdr`, `psnr`, `ssim`, `xpsnr`, `ssimulacra2`,
 `butteraugli`, `cvvdp`) holds its scores, empty where not scored. Other
 columns, such as `qp` or `class`, are only read for `--group-by`.
 

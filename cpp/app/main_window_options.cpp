@@ -167,7 +167,8 @@ VmafOptions MainWindow::read_panel_options() const {
     }
     return options_panel_->read_options(extra_features, metric_header_->is_checked(col_vmaf),
                                         metric_header_->is_checked(col_vmaf_neg),
-                                        metric_header_->is_checked(col_vmaf_v1), metric_header_->is_checked(col_xpsnr));
+                                        metric_header_->is_checked(col_vmaf_v1),
+                                        metric_header_->is_checked(col_vmaf_hdr), metric_header_->is_checked(col_xpsnr));
 }
 
 void MainWindow::on_panel_field_edited(const QString& field) {
@@ -193,6 +194,9 @@ void MainWindow::on_panel_field_edited(const QString& field) {
         } else if (field == "model_v1") {
             target.model_v1 = panel.model_v1;
             target.model_choice_v1 = panel.model_choice_v1;
+        } else if (field == "model_hdr") {
+            target.model_hdr = panel.model_hdr;
+            target.model_choice_hdr = panel.model_choice_hdr;
         } else if (field == "crop_mode") {
             target.crop_mode = panel.crop_mode;
         } else if (const std::optional<ManualCropBox> box = manual_crop_box_of(field)) {
@@ -291,11 +295,12 @@ void MainWindow::on_panel_field_edited(const QString& field) {
         write_panel_options(rows_[static_cast<std::size_t>(panel_target_rows_.front())]->options);
     }
     const std::vector<int> changed = execution_only ? std::vector<int>() : applied;
-    if (field == "model" || field == "model_v1" || field == "vship_build") {
+    if (field == "model" || field == "model_v1" || field == "model_hdr" || field == "vship_build") {
         // A model decides its own VMAF column's score only, and the Vship
         // build Vship's metrics' scores: the rest stay.
-        const std::vector<std::string> decided = field == "model"      ? std::vector<std::string>{"vmaf"}
-                                                 : field == "model_v1" ? std::vector<std::string>{"vmaf_v1"}
+        const std::vector<std::string> decided = field == "model"       ? std::vector<std::string>{"vmaf"}
+                                                 : field == "model_v1"  ? std::vector<std::string>{"vmaf_v1"}
+                                                 : field == "model_hdr" ? std::vector<std::string>{"vmaf_hdr"}
                                                  : std::vector<std::string>{"ssimulacra2", "butteraugli", "cvvdp"};
         std::vector<int> without_scores;
         for (const int row : changed) {
@@ -763,6 +768,7 @@ void MainWindow::add_cvvdp_display_rows(const std::vector<int>& rows, const Cvvd
             options.compute_vmaf = false;
             options.compute_vmaf_neg = false;
             options.compute_vmaf_v1 = false;
+            options.compute_vmaf_hdr = false;
             options.compute_xpsnr = false;
             options.extra_features.clear();
             display_row.extra_metric_keys = {"cvvdp"};

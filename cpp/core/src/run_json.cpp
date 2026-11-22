@@ -242,6 +242,9 @@ nlohmann::json options_json(const VmafOptions& options) {
             {"compute_vmaf_v1", options.compute_vmaf_v1},
             {"model_choice_v1", options.model_choice_v1},
             {"model_v1", options.model_v1},
+            {"compute_vmaf_hdr", options.compute_vmaf_hdr},
+            {"model_choice_hdr", options.model_choice_hdr},
+            {"model_hdr", options.model_hdr},
             {"range_start", options.range_start},
             {"range_end", options.range_end},
             {"range_in_frames", options.range_in_frames},
@@ -272,6 +275,9 @@ VmafOptions options_from(const nlohmann::json& text) {
     text.at("compute_vmaf_v1").get_to(options.compute_vmaf_v1);
     text.at("model_choice_v1").get_to(options.model_choice_v1);
     text.at("model_v1").get_to(options.model_v1);
+    options.compute_vmaf_hdr = text.value("compute_vmaf_hdr", false);
+    options.model_choice_hdr = text.value("model_choice_hdr", std::string(auto_model_choice));
+    options.model_hdr = text.value("model_hdr", std::string());
     text.at("range_start").get_to(options.range_start);
     text.at("range_end").get_to(options.range_end);
     options.range_in_frames = text.value("range_in_frames", false);

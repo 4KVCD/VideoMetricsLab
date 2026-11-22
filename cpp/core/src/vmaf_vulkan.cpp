@@ -113,6 +113,7 @@ VulkanEngine::VulkanEngine(const std::filesystem::path& path)
       export_memory(library.function<decltype(export_memory)>("vv_export")),
       shared_next(library.function<decltype(shared_next)>("vv_shared_next")),
       create_v1(optional_function<decltype(create_v1)>(library, "vv_create_v1")),
+      create_v1_ex(optional_function<decltype(create_v1_ex)>(library, "vv_create_v1_ex")),
       features_v1(optional_function<decltype(features_v1)>(library, "vv_features_v1")),
       v1_cambi(optional_function<decltype(v1_cambi)>(library, "vv_v1_cambi")),
       v1_cambi_scores(optional_function<decltype(v1_cambi_scores)>(library, "vv_v1_cambi_scores")),

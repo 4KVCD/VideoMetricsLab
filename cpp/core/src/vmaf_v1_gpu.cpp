@@ -24,6 +24,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "vml/temp_files.h"
+#include "vml/vmaf_hdr.h"
 
 namespace vml {
 
@@ -63,44 +64,6 @@ constexpr std::array<std::pair<const char*, int>, 2> probe_models{{
     {"vmaf_v1.0.16/vmaf_v1.0.16_3d0h.json", 8},
     {"vmaf_v1.0.16_hfr/vmaf_v1.0.16_hfr_1d5h_2160.json", 10},
 }};
-
-// libvmaf's handles, released however the work ends.
-struct LibvmafHandles {
-    const Libvmaf& library;
-    VmafContext* context = nullptr;
-    VmafModel* model = nullptr;
-
-    explicit LibvmafHandles(const Libvmaf& from) : library(from) {}
-    ~LibvmafHandles() {
-        if (model != nullptr) {
-            library.model_destroy(model);
-        }
-        if (context != nullptr) {
-            library.close(context);
-        }
-    }
-    LibvmafHandles(const LibvmafHandles&) = delete;
-    LibvmafHandles& operator=(const LibvmafHandles&) = delete;
-
-    // Starts libvmaf with `threads` threads (0: on the calling thread) and
-    // every `n_subsample`th frame.
-    void start(int threads, int n_subsample) {
-        const VmafConfiguration configuration{VMAF_LOG_LEVEL_ERROR, static_cast<unsigned>(std::max(0, threads)),
-                                              static_cast<unsigned>(std::max(1, n_subsample)), 0, 0};
-        // When vmaf_init fails it frees the context it made but leaves the
-        // pointer to it set, so the context is only kept once it has started.
-        VmafContext* made = nullptr;
-        check_libvmaf(library.init(&made, configuration), "Starting libvmaf");
-        context = made;
-    }
-
-    // Loads the model in `file` (and destroys one that fails half-made).
-    void load_model(const std::filesystem::path& file) {
-        VmafModelConfig config{"vmaf", 0};
-        const std::string path = libvmaf_path(file);
-        check_libvmaf(library.model_load_from_path(&model, &config, path.c_str()), "Loading the model");
-    }
-};
 
 // An option's value as libvmaf's option parser reads it (the Python app's
 // _text): Python's str() of it, with true and false as libvmaf takes them.
@@ -307,23 +270,44 @@ void use_cpu_features(const Libvmaf& library, VmafContext* context, const ModelO
     }
 }
 
-// Scores three small grey frame pairs with a context.
-void score_probe_pictures(const Libvmaf& library, VmafContext* context) {
+// Scores three small grey frame pairs with a context: 8-bit, untagged, or,
+// with `target` (a model's conversion target), pictures already in it,
+// which libvmaf takes as they are (an untagged picture it would refuse to
+// convert).
+void score_probe_pictures(const Libvmaf& library, VmafContext* context,
+                          const std::optional<VmafPictureConvertTarget>& target) {
+    const VmafPixelFormat format = target ? target->pix_fmt : VMAF_PIX_FMT_YUV420P;
+    const unsigned bits = target ? target->bpc : 8;
+    const unsigned width = target ? target->w : v1_probe_width;
+    const unsigned height = target ? target->h : v1_probe_height;
     for (unsigned index = 0; index < 3; ++index) {
         std::array<VmafPicture, 2> pictures{};
         for (std::size_t made = 0; made < pictures.size(); ++made) {
             VmafPicture& picture = pictures[made];
-            if (const int error = library.picture_alloc(&picture, VMAF_PIX_FMT_YUV420P, 8, v1_probe_width,
-                                                        v1_probe_height);
-                error != 0) {
+            if (const int error = library.picture_alloc(&picture, format, bits, width, height); error != 0) {
                 for (std::size_t given = 0; given < made; ++given) {
                     library.picture_unref(&pictures[given]);
                 }
                 check_libvmaf(error, "Allocating a picture");
             }
+            if (target) {
+                picture.color = target->color;
+            }
             for (int plane = 0; plane < 3; ++plane) {
-                std::memset(picture.data[plane], static_cast<int>(100 + index),
-                            static_cast<std::size_t>(picture.stride[plane]) * picture.h[plane]);
+                // A grey of 100 + index in 8 bits (the chroma's middle beyond 8 bits).
+                const unsigned value = bits == 8     ? 100 + index
+                                       : plane == 0 ? (100 + index) << (bits - 8)
+                                                    : 1u << (bits - 1);
+                for (unsigned row = 0; row < picture.h[plane]; ++row) {
+                    auto* line = static_cast<std::uint8_t*>(picture.data[plane]) +
+                                 static_cast<std::size_t>(row) * picture.stride[plane];
+                    if (bits == 8) {
+                        std::memset(line, static_cast<int>(value), picture.w[plane]);
+                    } else {
+                        std::fill_n(reinterpret_cast<std::uint16_t*>(line), picture.w[plane],
+                                    static_cast<std::uint16_t>(value));
+                    }
+                }
             }
         }
         check_libvmaf(library.read_pictures(context, &pictures[0], &pictures[1], index), "Scoring a probe frame");
@@ -357,6 +341,23 @@ struct FeatureNames {
     std::map<std::string, std::string> cpu;
 };
 
+// What libvmaf converts the probe's pictures to with `model`: nothing, or,
+// for a model with a conversion target (HDR VMAF's), that target at the size
+// it gives the probe's.
+std::optional<VmafPictureConvertTarget> probe_target(const std::filesystem::path& model) {
+    bool converts = false;
+    try {
+        std::ifstream file(model, std::ios::binary);
+        converts = nlohmann::json::parse(file).at("model_dict").contains("conversion_target");
+    } catch (const std::exception&) {
+        return std::nullopt;  // model_options says what is wrong with the file
+    }
+    if (!converts) {
+        return std::nullopt;
+    }
+    return hdr_targets(v1_probe_width, v1_probe_height, v1_probe_width, v1_probe_height, hdr_model_target(model))[0];
+}
+
 // libvmaf builds both names from the options, so they are found by running
 // it on three small frames, once per model.
 const FeatureNames& feature_names(const std::filesystem::path& model) {
@@ -373,6 +374,7 @@ const FeatureNames& feature_names(const std::filesystem::path& model) {
     }
     const Libvmaf& library = libvmaf();
     const ModelOptions options = model_options(model);
+    const std::optional<VmafPictureConvertTarget> target = probe_target(model);
     FeatureNames names;
     for (const bool with_model : {true, false}) {
         std::vector<std::string> listed;
@@ -385,7 +387,8 @@ const FeatureNames& feature_names(const std::filesystem::path& model) {
             } else {
                 use_cpu_features(library, handles.context, options, {});
             }
-            score_probe_pictures(library, handles.context);
+            // Without the model, no conversion: the 8-bit pictures.
+            score_probe_pictures(library, handles.context, with_model ? target : std::nullopt);
             listed = output_names(library, handles.context);
         }
         std::vector<std::pair<const char*, const char*>> wanted;
@@ -417,22 +420,6 @@ const FeatureNames& feature_names(const std::filesystem::path& model) {
     }
     const std::lock_guard lock(mutex);
     return found.emplace(key, std::move(names)).first->second;
-}
-
-// Copies the given planes of a frame into a libvmaf picture of its size. Its
-// planes are the frame's, but for an odd size's chroma planes, which libvmaf
-// rounds down where FFmpeg rounds up: the picture's part of them is copied.
-void fill_picture(VmafPicture& picture, const FramePlanes& frame, std::size_t sample,
-                  std::initializer_list<int> planes) {
-    for (const int plane : planes) {
-        const Plane& from = frame[static_cast<std::size_t>(plane)];
-        const std::size_t row_bytes = picture.w[plane] * sample;
-        auto* target = static_cast<std::uint8_t*>(picture.data[plane]);
-        const auto stride = static_cast<std::size_t>(picture.stride[plane]);
-        for (std::size_t row = 0; row < picture.h[plane]; ++row) {
-            std::memcpy(target + row * stride, from.data + static_cast<std::ptrdiff_t>(row) * from.stride, row_bytes);
-        }
-    }
 }
 
 }  // namespace
@@ -693,9 +680,11 @@ struct V1Scorer::State {
 };
 
 // The ADM and motion options of a VMAF v1 model as the GPU takes them, in
-// its order; throws for one it does not calculate.
-std::array<double, 9> adm_motion_values(const Options& adm, const Options& motion) {
-    const std::array<double, 9> values{
+// its order (vv_create_v1_ex's ten: vv_create_v1's nine, then
+// adm_skip_scale0, which the HDR VMAF models set); throws for one it does not
+// calculate.
+std::array<double, 10> adm_motion_values(const Options& adm, const Options& motion) {
+    const std::array<double, 10> values{
         option_number(option_or(adm, "adm_norm_view_dist", 3.0)),
         option_number(option_or(adm, "adm_ref_display_height", 1080)),
         option_number(option_or(adm, "adm_csf_mode", 0)),
@@ -704,10 +693,11 @@ std::array<double, 9> adm_motion_values(const Options& adm, const Options& motio
         option_number(option_or(adm, "adm_min_val", 0.0)),
         option_number(option_or(motion, "motion_max_val", 10000.0)),
         option_truthy(option_or(motion, "motion_five_frame_window", false)) ? 1.0 : 0.0,
-        option_truthy(option_or(motion, "motion_moving_average", false)) ? 1.0 : 0.0};
+        option_truthy(option_or(motion, "motion_moving_average", false)) ? 1.0 : 0.0,
+        option_truthy(option_or(adm, "adm_skip_scale0", false)) ? 1.0 : 0.0};
     static const std::set<std::string> adm_known{"adm_norm_view_dist", "adm_ref_display_height", "adm_csf_mode",
                                                  "adm_noise_weight",   "adm_dlm_weight",         "adm_min_val",
-                                                 "adm_enhn_gain_limit"};
+                                                 "adm_enhn_gain_limit", "adm_skip_scale0"};
     static const std::set<std::string> motion_known{"motion_max_val", "motion_five_frame_window",
                                                     "motion_moving_average"};
     std::set<std::string> unsupported;
@@ -756,12 +746,20 @@ V1Scorer::V1Scorer(int width, int height, int bit_depth, const std::filesystem::
         }
         device = chosen->index;
     }
-    const std::array<double, 9> values = adm_motion_values(options.at(v1_adm3), options.at(v1_motion3));
+    const std::array<double, 10> values = adm_motion_values(options.at(v1_adm3), options.at(v1_motion3));
+    const bool skip_scale0 = values[9] != 0.0;
+    if (skip_scale0 && engine.create_v1_ex == nullptr) {
+        throw VmafV1Error("the bundled Vulkan engine has no ADM adm_skip_scale0 (HDR VMAF)");
+    }
     int flags = vulkan_context_flags(shared != nullptr, shared != nullptr && shared_reference != nullptr);
     if (pictures && shared != nullptr && engine.pictures != nullptr && engine.pictures_mode != nullptr) {
         flags |= pictures_flag;
     }
-    s.check(engine.create_v1(&s.gpu, *device, width, height, bit_depth, flags, values.data()), "Starting Vulkan");
+    s.check(engine.create_v1_ex != nullptr
+                ? engine.create_v1_ex(&s.gpu, *device, width, height, bit_depth, flags, values.data(),
+                                      static_cast<int>(values.size()))
+                : engine.create_v1(&s.gpu, *device, width, height, bit_depth, flags, values.data()),
+            "Starting Vulkan");
     if (shared != nullptr) {
         if (is_odd_size(width, height)) {
             throw VmafV1Error("an odd size is not handed over on the GPU");
@@ -1298,6 +1296,8 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
     const bool v1 = std::any_of(plan.models.begin(), plan.models.end(),
                                 [](const auto& model) { return model.first == "vmaf_v1"; });
     const bool hand_over = pass_may_hand_over(plan);
+    // HDR VMAF beside reads whole frames from system memory (HostPairs), not a download of their luma.
+    const bool whole_frames = std::ranges::find(plan.beside, "vmaf_hdr") != plan.beside.end();
     const int pool = hand_over && plan.backend == "vulkan" && v1 && source_backend == test_backend &&
                              hands_over_textures(test_backend)
                          ? 6
@@ -1352,7 +1352,7 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
         // Windows' own decoder for one video and AMF's for the other.
         logger.info("VMAF v1 with the GPU: the frames go through system memory (the videos' decoders share no "
                     "GPU memory)");
-    } else if (test.shares_gpu_memory_with(reference) &&
+    } else if (test.shares_gpu_memory_with(reference) && !whole_frames &&
                (gpu_decoder(test_backend).cuda_copies || plan.backend == "vulkan")) {
         try {
             scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, plan.backend, device,
@@ -1370,11 +1370,11 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
                     [&](const DecodePlan& decoded) { return decoded.frame_bytes() != scorer->frame_bytes(); })) {
         throw VmafV1Error("the decoders' frames are not the size the scorers take");
     }
-    // The CPU's metrics, which read the same frames' luma.
-    std::optional<CpuScorer> beside;
+    // The CPU's metrics and HDR VMAF, which read the same frames.
+    std::optional<BesideScorer> beside;
     start_beside(beside, plan, n_subsample);
     if (beside && beside->frame_bytes() != scorer->frame_bytes()) {
-        throw VmafV1Error("the CPU's metrics take frames of another size than the GPU's");
+        throw VmafV1Error("the metrics beside the GPU's take frames of another size than its own");
     }
     // The pictures through system memory, the software decoder's read where
     // it holds them (a 4K 10-bit copy less per picture: 3.4 ms). Last, so

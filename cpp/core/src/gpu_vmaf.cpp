@@ -17,6 +17,7 @@
 #include "vml/host_frames.h"
 #include "vml/isolated.h"
 #include "vml/libvmaf_cpu.h"
+#include "vml/metrics.h"
 #include "vml/geometry.h"
 #include "vml/number_format.h"
 #include "vml/platform/pipe.h"
@@ -295,25 +296,112 @@ GpuModels scores_on_gpu(bool compute_vmaf, bool compute_vmaf_neg, const std::str
     return models;
 }
 
-void start_beside(std::optional<CpuScorer>& scorer, const GpuPlan& plan, int n_subsample) {
-    if (!plan.beside.empty()) {
-        scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.beside, n_subsample, plan.threads,
-                       plan.frame_rate);
+std::unique_ptr<HdrScorer> make_hdr_scorer(const GpuPlan& plan, int n_subsample) {
+    return std::make_unique<HdrScorer>(plan.width, plan.height, plan.bit_depth,
+                                       platform::path_from_text(plan.hdr_model_file), plan.hdr_colours, n_subsample,
+                                       plan.hdr_threads, plan.hdr_gpu);
+}
+
+namespace {
+
+// `scores` with `more`'s metrics after its own, the two scored for the same frames (`what` names `more` in the error).
+void append_scores(PairScores& scores, PairScores&& more, const std::string& what) {
+    if (more.frames != scores.frames) {
+        throw LibvmafError(what + " were scored for other frames than the pass's own metrics (" +
+                           std::to_string(more.frames.size()) + " against " + std::to_string(scores.frames.size()) +
+                           ")");
+    }
+    for (auto& metric : more.by_metric) {
+        scores.by_metric.push_back(std::move(metric));
     }
 }
 
-void add_beside(PairScores& scores, std::optional<CpuScorer>& beside) {
-    if (!beside) {
+}  // namespace
+
+BesideScorer::BesideScorer(const GpuPlan& plan, int n_subsample) {
+    std::vector<std::string> cpu_metrics;
+    bool hdr = false;
+    for (const std::string& key : plan.beside) {
+        if (key == "vmaf_hdr") {
+            hdr = true;
+        } else {
+            cpu_metrics.push_back(key);
+        }
+    }
+    if (!cpu_metrics.empty()) {
+        cpu_.emplace(plan.width, plan.height, plan.bit_depth, cpu_metrics, n_subsample, plan.threads,
+                     plan.frame_rate);
+    }
+    if (hdr) {
+        hdr_ = make_hdr_scorer(plan, n_subsample);
+    }
+}
+
+BesideScorer::~BesideScorer() = default;
+
+std::size_t BesideScorer::frame_bytes() const { return cpu_ ? cpu_->frame_bytes() : hdr_->frame_bytes(); }
+
+void BesideScorer::add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted) {
+    if (cpu_) {
+        cpu_->add(reference, distorted);
+    }
+    if (hdr_) {
+        hdr_->add(reference, distorted);
+    }
+}
+
+void BesideScorer::add_planes(const FramePlanes& reference, const FramePlanes& distorted) {
+    if (cpu_) {
+        cpu_->add_planes(reference, distorted);
+    }
+    if (hdr_) {
+        hdr_->add_planes(reference, distorted);
+    }
+}
+
+CpuScorer& BesideScorer::luma_only_scorer() {
+    if (hdr_ || !cpu_) {
+        throw std::logic_error("HDR VMAF beside a pass reads whole frames, not downloads of their luma");
+    }
+    return *cpu_;
+}
+
+void BesideScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot) {
+    luma_only_scorer().add_decoded(reference, reference_slot, test, test_slot);
+}
+
+void BesideScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot,
+                               const std::function<void(Plane, Plane)>& also) {
+    luma_only_scorer().add_decoded(reference, reference_slot, test, test_slot, also);
+}
+
+PairScores BesideScorer::finish() {
+    if (!hdr_) {
+        return cpu_->finish();
+    }
+    if (!cpu_) {
+        return hdr_->finish();
+    }
+    PairScores scores = cpu_->finish();
+    append_scores(scores, hdr_->finish(), "HDR VMAF's scores");
+    return scores;
+}
+
+void start_beside(std::optional<BesideScorer>& scorer, const GpuPlan& plan, int n_subsample) {
+    if (plan.beside.empty()) {
         return;
     }
-    PairScores scored = beside->finish();
-    if (scored.frames != scores.frames) {
-        throw LibvmafError("the CPU's metrics were scored for other frames than the GPU's (" +
-                           std::to_string(scored.frames.size()) + " against " + std::to_string(scores.frames.size()) +
-                           ")");
-    }
-    for (auto& metric : scored.by_metric) {
-        scores.by_metric.push_back(std::move(metric));
+    scorer.emplace(plan, n_subsample);
+    // Which pass took them, so that a run shows it decoded the videos once for all of its metrics.
+    const std::string pass = plan.backend == "hdr"    ? "HDR VMAF"
+                             : plan.backend == "cpu" ? "the CPU's metrics"
+                                                     : "VMAF on the GPU (" + plan.backend + ")";
+    logger.info(metric_labels(plan.beside, " and ") + " beside " + pass + ", from the same frames");
+}
+
+void add_beside(PairScores& scores, std::optional<BesideScorer>& beside) {
+    if (beside) {
+        append_scores(scores, beside->finish(), "The metrics beside them");
     }
 }
 
@@ -532,7 +620,7 @@ void StreamReader::join() {
 
 struct GpuAttempt::State {
     std::unique_ptr<PairScorer> scorer;
-    std::optional<CpuScorer> beside;  // the plan's metrics beside the GPU's
+    std::optional<BesideScorer> beside;  // the plan's metrics beside the pass's own
     std::unique_ptr<StreamReader> distorted;
     std::unique_ptr<StreamReader> reference;
     std::thread feeder;
@@ -549,6 +637,8 @@ GpuAttempt::GpuAttempt(const GpuPlan& plan, int n_subsample) : state_(std::make_
         }
         s.scorer = std::make_unique<CpuScorer>(plan.width, plan.height, plan.bit_depth, metrics, n_subsample,
                                                plan.threads, plan.frame_rate);
+    } else if (plan.backend == "hdr") {
+        s.scorer = make_hdr_scorer(plan, n_subsample);
     } else if (std::any_of(plan.models.begin(), plan.models.end(),
                            [](const auto& model) { return model.first == "vmaf_v1"; })) {
         s.scorer = std::make_unique<MultiScorer>(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample,
@@ -563,7 +653,7 @@ GpuAttempt::GpuAttempt(const GpuPlan& plan, int n_subsample) : state_(std::make_
     start_beside(s.beside, plan, n_subsample);
     // Both read the frames FFmpeg writes: whole frames, luma first.
     if (s.beside && s.beside->frame_bytes() != s.scorer->frame_bytes()) {
-        throw LibvmafError("the CPU's metrics take frames of another size than the GPU's");
+        throw LibvmafError("the metrics beside the pass take frames of another size than its own");
     }
     s.distorted = std::make_unique<StreamReader>("distorted", s.scorer->frame_bytes());
     s.reference = std::make_unique<StreamReader>("reference", s.scorer->frame_bytes());
@@ -739,6 +829,8 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     if (cuda && !plan.beside.empty()) {
         throw std::invalid_argument("libvmaf's CUDA code is not given CPU metrics to score beside it");
     }
+    // HDR VMAF beside reads whole frames (its colour conversion takes the chroma too) from system memory (HostPairs).
+    const bool whole_frames = std::ranges::find(plan.beside, "vmaf_hdr") != plan.beside.end();
     std::string gpu;  // its name, for messages
     if (cuda) {
         // libvmaf's CUDA code takes NVIDIA's pictures on the GPU and uploads
@@ -766,8 +858,10 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     require_same_range(source, distorted);
     const std::pair size(plan.width, plan.height);
     std::vector<DecodePlan> plans = plan_pair(source, distorted, source_crop, distorted_crop, size, plan.bit_depth,
-                                              true, scale_algorithm, decoders);
-    require_luma_of_size(plans, size, plan.bit_depth);
+                                              !whole_frames, scale_algorithm, decoders);
+    if (!whole_frames) {
+        require_luma_of_size(plans, size, plan.bit_depth);
+    }
     if (cuda) {
         plan_pair_seek(plans, distorted, source, range.decode_start, ffmpeg, ffprobe, cancel);
         return score_decoded_cuda(source, distorted, plans, plan, n_subsample, range, total_frames,
@@ -775,7 +869,7 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     }
     // Where wanted (Settings' VVC decoder): an 8- or 10-bit VVC video, unscaled and scored without film grain, decoded
     // on the GPU by vvdec-vulkan (vvdec_use). Where the other video's decoder copies on the GPU too (vvdec-vulkan's or
-    // NVIDIA's) and no CPU metric runs beside (they need both pictures in system memory anyway: the extra copies on
+    // NVIDIA's) and no metric runs beside (they need both pictures in system memory anyway: the extra copies on
     // the GPU made the six metrics of a 1080p pair about 30 % slower on an RTX 5090), both videos' pictures are
     // copied into the engine's memory by the GPU (both_copy_on_gpu). Otherwise a test video's pictures handed over to
     // the engine, the reference written into its slots by the CPU (mixed); else copied by the GPU into host memory,
@@ -786,7 +880,7 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     const std::string source_library = vvdec.reference ? std::string(vvdec_decoder) : source_backend;
     // AMD's decoder hands its pictures over on the GPU where neither video is scaled or widened for the other
     // (can_hand_over); NVIDIA's always does. Not beside vvdec-vulkan's pictures in host memory, where nothing hands
-    // over, nor beside the CPU's metrics (pass_may_hand_over).
+    // over, nor beside the CPU's metrics or HDR VMAF (pass_may_hand_over).
     const bool hand_over = pass_may_hand_over(plan) && (vvdec.mixed || !vvdec.any()) &&
                            can_hand_over(plans[0], test_library) && can_hand_over(plans[1], source_library);
     if (vvdec.any() && on_vvdec_opening) {
@@ -849,14 +943,14 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
         app_log::write(app_log::Level::info, "vml.vmaf_vulkan",
                        std::string("VMAF with Vulkan: vvdec-vulkan's pictures go through system memory (") +
                            (plan.beside.empty() ? "only a test video's are handed over to the engine"
-                                                : "the CPU's metrics read them") +
+                                                : "the metrics beside it read them") +
                            ")");
     } else if (test.handover() && reference.handover() && !test.shares_gpu_memory_with(reference)) {
         // Windows' own decoder for one video and AMF's for the other.
         app_log::write(app_log::Level::info, "vml.vmaf_vulkan",
                        "VMAF with Vulkan: the frames go through system memory (the videos' decoders share no GPU "
                        "memory)");
-    } else if (test.shares_gpu_memory_with(reference)) {
+    } else if (test.shares_gpu_memory_with(reference) && !whole_frames) {
         try {
             scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, plan.device, &test);
             shared = true;
@@ -871,8 +965,13 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     }
     // After the streams, so that it goes before them: it gives back the
     // memory NVIDIA's decoder page-locked for it.
-    std::optional<CpuScorer> beside;
+    std::optional<BesideScorer> beside;
     start_beside(beside, plan, n_subsample);
+    if (beside && beside->reads_whole_frames() &&
+        std::any_of(plans.begin(), plans.end(),
+                    [&](const DecodePlan& decoded) { return decoded.frame_bytes() != beside->frame_bytes(); })) {
+        throw LibvmafError("the decoders' frames are not the size HDR VMAF's scorer takes");
+    }
     // Without the CPU's metrics, where neither video's picture needs a copy
     // on the CPU of its own to reach the engine (the software decoder's read
     // where it holds them, NVIDIA's downloaded by its GPU into page-locked
@@ -880,12 +979,13 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     // decoders are written straight into the engine's memory instead.
     // vvdec-vulkan's not handed over are always taken so, as its GPU copies
     // them only into its own buffer, and the CPU's metrics read them there
-    // too. Last, so that it goes first: it unlocks memory with the streams.
+    // too. So are all pictures beside HDR VMAF, which reads whole frames.
+    // Last, so that it goes first: it unlocks memory with the streams.
     const auto as_planes = [](const GpuFrameStream& stream) {
         return stream.gives_planes() || gpu_decoder(stream.backend()).cuda_copies;
     };
     std::optional<HostPairs> pairs;
-    if ((vvdec.any() && !shared) || (!shared && !beside && as_planes(reference) && as_planes(test))) {
+    if ((vvdec.any() && !shared) || whole_frames || (!shared && !beside && as_planes(reference) && as_planes(test))) {
         pairs.emplace(reference, plans[1], test, plans[0]);
     }
     test.start();

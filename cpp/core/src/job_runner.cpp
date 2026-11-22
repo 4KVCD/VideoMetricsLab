@@ -482,8 +482,10 @@ std::string JobRun::describe() const {
                            ", resolution mismatch " +
                            scale_direction_value(options.scale_direction) + " (" + options.scale_algorithm +
                            "), VMAF v0.6.1 model " + options.model_choice + ", VMAF v1 model " +
-                           options.model_choice_v1 + ", frame subsample " + std::to_string(options.n_subsample) +
-                           ", GPU decode " + (options.gpu_decode ? "on" : "off");
+                           options.model_choice_v1 +
+                           (options.compute_vmaf_hdr ? ", HDR VMAF model " + options.model_choice_hdr : "") +
+                           ", frame subsample " + std::to_string(options.n_subsample) + ", GPU decode " +
+                           (options.gpu_decode ? "on" : "off");
 #ifndef __APPLE__
     // A Mac decodes with its own media engine, whichever maker is asked.
     if (options.gpu_decode && !vendor_label(options.gpu_vendor).empty()) {
@@ -558,8 +560,11 @@ ComparisonResult JobRun::execute_task(std::size_t task) {
     // The CPU's task keeps what the planner gave it: VMAF, NEG or v1 placed
     // there with the whole family (plan_tasks) stay on the CPU, which the
     // run's own placement (models_on_gpu), seeing only this task's, might
-    // otherwise move to the GPU.
-    if (job_.tasks[task].backend != gpu_vmaf_task) {
+    // otherwise move to the GPU. A CPU task without them keeps the choice:
+    // HDR VMAF's features go to the GPU with it (hdr_plan).
+    const std::vector<std::string>& keys = job_.tasks[task].metric_keys;
+    if (job_.tasks[task].backend != gpu_vmaf_task &&
+        (contains(keys, "vmaf") || contains(keys, "vmaf_neg") || contains(keys, "vmaf_v1"))) {
         options.vmaf_on_gpu = false;
     }
     ComparisonResult result = scheduler_.runner(
@@ -1238,6 +1243,7 @@ std::optional<ComparisonResult> JobRun::merged() const {
         // score always replaces the saved one.
         bool carried_vmaf = false;
         bool carried_v1 = false;
+        bool carried_hdr = false;
         for (const std::string& key : job_.cached_metrics.keys()) {
             if (result->has_metric(key)) {
                 continue;
@@ -1245,6 +1251,7 @@ std::optional<ComparisonResult> JobRun::merged() const {
             result->metric_results.copy_from(job_.cached_metrics, key);
             carried_vmaf = carried_vmaf || key == "vmaf";
             carried_v1 = carried_v1 || key == "vmaf_v1";
+            carried_hdr = carried_hdr || key == "vmaf_hdr";
         }
         // A saved VMAF keeps its model when the run calculated no VMAF (only
         // NEG, say, or only PSNR, its result the base).
@@ -1254,6 +1261,10 @@ std::optional<ComparisonResult> JobRun::merged() const {
         if (carried_v1 && !result->model_choice_v1) {
             result->model_v1 = job_.cached_result->model_v1;
             result->model_choice_v1 = job_.cached_result->model_choice_v1;
+        }
+        if (carried_hdr && !result->model_choice_hdr) {
+            result->model_hdr = job_.cached_result->model_hdr;
+            result->model_choice_hdr = job_.cached_result->model_choice_hdr;
         }
     }
     return result;
@@ -1498,14 +1509,15 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
                                                [&key](const auto& model) { return model.first == key; });
         (scored_on_gpu ? gpu : ffmpeg).metric_keys.push_back(key);
     }
-    // PSNR, SSIM and XPSNR beside VMAF on the GPU, from the GPU's decode,
-    // when both parts still run.
-    // Not metrics that cannot share its pass: in the GPU's task they would
-    // decode the videos again while holding the GPU's queue.
-    if (share_decode && !cpu_metrics_need_every_frame(ffmpeg.metric_keys, options.n_subsample) &&
+    // PSNR, SSIM, XPSNR and HDR VMAF beside VMAF on the GPU, from the GPU's decode, when both parts still run
+    // (score_hdr_beside, score_gpu_and_cpu). Not metrics that cannot share its pass: in the GPU's task they would
+    // decode the videos again while holding the GPU's queue. HDR VMAF does not change which those are.
+    std::vector<std::string> cpu_keys = ffmpeg.metric_keys;
+    std::erase(cpu_keys, "vmaf_hdr");
+    if (share_decode && !cpu_metrics_need_every_frame(cpu_keys, options.n_subsample) &&
         !gpu.metric_keys.empty() && !ffmpeg.metric_keys.empty() &&
         std::all_of(ffmpeg.metric_keys.begin(), ffmpeg.metric_keys.end(),
-                    [](const std::string& key) { return is_cpu_metric(key); })) {
+                    [](const std::string& key) { return is_cpu_metric(key) || key == "vmaf_hdr"; })) {
         gpu.cpu_beside = std::move(ffmpeg.metric_keys);
         ffmpeg.metric_keys.clear();
         gpu.metric_keys.clear();

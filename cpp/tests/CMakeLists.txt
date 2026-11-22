@@ -56,6 +56,7 @@ add_executable(vml_tests
     unit/native_playback_test.cpp
     unit/soundtrack_clock_test.cpp
     unit/video_playback_test.cpp
+    unit/vmaf_hdr_test.cpp
     unit/vmaf_vulkan_test.cpp
     unit/vship_test.cpp
     unit/reference.cpp

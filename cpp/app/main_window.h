@@ -110,6 +110,7 @@ enum Column : int {
     col_butteraugli,
     col_cvvdp,
     col_vmaf_v1,
+    col_vmaf_hdr,
     column_count,
 };
 

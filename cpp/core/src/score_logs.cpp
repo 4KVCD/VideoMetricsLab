@@ -178,7 +178,7 @@ private:
         const std::array<std::optional<double>, column_count> values{
             frame_.number_of[vmaf], first(psnr_y, psnr), first(float_ssim, ssim),
             at == xpsnr_.end() ? std::nullopt : std::optional<double>(at->second), frame_.number_of[vmaf_neg],
-            frame_.number_of[vmaf_v1]};
+            frame_.number_of[vmaf_v1], std::nullopt /* HDR VMAF: never FFmpeg's */};
         frames.push_back(frame_number);
         for (std::size_t column = 0; column < column_count; ++column) {
             columns[column].push_back(values[column] ? static_cast<float>(*values[column]) : std::nanf(""));

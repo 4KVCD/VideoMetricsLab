@@ -188,6 +188,11 @@ Json settings_json(const VideoSettings& settings, const ComparisonResult* result
         asks("vmaf_v1") ? model_json(options.model_choice_v1,
                                      result && !result->model_v1.empty() ? result->model_v1 : options.model_v1)
                         : Json(nullptr);
+    if (asks("vmaf_hdr")) {  // only with HDR VMAF, so other runs' records stay as they were
+        json["vmaf_hdr_model"] = model_json(options.model_choice_hdr, result && !result->model_hdr.empty()
+                                                                          ? result->model_hdr
+                                                                          : options.model_hdr);
+    }
     json["custom_model_path"] = options.custom_model_path.empty() ? Json(nullptr) : Json(options.custom_model_path);
     const bool asks_cvvdp = asks("cvvdp");
     json["cvvdp"] = asks_cvvdp ? Json{{"display", cvvdp_display}, {"parameters", settings.cvvdp.parameters()}}

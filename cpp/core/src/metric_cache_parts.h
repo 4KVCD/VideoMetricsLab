@@ -39,7 +39,7 @@ using LoadedMetric = std::variant<FrameMetricResult, SequenceMetricResult>;
 // A provenance parameter's value: the JSON its text holds.
 std::optional<nlohmann::json> parameter(const MetricProvenance& provenance, const std::string& name);
 
-// The model and model choice of VMAF or VMAF v1 (`key`) in a result of saved
+// The model and model choice of VMAF, VMAF v1 or HDR VMAF (`key`) in a result of saved
 // scores (the Python app's _loaded_model). When it was loaded: the model its
 // score was made with, as its file records it, and the choice of the request
 // it answers, as calculating that request would give them. Otherwise `model`

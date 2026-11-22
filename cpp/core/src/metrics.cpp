@@ -41,7 +41,7 @@ using enum MetricAggregation;
 // In the order the app shows them. Key "vmaf" is the v0.6.1 family (its
 // standard and 4K models), as it always was: saved scores, settings and
 // exports keep the key; only the label names the version.
-const std::array<MetricDefinition, 9> registry{{
+const std::array<MetricDefinition, 10> registry{{
     {"vmaf", "VMAF v0.6.1", "VMAF v0.6.1", "VMAF v0.6.1", "VMAF v0.6.1", 2, "", frame, higher_is_better,
      arithmetic, 100.0, vmaf_thresholds, bool_option("compute_vmaf"), {}, vmaf_smallest_side},
     {"vmaf_neg", "VMAF NEG", "VMAF NEG", "VMAF NEG", "VMAF NEG", 2, "", frame, higher_is_better, arithmetic,
@@ -50,6 +50,11 @@ const std::array<MetricDefinition, 9> registry{{
     // fixed axis: the 4K/3H model scores up to 110.
     {"vmaf_v1", "VMAF v1", "VMAF v1", "VMAF v1", "VMAF v1", 2, "", frame, higher_is_better, arithmetic,
      std::nullopt, vmaf_thresholds, bool_option("compute_vmaf_v1"), {}, vmaf_smallest_side},
+    // Netflix's HDR VMAF models: both videos converted to ICtCp (PQ) at the
+    // model's display size first, then scored as VMAF v1 is (on the GPU, or
+    // by libvmaf). PQ videos only.
+    {"vmaf_hdr", "HDR VMAF", "HDR VMAF", "HDR VMAF", "HDR VMAF", 2, "", frame, higher_is_better, arithmetic,
+     std::nullopt, vmaf_thresholds, bool_option("compute_vmaf_hdr"), {}, vmaf_smallest_side},
     {"psnr", "PSNR", "PSNR", "PSNR (dB)", "PSNR (dB)", 2, " dB", frame, higher_is_better, arithmetic,
      std::nullopt, psnr_thresholds, libvmaf_feature("name=psnr"), {}, 0},
     {"ssim", "SSIM", "SSIM", "SSIM", "SSIM", 4, "", frame, higher_is_better, arithmetic, std::nullopt,

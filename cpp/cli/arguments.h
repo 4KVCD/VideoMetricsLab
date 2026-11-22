@@ -32,7 +32,8 @@ struct CompareArguments {
     std::optional<std::string> scores_csv;
     std::optional<std::vector<std::string>> metrics;  // keys, in the registry's order
     std::string model = "auto";
-    std::string model_v1 = "auto";  // a word of v1_model_choices (model_select.h)
+    std::string model_v1 = "auto";   // a word of v1_model_choices (model_select.h)
+    std::string model_hdr = "auto";  // a word of hdr_model_choices
     std::string black_bars = "auto";  // "auto", "source" (the source's only) or "none"
     bool black_bars_given = false;    // --black-bars was given (refused beside a crop entered)
     // Crops entered by hand (--source-crop, --test-crop): either one makes the run's black bars

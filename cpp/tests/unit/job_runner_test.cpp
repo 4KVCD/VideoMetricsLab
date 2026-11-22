@@ -137,7 +137,9 @@ TEST(JobRunner, AVideosTasksRunAtOnceAndMakeOneResult) {
     std::mutex mutex;
     std::vector<std::vector<std::string>> asked;  // the metrics each task was run with
     bool met = true;
-    bool vmaf_on_gpu_as_planned = true;  // only the GPU's task may place VMAF there
+    // Both tasks keep the choice of the GPU: the CPU's holds no VMAF it could
+    // move there (HDR VMAF's features would take it).
+    bool vmaf_on_gpu_as_planned = true;
     Reported reported;
     run_jobs(
         jobs, 1, reported.events(),
@@ -148,7 +150,7 @@ TEST(JobRunner, AVideosTasksRunAtOnceAndMakeOneResult) {
             const std::lock_guard lock(mutex);
             asked.push_back(keys);
             met = met && together;
-            vmaf_on_gpu_as_planned = vmaf_on_gpu_as_planned && options.vmaf_on_gpu == options.compute_vmaf;
+            vmaf_on_gpu_as_planned = vmaf_on_gpu_as_planned && options.vmaf_on_gpu;
             if (options.compute_vmaf) {
                 return result_with({{"vmaf", {0, 2, 4}}}, "version=vmaf_v0.6.1");
             }

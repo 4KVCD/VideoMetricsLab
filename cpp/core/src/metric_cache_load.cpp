@@ -491,9 +491,12 @@ std::optional<std::pair<ComparisonResult, std::string>> comparison_from(
         result.model_choice = optional_string("model_choice");
         result.model_v1 = optional_string("model_v1").value_or("");
         result.model_choice_v1 = optional_string("model_choice_v1");
+        result.model_hdr = optional_string("model_hdr").value_or("");
+        result.model_choice_hdr = optional_string("model_choice_hdr");
         result.metric_results = std::move(results);
         loaded_model(result.metric_results, loaded_for, "vmaf", result.model, result.model_choice);
         loaded_model(result.metric_results, loaded_for, "vmaf_v1", result.model_v1, result.model_choice_v1);
+        loaded_model(result.metric_results, loaded_for, "vmaf_hdr", result.model_hdr, result.model_choice_hdr);
         std::optional<std::string> label = optional_string("label");
         if (!label || label->empty()) {
             label = platform::path_text(result.distorted.stem());

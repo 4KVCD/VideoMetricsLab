@@ -436,6 +436,11 @@ nlohmann::json context_json(const ComparisonResult& result, const std::string& l
             {"recipe", recipe.identity()},
             {"black_bars_rule", black_bars_rule_version},
             {"saved_by", build_stamp()}};
+    if (result.model_choice_hdr) {
+        // Only with HDR VMAF, so every other comparison's context stays as it was.
+        context["model_hdr"] = result.model_hdr;
+        context["model_choice_hdr"] = *result.model_choice_hdr;
+    }
     if (result.frames_short) {
         context["frames_short"] = frames_short_json(result.frames_short);
     }

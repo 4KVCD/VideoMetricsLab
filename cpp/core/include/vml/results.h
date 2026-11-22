@@ -158,6 +158,9 @@ struct ComparisonResult {
     std::optional<std::string> model_choice;
     std::string model_v1;
     std::optional<std::string> model_choice_v1;
+    // HDR VMAF's model file and choice; empty and unset unless it was scored.
+    std::string model_hdr;
+    std::optional<std::string> model_choice_hdr;
     MetricResultSet metric_results;
     // Metrics asked for that the run could not score, with why, while the
     // others stand (reported as failed; never saved).

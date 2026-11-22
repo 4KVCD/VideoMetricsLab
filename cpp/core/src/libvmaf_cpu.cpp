@@ -344,6 +344,19 @@ int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr) {
     return static_cast<int>(std::max(2LL, std::min(wanted, fit))) + (xpsnr ? 1 : 0);
 }
 
+void fill_picture(VmafPicture& picture, const FramePlanes& frame, std::size_t sample,
+                  std::initializer_list<int> planes) {
+    for (const int plane : planes) {
+        const Plane& from = frame[static_cast<std::size_t>(plane)];
+        const std::size_t row_bytes = picture.w[plane] * sample;
+        auto* target = static_cast<std::uint8_t*>(picture.data[plane]);
+        const auto stride = static_cast<std::size_t>(picture.stride[plane]);
+        for (std::size_t row = 0; row < picture.h[plane]; ++row) {
+            std::memcpy(target + row * stride, from.data + static_cast<std::ptrdiff_t>(row) * from.stride, row_bytes);
+        }
+    }
+}
+
 PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted,
                              const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
                              int width, int height, int bit_depth, const std::vector<std::string>& metrics,

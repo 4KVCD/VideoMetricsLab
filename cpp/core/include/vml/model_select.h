@@ -53,6 +53,8 @@ inline constexpr std::string_view auto_word = "auto";
 // The VMAF v1 column's models: Auto, then each bundled model (its word its
 // id), in the window's dropdown order.
 const std::vector<ModelChoice>& v1_model_choices();
+// The HDR VMAF column's models, the same way.
+const std::vector<ModelChoice>& hdr_model_choices();
 
 // The model "Auto" picks for frames compared at this size.
 std::string model_for_resolution(int width, int height);
@@ -77,5 +79,10 @@ std::string resolve_model(const VmafOptions& options, int width, int height);
 // and the model= value of the options' VMAF v1 choice ("path=<file>").
 std::string v1_model_for_resolution(int width, int height);
 std::string resolve_v1_model(const VmafOptions& options, int width, int height);
+
+// The same for HDR VMAF: its bundled models (hdr_vmaf_v1.1.8) and the
+// options' HDR VMAF choice.
+std::string hdr_model_for_resolution(int width, int height);
+std::string resolve_hdr_model(const VmafOptions& options, int width, int height);
 
 }  // namespace vml

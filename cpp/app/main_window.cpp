@@ -113,9 +113,11 @@ constexpr int max_videos_in_flight = max_parallel_jobs + 1;
 }  // namespace
 
 const std::vector<MetricColumn>& metric_columns() {
-    // VMAF NEG beside VMAF v0.6.1, whose variant it is; VMAF v1 after them.
+    // VMAF NEG beside VMAF v0.6.1, whose variant it is; VMAF v1 and HDR VMAF
+    // after them.
     static const std::vector<MetricColumn> columns{
         {col_vmaf, "vmaf"},       {col_vmaf_neg, "vmaf_neg"},       {col_vmaf_v1, "vmaf_v1"},
+        {col_vmaf_hdr, "vmaf_hdr"},
         {col_psnr, "psnr"},       {col_ssim, "ssim"},               {col_xpsnr, "xpsnr"},
         {col_ssimulacra2, "ssimulacra2"}, {col_butteraugli, "butteraugli"}, {col_cvvdp, "cvvdp"},
     };
@@ -843,7 +845,7 @@ void MainWindow::build_test_table() {
         "", app::tr("File name"), app::tr("Media info"), app::tr("Black bars"), app::tr("Scaling"),
         app::tr("Approx. bitrate"), header_of("psnr"), header_of("ssim"), header_of("vmaf"), header_of("xpsnr"),
         header_of("vmaf_neg"), header_of("ssimulacra2"), header_of("butteraugli"), header_of("cvvdp"),
-        header_of("vmaf_v1"),
+        header_of("vmaf_v1"), header_of("vmaf_hdr"),
     });
     distorted_table_->verticalHeader()->setVisible(false);
     // Kept as a column, but not shown: cropping is in the row's options.
@@ -1027,6 +1029,7 @@ VmafOptions MainWindow::options_from_settings() const {
     options.compute_vmaf = settings_.default_compute_vmaf;
     options.compute_vmaf_neg = settings_.default_compute_vmaf_neg;
     options.compute_vmaf_v1 = settings_.default_compute_vmaf_v1;
+    options.compute_vmaf_hdr = settings_.default_compute_vmaf_hdr;
     return options;
 }
 

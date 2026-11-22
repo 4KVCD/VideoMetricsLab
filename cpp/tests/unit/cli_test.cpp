@@ -127,6 +127,20 @@ TEST(CommandLine, ReadsArgumentsAsThePythonApp) {
     }
 }
 
+// HDR VMAF: its model named by its word, and left out of "all", which would
+// otherwise fail every SDR video's run.
+TEST(CommandLine, ReadsHdrVmafAndLeavesItOutOfAll) {
+    const CompareArguments all = parse_arguments({"compare", "ref.mkv", "a.mkv", "-m", "all"}).compare;
+    ASSERT_TRUE(all.metrics);
+    EXPECT_EQ(std::count(all.metrics->begin(), all.metrics->end(), "vmaf_hdr"), 0);
+    EXPECT_EQ(std::count(all.metrics->begin(), all.metrics->end(), "vmaf_v1"), 1);
+    const CompareArguments hdr =
+        parse_arguments({"compare", "ref.mkv", "a.mkv", "-m", "vmaf_hdr", "--model-hdr", "hdr_vmaf_5d0h"}).compare;
+    EXPECT_EQ(*hdr.metrics, std::vector<std::string>{"vmaf_hdr"});
+    EXPECT_EQ(hdr.model_hdr, "hdr_vmaf_5d0h");
+    EXPECT_THROW(parse_arguments({"compare", "ref.mkv", "a.mkv", "--model-hdr", "vmaf_v1_3d0h"}), UsageError);
+}
+
 // --worst and --segments (issue #24, which the Python app never had): the
 // conditions read, each named metric checked, and the segments' options
 // refused without --segments.

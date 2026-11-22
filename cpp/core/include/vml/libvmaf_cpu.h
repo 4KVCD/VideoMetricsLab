@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <initializer_list>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -145,6 +146,13 @@ bool cpu_scores_xpsnr();
 // (270 MB with XPSNR), but at least two pairs; XPSNR gets one more, for the
 // test pictures it keeps from the previous frames.
 int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr);
+
+// Copies the given planes (0 Y, 1 U, 2 V) of a frame into a libvmaf picture of
+// its size, `sample` bytes a sample. Its planes are the frame's, but for an odd
+// size's chroma planes, which libvmaf rounds down where FFmpeg rounds up: the
+// picture's part of them is copied.
+void fill_picture(VmafPicture& picture, const FramePlanes& frame, std::size_t sample,
+                  std::initializer_list<int> planes);
 
 // PSNR, SSIM and XPSNR (CpuScorer) with both videos decoded in this process,
 // luma only, as score_decoded (gpu_vmaf.h) does for VMAF: by `decoders`

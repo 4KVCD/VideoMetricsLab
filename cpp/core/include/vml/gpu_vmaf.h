@@ -14,6 +14,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -22,6 +23,7 @@
 #include "vml/cancel.h"
 #include "vml/libvmaf_cpu.h"
 #include "vml/video.h"
+#include "vml/vmaf_hdr.h"
 #include "vml/vmaf_vulkan.h"
 
 namespace vml {
@@ -89,9 +91,11 @@ GpuModels scores_on_gpu(bool compute_vmaf, bool compute_vmaf_neg, const std::str
 
 // What a run scores outside FFmpeg, and how (the Python app's _GpuPlan):
 // VMAF, NEG and VMAF v1 on the GPU, or PSNR, SSIM and XPSNR with libvmaf's
-// CPU extractors.
+// CPU extractors, or HDR VMAF in the app (vmaf_hdr.h).
 struct GpuPlan {
-    GpuModels models;  // with backend "cpu": each metric's key with itself
+    // With backend "cpu": each metric's key with itself; with "hdr":
+    // "vmaf_hdr" with its model's file.
+    GpuModels models;
     int width = 0;     // the size and depth frames are compared at
     int height = 0;
     int bit_depth = 8;
@@ -101,18 +105,71 @@ struct GpuPlan {
     // What scores VMAF v0.6.1 and NEG: "vulkan" or "cuda" (VMAF v1 is
     // Vulkan's on every GPU); or "cpu" for PSNR, SSIM and XPSNR with
     // libvmaf's CPU extractors (libvmaf_cpu.h), which take their frames the
-    // same way.
+    // same way; or "hdr" for HDR VMAF (HdrScorer), whole frames.
     std::string backend = "vulkan";
-    // PSNR, SSIM and XPSNR scored beside the GPU's metrics with libvmaf's CPU
-    // extractors, from the frames decoded for the GPU (a run that decodes each
-    // video once for both). `threads` and `frame_rate` are theirs.
+    // With HDR VMAF (backend "hdr", or "vmaf_hdr" in `beside`): how the
+    // videos' pictures are coded (hdr_colours), its model's file, and its
+    // libvmaf threads.
+    HdrColours hdr_colours;
+    std::string hdr_model_file;
+    int hdr_threads = 0;
+    // The GPU its features go on (HdrScorer's `gpu`: Vulkan's number, -1 for
+    // the best one), or nothing for libvmaf's on the CPU.
+    std::optional<int> hdr_gpu;
+    // What is scored beside the plan's own metrics from the frames decoded for
+    // them (a run that decodes each video once for all): PSNR, SSIM and XPSNR
+    // with libvmaf's CPU extractors, and "vmaf_hdr", HDR VMAF (HdrScorer).
+    // `threads` and `frame_rate` are the CPU extractors'.
     std::vector<std::string> beside;
     int threads = 0;     // the CPU extractors' libvmaf threads
     int frame_rate = 0;  // XPSNR's, in whole frames per second
 };
 
+// HDR VMAF's scorer for a plan that scores it (GpuPlan::hdr_model_file,
+// hdr_colours, hdr_threads, hdr_gpu). Throws as HdrScorer does.
+std::unique_ptr<HdrScorer> make_hdr_scorer(const GpuPlan& plan, int n_subsample);
+
+// What a pass scores beside its own metrics, from the same frames
+// (GpuPlan::beside): PSNR, SSIM and XPSNR with libvmaf's CPU extractors
+// (CpuScorer), HDR VMAF (HdrScorer), or both. Each scores every
+// `n_subsample`th pair, as the pass's own scorers do.
+class BesideScorer : public PairScorer {
+public:
+    // Throws LibvmafError, and std::invalid_argument for a size HDR VMAF's
+    // model refuses.
+    BesideScorer(const GpuPlan& plan, int n_subsample);
+    ~BesideScorer() override;
+    BesideScorer(const BesideScorer&) = delete;
+    BesideScorer& operator=(const BesideScorer&) = delete;
+
+    std::size_t frame_bytes() const override;
+    void add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted) override;
+    void add_planes(const FramePlanes& reference, const FramePlanes& distorted) override;
+
+    // Whether it reads whole pictures (HDR VMAF reads the chroma), which a
+    // pass then gives it in system memory (HostPairs, or FFmpeg's pipes)
+    // rather than through add_decoded's downloads of the luma alone.
+    bool reads_whole_frames() const { return hdr_ != nullptr; }
+
+    // CpuScorer::add_decoded, for a scorer that does not read whole frames
+    // (std::logic_error otherwise).
+    void add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot);
+    void add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot,
+                     const std::function<void(Plane, Plane)>& also);
+
+    // The CPU extractors' scores, then HDR VMAF's. Throws LibvmafError when
+    // the two were not scored for the same frames.
+    PairScores finish() override;
+
+private:
+    CpuScorer& luma_only_scorer();
+
+    std::optional<CpuScorer> cpu_;
+    std::unique_ptr<HdrScorer> hdr_;
+};
+
 // Whether a pass may ask for its pictures to stay on the GPU. Not with CPU metrics
-// beside it: they read the frames in system memory anyway, and AMD's decoder then
+// or HDR VMAF beside it: they read the frames in system memory anyway, and AMD's decoder then
 // gives AMF's own download rather than Windows' decoder's pictures, the ones
 // those metrics read in their own run. NVIDIA's and vvdec-vulkan's streams hand
 // over whatever they are asked (GpuFrameStream).
@@ -125,15 +182,15 @@ inline bool pass_may_hand_over(const GpuPlan& plan) { return plan.beside.empty()
 // decoders keep their own routes. Taken only where pass_may_hand_over.
 bool both_copy_on_gpu(const GpuFrameStream& test, const GpuFrameStream& reference);
 
-// The scorer of a plan's metrics beside the GPU's (GpuPlan::beside), made in
-// `scorer` where the plan has any: every `n_subsample`th pair, as the GPU's
-// scorers score them. Throws LibvmafError.
-void start_beside(std::optional<CpuScorer>& scorer, const GpuPlan& plan, int n_subsample);
+// The scorer of a plan's metrics beside its own (GpuPlan::beside), made in
+// `scorer` where the plan has any (and logged, with the pass it joins).
+// Throws as BesideScorer does.
+void start_beside(std::optional<BesideScorer>& scorer, const GpuPlan& plan, int n_subsample);
 
-// The GPU's `scores` with those of the metrics scored beside them (if any)
+// The pass's `scores` with those of the metrics scored beside them (if any)
 // added after theirs. Throws LibvmafError when the two were not scored for
 // the same frames.
-void add_beside(PairScores& scores, std::optional<CpuScorer>& beside);
+void add_beside(PairScores& scores, std::optional<BesideScorer>& beside);
 
 // The GPU's turn: one GPU pass at a time in this process (the Python app's
 // gpu.GPU_PASS), so that no video's GPU metrics run beside another's.

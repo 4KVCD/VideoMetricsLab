@@ -28,16 +28,24 @@ namespace {
 // The columns the export always had come first, in their old order, so a
 // new metric never moves them.
 constexpr std::array<std::string_view, 5> first_columns{"vmaf", "vmaf_neg", "psnr", "ssim", "xpsnr"};
+// Columns only exports that have their scores get, so that every other
+// export keeps the columns it always had: HDR VMAF scores PQ videos only.
+constexpr std::array<std::string_view, 1> scored_only_columns{"vmaf_hdr"};
 
-// The frame metrics in the CSV's order.
-std::vector<std::string> column_keys() {
+template <std::size_t N>
+bool is_one_of(const std::array<std::string_view, N>& keys, std::string_view key) {
+    return std::find(keys.begin(), keys.end(), key) != keys.end();
+}
+
+// The frame metrics in the CSV's order, for an export of `scores`.
+std::vector<std::string> column_keys(const MetricResultSet& scores) {
     std::vector<std::string> keys;
     for (const std::string_view first : first_columns) {
         keys.emplace_back(first);
     }
     for (const MetricDefinition& metric : metrics()) {
-        if (metric.kind == MetricKind::frame &&
-            std::find(first_columns.begin(), first_columns.end(), metric.key) == first_columns.end()) {
+        if (metric.kind == MetricKind::frame && !is_one_of(first_columns, metric.key) &&
+            (!is_one_of(scored_only_columns, metric.key) || scores.frame(std::string(metric.key)) != nullptr)) {
             keys.emplace_back(metric.key);
         }
     }
@@ -86,7 +94,7 @@ constexpr double blank = std::numeric_limits<double>::quiet_NaN();
 
 CsvTable csv_table(const MetricResultSet& metrics) {
     CsvTable table;
-    const std::vector<std::string> keys = column_keys();
+    const std::vector<std::string> keys = column_keys(metrics);
     const SequenceMetricResult* cvvdp = metrics.sequence("cvvdp");
     for (const std::string& key : keys) {
         if (const FrameMetricResult* column = metrics.frame(key)) {
@@ -241,7 +249,7 @@ void export_difference_csv(const ComparisonResult& first, const ComparisonResult
     const MetricResultSet ours = portable_metric_results(first);
     const MetricResultSet theirs = portable_metric_results(second);
     CsvTable table = csv_table(ours);  // the first's rows, times and columns
-    for (const std::string& key : column_keys()) {
+    for (const std::string& key : column_keys(ours)) {
         std::vector<double>& column = table.values.at(key);
         std::fill(column.begin(), column.end(), blank);
         const FrameMetricResult* mine = ours.frame(key);

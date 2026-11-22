@@ -109,7 +109,7 @@ public:
     // The options the controls show. The metrics are not in the panel, so
     // the window gives them, from the table's column headings.
     VmafOptions read_options(const std::vector<std::string>& extra_features, bool compute_vmaf, bool compute_vmaf_neg,
-                             bool compute_vmaf_v1, bool compute_xpsnr) const;
+                             bool compute_vmaf_v1, bool compute_vmaf_hdr, bool compute_xpsnr) const;
 
     // The model file chosen for "Custom model file...", until it is applied
     // to the rows.
@@ -137,6 +137,7 @@ public:
     QComboBox* film_grain_combo = nullptr;
     QComboBox* model_combo = nullptr;
     QComboBox* model_v1_combo = nullptr;
+    QComboBox* model_hdr_combo = nullptr;
     QSpinBox* subsample_spin = nullptr;
     QComboBox* cvvdp_preset_combo = nullptr;
     QLabel* cvvdp_display_label = nullptr;

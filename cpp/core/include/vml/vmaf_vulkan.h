@@ -81,6 +81,10 @@ struct VulkanEngine {
     // in, in system memory or in the shared buffers.
     int (*create_v1)(VulkanContext** out, int device, int width, int height, int bit_depth, int flags,
                      const double* options);
+    // create_v1 with `count` options: its nine, then adm_skip_scale0 (the
+    // HDR VMAF models'); nullptr in an engine before libvmaf-fast c3f7a430.
+    int (*create_v1_ex)(VulkanContext** out, int device, int width, int height, int bit_depth, int flags,
+                        const double* options, int count);
     int (*features_v1)(VulkanContext* context, double* out, unsigned frames);
     int (*v1_cambi)(VulkanContext* context, const double* options);
     int (*v1_cambi_scores)(VulkanContext* context, double* out, unsigned frames);

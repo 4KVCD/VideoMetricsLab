@@ -66,6 +66,11 @@ struct Libvmaf {
     decltype(&::vmaf_use_features_from_model) use_features_from_model;
     decltype(&::vmaf_write_output) write_output;
     decltype(&::vmaf_picture_alloc) picture_alloc;
+    // For HDR VMAF (vmaf_hdr.h): its conversion of pictures to the colours,
+    // format and size a model asks for (zimg, linked into the library).
+    decltype(&::vmaf_picture_convert_context_init) picture_convert_context_init = nullptr;
+    decltype(&::vmaf_picture_convert) picture_convert = nullptr;
+    decltype(&::vmaf_picture_convert_context_close) picture_convert_context_close = nullptr;
     // Its CUDA code, for VMAF and NEG with CUDA (vmaf_cuda.h), each nullptr
     // in a build without it: the CUDA state, imported into a context, and
     // the context's pictures in GPU memory.
@@ -73,6 +78,25 @@ struct Libvmaf {
     decltype(&::vmaf_cuda_import_state) cuda_import_state = nullptr;
     decltype(&::vmaf_cuda_preallocate_pictures) cuda_preallocate_pictures = nullptr;
     decltype(&::vmaf_cuda_fetch_preallocated_picture) cuda_fetch_preallocated_picture = nullptr;
+};
+
+// A libvmaf context and its model, released however the work ends.
+struct LibvmafHandles {
+    const Libvmaf& library;
+    VmafContext* context = nullptr;
+    VmafModel* model = nullptr;
+
+    explicit LibvmafHandles(const Libvmaf& from) : library(from) {}
+    ~LibvmafHandles();
+    LibvmafHandles(const LibvmafHandles&) = delete;
+    LibvmafHandles& operator=(const LibvmafHandles&) = delete;
+
+    // Starts libvmaf with `threads` threads (0: on the calling thread) and
+    // every `n_subsample`th frame.
+    void start(int threads, int n_subsample);
+
+    // Loads the model in `file` (and destroys one that fails half-made).
+    void load_model(const std::filesystem::path& file);
 };
 
 // Where the bundled library is, with its build record.

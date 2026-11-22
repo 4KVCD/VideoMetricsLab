@@ -60,6 +60,10 @@ void take_run_options(VmafOptions& options, const ComparisonResult& result) {
     if (result.model_choice_v1 && !result.model_choice_v1->empty()) {
         options.model_choice_v1 = *result.model_choice_v1;
     }
+    options.compute_vmaf_hdr = has("vmaf_hdr");
+    if (result.model_choice_hdr && !result.model_choice_hdr->empty()) {
+        options.model_choice_hdr = *result.model_choice_hdr;
+    }
     options.model = result.model;
     // The model chosen too: without it, a later lookup or calculation would
     // put the row back to Auto. An older file has none, and its two forms

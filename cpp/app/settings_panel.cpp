@@ -76,6 +76,7 @@ const std::vector<std::pair<std::string, QString>> default_metric_boxes{
     {"vmaf", "VMAF v0.6.1"},
     {"vmaf_neg", "VMAF NEG"},
     {"vmaf_v1", "VMAF v1"},
+    {"vmaf_hdr", "HDR VMAF"},
     {"psnr", "PSNR"},
     {"ssim", "SSIM"},
     {"xpsnr", "XPSNR"},

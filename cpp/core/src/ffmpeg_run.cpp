@@ -16,6 +16,7 @@
 #include <set>
 #include <sstream>
 #include <thread>
+#include <variant>
 
 #include "ffmpeg_run_parts.h"
 #include "vml/app_log.h"
@@ -39,6 +40,7 @@
 #include "vml/temp_files.h"
 #include "vml/time_format.h"
 #include "vml/vmaf_cuda.h"
+#include "vml/vmaf_hdr.h"
 #include "vml/vmaf_v1_gpu.h"
 
 namespace vml {
@@ -520,7 +522,11 @@ ParsedScores gpu_scores(const PairScores& scored, double fps, const VmafOptions&
 std::string metric_names(const GpuPlan& plan) {
     std::vector<std::string> names;
     for (const auto& [key, model] : plan.models) {
-        names.push_back(key == "psnr" ? "PSNR" : key == "ssim" ? "SSIM" : key == "xpsnr" ? "XPSNR" : key);
+        names.push_back(key == "psnr"       ? "PSNR"
+                        : key == "ssim"     ? "SSIM"
+                        : key == "xpsnr"    ? "XPSNR"
+                        : key == "vmaf_hdr" ? "HDR VMAF"
+                                            : key);
     }
     std::string text;
     for (std::size_t i = 0; i < names.size(); ++i) {
@@ -530,9 +536,9 @@ std::string metric_names(const GpuPlan& plan) {
 }
 
 // What a plan's run is doing, for its statuses: "VMAF on the GPU", or
-// "PSNR and SSIM in the app".
+// "PSNR and SSIM in the app", or "HDR VMAF in the app".
 std::string doing(const GpuPlan& plan) {
-    return plan.backend == "cpu" ? metric_names(plan) + " in the app" : "VMAF on the GPU";
+    return plan.backend == "cpu" || plan.backend == "hdr" ? metric_names(plan) + " in the app" : "VMAF on the GPU";
 }
 
 // The plan's metrics scored outside FFmpeg's filters, each video decoded by
@@ -549,7 +555,8 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
     if (options.requested_metrics().empty()) {
         throw VmafRunError("Select at least one metric to calculate.");
     }
-    const TempFolder folder = run_folder(plan.backend == "cpu" ? "vmaf_cpu_run_" : "vmaf_gpu_run_");
+    const TempFolder folder =
+        run_folder(plan.backend == "cpu" || plan.backend == "hdr" ? "vmaf_cpu_run_" : "vmaf_gpu_run_");
     const VmafOptions seeking = reading_near_range(options, environment, source, distorted, cancel);
     const std::vector<HardwareDecoding> ladder = fallback_ladder(decoding);
     std::optional<PairScores> scored;
@@ -682,6 +689,10 @@ ParsedScores score_decoded_here(const RunEnvironment& environment, const VideoIn
             ? score_decoded_cpu(source, distorted, source_crop, distorted_crop, plan.width, plan.height,
                                 plan.bit_depth, keys, options.n_subsample, range, total_frames, decoders,
                                 plan.threads, plan.frame_rate, options.scale_algorithm, environment.ffmpeg,
+                                environment.ffprobe, want_vvdec, on_vvdec_opening(on_status), on_progress, cancel)
+        : plan.backend == "hdr"
+            ? score_decoded_hdr(source, distorted, source_crop, distorted_crop, plan, options.n_subsample, range,
+                                total_frames, options.scale_algorithm, decoders, environment.ffmpeg,
                                 environment.ffprobe, want_vvdec, on_vvdec_opening(on_status), on_progress, cancel)
         : std::find(keys.begin(), keys.end(), "vmaf_v1") != keys.end()
             ? score_decoded_v1(source, distorted, source_crop, distorted_crop, plan, options.n_subsample, range,
@@ -974,9 +985,24 @@ nlohmann::json plan_json(const GpuPlan& plan) {
     for (const auto& [key, version] : plan.models) {
         models.push_back({key, version});
     }
+    // HDR VMAF's colours, each video's as libvmaf's numbers: range, primaries, transfer, matrix.
+    nlohmann::json colours = nlohmann::json::array();
+    for (const VmafColor& colour : {plan.hdr_colours.source, plan.hdr_colours.distorted}) {
+        colours.push_back({colour.range, colour.primaries, colour.trc, colour.matrix});
+    }
     return {{"models", models},           {"width", plan.width},     {"height", plan.height},
             {"bit_depth", plan.bit_depth}, {"device", plan.device},   {"backend", plan.backend},
-            {"beside", plan.beside},       {"threads", plan.threads}, {"frame_rate", plan.frame_rate}};
+            {"beside", plan.beside},       {"threads", plan.threads}, {"frame_rate", plan.frame_rate},
+            {"hdr_colours", colours},      {"hdr_model_file", plan.hdr_model_file},
+            {"hdr_threads", plan.hdr_threads},
+            {"hdr_gpu", plan.hdr_gpu ? nlohmann::json(*plan.hdr_gpu) : nlohmann::json(nullptr)}};
+}
+
+VmafColor colour_from(const nlohmann::json& text) {
+    return {static_cast<VmafColorRange>(text.at(0).get<int>()),
+            static_cast<VmafColorPrimaries>(text.at(1).get<int>()),
+            static_cast<VmafColorTransferCharacteristic>(text.at(2).get<int>()),
+            static_cast<VmafColorMatrixCoefficients>(text.at(3).get<int>())};
 }
 
 GpuPlan plan_from(const nlohmann::json& text) {
@@ -992,6 +1018,12 @@ GpuPlan plan_from(const nlohmann::json& text) {
     text.at("beside").get_to(plan.beside);
     text.at("threads").get_to(plan.threads);
     text.at("frame_rate").get_to(plan.frame_rate);
+    plan.hdr_colours = {colour_from(text.at("hdr_colours").at(0)), colour_from(text.at("hdr_colours").at(1))};
+    text.at("hdr_model_file").get_to(plan.hdr_model_file);
+    text.at("hdr_threads").get_to(plan.hdr_threads);
+    if (const nlohmann::json& gpu = text.at("hdr_gpu"); !gpu.is_null()) {
+        plan.hdr_gpu = gpu.get<int>();
+    }
     return plan;
 }
 
@@ -1033,7 +1065,7 @@ ParsedScores run_plan_child(std::string_view task, const RunEnvironment& environ
 }
 
 // The plan's metrics scored in a process of its own (score_plan in the
-// child, `task` "gpu-run" or "cpu-metrics"), so that a crash in libvmaf, the
+// child, `task` "gpu-run" or "cpu-metrics", HDR VMAF's too), so that a crash in libvmaf, the
 // GPU's code or its driver ends that process and not the run (the Python
 // app's run_isolated(..., what="libvmaf")). A child that opened vvdec-vulkan
 // and then failed or crashed, where it did not turn vvdec-vulkan off itself,
@@ -1084,8 +1116,11 @@ ParsedScores score_on_gpu(const RunEnvironment& environment, const VideoInfo& so
         for (const std::string& key : plan.beside) {
             cpu.models.emplace_back(key, key);
         }
-        beside = ", with " + metric_names(cpu) + " beside it from the same frames (" + cpu_library_build() + ", " +
-                 std::to_string(plan.threads) + " threads)";
+        // HDR VMAF's threads are its own (log_hdr_vmaf)
+        const bool cpu_metrics = std::any_of(plan.beside.begin(), plan.beside.end(),
+                                             [](const std::string& key) { return is_cpu_metric(key); });
+        beside = ", with " + metric_names(cpu) + " beside it from the same frames (" + cpu_library_build() +
+                 (cpu_metrics ? ", the CPU's metrics on " + std::to_string(plan.threads) + " threads" : "") + ")";
     }
     logger.info("VMAF on the GPU (" + models +
                 "): " + (plan.backend == "vulkan" ? vulkan_library_build() : cuda_library_build()) + beside);
@@ -1342,11 +1377,14 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
 
 // The VMAF model a run uses, from the size its frames are compared at, which
 // is known only once black bars are: Auto's model comes from it, while an
-// explicit or custom choice is the user's. VMAF v1's model is resolved into
-// `options` the same way.
+// explicit or custom choice is the user's. VMAF v1's and HDR VMAF's models
+// are resolved into `options` the same way.
 std::string resolve_run_models(VmafOptions& options, int width, int height) {
     if (options.compute_vmaf_v1) {
         options.model_v1 = resolve_v1_model(options, width, height);
+    }
+    if (options.compute_vmaf_hdr) {
+        options.model_hdr = resolve_hdr_model(options, width, height);
     }
     if (!options.compute_vmaf) {
         return {};
@@ -1447,9 +1485,9 @@ void validate_display_geometry(const VideoInfo& source, const VideoInfo& distort
 }
 
 FrameRange run_range(const VmafOptions& options, const VideoInfo& source) {
-    // VMAF's motion and XPSNR look at the frames around the one they score.
-    const bool looks_around =
-        options.compute_vmaf || options.compute_vmaf_neg || options.compute_vmaf_v1 || options.compute_xpsnr;
+    // VMAF's motion (HDR VMAF's too) and XPSNR look at the frames around the one they score.
+    const bool looks_around = options.compute_vmaf || options.compute_vmaf_neg || options.compute_vmaf_v1 ||
+                              options.compute_vmaf_hdr || options.compute_xpsnr;
     return frame_range(options.compared_range(), source.fps, options.n_subsample, looks_around);
 }
 
@@ -1649,6 +1687,8 @@ MetricProvenance run_provenance(const std::string& key, const std::string& model
         parameters["model"] = nlohmann::json(model).dump();
     } else if (key == "vmaf_v1") {
         parameters["model"] = nlohmann::json(options.model_v1).dump();
+    } else if (key == "vmaf_hdr") {
+        parameters["model"] = nlohmann::json(options.model_hdr).dump();
     }
     MetricProvenance provenance = current_ffmpeg_provenance(key, ffmpeg_version, std::move(parameters));
     if (cpu_keys.contains(key)) {
@@ -1986,6 +2026,184 @@ std::optional<RunScores> score_gpu_and_cpu(const RunFrames& run, const VmafOptio
     return score_apart(run, gpu_options, cpu_options, *gpu, cpu, model, on_progress, on_status);
 }
 
+// The progress of part `index` of `parts` run one after the other, as the
+// whole run's: each part counts as much as the others.
+ProgressCallback part_in_sequence(const ProgressCallback& on_progress, long long index, long long parts) {
+    if (!on_progress) {
+        return nullptr;
+    }
+    return [on_progress, index, parts](long long done, long long whole, double fps) {
+        on_progress(index * whole + done, parts * whole, fps);
+    };
+}
+
+// HDR VMAF's plan for the run (backend "hdr"), or why it fails for this pair: videos it does not take (not PQ, say),
+// or a model it cannot load or that refuses the size. Neither decodes anything.
+std::variant<GpuPlan, std::string> hdr_plan(const RunFrames& run, const VmafOptions& options) {
+    const std::variant<HdrColours, std::string> colours = hdr_colours(run.source, run.distorted);
+    if (const auto* refusal = std::get_if<std::string>(&colours)) {
+        return *refusal;
+    }
+    GpuPlan plan;
+    plan.backend = "hdr";
+    plan.width = run.width;
+    plan.height = run.height;
+    plan.bit_depth = run.depth;
+    plan.hdr_colours = std::get<HdrColours>(colours);
+    // libvmaf's threads when its features are on the CPU: half the cores by default, beside its conversion threads.
+    // Each keeps its own 4K feature buffers: on the Core Ultra 9 285K, 12 threads scored 4K as fast as 24 (8.5 s
+    // against 9.0 s for 480 frames) with 3.2 GB less memory (5.0 GB against 8.1 GB).
+    plan.hdr_threads =
+        options.n_threads > 0 ? options.n_threads : std::max(1, static_cast<int>(run.environment.cores) / 2);
+    if (options.vmaf_on_gpu) {
+        // Its features on VMAF v1's Vulkan engine, on the GPU gpu_plan gives VMAF v1 (HdrScorer falls back to the
+        // CPU where it cannot).
+        const GpuVmafBackend backend = gpu_vmaf_backend(run.cancel);
+        plan.hdr_gpu = backend.backend == "vulkan" && backend.device ? *backend.device : -1;
+    }
+    try {
+        const std::optional<std::string_view> file = model_file_of(options.model_hdr);
+        if (!file) {
+            throw std::invalid_argument("Not an HDR VMAF model: " + options.model_hdr);
+        }
+        plan.models.emplace_back("vmaf_hdr", std::string(*file));
+        plan.hdr_model_file = std::string(*file);
+        const HdrModelTarget model = hdr_model_target(platform::path_from_text(*file));
+        hdr_targets(static_cast<unsigned>(run.width), static_cast<unsigned>(run.height),
+                    static_cast<unsigned>(run.width), static_cast<unsigned>(run.height), model);
+    } catch (const std::exception& error) {
+        logger.error(std::string("HDR VMAF failed: ") + error.what());
+        return std::string("HDR VMAF failed: ") + error.what();
+    }
+    return plan;
+}
+
+// The log line of HDR VMAF's libvmaf and threads, as a run starts it (HdrScorer logs where its features go).
+void log_hdr_vmaf(const GpuPlan& plan) {
+    logger.info("HDR VMAF in the app: " + cpu_library_build() + ", " + std::to_string(plan.hdr_threads) +
+                " threads, its pictures converted on " +
+                std::to_string(hdr_conversion_threads(std::thread::hardware_concurrency(), plan.hdr_gpu.has_value())) +
+                (plan.hdr_gpu ? " (its features on the GPU where the engine takes them)" : ""));
+}
+
+// HDR VMAF's part of a run (vmaf_hdr.h, `planned` by hdr_plan): scored in the app, in a process of its own where one
+// is set, on the frames the other metrics compare (cropped, and at the size they are compared at), decoded by the
+// app's decoders or by FFmpeg as theirs are. A pair it cannot score (`planned`'s failure), or a run of it that fails,
+// fails HDR VMAF alone (the part's `failed`); Cancel and what makes the whole run again or refuses it end the run.
+ParsedScores score_hdr(const RunFrames& run, const VmafOptions& options,
+                       const std::variant<GpuPlan, std::string>& planned, const ProgressCallback& on_progress,
+                       const StatusCallback& on_status) {
+    ParsedScores refused;
+    if (const auto* failure = std::get_if<std::string>(&planned)) {
+        refused.failed["vmaf_hdr"] = *failure;
+        return refused;
+    }
+    const GpuPlan& plan = std::get<GpuPlan>(planned);
+    try {
+        log_hdr_vmaf(plan);
+        return isolation_program()
+                   ? score_plan_apart("cpu-metrics", run.environment, run.source, run.distorted, options,
+                                      run.source_crop, run.distorted_crop, plan, run.distorted.fps, run.total_frames,
+                                      run.decoding, on_progress, on_status, run.cancel)
+                   : score_plan(run.environment, run.source, run.distorted, options, run.source_crop,
+                                run.distorted_crop, plan, run.distorted.fps, run.total_frames, run.decoding,
+                                on_progress, on_status, run.cancel);
+    } catch (const Cancelled&) {
+        throw;
+    } catch (const VideoSizeChanged&) {
+        throw;  // the run is made again, the video marked (run_vmaf)
+    } catch (const FilmGrainRefusal&) {
+        throw;  // final: every route decodes it with the same decoder (grain_feed.h)
+    } catch (const std::exception& error) {
+        logger.error(std::string("HDR VMAF failed: ") + error.what());
+        refused.failed["vmaf_hdr"] = std::string("HDR VMAF failed: ") + error.what();
+        return refused;
+    }
+}
+
+// HDR VMAF (`hdr`, hdr_plan's) beside the run's other metrics (`others`: VMAF, NEG and VMAF v1 on the GPU, PSNR, SSIM
+// and XPSNR in the app), in one pass from one decode of each video, its scores the same as in a part of its own (it
+// reads the frames that part would: shares_pass's rules, as for the CPU's metrics). The GPU's pass where the GPU scores
+// VMAF, else HDR VMAF's own with the CPU's metrics beside. Nothing where they cannot share a pass, or where the pass
+// fails for a reason that would not end the parts too: the parts are then scored one after the other.
+std::optional<RunScores> score_hdr_beside(const RunFrames& run, const VmafOptions& others, const std::string& model,
+                                          const GpuPlan& hdr, const ProgressCallback& on_progress,
+                                          const StatusCallback& on_status) {
+    const std::vector<std::string> requested = others.requested_metrics();
+    const bool gpu_wanted = std::any_of(requested.begin(), requested.end(),
+                                        [](const std::string& key) { return !is_cpu_metric(key); });
+    const bool cpu_wanted = std::any_of(requested.begin(), requested.end(),
+                                        [](const std::string& key) { return is_cpu_metric(key); });
+    std::optional<GpuPlan> gpu;
+    if (gpu_wanted) {
+        gpu = gpu_plan(run, part_of(others, false), model);
+        if (!gpu) {
+            return std::nullopt;  // FFmpeg's libvmaf calculates them on the CPU
+        }
+    }
+    const VmafOptions cpu_options = part_of(others, true);
+    std::optional<GpuPlan> cpu;
+    if (cpu_wanted) {
+        cpu = cpu_plan(run, cpu_options);
+        if (!cpu) {
+            return std::nullopt;  // FFmpeg's filters score them
+        }
+    }
+    if (!shares_pass(run, gpu ? *gpu : hdr, cpu ? *cpu : GpuPlan{}, cpu_options)) {
+        return std::nullopt;
+    }
+    GpuPlan plan = gpu ? *gpu : hdr;
+    if (cpu) {
+        plan.beside = plan_keys(*cpu);
+        plan.threads = cpu->threads;
+        plan.frame_rate = cpu->frame_rate;
+    }
+    if (gpu) {
+        plan.beside.push_back("vmaf_hdr");
+        plan.hdr_colours = hdr.hdr_colours;
+        plan.hdr_model_file = hdr.hdr_model_file;
+        plan.hdr_threads = hdr.hdr_threads;
+        plan.hdr_gpu = hdr.hdr_gpu;
+    }
+    try {
+        log_hdr_vmaf(hdr);
+        ParsedScores scored =
+            gpu ? score_on_gpu(run.environment, run.source, run.distorted, others, run.source_crop, run.distorted_crop,
+                               plan, run.distorted.fps, run.total_frames, run.decoding, on_progress, on_status,
+                               run.cancel)
+            : isolation_program()
+                ? score_plan_apart("cpu-metrics", run.environment, run.source, run.distorted, others, run.source_crop,
+                                   run.distorted_crop, plan, run.distorted.fps, run.total_frames, run.decoding,
+                                   on_progress, on_status, run.cancel)
+                : score_plan(run.environment, run.source, run.distorted, others, run.source_crop, run.distorted_crop,
+                             plan, run.distorted.fps, run.total_frames, run.decoding, on_progress, on_status,
+                             run.cancel);
+        RunScores scores;
+        if (cpu) {
+            scores.parts.push_back(take_metrics(scored, plan_keys(*cpu)));
+            insert_keys(scores.cpu_keys, *cpu);
+        }
+        scores.cpu_keys.insert("vmaf_hdr");
+        if (gpu) {
+            scores.parts.push_back(take_metrics(scored, {"vmaf_hdr"}));
+            insert_keys(scores.gpu_keys, *gpu);
+            scores.gpu_backend = gpu->backend;
+        }
+        scores.parts.push_back(std::move(scored));
+        return scores;
+    } catch (const Cancelled&) {
+        throw;
+    } catch (const VideoSizeChanged&) {
+        throw;  // the run is made again, the video marked (run_vmaf)
+    } catch (const FilmGrainRefusal&) {
+        throw;  // final: every route decodes it with the same decoder (grain_feed.h)
+    } catch (const std::exception& error) {
+        logger.warning("HDR VMAF beside the run's other metrics failed; scoring them apart: " +
+                       std::string(error.what()));
+        return std::nullopt;
+    }
+}
+
 // A video whose container gives no duration was expected to be a frame long
 // (estimate_total_frames): its result, and Video Compare's frame box, then count
 // what was scored.
@@ -2015,6 +2233,10 @@ ComparisonResult result_of_pair(const VideoInfo& source, const VideoInfo& distor
     if (options.compute_vmaf_v1) {
         result.model_choice_v1 = options.model_choice_v1;
     }
+    if (options.compute_vmaf_hdr) {
+        result.model_hdr = options.model_hdr;
+        result.model_choice_hdr = options.model_choice_hdr;
+    }
     return result;
 }
 
@@ -2036,9 +2258,41 @@ ComparisonResult score_pair_once(const RunEnvironment& environment, const VideoI
     const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt}));
     const RunFrames run{environment, source, distorted, source_crop, distorted_crop, width, height,
                         depth,       decoded_frames, decoding, cancel};
-    std::optional<RunScores> scores = score_gpu_and_cpu(run, options, model, on_progress, on_status);
-    if (!scores) {
-        scores = score_alone(run, options, model, on_progress, on_status);
+    // HDR VMAF in the others' pass where it can (score_hdr_beside); else a part of its own, after the others
+    // (score_hdr), they scored as they would be without it.
+    VmafOptions others = options;
+    others.compute_vmaf_hdr = false;
+    const bool with_others = !others.requested_metrics().empty();
+    std::optional<std::variant<GpuPlan, std::string>> hdr;
+    if (options.compute_vmaf_hdr) {
+        hdr = hdr_plan(run, options);
+    }
+    std::optional<RunScores> scores;
+    if (with_others && hdr && std::holds_alternative<GpuPlan>(*hdr)) {
+        scores = score_hdr_beside(run, others, model, std::get<GpuPlan>(*hdr), on_progress, on_status);
+    }
+    const bool hdr_apart = hdr && !scores;
+    const long long parts = (with_others ? 1 : 0) + (hdr_apart ? 1 : 0);
+    if (!scores && with_others) {
+        const ProgressCallback progress = part_in_sequence(on_progress, 0, parts);
+        scores = score_gpu_and_cpu(run, others, model, progress, on_status);
+        if (!scores) {
+            scores = score_alone(run, others, model, progress, on_status);
+        }
+    } else if (!scores) {
+        scores.emplace();
+    }
+    if (hdr_apart) {
+        VmafOptions hdr_only = options;
+        for (const std::string& key : others.requested_metrics()) {
+            hdr_only.set_metric_enabled(key, false);
+        }
+        ParsedScores hdr_part =
+            score_hdr(run, hdr_only, *hdr, part_in_sequence(on_progress, parts - 1, parts), on_status);
+        if (hdr_part.has("vmaf_hdr")) {
+            scores->cpu_keys.insert("vmaf_hdr");
+        }
+        scores->parts.push_back(std::move(hdr_part));
     }
     for (const ParsedScores& part : scores->parts) {
         if (part.order.empty() && !part.failed.empty()) {
@@ -2065,6 +2319,10 @@ ComparisonResult score_pair_once(const RunEnvironment& environment, const VideoI
         }
         result.metric_failures.insert(part.failed.begin(), part.failed.end());
         count_scored_frames(result, part);
+    }
+    if (!result.metric_results.frame("vmaf_hdr")) {
+        result.model_hdr.clear();  // no HDR VMAF score: no model to record with it
+        result.model_choice_hdr.reset();
     }
     return result;
 }
@@ -2392,6 +2650,18 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
 ComparisonResult run_resample_test(const RunEnvironment& environment, const VideoInfo& source, VmafOptions options,
                                    const ProgressCallback& on_progress, const StatusCallback& on_status,
                                    const CancelToken& cancel) {
+    // A resolution test makes its test video in FFmpeg's filters, which HDR
+    // VMAF's conversion is not part of: it fails alone, the others stand.
+    const bool hdr_refused = std::exchange(options.compute_vmaf_hdr, false);
+    if (hdr_refused && options.requested_metrics().empty()) {
+        throw VmafRunError("HDR VMAF is not calculated in resolution tests");
+    }
+    const auto with_hdr_refusal = [hdr_refused](ComparisonResult result) {
+        if (hdr_refused) {
+            result.metric_failures["vmaf_hdr"] = "HDR VMAF is not calculated in resolution tests";
+        }
+        return result;
+    };
     while (true) {
         const bool on_gpu =
             options.gpu_decode && pick_decode(environment.decoding, options.gpu_vendor, source).has_value();
@@ -2403,7 +2673,7 @@ ComparisonResult run_resample_test(const RunEnvironment& environment, const Vide
         try {
             ComparisonResult result = resample_test_run(environment, source, options, on_progress, on_status, cancel);
             if (!on_gpu || !gpu_decoding_distrusted()) {
-                return result;
+                return with_hdr_refusal(std::move(result));
             }
         } catch (const VideoSizeChanged&) {
             throw VmafRunError(size_change_in_resample_test);

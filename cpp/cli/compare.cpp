@@ -479,6 +479,11 @@ VmafOptions row_options(const CompareArguments& arguments, const Settings& setti
             options.model_choice_v1 = model.choice;
         }
     }
+    for (const ModelChoice& model : hdr_model_choices()) {
+        if (model.word == arguments.model_hdr) {
+            options.model_choice_hdr = model.choice;
+        }
+    }
     for (const std::string& key : metric_keys) {
         if (metric_definition(key).ffmpeg_binding) {
             options.set_metric_enabled(key, true);
@@ -605,6 +610,7 @@ std::vector<std::string> default_metrics(const Settings& settings) {
     options.compute_vmaf = settings.default_compute_vmaf;
     options.compute_vmaf_neg = settings.default_compute_vmaf_neg;
     options.compute_vmaf_v1 = settings.default_compute_vmaf_v1;
+    options.compute_vmaf_hdr = settings.default_compute_vmaf_hdr;
     const std::vector<std::string> requested = options.requested_metrics();
     std::set<std::string, std::less<>> chosen(requested.begin(), requested.end());
     const std::pair<const char*, bool> perceptual[] = {{"ssimulacra2", settings.default_compute_ssimulacra2},
@@ -1354,6 +1360,9 @@ std::vector<std::string> ComparisonPlanner::unused_argument_notes() const {
     }
     if (arguments_.model_v1 != "auto" && !asked("vmaf_v1")) {
         notes.emplace_back("--model-v1 is not used: VMAF v1 is not among the metrics.");
+    }
+    if (arguments_.model_hdr != "auto" && !asked("vmaf_hdr")) {
+        notes.emplace_back("--model-hdr is not used: HDR VMAF is not among the metrics.");
     }
     if (arguments_.film_grain && !film_grain_used_) {
         notes.emplace_back("--film-grain is not used: neither the reference nor any test video has film grain.");

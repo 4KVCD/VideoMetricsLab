@@ -69,6 +69,8 @@ struct Settings {
     bool default_compute_vmaf = true;
     bool default_compute_vmaf_neg = true;
     bool default_compute_vmaf_v1 = true;
+    // Off by default: it scores PQ (HDR10) videos only.
+    bool default_compute_vmaf_hdr = false;
     bool default_compute_ssimulacra2 = true;
     bool default_compute_butteraugli = true;
     bool default_compute_cvvdp = true;

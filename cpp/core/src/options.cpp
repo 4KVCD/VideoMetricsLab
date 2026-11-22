@@ -23,6 +23,9 @@ bool VmafOptions::*bool_option(std::string_view name) {
     if (name == "compute_vmaf_v1") {
         return &VmafOptions::compute_vmaf_v1;
     }
+    if (name == "compute_vmaf_hdr") {
+        return &VmafOptions::compute_vmaf_hdr;
+    }
     if (name == "compute_xpsnr") {
         return &VmafOptions::compute_xpsnr;
     }

@@ -193,8 +193,8 @@ AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<s
                                {"custom_model", options.custom_model_path.empty()
                                                     ? std::string()
                                                     : custom_model_identity(options.custom_model_path)}};
-        } else if (key == "vmaf_v1") {
-            const std::string& choice = options.model_choice_v1;
+        } else if (key == "vmaf_v1" || key == "vmaf_hdr") {
+            const std::string& choice = key == "vmaf_v1" ? options.model_choice_v1 : options.model_choice_hdr;
             spec.parameters = {{"model", choice == auto_model_choice ? std::string() : choice}, {"model_choice", choice}};
         } else if (key == "vmaf_neg") {
             spec.parameters = {{"model", "version=vmaf_v0.6.1neg"}};

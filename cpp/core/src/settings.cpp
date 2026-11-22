@@ -44,6 +44,7 @@ const std::unordered_map<std::string, Field>& fields() {
         {"default_compute_vmaf", &Settings::default_compute_vmaf},
         {"default_compute_vmaf_neg", &Settings::default_compute_vmaf_neg},
         {"default_compute_vmaf_v1", &Settings::default_compute_vmaf_v1},
+        {"default_compute_vmaf_hdr", &Settings::default_compute_vmaf_hdr},
         {"default_compute_ssimulacra2", &Settings::default_compute_ssimulacra2},
         {"default_compute_butteraugli", &Settings::default_compute_butteraugli},
         {"default_compute_cvvdp", &Settings::default_compute_cvvdp},
@@ -429,6 +430,7 @@ std::string Settings::text() const {
     data["default_compute_vmaf"] = default_compute_vmaf;
     data["default_compute_vmaf_neg"] = default_compute_vmaf_neg;
     data["default_compute_vmaf_v1"] = default_compute_vmaf_v1;
+    data["default_compute_vmaf_hdr"] = default_compute_vmaf_hdr;
     data["default_compute_ssimulacra2"] = default_compute_ssimulacra2;
     data["default_compute_butteraugli"] = default_compute_butteraugli;
     data["default_compute_cvvdp"] = default_compute_cvvdp;

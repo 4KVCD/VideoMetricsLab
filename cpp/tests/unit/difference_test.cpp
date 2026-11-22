@@ -76,6 +76,13 @@ TEST(ExportCsv, JsonHoldsTheCsvsTable) {
               "}\n");
     EXPECT_EQ(per_frame_json(ComparisonResult{}).substr(per_frame_json(ComparisonResult{}).find("\"rows\"")),
               "\"rows\": []\n}\n");
+
+    // HDR VMAF's column is in the exports that have its scores only, after VMAF v1's.
+    FrameMetricResult hdr = vmaf;
+    hdr.key = "vmaf_hdr";
+    result.metric_results.add(hdr);
+    EXPECT_TRUE(per_frame_csv(result).starts_with(
+        "frame,time_s,vmaf,vmaf_neg,psnr,ssim,xpsnr,vmaf_v1,vmaf_hdr,ssimulacra2,butteraugli\r\n"));
 }
 
 // Two labels that name one file on this system, still to be written, get two

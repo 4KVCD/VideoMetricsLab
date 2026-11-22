@@ -127,6 +127,11 @@ struct VmafOptions {
     bool compute_vmaf_v1 = false;
     std::string model_choice_v1 = std::string(auto_model_choice);
     std::string model_v1;
+    // HDR VMAF (Netflix's HDR models, which convert both videos to ICtCp
+    // first), the same way.
+    bool compute_vmaf_hdr = false;
+    std::string model_choice_hdr = std::string(auto_model_choice);
+    std::string model_hdr;
     // The range compared, in whole seconds of the reference counted as CVVDP
     // counts them (frame_range.h), in frames (range_in_frames), or in
     // milliseconds (range_in_milliseconds, a time that is not whole

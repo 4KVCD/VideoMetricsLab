@@ -97,7 +97,7 @@ answered it, or a Cancel stopped it before it started.
 
 ### `metrics`
 
-Each metric's key (`vmaf`, `vmaf_neg`, `vmaf_v1`, `psnr`, `ssim`, `xpsnr`,
+Each metric's key (`vmaf`, `vmaf_neg`, `vmaf_v1`, `vmaf_hdr`, `psnr`, `ssim`, `xpsnr`,
 `ssimulacra2`, `butteraugli`, `cvvdp`) holds:
 
 | Key | Meaning |
@@ -119,6 +119,7 @@ Each metric's key (`vmaf`, `vmaf_neg`, `vmaf_v1`, `psnr`, `ssim`, `xpsnr`,
 | --- | --- |
 | `metrics` | The metrics asked for, in order. |
 | `vmaf_model`, `vmaf_v1_model` | `choice` (`__auto__` picks by the size compared at) and the `model` used. `null` where that VMAF was not asked for (VMAF NEG uses `vmaf_model`). |
+| `vmaf_hdr_model` | The same for HDR VMAF; present only where HDR VMAF was asked for. |
 | `custom_model_path` | A VMAF model file given by its path, or `null`. |
 | `cvvdp` | `display` (the preset's name, `""` for a display that is no preset) and its `parameters`; `null` without CVVDP. |
 | `frame_subsample` | `asked` (every n-th frame) and `every_nth_frame` per metric: libvmaf's metrics follow it, XPSNR and CVVDP score every frame. |

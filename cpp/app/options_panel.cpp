@@ -362,6 +362,16 @@ void OptionsPanel::build_metric_settings(QFormLayout* form) {
         app::tr("The VMAF v1 column's model (Netflix's bundled VMAF v1 models). Auto picks the 1080p model at three "
                 "screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1."));
     form->addRow(app::tr("VMAF v1 model:"), model_v1_combo);
+    model_hdr_combo = new QComboBox;
+    for (const ModelChoice& choice : hdr_model_choices()) {
+        model_hdr_combo->addItem(app::tr(choice.name));
+    }
+    connect(model_hdr_combo, &QComboBox::currentIndexChanged, this, [this] { emit field_edited("model_hdr"); });
+    model_hdr_combo->setToolTip(
+        app::tr("The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three "
+                "screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) "
+                "videos only."));
+    form->addRow(app::tr("HDR VMAF model:"), model_hdr_combo);
 
     subsample_spin = new QSpinBox;
     subsample_spin->setRange(1, 60);
@@ -485,7 +495,8 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
         "VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, "
         "SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with "
         "the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. "
-        "If the GPU calculation fails, they are calculated on the CPU instead."));
+        "If the GPU calculation fails, they are calculated on the CPU instead. "
+        "HDR VMAF follows this choice too: its features on the GPU, its pictures converted on the CPU."));
 #else
     vmaf_backend_combo->setToolTip(app::tr(
         "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (VMAF v0.6.1 and NEG "
@@ -493,7 +504,8 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
         "whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. "
         "PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a "
         "thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation "
-        "fails, they are calculated on the CPU instead."));
+        "fails, they are calculated on the CPU instead. HDR VMAF follows this choice too: "
+        "its features on the GPU, its pictures converted on the CPU."));
 #endif
     connect(vmaf_backend_combo, &QComboBox::currentIndexChanged, this, [this] { emit field_edited("vmaf_on_gpu"); });
     form->addRow(app::tr("VMAF compute:"), vmaf_backend_combo);
@@ -609,6 +621,7 @@ void OptionsPanel::show_options(const VmafOptions& options, const std::vector<Vm
     model_combo->setCurrentIndex(index_of(model_choices(), options.model_choice));
     custom_model_path = options.custom_model_path;
     model_v1_combo->setCurrentIndex(index_of(v1_model_choices(), options.model_choice_v1));
+    model_hdr_combo->setCurrentIndex(index_of(hdr_model_choices(), options.model_choice_hdr));
 
     gpu_checkbox->setChecked(options.gpu_decode);
     const auto vendor = std::find(gpu_vendor_entries.begin(), gpu_vendor_entries.end(), options.gpu_vendor);
@@ -662,8 +675,10 @@ void OptionsPanel::show_options(const VmafOptions& options, const std::vector<Vm
     const auto any = [&selected](auto&& predicate) { return std::any_of(selected.begin(), selected.end(), predicate); };
     model_combo->setEnabled(any([](const VmafOptions& item) { return item.compute_vmaf; }));
     model_v1_combo->setEnabled(any([](const VmafOptions& item) { return item.compute_vmaf_v1; }));
+    model_hdr_combo->setEnabled(any([](const VmafOptions& item) { return item.compute_vmaf_hdr; }));
     const bool uses_libvmaf = any([](const VmafOptions& item) {
-        return item.compute_vmaf || item.compute_vmaf_neg || item.compute_vmaf_v1 || !item.extra_features.empty();
+        return item.compute_vmaf || item.compute_vmaf_neg || item.compute_vmaf_v1 || item.compute_vmaf_hdr ||
+               !item.extra_features.empty();
     });
     threads_spin->setEnabled(uses_libvmaf);
     // Also while it is above 1: CVVDP is unavailable then, and the way back
@@ -734,12 +749,15 @@ void OptionsPanel::show_cvvdp(const std::vector<CvvdpSettings>& selected, const 
 }
 
 VmafOptions OptionsPanel::read_options(const std::vector<std::string>& extra_features, bool compute_vmaf,
-                                       bool compute_vmaf_neg, bool compute_vmaf_v1, bool compute_xpsnr) const {
+                                       bool compute_vmaf_neg, bool compute_vmaf_v1, bool compute_vmaf_hdr,
+                                       bool compute_xpsnr) const {
     VmafOptions options;
     options.model.clear();  // worked out for each video as a run starts (resolve_model), once its size is known
     options.model_choice = model_choices()[static_cast<std::size_t>(model_combo->currentIndex())].choice;
     options.model_choice_v1 = v1_model_choices()[static_cast<std::size_t>(model_v1_combo->currentIndex())].choice;
     options.compute_vmaf_v1 = compute_vmaf_v1;
+    options.model_choice_hdr = hdr_model_choices()[static_cast<std::size_t>(model_hdr_combo->currentIndex())].choice;
+    options.compute_vmaf_hdr = compute_vmaf_hdr;
     options.custom_model_path = custom_model_path;
     options.extra_features = extra_features;
     options.n_threads = threads_spin->value();

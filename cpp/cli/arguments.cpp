@@ -30,7 +30,7 @@ namespace {
 const char* const top_usage = "usage: VideoMetricsLab-cli [-h] [--version] COMMAND ...\n";
 
 const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]
-                                   [--model-v1 MODEL]
+                                   [--model-v1 MODEL] [--model-hdr MODEL]
                                    [--black-bars {auto,source,none}]
                                    [--source-crop T:B:L:R] [--test-crop T:B:L:R]
                                    [--scale-to {test,reference}]
@@ -140,9 +140,10 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  -m, --metrics LIST    comma-separated: vmaf, vmaf_neg, vmaf_v1, psnr, ssim,
-                        xpsnr, ssimulacra2, butteraugli, cvvdp; or all
-                        (default: the app's)
+  -m, --metrics LIST    comma-separated: vmaf, vmaf_neg, vmaf_v1, vmaf_hdr,
+                        psnr, ssim, xpsnr, ssimulacra2, butteraugli, cvvdp; or
+                        all (every one but vmaf_hdr, which scores PQ (HDR10)
+                        videos only) (default: the app's)
   --model MODEL         VMAF v0.6.1's model: auto (4K model for a 4K
                         comparison), standard, 4k, or a model .json file
                         (default: auto)
@@ -153,6 +154,13 @@ options:
                         or their high frame rate models vmaf_v1_hfr_3d0h,
                         vmaf_v1_hfr_5d0h, vmaf_v1_hfr_1d5h_2160,
                         vmaf_v1_hfr_3d0h_2160 (default: auto)
+  --model-hdr MODEL     HDR VMAF's model: auto (the one for the size frames
+                        are compared at), or a bundled one: hdr_vmaf_3d0h or
+                        hdr_vmaf_5d0h (1080p, 3 or 5 picture heights away),
+                        hdr_vmaf_1d5h_2160 or hdr_vmaf_3d0h_2160 (4K, 1.5 or
+                        3), or their high frame rate models hdr_vmaf_hfr_3d0h,
+                        hdr_vmaf_hfr_5d0h, hdr_vmaf_hfr_1d5h_2160,
+                        hdr_vmaf_hfr_3d0h_2160 (default: auto)
   --black-bars {auto,source,none}
                         auto: detect and cut black bars; source: detect and
                         cut the source's black bars only, the test video
@@ -418,9 +426,10 @@ options:
                       run file (.metrics.json)
   --test FILE         the test encoder's encodes, in either form; sequences
                       are paired by name
-  -m, --metrics LIST  comma-separated: vmaf, vmaf_neg, vmaf_v1, psnr, ssim,
-                      xpsnr, ssimulacra2, butteraugli, cvvdp; or all (default:
-                      those the files have columns for)
+  -m, --metrics LIST  comma-separated: vmaf, vmaf_neg, vmaf_v1, vmaf_hdr,
+                      psnr, ssim, xpsnr, ssimulacra2, butteraugli, cvvdp; or
+                      all but vmaf_hdr (default: those the files have columns
+                      for)
   --group-by COLUMN   a column of the anchor's file, such as class: a mean and
                       median for each of its values as well
   --json FILE         also write the results as JSON to FILE; - prints the
@@ -832,13 +841,16 @@ std::string metric_keys_text() {
     return keys;
 }
 
-// The metric keys named in a --metrics value ("all" is every metric), in
-// the registry's order.
+// The metric keys named in a --metrics value, in the registry's order. "all"
+// is every metric but HDR VMAF, which refuses all but PQ videos: with it, a
+// run of SDR videos asked for "all" would fail.
 std::vector<std::string> metric_list(const std::string& text) {
     std::vector<std::string> keys;
     if (ascii_lower(python_strip(text)) == "all") {
         for (const MetricDefinition& metric : metrics()) {
-            keys.emplace_back(metric.key);
+            if (metric.key != "vmaf_hdr") {
+                keys.emplace_back(metric.key);
+            }
         }
         return keys;
     }
@@ -1103,10 +1115,11 @@ std::string pixel_format(const std::string& text) {
     return text;
 }
 
-// --model-v1's words: auto, then the bundled VMAF v1 models' ids.
-std::vector<std::string> v1_words() {
+// A model option's words (--model-v1, --model-hdr): auto, then the bundled
+// models' ids.
+std::vector<std::string> model_words(const std::vector<ModelChoice>& choices) {
     std::vector<std::string> words;
-    for (const ModelChoice& model : v1_model_choices()) {
+    for (const ModelChoice& model : choices) {
         words.push_back(model.word);
     }
     return words;
@@ -1159,7 +1172,12 @@ Parser compare_parser(CompareArguments& parsed) {
          [&parsed](const std::vector<std::string>& values) { parsed.tests = values; }},
         option({"-m", "--metrics"}, [&parsed](const std::string& value) { parsed.metrics = metric_list(value); }),
         option({"--model"}, [&parsed](const std::string& value) { parsed.model = value; }),
-        option({"--model-v1"}, [&parsed](const std::string& value) { parsed.model_v1 = choice(value, v1_words()); }),
+        option({"--model-v1"},
+               [&parsed](const std::string& value) { parsed.model_v1 = choice(value, model_words(v1_model_choices())); }),
+        option({"--model-hdr"},
+               [&parsed](const std::string& value) {
+                   parsed.model_hdr = choice(value, model_words(hdr_model_choices()));
+               }),
         option({"--black-bars"},
                [&parsed](const std::string& value) {
                    parsed.black_bars = choice(value, {"auto", "source", "none"});

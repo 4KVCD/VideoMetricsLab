@@ -90,6 +90,31 @@ void check_libvmaf(int error, const std::string& what) {
 
 double to_6_decimals(double value) { return python_round(value, 6); }
 
+LibvmafHandles::~LibvmafHandles() {
+    if (model != nullptr) {
+        library.model_destroy(model);
+    }
+    if (context != nullptr) {
+        library.close(context);
+    }
+}
+
+void LibvmafHandles::start(int threads, int n_subsample) {
+    const VmafConfiguration configuration{VMAF_LOG_LEVEL_ERROR, static_cast<unsigned>(std::max(0, threads)),
+                                          static_cast<unsigned>(std::max(1, n_subsample)), 0, 0};
+    // When vmaf_init fails it frees the context it made but leaves the
+    // pointer to it set, so the context is only kept once it has started.
+    VmafContext* made = nullptr;
+    check_libvmaf(library.init(&made, configuration), "Starting libvmaf");
+    context = made;
+}
+
+void LibvmafHandles::load_model(const std::filesystem::path& file) {
+    VmafModelConfig config{"vmaf", 0};
+    const std::string path = libvmaf_path(file);
+    check_libvmaf(library.model_load_from_path(&model, &config, path.c_str()), "Loading the model");
+}
+
 Libvmaf::Libvmaf(const std::filesystem::path& path)
     : library(path),
       version(library.function<decltype(version)>("vmaf_version")),
@@ -119,6 +144,11 @@ Libvmaf::Libvmaf(const std::filesystem::path& path)
         throw LibvmafError(platform::path_text(path) +
                            " is older than the libvmaf-fast the app was built with (it has no vmaf_picture_convert)");
     }
+    picture_convert_context_init =
+        library.function<decltype(picture_convert_context_init)>("vmaf_picture_convert_context_init");
+    picture_convert = library.function<decltype(picture_convert)>("vmaf_picture_convert");
+    picture_convert_context_close =
+        library.function<decltype(picture_convert_context_close)>("vmaf_picture_convert_context_close");
     cuda_state_init = reinterpret_cast<decltype(cuda_state_init)>(library.find("vmaf_cuda_state_init"));
     cuda_import_state = reinterpret_cast<decltype(cuda_import_state)>(library.find("vmaf_cuda_import_state"));
     cuda_preallocate_pictures =
