@@ -258,7 +258,10 @@ options:
                         is GPU only): VMAF as with --vmaf-on cpu, unless
                         --vmaf-on says otherwise, and SSIMULACRA2 and
                         Butteraugli rather than on the GPU where one can
-  --no-gpu-decode       decode the videos on the CPU
+)"
+// (Two literals: MSVC takes at most 16,380 bytes in one, error C2026. The
+// test SourceLimits.StringLiteralsFitMsvc holds every literal under it.)
+R"(  --no-gpu-decode       decode the videos on the CPU
   --gpu-decode {auto,nvidia,intel,amd}
                         decode the videos on the GPU: auto, the first GPU
                         whose decoder takes each video (NVIDIA, Intel, then
