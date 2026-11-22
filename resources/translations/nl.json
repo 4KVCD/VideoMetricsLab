@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Details": "Details",
+  "Point at the graph for a frame's scores, or select a row in the lists.": "Wijs de grafiek aan voor de scores van een frame, of selecteer een rij in de lijsten.",
+  "Worst frame {rank} of {count}": "Slechtste frame {rank} van {count}",
+  "In weak segment {first} to {last}": "In zwak segment {first} tot {last}",
+  "No condition holds": "Geen voorwaarde geldt",
+  "Weak by {conditions}": "Zwak door {conditions}",
+  "Segment {first} to {last}": "Segment {first} tot {last}",
   "Video names:": "Videonamen:",
   "What tells them apart": "Wat ze onderscheidt",
   "First and last characters": "Eerste en laatste tekens",

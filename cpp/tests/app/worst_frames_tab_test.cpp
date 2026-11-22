@@ -12,6 +12,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdlib>
 #include <memory>
 #include <optional>
 #include <string>
@@ -160,6 +161,51 @@ TEST(WorstFramesTab, ListsTheDipsAndTheSegmentsAndOpensThemInVideoCompare) {
         }
     }
     EXPECT_EQ(suggested, (QStringList{"a.vmaf.segments.json", "a.vmaf.segments.csv"}));
+}
+
+TEST(WorstFramesTab, DetailsTellsTheFrameUnderThePointerElseTheRowSelected) {
+    // Details: the frame the pointer is on, with why it is weak; a worst
+    // frame's dot a few pixels away taken instead (a frame further off is
+    // not); once the pointer leaves, the row selected in either list.
+    std::vector<float> values(90, 95.0F);
+    values[10] = 40.0F;
+    values[40] = 80.0F;
+    values[70] = 50.0F;
+    Settings settings;
+    Bench bench(settings);
+    WorstFramesTab& tab = bench.tab;
+    tab.resize(1400, 900);
+    tab.show();
+    tab.set_videos({{"row:a", "a", vmaf_result("a.mkv", values)}});
+    ASSERT_NE(tab.chart(), nullptr);
+    EXPECT_TRUE(tab.details()->text().isEmpty());  // the hint shown instead
+
+    // Frame 40: weak, in a segment of its own, not among the worst listed.
+    emit tab.chart()->hovered(40.0 / 30.0, 80.0);
+    QString text = tab.details()->text();
+    EXPECT_TRUE(text.startsWith("Frame 40   0:00:01.333")) << text.toStdString();
+    EXPECT_TRUE(text.contains("In weak segment 40 to 40"));
+    EXPECT_TRUE(text.contains("Weak by VMAF v0.6.1 < 85.00"));
+    EXPECT_FALSE(text.contains("Worst frame"));
+    // A frame away from 70's dot is itself; a pixel or two away, the dot's.
+    emit tab.chart()->hovered(68.0 / 30.0, 95.0);
+    EXPECT_TRUE(tab.details()->text().startsWith("Frame 68 ")) << tab.details()->text().toStdString();
+    EXPECT_TRUE(tab.details()->text().contains("No condition holds"));
+    const int dot = tab.chart()->pixel_for_time(70.0 / 30.0);
+    emit tab.chart()->hovered((70.0 - 0.1) / 30.0, 95.0);
+    ASSERT_LE(std::abs(tab.chart()->pixel_for_time((70.0 - 0.1) / 30.0) - dot), 6);
+    text = tab.details()->text();
+    EXPECT_TRUE(text.startsWith("Frame 70 ")) << text.toStdString();
+    EXPECT_TRUE(text.contains("Worst frame 2 of 2"));
+
+    // Left: nothing selected, nothing told; then the rows selected.
+    emit tab.chart()->left();
+    EXPECT_TRUE(tab.details()->text().isEmpty());
+    tab.worst_table()->selectRow(0);
+    EXPECT_TRUE(tab.details()->text().startsWith("Frame 10 ")) << tab.details()->text().toStdString();
+    EXPECT_TRUE(tab.details()->text().contains("Worst frame 1 of 2"));
+    tab.segments_table()->selectRow(1);  // 40 to 40
+    EXPECT_TRUE(tab.details()->text().startsWith("Segment 40 to 40")) << tab.details()->text().toStdString();
 }
 
 TEST(WorstFramesTab, StartsFromAProfileAndSavesOnlyWhenAsked) {

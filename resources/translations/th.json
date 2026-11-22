@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Details": "รายละเอียด",
+  "Point at the graph for a frame's scores, or select a row in the lists.": "ชี้ที่กราฟเพื่อดูคะแนนของเฟรม หรือเลือกแถวในรายการ",
+  "Worst frame {rank} of {count}": "เฟรมที่แย่ที่สุด {rank} จาก {count}",
+  "In weak segment {first} to {last}": "อยู่ในช่วงอ่อน {first} ถึง {last}",
+  "No condition holds": "ไม่มีเงื่อนไขใดเป็นจริง",
+  "Weak by {conditions}": "อ่อนเพราะ {conditions}",
+  "Segment {first} to {last}": "ช่วง {first} ถึง {last}",
   "Video names:": "ชื่อวิดีโอ:",
   "What tells them apart": "ส่วนที่ทำให้ต่างกัน",
   "First and last characters": "อักขระแรกและท้าย",

@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Details": "详细信息",
+  "Point at the graph for a frame's scores, or select a row in the lists.": "指向图表可查看某帧的分数，或在列表中选择一行。",
+  "Worst frame {rank} of {count}": "最差帧 {rank} / {count}",
+  "In weak segment {first} to {last}": "位于弱片段 {first} 至 {last}",
+  "No condition holds": "没有满足的条件",
+  "Weak by {conditions}": "弱于 {conditions}",
+  "Segment {first} to {last}": "片段 {first} 至 {last}",
   "Video names:": "视频名称：",
   "What tells them apart": "区分它们的部分",
   "First and last characters": "首尾字符",

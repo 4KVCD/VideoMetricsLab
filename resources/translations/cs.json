@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Details": "Podrobnosti",
+  "Point at the graph for a frame's scores, or select a row in the lists.": "Najeďte na graf pro skóre snímku, nebo vyberte řádek v seznamech.",
+  "Worst frame {rank} of {count}": "Nejhorší snímek {rank} z {count}",
+  "In weak segment {first} to {last}": "Ve slabém úseku {first} až {last}",
+  "No condition holds": "Žádná podmínka neplatí",
+  "Weak by {conditions}": "Slabý kvůli {conditions}",
+  "Segment {first} to {last}": "Úsek {first} až {last}",
   "Video names:": "Názvy videí:",
   "What tells them apart": "Co je odlišuje",
   "First and last characters": "První a poslední znaky",

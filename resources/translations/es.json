@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Details": "Detalles",
+  "Point at the graph for a frame's scores, or select a row in the lists.": "Señale el gráfico para ver las puntuaciones de un fotograma, o seleccione una fila en las listas.",
+  "Worst frame {rank} of {count}": "Peor fotograma {rank} de {count}",
+  "In weak segment {first} to {last}": "En el segmento débil {first} a {last}",
+  "No condition holds": "No se cumple ninguna condición",
+  "Weak by {conditions}": "Débil por {conditions}",
+  "Segment {first} to {last}": "Segmento {first} a {last}",
   "Video names:": "Nombres de vídeo:",
   "What tells them apart": "Lo que los distingue",
   "First and last characters": "Primeros y últimos caracteres",

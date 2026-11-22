@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Details": "التفاصيل",
+  "Point at the graph for a frame's scores, or select a row in the lists.": "أشِر إلى الرسم البياني لعرض درجات إطار، أو حدِّد صفًا في القائمتين.",
+  "Worst frame {rank} of {count}": "أسوأ إطار {rank} من {count}",
+  "In weak segment {first} to {last}": "في مقطع ضعيف من {first} إلى {last}",
+  "No condition holds": "لا ينطبق أي شرط",
+  "Weak by {conditions}": "ضعيف بسبب {conditions}",
+  "Segment {first} to {last}": "المقطع من {first} إلى {last}",
   "Video names:": "أسماء الفيديوهات:",
   "What tells them apart": "ما يميّزها",
   "First and last characters": "الأحرف الأولى والأخيرة",

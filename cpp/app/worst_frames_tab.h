@@ -5,7 +5,9 @@
 // conditions (as the dialog had them, with each condition's frames). On the
 // right what they find: the metric shown, a graph of the video with its weak
 // segments shaded and its worst frames marked, and the two lists, side by
-// side where they fit and one above the other where they don't.
+// side where they fit and one above the other where they don't. Under the
+// conditions, Details: the frame under the pointer on the graph (every
+// metric's score, why it is weak), else the row selected in either list.
 #pragma once
 
 #include <QColor>
@@ -101,6 +103,7 @@ public:
     QPushButton* preset_button() const { return preset_button_; }
     QLabel* conditions_note() const { return conditions_note_; }
     ChartWidget* chart() const { return chart_; }
+    QLabel* details() const { return details_; }
     // Whether the two lists are side by side (else one above the other).
     bool lists_side_by_side() const;
 
@@ -125,6 +128,22 @@ private:
     QPushButton* make_export_button();
     QWidget* build_conditions();
     QWidget* build_lists();
+    // Details, under the conditions: the frame under the pointer, else the
+    // row selected in either list.
+    QWidget* build_details();
+    // The pointer on the graph at `time`: the frame under it, or a worst
+    // frame marked within a few pixels of it; the line on that frame.
+    void hover_at(double time);
+    // The pointer left the graph: the line back on the worst frame selected,
+    // if one is.
+    void hover_left();
+    // Details for what is shown now (hover_frame_, else the selection).
+    void show_details();
+    // `frame`'s lines: its time, where it ranks among the worst frames,
+    // whether it is weak and why, and every metric's score, the one
+    // graphed first. Empty when the video has no such frame.
+    QString frame_details(int frame) const;
+    QString segment_details(const WeakSegment& segment) const;
     // The video chosen changed: its metrics in the bar, and the profile's
     // conditions on them.
     void choose_video(int index);
@@ -207,6 +226,9 @@ private:
     QTableWidget* segments_table_ = nullptr;
     QLabel* empty_note_ = nullptr;
     QWidget* work_ = nullptr;
+    QLabel* details_hint_ = nullptr;  // until there is a frame or a row to tell of
+    QLabel* details_ = nullptr;       // monospaced, so that its columns line up
+    std::optional<int> hover_frame_;  // the frame under the pointer, while it is on the graph
 };
 
 }  // namespace vml::app

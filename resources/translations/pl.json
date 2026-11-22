@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Details": "Szczegóły",
+  "Point at the graph for a frame's scores, or select a row in the lists.": "Wskaż wykres, aby zobaczyć wyniki klatki, lub zaznacz wiersz na listach.",
+  "Worst frame {rank} of {count}": "Najgorsza klatka {rank} z {count}",
+  "In weak segment {first} to {last}": "W słabym odcinku od {first} do {last}",
+  "No condition holds": "Żaden warunek nie jest spełniony",
+  "Weak by {conditions}": "Słaba z powodu {conditions}",
+  "Segment {first} to {last}": "Odcinek od {first} do {last}",
   "Video names:": "Nazwy wideo:",
   "What tells them apart": "To, co je odróżnia",
   "First and last characters": "Pierwsze i ostatnie znaki",

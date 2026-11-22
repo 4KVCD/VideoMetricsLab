@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Details": "詳細資訊",
+  "Point at the graph for a frame's scores, or select a row in the lists.": "指向圖表可查看某影格的分數，或在清單中選取一列。",
+  "Worst frame {rank} of {count}": "最差影格 {rank} / {count}",
+  "In weak segment {first} to {last}": "位於弱片段 {first} 至 {last}",
+  "No condition holds": "沒有符合的條件",
+  "Weak by {conditions}": "弱於 {conditions}",
+  "Segment {first} to {last}": "片段 {first} 至 {last}",
   "Video names:": "影片名稱：",
   "What tells them apart": "區分它們的部分",
   "First and last characters": "首尾字元",

@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Details": "Ayrıntılar",
+  "Point at the graph for a frame's scores, or select a row in the lists.": "Bir karenin puanları için grafiğin üzerine gelin veya listelerden bir satır seçin.",
+  "Worst frame {rank} of {count}": "En kötü kare {rank} / {count}",
+  "In weak segment {first} to {last}": "{first}–{last} zayıf bölümünde",
+  "No condition holds": "Hiçbir koşul sağlanmıyor",
+  "Weak by {conditions}": "Zayıflatan: {conditions}",
+  "Segment {first} to {last}": "Bölüm {first}–{last}",
   "Video names:": "Video adları:",
   "What tells them apart": "Onları ayıran kısım",
   "First and last characters": "İlk ve son karakterler",

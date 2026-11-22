@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Details": "Részletek",
+  "Point at the graph for a frame's scores, or select a row in the lists.": "Mutasson a grafikonra egy képkocka pontszámaiért, vagy jelöljön ki egy sort a listákban.",
+  "Worst frame {rank} of {count}": "{rank}. legrosszabb képkocka a(z) {count} közül",
+  "In weak segment {first} to {last}": "A(z) {first}–{last} gyenge szakaszban",
+  "No condition holds": "Egyik feltétel sem teljesül",
+  "Weak by {conditions}": "Gyenge ettől: {conditions}",
+  "Segment {first} to {last}": "Szakasz: {first}–{last}",
   "Video names:": "Videónevek:",
   "What tells them apart": "Ami megkülönbözteti őket",
   "First and last characters": "Első és utolsó karakterek",

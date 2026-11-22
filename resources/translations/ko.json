@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Details": "세부 정보",
+  "Point at the graph for a frame's scores, or select a row in the lists.": "그래프를 가리키면 프레임의 점수가 표시됩니다. 목록에서 행을 선택할 수도 있습니다.",
+  "Worst frame {rank} of {count}": "최악 프레임 {rank} / {count}",
+  "In weak segment {first} to {last}": "약한 구간 {first}~{last} 안",
+  "No condition holds": "해당하는 조건 없음",
+  "Weak by {conditions}": "약한 원인: {conditions}",
+  "Segment {first} to {last}": "구간 {first}~{last}",
   "Video names:": "영상 이름:",
   "What tells them apart": "서로 다른 부분",
   "First and last characters": "처음과 마지막 글자",

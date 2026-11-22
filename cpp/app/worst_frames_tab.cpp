@@ -8,6 +8,7 @@
 #include <QMenu>
 #include <QPushButton>
 #include <QEvent>
+#include <QFontMetrics>
 #include <QScopeGuard>
 #include <QScrollBar>
 #include <QSizePolicy>
@@ -21,8 +22,11 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <iterator>
+#include <span>
 
 #include "chart.h"
+#include "export_image.h"
 #include "i18n.h"
 #include "theme.h"
 #include "widgets.h"
@@ -65,6 +69,24 @@ QTableWidget* make_table() {
 }
 
 QString time_text(double seconds) { return qt_text(format_hms(seconds, 3)); }
+
+// How near (in pixels) a worst frame's dot must be for the pointer to take it
+// rather than the frame under it: a dip's worst frame is easy to land on.
+constexpr int snap_pixels = 6;
+
+// Rows of (label, value), the values lined up after the longest label: for
+// the monospaced Details.
+QStringList aligned(const std::vector<std::pair<QString, QString>>& rows) {
+    qsizetype width = 0;
+    for (const auto& [label, value] : rows) {
+        width = std::max(width, label.size());
+    }
+    QStringList lines;
+    for (const auto& [label, value] : rows) {
+        lines << label.leftJustified(width + 2) + value;
+    }
+    return lines;
+}
 
 // The conditions on none of the metrics `keys`.
 std::vector<WeakCondition> conditions_not_on(const std::vector<WeakCondition>& conditions,
@@ -143,6 +165,7 @@ WorstFramesTab::WorstFramesTab(Dialogs dialogs, QWidget* parent) : QWidget(paren
     inputs->setContentsMargins(0, 0, 0, 0);
     inputs->addWidget(videos_card);
     inputs->addWidget(build_conditions());
+    inputs->addWidget(build_details());
     inputs->addStretch(1);
 
     // The work: the metric, the graph and the two lists.
@@ -318,6 +341,37 @@ QWidget* WorstFramesTab::build_conditions() {
     return card;
 }
 
+QWidget* WorstFramesTab::build_details() {
+    // What the pointer is on, in the column's room under the conditions: a
+    // frame's every score and why it is weak, as Metric Graphs' readout
+    // tells its frames.
+    QBoxLayout* column = nullptr;
+    QWidget* card = theme::container("card", false, &column);
+    card->setObjectName("worstDetails");
+    auto* title = new QLabel(app::tr("Details"));
+    theme::set_role(title, "title");
+    column->addWidget(title);
+    details_hint_ = new QLabel(app::tr("Point at the graph for a frame's scores, or select a row in the lists."));
+    details_hint_->setWordWrap(true);
+    theme::style(details_hint_, "color: {muted};");
+    column->addWidget(details_hint_);
+    details_ = new QLabel;
+    details_->setObjectName("worstDetailsText");
+    details_->setTextFormat(Qt::PlainText);
+    QFont font{QString::fromLatin1(number_font_family)};
+    font.setStyleHint(QFont::Monospace);
+    details_->setFont(font);
+    details_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    // As wide as the column whatever it says (a line too long is cut, the
+    // column not widened), and never less than two lines tall: on a short
+    // window the frame and the score graphed, the rest cut.
+    details_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    details_->setMinimumHeight(2 * QFontMetrics(font).lineSpacing());
+    details_->hide();
+    column->addWidget(details_);
+    return card;
+}
+
 QWidget* WorstFramesTab::build_lists() {
     auto* lists = new QWidget;
     lists_layout_ = new QBoxLayout(QBoxLayout::LeftToRight, lists);
@@ -365,6 +419,7 @@ QWidget* WorstFramesTab::build_lists() {
             }
         }
         open_button_->setEnabled(true);
+        show_details();
     });
     connect(worst_table_, &QTableWidget::cellDoubleClicked, this, [this](int, int) { open_selected(); });
     worst->addWidget(worst_table_, 1);
@@ -407,6 +462,7 @@ QWidget* WorstFramesTab::build_lists() {
             chart_->bring_into_view(segment.start_time);
         }
         open_button_->setEnabled(true);
+        show_details();
     });
     connect(segments_table_, &QTableWidget::cellDoubleClicked, this, [this](int, int) { open_selected(); });
     segments->addWidget(segments_table_, 1);
@@ -562,6 +618,10 @@ void WorstFramesTab::choose_video(int index) {
             keys_.emplace_back(definition.key);
         }
     }
+    // Room for a frame's lines (its time, its rank, why it is weak, a blank,
+    // a score per metric), so that Details does not grow as the pointer
+    // moves from one frame to another.
+    details_->setMinimumHeight(static_cast<int>(keys_.size() + 5) * details_->fontMetrics().lineSpacing());
     // The metric shown stays where this video has it.
     const std::string previous = metric_ != nullptr ? std::string(metric_->key) : std::string();
     const std::string key =
@@ -718,6 +778,7 @@ void WorstFramesTab::refresh() {
     refresh_videos_table();
     refresh_chart();
     open_button_->setEnabled(false);
+    show_details();
 }
 
 void WorstFramesTab::refresh_videos_table() {
@@ -756,6 +817,7 @@ void WorstFramesTab::refresh_chart() {
     if (chart_ != nullptr && (metric_ == nullptr || chart_->property("metric").toString() != qt_text(metric_->key))) {
         delete chart_;
         chart_ = nullptr;
+        hover_frame_.reset();
     }
     if (video != nullptr) {
         video_title_->set_text(video->label);
@@ -773,6 +835,8 @@ void WorstFramesTab::refresh_chart() {
         chart_->setProperty("metric", qt_text(metric_->key));
         chart_->setMinimumHeight(100);  // room for the lists at 1280x800 without the page scrolling
         chart_layout_->addWidget(chart_, 1);  // the card's height to the graph, not around its title
+        connect(chart_, &ChartWidget::hovered, this, [this](double time, double) { hover_at(time); });
+        connect(chart_, &ChartWidget::left, this, [this] { hover_left(); });
     }
     const std::optional<ScoreSamples> samples = score_samples(video->result->metric_results, std::string(metric_->key));
     if (!samples) {
@@ -1009,6 +1073,176 @@ void WorstFramesTab::show_saved_state() {
     saved_note_->setText(differ ? app::tr("Changed here only: Save to profile keeps these in {profile}.",
                                           {{"profile", name}})
                                 : app::tr("As saved in profile {profile}.", {{"profile", name}}));
+}
+
+// ----------------------------------------------------------------- details
+
+void WorstFramesTab::hover_at(double time) {
+    const WeakFramesVideo* video = chosen_video();
+    if (video == nullptr || metric_ == nullptr || chart_ == nullptr) {
+        return;
+    }
+    const std::optional<ScoreSamples> samples = score_samples(video->result->metric_results, std::string(metric_->key));
+    if (!samples || samples->time.empty()) {
+        return;
+    }
+    // The frame nearest in time, unless a worst frame's dot is within a few
+    // pixels: that one, which is what the dot is for.
+    const std::span<const double> times = samples->time;
+    auto i = static_cast<std::size_t>(std::lower_bound(times.begin(), times.end(), time) - times.begin());
+    if (i == times.size() || (i > 0 && time - times[i - 1] <= times[i] - time)) {
+        --i;
+    }
+    int frame = samples->frame[i];
+    double at = times[i];
+    const int pointer = chart_->pixel_for_time(time);
+    int nearest = snap_pixels + 1;
+    for (const WorstFrame& worst : worst_) {
+        const int distance = std::abs(chart_->pixel_for_time(worst.time) - pointer);
+        if (distance < nearest) {
+            nearest = distance;
+            frame = worst.frame;
+            at = worst.time;
+        }
+    }
+    chart_->set_cursor_time(at);
+    if (frame != hover_frame_) {  // a move within one frame's pixels tells the same
+        hover_frame_ = frame;
+        show_details();
+    }
+}
+
+void WorstFramesTab::hover_left() {
+    hover_frame_.reset();
+    if (chart_ != nullptr) {
+        // Back on the worst frame selected, as selecting it put it; none for
+        // a segment, whose shading shows it.
+        std::optional<double> selected;
+        if (const QList<QTableWidgetItem*> rows = worst_table_->selectedItems(); !rows.isEmpty()) {
+            if (const std::optional<int> frame = worst_frame_of_row(rows.front()->row())) {
+                const auto found = std::find_if(worst_.begin(), worst_.end(),
+                                                [&](const WorstFrame& w) { return w.frame == *frame; });
+                if (found != worst_.end()) {
+                    selected = found->time;
+                }
+            }
+        }
+        chart_->set_cursor_time(selected);
+    }
+    show_details();
+}
+
+void WorstFramesTab::show_details() {
+    if (details_ == nullptr) {
+        return;
+    }
+    QString text;
+    if (hover_frame_) {
+        text = frame_details(*hover_frame_);
+    }
+    if (text.isEmpty()) {
+        if (const QList<QTableWidgetItem*> rows = worst_table_->selectedItems(); !rows.isEmpty()) {
+            if (const std::optional<int> frame = worst_frame_of_row(rows.front()->row())) {
+                text = frame_details(*frame);
+            }
+        } else if (const QList<QTableWidgetItem*> picked = segments_table_->selectedItems(); !picked.isEmpty()) {
+            const int row = picked.front()->row();
+            if (row >= 0 && static_cast<std::size_t>(row) < segments_.size()) {
+                text = segment_details(segments_[static_cast<std::size_t>(row)]);
+            }
+        }
+    }
+    details_->setText(text);
+    details_->setVisible(!text.isEmpty());
+    details_hint_->setVisible(text.isEmpty());
+}
+
+QString WorstFramesTab::frame_details(int frame) const {
+    const WeakFramesVideo* video = chosen_video();
+    if (video == nullptr || metric_ == nullptr) {
+        return {};
+    }
+    const MetricResultSet& results = video->result->metric_results;
+    const std::optional<ScoreSamples> graphed = score_samples(results, std::string(metric_->key));
+    if (!graphed) {
+        return {};
+    }
+    const auto at = std::lower_bound(graphed->frame.begin(), graphed->frame.end(), frame);
+    if (at == graphed->frame.end() || *at != frame) {
+        return {};
+    }
+    const double time = graphed->time[static_cast<std::size_t>(at - graphed->frame.begin())];
+    QStringList lines{app::tr("Frame {frame}", {{"frame", frame}}) + QStringLiteral("   ") + time_text(time)};
+    const auto worst =
+        std::find_if(worst_.begin(), worst_.end(), [frame](const WorstFrame& w) { return w.frame == frame; });
+    if (worst != worst_.end()) {
+        lines << app::tr("Worst frame {rank} of {count}", {{"rank", static_cast<int>(worst - worst_.begin()) + 1},
+                                                            {"count", static_cast<int>(worst_.size())}});
+    }
+    // Its segment (they are in order and apart), and the conditions that
+    // hold on it: one may hold on a frame no segment has (a run too short).
+    const auto after = std::upper_bound(segments_.begin(), segments_.end(), frame,
+                                        [](int f, const WeakSegment& segment) { return f < segment.first_frame; });
+    if (after != segments_.begin() && std::prev(after)->last_frame >= frame) {
+        lines << app::tr("In weak segment {first} to {last}",
+                         {{"first", std::prev(after)->first_frame}, {"last", std::prev(after)->last_frame}});
+    }
+    QStringList held;
+    if (editor_ != nullptr) {
+        for (const WeakCondition& condition : editor_->rules().conditions) {
+            if (const std::optional<ScoreSamples> samples = score_samples(results, condition.key)) {
+                if (const std::optional<double> value = score_at(*samples, frame); value && condition.is_weak(*value)) {
+                    held << condition_label(condition);
+                }
+            }
+        }
+    }
+    lines << (held.isEmpty() ? app::tr("No condition holds")
+                             : app::tr("Weak by {conditions}", {{"conditions", held.join(QStringLiteral(", "))}}));
+    // Every metric's score, the one graphed first.
+    std::vector<std::string> keys{std::string(metric_->key)};
+    for (const std::string& key : keys_) {
+        if (key != keys.front()) {
+            keys.push_back(key);
+        }
+    }
+    std::vector<std::pair<QString, QString>> scores;
+    for (const std::string& key : keys) {
+        const MetricDefinition& definition = metric_definition(key);
+        const std::optional<ScoreSamples> samples = score_samples(results, key);
+        scores.emplace_back(qt_text(definition.short_label),
+                            qt_text(definition.format_value(samples ? score_at(*samples, frame) : std::nullopt)));
+    }
+    lines << QString() << aligned(scores);
+    return lines.join(QLatin1Char('\n'));
+}
+
+QString WorstFramesTab::segment_details(const WeakSegment& segment) const {
+    QStringList lines{
+        app::tr("Segment {first} to {last}", {{"first", segment.first_frame}, {"last", segment.last_frame}}),
+        app::tr("{start} to {end}", {{"start", time_text(segment.start_time)}, {"end", time_text(segment.end_time)}})};
+    const SegmentRules current = rules();
+    QStringList held;
+    for (std::size_t c = 0; c < current.conditions.size() && c < segment.condition_frames.size(); ++c) {
+        if (segment.condition_frames[c] > 0) {
+            held << condition_label(current.conditions[c]);
+        }
+    }
+    if (!held.isEmpty()) {
+        lines << app::tr("Weak by {conditions}", {{"conditions", held.join(QStringLiteral(", "))}});
+    }
+    std::vector<std::pair<QString, QString>> rows{{app::tr("Frames"), QString::number(segment.frames())}};
+    for (const SegmentMetric& metric : segment.metrics) {
+        const MetricDefinition& definition = metric_definition(metric.key);
+        const QString label = qt_text(definition.short_label);
+        // The worst end: Butteraugli's highest.
+        const std::optional<double> worst =
+            definition.direction == MetricDirection::lower_is_better ? metric.max : metric.min;
+        rows.emplace_back(app::tr("{metric} worst", {{"metric", label}}), qt_text(definition.format_value(worst)));
+        rows.emplace_back(app::tr("{metric} mean", {{"metric", label}}), qt_text(definition.format_value(metric.mean)));
+    }
+    lines << QString() << aligned(rows);
+    return lines.join(QLatin1Char('\n'));
 }
 
 // -------------------------------------------------------------- the actions

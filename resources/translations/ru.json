@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Details": "Подробности",
+  "Point at the graph for a frame's scores, or select a row in the lists.": "Наведите указатель на график, чтобы увидеть оценки кадра, или выберите строку в списках.",
+  "Worst frame {rank} of {count}": "Худший кадр {rank} из {count}",
+  "In weak segment {first} to {last}": "В слабом сегменте с {first} по {last}",
+  "No condition holds": "Ни одно условие не выполняется",
+  "Weak by {conditions}": "Слабый из-за {conditions}",
+  "Segment {first} to {last}": "Сегмент с {first} по {last}",
   "Video names:": "Названия видео:",
   "What tells them apart": "Что их различает",
   "First and last characters": "Первые и последние символы",

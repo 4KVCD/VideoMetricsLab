@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Details": "Detail",
+  "Point at the graph for a frame's scores, or select a row in the lists.": "Arahkan ke grafik untuk skor sebuah frame, atau pilih baris di daftar.",
+  "Worst frame {rank} of {count}": "Frame terburuk {rank} dari {count}",
+  "In weak segment {first} to {last}": "Dalam segmen lemah {first} sampai {last}",
+  "No condition holds": "Tidak ada kondisi yang terpenuhi",
+  "Weak by {conditions}": "Lemah karena {conditions}",
+  "Segment {first} to {last}": "Segmen {first} sampai {last}",
   "Video names:": "Nama video:",
   "What tells them apart": "Yang membedakannya",
   "First and last characters": "Karakter pertama dan terakhir",

@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Details": "Chi tiết",
+  "Point at the graph for a frame's scores, or select a row in the lists.": "Trỏ vào biểu đồ để xem điểm của một khung hình, hoặc chọn một hàng trong danh sách.",
+  "Worst frame {rank} of {count}": "Khung hình tệ nhất {rank} / {count}",
+  "In weak segment {first} to {last}": "Trong đoạn yếu {first} đến {last}",
+  "No condition holds": "Không có điều kiện nào đúng",
+  "Weak by {conditions}": "Yếu do {conditions}",
+  "Segment {first} to {last}": "Đoạn {first} đến {last}",
   "Video names:": "Tên video:",
   "What tells them apart": "Phần phân biệt chúng",
   "First and last characters": "Ký tự đầu và cuối",

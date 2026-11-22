@@ -95,7 +95,12 @@ calculated in resolution tests.
      names those behind each segment.
 
    Click a row to mark it on the graph; double-click it, or **Open in Video
-   Compare**, to see it there (a segment from its first frame). Only frames
+   Compare**, to see it there (a segment from its first frame). Point at the
+   graph and **Details**, under the conditions, tells the frame there: its
+   time, its place among the worst frames, the weak segment it is in and the
+   conditions that hold on it, and every metric's score (a worst frame's dot
+   a few pixels away is taken, so a dip's worst frame is easy to land on).
+   With the pointer elsewhere, it tells the row selected. Only frames
    in Metric Graphs' highlighted range count, if there is one.
    The conditions start from the weak segment profile in use (see [Weak
    segment profiles](#weak-segment-profiles)): its conditions on the metrics
