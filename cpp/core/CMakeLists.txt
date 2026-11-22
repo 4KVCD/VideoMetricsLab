@@ -146,6 +146,12 @@ else()
             "delete CMakeCache.txt, or set VML_CLANG_CL.")
     endif()
     target_sources(vml_core PRIVATE ${vml_engine_sources})
+    # No SVE code on Arm: the kernels keep filter state in arrays and structs
+    # of vectors, which SVE's vectors (no size known when compiling) cannot
+    # be, so clang refuses them. NEON compiles them on every Arm CPU, and no
+    # Apple chip has SVE.
+    set_property(SOURCE ${vml_engine_sources} APPEND PROPERTY COMPILE_DEFINITIONS
+        "HWY_DISABLED_TARGETS=HWY_ALL_SVE")
 endif()
 # The app's version, for every part of it: shown, compared by the update
 # check with GitHub's latest release, and written into what the app saves
