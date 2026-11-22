@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <stdexcept>
 
+#include "codes.h"
 #include "common.h"
 #include "compare.h"
 #include "vml/build_info.h"
@@ -32,16 +33,34 @@ Json row_json(const BdRateRow& row, const BdRateReport& report) {
     return Json{{"bd_rate", percent}};
 }
 
-// The file a table comes from, read; nothing, with the reason printed, when
+// The file a table comes from, read; nothing, with the reason in `why`, when
 // it cannot be.
-std::optional<RateTable> read_table_file(const std::string& text_path) {
+std::optional<RateTable> read_table_file(const std::string& text_path, std::string& why) {
     const std::filesystem::path path = python_path(text_path);
     try {
         return read_rate_file(read_whole_file(path), platform::path_text(path));
     } catch (const std::exception& error) {
-        print_error(error.what());
+        why += (why.empty() ? "" : "\n") + std::string(error.what());
         return std::nullopt;
     }
+}
+
+// The files could not give BD-rates (exit_input): `why` printed, and with
+// --json the document of the error, as the results would be written.
+int refuse_input(const BdrateArguments& arguments, const std::string& why, const char* code) {
+    print_error(why);
+    if (arguments.json_path) {
+        const Json document{{"app", "VideoMetricsLab"}, {"version", VML_VERSION}, {"commit", build_commit()},
+                            {"format", bdrate_format},  {"anchor", arguments.anchor}, {"test", arguments.test},
+                            {"error", why},             {"error_code", code}};
+        if (*arguments.json_path == "-") {
+            print_results(python_json_dumps(document) + "\n");
+        } else if (const std::optional<std::string> failure =
+                       write_json_file(python_path(*arguments.json_path), document)) {
+            print_error("The JSON file could not be written: " + *failure);
+        }
+    }
+    return exit_input;
 }
 
 }  // namespace
@@ -88,16 +107,17 @@ Json bd_rate_json(const BdRateReport& report, const std::string& anchor_path, co
 }
 
 int bdrate(const BdrateArguments& arguments) {
-    const std::optional<RateTable> anchor = read_table_file(arguments.anchor);
-    const std::optional<RateTable> test = read_table_file(arguments.test);
+    std::string unread;
+    const std::optional<RateTable> anchor = read_table_file(arguments.anchor, unread);
+    const std::optional<RateTable> test = read_table_file(arguments.test, unread);
     if (!anchor || !test) {
-        return exit_usage;
+        return refuse_input(arguments, unread, codes::rates_unreadable);
     }
     BdRateReport report;
     try {
         report = bd_rate_report(*anchor, *test, bd_rate_options(arguments));
     } catch (const std::runtime_error& error) {
-        print_error(error.what());
+        print_error(error.what());  // --group-by naming no column of the anchor's
         return exit_usage;
     }
     if (!arguments.quiet) {
@@ -106,12 +126,12 @@ int bdrate(const BdrateArguments& arguments) {
         }
     }
     if (report.metrics.empty()) {
-        print_error("neither the anchor nor the test has a column of scores of a metric");
-        return exit_usage;
+        return refuse_input(arguments, "neither the anchor nor the test has a column of scores of a metric",
+                            codes::no_common_metric);
     }
     if (report.sequences.empty()) {
-        print_error("the anchor and the test have no sequence in common");
-        return exit_usage;
+        return refuse_input(arguments, "the anchor and the test have no sequence in common",
+                            codes::no_common_sequence);
     }
     const Json document = bd_rate_json(report, arguments.anchor, arguments.test);
     if (arguments.json_path && *arguments.json_path == "-") {

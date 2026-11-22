@@ -57,7 +57,7 @@ std::shared_ptr<const RunFacts> MainWindow::saved_facts(const RowData& row_data,
                                     row_data.cvvdp};
     for (const std::string& key : facts->settings.metrics) {
         facts->metrics.emplace_back(key, shown.has_metric(key) ? MetricOutcome{metric_saved, ""}
-                                                               : MetricOutcome{metric_not_run, "no saved score"});
+                                                               : MetricOutcome{metric_not_run, "no saved score", "no_saved_score"});
     }
     return facts;
 }

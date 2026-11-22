@@ -589,7 +589,7 @@ $run.videos[0].metrics.vmaf.score
 | `--difference` | With exactly two test videos: the first minus the second as well, frame by frame (CVVDP second by second), paired as **Difference** in Metric Graphs pairs them. The tables end with a difference table (Score: the two scores subtracted; Mean, Min, Max: of the frames' differences; Paired: the frames, or seconds, both have), the JSON gets a `difference` section, and with `--csv` it is written as `<first>_minus_<second>.csv` (the files' names). |
 | `--csv FOLDER` | Write each video's per-frame scores as `<video>.csv`, as the window's per-frame scores export writes them. |
 | `--json FILE` | Also write the results as JSON. `--json -` prints the JSON instead of the tables, for a script to read. |
-| `--batch CSV` | Compare the videos a CSV file lists, in place of REFERENCE and TEST, all in one run (the start-up and the GPU checks once, not once per reference). A row per test video, with the columns `reference` and `test` (a file or a pattern) and, if wanted, `sequence` and any others, which `--scores-csv` keeps; paths are relative to the CSV file's folder. The tables come per reference, and `--json` writes `{"batch": [...]}`, each reference's results as without `--batch`. A reference that cannot be read is said and the others are still compared (exit code 1). Not with `--difference`. |
+| `--batch CSV` | Compare the videos a CSV file lists, in place of REFERENCE and TEST, all in one run (the start-up and the GPU checks once, not once per reference). A row per test video, with the columns `reference` and `test` (a file or a pattern) and, if wanted, `sequence` and any others, which `--scores-csv` keeps; paths are relative to the CSV file's folder. The tables come per reference, and `--json` writes `{"batch": [...]}`, each reference's results as without `--batch`. A reference that cannot be read is said and the others are still compared (exit code 4). Not with `--difference`. |
 | `--scores-csv FILE` | Write each test video's bitrate (`kbps`) and scores to FILE, a row per video, with its `sequence` (the `--batch` row's, else the reference's file name), `test`, `reference` and the `--batch` row's other columns: the file `bdrate --anchor` and `--test` read. A video whose bitrate is not known, or with only a part compared (`--range`, `--duration`), is left out, said. |
 | `--worst N` | After the tables, each metric's N worst dips: the worst frame of each (a frame within 1 s of a worse one is part of its dip), with every metric's score there. |
 | `--segments CONDITIONS` | List the stretches where scores fall past a threshold, such as `"vmaf<90,ssimulacra2<70"` (quoted: `<` and `>` are the shell's; Butteraugli's worst are high: `"butteraugli>2"`). A frame is weak where any of them holds. Frames are numbered from the video's first, as its encoder numbers them; CVVDP is judged second by second. `--segments saved` takes the conditions of the weak segment profile in use in the app's Settings > Weak segments, `--segments profile:NAME` those of profile NAME (any case; `Default` too), and `--segments preset:KEY` those of a preset (see [Weak segment profiles](#weak-segment-profiles)); conditions after it change it: `"preset:grainy-film,vmaf<80"` replaces the preset's VMAF condition (all of those given on a metric replace its conditions on it: `"preset:grainy-film,vmaf<85,vmaf>20"` keeps both), and a metric it has none for is added; those on metrics not compared are left out, and said; the profile's any/every choice, shortest segment and gap apply where the command gives none. |
@@ -621,12 +621,26 @@ system's code page, so a script reads them as UTF-8 (in Python,
 `subprocess.run(..., encoding="utf-8")`); a console is sent every character
 as it is, whatever its code page.
 
-The exit code is 0 when every video got every metric asked for that it can
-have (one it cannot, such as CVVDP with `--subsample`, is left out with a
-note, as in the app), 1 when a video failed or lost a metric, 2 for a wrong
-command (a raw stream that stores no frame rate without `--fps`, or a raw YUV file without `--size`,
-`--pix-fmt` and `--fps`, and `--difference` without two test videos, among them), when FFmpeg cannot be used or when
-there is no test video, and 130 after Ctrl+C.
+The exit code says how the run went, so that a script can act on it without
+reading the text:
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Every video got every metric asked for that applies to it. A metric that does not apply to the videos, such as HDR VMAF of a video that is not PQ (HDR10), is left out with a note and its status `not applicable`, as is a metric ticked by default in the app that cannot be calculated (CVVDP with `--subsample`, say). |
+| 1 | A video failed or lost a metric (a metric asked for by name that cannot be calculated, such as `-m cvvdp` with `--subsample`, counts), or a file asked for could not be written. |
+| 2 | A wrong command: nothing was read or run. Among them a raw stream that stores no frame rate without `--fps`, a raw YUV file without `--size`, `--pix-fmt` and `--fps`, `--difference` without two test videos, patterns that find only the reference, and FFmpeg that cannot be used. |
+| 3 | Reserved for quality gates (a score below a bar the command sets), which are to come: every score asked for is there, but the encode does not reach the bar. Nothing gives it yet. |
+| 4 | An input could not be read: the reference, a test video, a pattern that finds no file, or the `--batch` list. The other videos are still compared, and the JSON says which could not be read. |
+| 130 | Cancelled with Ctrl+C (or Ctrl+Break, or the console window closed). |
+
+When more than one applies, 130 comes first, then 4, then 1. With `--json`,
+the results are written for every code but 2, also when nothing could be
+compared: a reference that cannot be read gives a document with its `error`
+and `error_code` and no videos, and a `--batch` list that cannot be read
+one with an empty `batch`. Each error, failure, note and reason in the JSON
+has a code beside it, a word that stays the same from version to version
+where the text may change; [The results file](RESULTS_JSON.md#codes) lists
+them.
 Ctrl+C stops the run as **Cancel** does; scores that had finished are saved.
 Closing the console window does the same on Windows' classic console.
 
@@ -691,9 +705,12 @@ YUV file has no bitrate to read.
 | `--json FILE` | Also write the results as JSON; `--json -` prints the JSON instead of the table. |
 | `-q`, `--quiet` | No progress, only the results. |
 
-The exit code is 0 when every video was read, 1 when one could not be or a
-file could not be written, 2 for a wrong command (a raw stream that stores no
-frame rate, without `--fps`) or when ffprobe cannot be used, and 130 after Ctrl+C.
+The exit code is 0 when every video was read, 1 when a file could not be
+written, 2 for a wrong command (a raw stream that stores no frame rate,
+without `--fps`) or when ffprobe cannot be used, 4 when a video could not be
+read (a pattern that finds no file, a raw YUV file, which has no packets, or
+a file FFmpeg cannot read: the others are still given, and the JSON's
+`error_code` says which), and 130 after Ctrl+C.
 
 ### BD-rate
 
@@ -749,9 +766,12 @@ medians are over the sequences that have a BD-rate.
 The table is in markdown: a column per metric and rows for the
 mean, the median, each group's mean and median, and each sequence. The exit
 code is 0 when both files were read, n/a cells or not; 1 when the JSON file
-could not be written; 2 for a wrong command or a file that cannot be read
-(no `sequence` or `kbps` column, a cell that is not a number, no sequence in
-both files).
+could not be written; 2 for a wrong command (a `--group-by` column the
+anchor's file does not have, among them); 4 when a file cannot be read or
+gives no BD-rate (no `sequence` or `kbps` column, a cell that is not a
+number, no metric's scores, no sequence in both files), which `--json` then
+writes as `error` and `error_code` (`rates_unreadable`, `no_common_metric`
+or `no_common_sequence`).
 
 `compare --scores-csv` writes these files. For many clips, list each
 encoder's encodes in a `--batch` file and score them in one run:

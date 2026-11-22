@@ -15,9 +15,16 @@
 namespace vml::cli {
 
 inline constexpr const char* program = "VideoMetricsLab-cli";
+// The exit codes, as the user guide's command line section lists them. When
+// more than one applies: cancelled, then an input not read, then a failure.
 inline constexpr int exit_ok = 0;
-inline constexpr int exit_failed = 1;
-inline constexpr int exit_usage = 2;
+inline constexpr int exit_failed = 1;  // a video or a metric failed, or a file could not be written
+inline constexpr int exit_usage = 2;   // a wrong command: nothing was read or run
+// Every score asked for is there, but a quality gate (to come) is not met.
+inline constexpr int exit_gate_failed = 3;
+// An input could not be read: the reference, a test video, a pattern that
+// finds no file, the --batch list, bdrate's files; the others are still done.
+inline constexpr int exit_input = 4;
 inline constexpr int exit_cancelled = 130;
 
 // The compare command's arguments.

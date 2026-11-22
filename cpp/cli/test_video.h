@@ -1,7 +1,10 @@
 // One test video of a command-line run: what the window keeps in a row.
 #pragma once
 
+#include <algorithm>
 #include <filesystem>
+#include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <utility>
@@ -33,12 +36,21 @@ struct TestVideo {
     // tags, nor of a raw stream, as the saved scores know a video by its
     // file, not by the colours or frame rate it was read with.
     bool save_scores = true;
-    // What the reader should know: metrics left out and why.
+    // What the reader should know: metrics left out and why. Each note's
+    // code (codes.h) is in note_codes, in step: add them with note().
     std::vector<std::string> notes;
+    std::vector<std::string> note_codes;
     std::string error;  // why it was not compared at all
+    std::string error_code;  // error's (codes.h)
     std::optional<ComparisonResult> result;
     // The metrics that failed and why, in the order they failed.
     std::vector<std::pair<std::string, std::string>> failures;
+    // The codes of the failures the command line found itself, by metric;
+    // a failure of the run has none here (calculation_failed_code).
+    std::map<std::string, std::string, std::less<>> failure_codes;
+    // The metrics asked for that do not apply to these videos, left out of
+    // `metrics`: each with its outcome (metric_not_applicable).
+    std::vector<std::pair<std::string, MetricOutcome>> not_applicable;
     bool from_cache = false;  // nothing had to be calculated
     std::optional<std::filesystem::path> csv_file;  // where --csv wrote its scores
     std::optional<std::filesystem::path> run_file;  // where --run-dir wrote its result
@@ -54,6 +66,22 @@ struct TestVideo {
     // How its run went (RunEvents::job_facts), or how its saved scores answered
     // it all: none for a video that was not compared.
     std::optional<RunFacts> facts;
+
+    // Adds a note and its code, unless the same note is there already.
+    // Whether it was added.
+    bool note(const char* code, const std::string& text) {
+        if (std::find(notes.begin(), notes.end(), text) != notes.end()) {
+            return false;
+        }
+        notes.push_back(text);
+        note_codes.emplace_back(code);
+        return true;
+    }
+    // The code of `metric`'s failure: the command line's, else the run's.
+    std::string failure_code(const std::string& metric) const {
+        const auto found = failure_codes.find(metric);
+        return found != failure_codes.end() ? found->second : std::string(calculation_failed_code);
+    }
 
     // Its name as the reports give it.
     std::string name() const;

@@ -21,6 +21,7 @@
 #include <utility>
 
 #include "batch_file.h"
+#include "codes.h"
 #include "common.h"
 #include "file_names.h"
 #include "notify.h"
@@ -36,6 +37,7 @@
 #include "vml/ffmpeg_run.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/ffprobe.h"
+#include "vml/vmaf_hdr.h"
 #include "vml/file_fingerprint.h"
 #include "vml/film_grain_detect.h"
 #include "vml/film_grain_scoring.h"
@@ -731,9 +733,7 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
             note += " (the log, -v, says why)";
         }
         const std::lock_guard lock(noting);
-        std::vector<std::string>& notes = video(index).notes;
-        if (std::find(notes.begin(), notes.end(), note) == notes.end()) {
-            notes.push_back(note);
+        if (video(index).note(codes::gpu_fallback, note)) {
             progress.message(video(index).label() + ": " + note);
         }
     };
@@ -764,11 +764,15 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
                                        [&result](const std::string& key) { return result.has_metric(key); });
         progress.finished(index, video(index).label() + (whole || !cancel.cancelled() ? ": done" : ": cancelled"));
     };
-    events.job_facts = [&](std::size_t index, const RunFacts& facts) { video(index).facts = facts; };
+    events.job_facts = [&](std::size_t index, const RunFacts& facts) {
+        video(index).facts = facts;
+        append(video(index).facts->metrics, video(index).not_applicable);
+    };
     // The counts files state, always (they cost nothing); whole files read only when asked
     events.count_frames = container_frame_counter(environment.ffprobe, cancel, read_whole_files);
     events.job_failed = [&](std::size_t index, const std::string& message, const std::string& /*stderr_tail*/) {
         video(index).error = message;
+        video(index).error_code = codes::run_failed;
         progress.finished(index, video(index).label() + ": FAILED: " + message);
     };
     events.job_partially_failed = [&](std::size_t index, const ComparisonResult& result, const std::string& message,
@@ -860,6 +864,7 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
         for (const std::string& key : video.metrics) {
             facts.metrics.emplace_back(key, MetricOutcome{metric_saved, ""});
         }
+        append(facts.metrics, video.not_applicable);
         video.facts = std::move(facts);
         return std::nullopt;
     }
@@ -1136,6 +1141,7 @@ public:
 
 private:
     void leave_out_cvvdp_if_unable(TestVideo& video) const;
+    void leave_out_hdr_vmaf_if_not_pq(TestVideo& video) const;
     void add_colour_notes(TestVideo& video) const;
     void add_film_grain_notes(TestVideo& video) const;
     std::optional<std::string> queue_jobs(TestVideo& video, const std::string& ffmpeg);
@@ -1195,6 +1201,7 @@ std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& 
     video.path = path;
     if (std::optional<std::string> nothing = found_nothing(path)) {
         video.error = *std::move(nothing);
+        video.error_code = codes::no_match;
         return std::nullopt;
     }
     try {
@@ -1207,6 +1214,7 @@ std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& 
         video.info = with_assumed_colour(std::move(*found.info), arguments_.colour);
     } catch (const ProbeError& error) {
         video.error = std::string("it could not be read: ") + error.what();
+        video.error_code = codes::unreadable;
         return std::nullopt;
     }
     try {  // the crops given, refused before anything runs where they cannot be cut
@@ -1235,18 +1243,21 @@ std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& 
     add_film_grain_notes(video);
     video.metrics = asked_;
     leave_out_cvvdp_if_unable(video);
+    leave_out_hdr_vmaf_if_not_pq(video);
     if (video.metrics.empty()) {
         video.error = "none of the metrics asked for can be calculated for it";
+        video.error_code = codes::no_metric;
         return std::nullopt;
     }
     add_colour_notes(video);
     if (const std::optional<std::string> note = sdr_display_note(arguments_, video.source, video, displays_)) {
-        video.notes.push_back(*note);
+        video.note(codes::sdr_display, *note);
     }
     try {
         return queue_jobs(video, ffmpeg);
     } catch (const std::exception& error) {
         video.error = error.what();
+        video.error_code = codes::not_comparable;
         if (video.error.starts_with("Durations do not match")) {
             video.error += different_durations_hint(video.source, *video.info, range_of(arguments_));
         }
@@ -1272,11 +1283,13 @@ void ComparisonPlanner::leave_out_cvvdp_if_unable(TestVideo& video) const {
     }
     const VshipBuild build = vship_build(arguments_, settings_);
     std::optional<std::string> reason;
+    const char* code = codes::needs_every_frame;
     if (arguments_.subsample > 1) {
         reason = "CVVDP needs every frame: it is not calculated with --subsample above 1";
     } else if (!detect_vship_device(build, gpu_probes_token()).first) {
         reason = "CVVDP is calculated on the GPU only, and no GPU that " + std::string(vship_build_label(build)) +
                  " can use was found";
+        code = codes::no_gpu;
     }
     if (reason) {
         std::erase(video.metrics, "cvvdp");
@@ -1284,9 +1297,27 @@ void ComparisonPlanner::leave_out_cvvdp_if_unable(TestVideo& video) const {
         // default in the settings, a note.
         if (arguments_.metrics) {
             video.failures.emplace_back("cvvdp", *reason);
+            video.failure_codes["cvvdp"] = code;
         } else {
-            video.notes.push_back(*reason);
+            video.note(codes::metric_left_out, *reason);
         }
+    }
+}
+
+// HDR VMAF left out of `video`'s metrics where it does not apply: a pair HDR
+// VMAF cannot score, as it scores PQ (HDR10) video only (hdr_colours). Not a
+// failure, whether asked for by name or by the settings: the other metrics
+// are the video's, and its outcome says why (metric_not_applicable).
+void ComparisonPlanner::leave_out_hdr_vmaf_if_not_pq(TestVideo& video) const {
+    if (std::find(video.metrics.begin(), video.metrics.end(), "vmaf_hdr") == video.metrics.end()) {
+        return;
+    }
+    const std::variant<HdrColours, std::string> colours = hdr_colours(video.source, *video.info);
+    if (const std::string* why = std::get_if<std::string>(&colours)) {
+        std::erase(video.metrics, "vmaf_hdr");
+        video.not_applicable.emplace_back("vmaf_hdr",
+                                          MetricOutcome{metric_not_applicable, *why, codes::hdr_vmaf_colours});
+        video.note(codes::not_applicable, "HDR VMAF is not calculated: " + *why);
     }
 }
 
@@ -1307,9 +1338,9 @@ void ComparisonPlanner::add_colour_notes(TestVideo& video) const {
     } sides[] = {{&video.source, "the reference", "the test video"}, {&*video.info, "the test video", "the reference"}};
     for (const auto& side : sides) {
         if (video.colours_taken == side.which) {
-            video.notes.push_back(taken_colour_note(*side.info, side.which, side.other));
+            video.note(codes::colours_taken, taken_colour_note(*side.info, side.which, side.other));
         } else if (!has_colour_tags(*side.info)) {
-            video.notes.push_back(guessed_colour_note(*side.info, side.which, video.source, *video.info));
+            video.note(codes::colours_guessed, guessed_colour_note(*side.info, side.which, video.source, *video.info));
         }
     }
 }
@@ -1320,13 +1351,14 @@ void ComparisonPlanner::add_film_grain_notes(TestVideo& video) const {
                                                               {&*video.info, "the test video"}};
     for (const auto& [info, which] : sides) {
         if (film_grain_not_known(*info)) {
-            video.notes.push_back(std::string("the film grain of ") + which +
+            video.note(codes::film_grain_unknown, std::string("the film grain of ") + which +
                                   " could not be looked for (FFmpeg failed or took too long): whether its score "
                                   "includes any is not known");
         }
         const FilmGrainScoring grain = effective_film_grain(*info);
         if (!grain.why_without.empty()) {
-            video.notes.push_back(std::string("the film grain of ") + which + " is left out: " + grain.why_without);
+            video.note(codes::film_grain_left_out,
+                       std::string("the film grain of ") + which + " is left out: " + grain.why_without);
         }
     }
 }
@@ -1486,6 +1518,7 @@ struct Comparison {
     VideoInfo source;
     std::optional<ComparisonPlanner> planner;  // once the reference is read
     std::string error;  // why it is not compared (--batch: the others still are)
+    std::string error_code;  // error's (codes.h)
 };
 
 // With --test-remuxes on (or Settings'), each test video calculated and
@@ -1875,7 +1908,11 @@ bool write_results(const CompareArguments& arguments, const Comparisons& compari
         if (!comparison->error.empty()) {
             const std::string reference = platform::path_text(comparison->reference);
             tables += (tables.empty() ? "" : "\n") + reference + ": not compared: " + comparison->error + "\n";
-            batch.push_back({{"reference", reference}, {"error", comparison->error}});
+            batch.push_back(
+                {{"reference", reference}, {"error", comparison->error}, {"error_code", comparison->error_code}});
+            if (!arguments.batch) {
+                document = error_document(reference, comparison->error, comparison->error_code, &record);
+            }
             continue;
         }
         document = comparison_results(arguments, *comparison, cancelled, record, fields, tables, written, progress);
@@ -2020,8 +2057,8 @@ bool start_log_file(const std::filesystem::path& file, const std::vector<std::st
 
 // Takes `comparison`'s reference as read (reads, the comparison's `index`)
 // and plans its test videos. Returns the exit code of a wrong command, or
-// nothing. A reference that cannot be read is the command's error, or with
-// --batch the comparison's: the others are still made.
+// nothing. A reference that cannot be read is the comparison's error (with
+// --batch, the others are still made), which the results give.
 std::optional<int> plan_comparison(Comparison& comparison, std::size_t index, VideoReads& reads,
                                    const CompareArguments& arguments, const Settings& settings,
                                    const ToolsStatus& tools, const std::vector<CvvdpDisplayChoice>& displays,
@@ -2035,13 +2072,9 @@ std::optional<int> plan_comparison(Comparison& comparison, std::size_t index, Vi
         }
         comparison.source = with_assumed_colour(std::move(*read.info), arguments.colour);
     } catch (const ProbeError& error) {
-        const std::string why = std::string("The reference could not be read: ") + error.what();
-        if (!arguments.batch) {
-            print_error(why);
-            return exit_usage;
-        }
-        comparison.error = why;
-        progress.problem(platform::path_text(comparison.reference) + ": not compared: " + why);
+        comparison.error = std::string("The reference could not be read: ") + error.what();
+        comparison.error_code = codes::reference_unreadable;
+        progress.problem(platform::path_text(comparison.reference) + ": not compared: " + comparison.error);
         return std::nullopt;
     }
     ComparisonPlanner& planner =
@@ -2063,12 +2096,32 @@ std::optional<int> plan_comparison(Comparison& comparison, std::size_t index, Vi
             return exit_usage;
         }
         comparison.error = "its rows find only the reference";
+        comparison.error_code = codes::no_test_video;
         comparison.planner.reset();
         progress.problem(platform::path_text(comparison.reference) + ": not compared: " + comparison.error);
         return std::nullopt;
     }
     report_plans(planner.videos, progress);
     return std::nullopt;
+}
+
+// --json: the error document (error_document) of a run that read nothing,
+// its --batch list not read; not where the path has a field that needs the
+// videos, which name_paths refuses. Written as the results would be: to
+// standard output for "-".
+void write_error_json(const CompareArguments& given, const NameFields& fields, const std::string& error,
+                      const std::string& code) {
+    CompareArguments arguments = given;
+    if (!arguments.json_path || name_paths(arguments, {}, fields)) {
+        return;
+    }
+    const nlohmann::ordered_json document = error_document(std::nullopt, error, code);
+    if (*arguments.json_path == "-") {
+        print_results(python_json_dumps(document) + "\n");
+    } else if (const std::optional<std::string> failure =
+                   write_json_file(python_path(*arguments.json_path), document)) {
+        print_error("The JSON file could not be written: " + *failure);
+    }
 }
 
 }  // namespace
@@ -2090,8 +2143,10 @@ int compare(const CompareArguments& given) {
     try {
         comparisons = comparisons_asked(given, groups);
     } catch (const std::runtime_error& error) {
-        print_error("--batch: " + std::string(error.what()));
-        return exit_usage;
+        const std::string why = "--batch: " + std::string(error.what());
+        print_error(why);
+        write_error_json(given, fields, why, codes::batch_unreadable);
+        return exit_input;
     }
     CompareArguments arguments = given;  // with the fields in its paths replaced
     if (const std::optional<std::string> wrong = name_paths(arguments, comparisons, fields)) {
@@ -2270,14 +2325,20 @@ int compare(const CompareArguments& given) {
         }
     };
     bool every_ok = true;
+    bool input_unread = false;  // a reference or a test video could not be read, or a pattern found nothing
     for (const std::unique_ptr<Comparison>& comparison : comparisons) {
         every_ok = every_ok && comparison->error.empty();
+        // (one whose --batch rows find only the reference is a failure: without
+        // --batch, a wrong command)
+        input_unread = input_unread || comparison->error_code == codes::reference_unreadable;
         if (!comparison->planner) {
             continue;
         }
         for (TestVideo& video : comparison->planner->videos) {
+            input_unread =
+                input_unread || video.error_code == codes::no_match || video.error_code == codes::unreadable;
             if (const std::optional<std::string> note = near_miss_note(video)) {
-                video.notes.push_back(*note);
+                video.note(codes::near_miss_crop, *note);
             }
             if (!cancelled && video.from_cache && video.result && video.result->frames_short &&
                 !video.result->frames_short->counted()) {
@@ -2288,7 +2349,7 @@ int compare(const CompareArguments& given) {
                 }
             }
             if (video.result && video.result->frames_short && !video.result->frames_short->in_step()) {
-                video.notes.push_back(frames_short_text(*video.result->frames_short));
+                video.note(codes::frame_counts, frames_short_text(*video.result->frames_short));
             }
             every_ok = every_ok && video_status(video, false) == "ok";
         }
@@ -2309,7 +2370,10 @@ int compare(const CompareArguments& given) {
     if (test_remuxes && !cancelled) {
         record_test_streams(comparisons, cache_folder, *progress, cancel);  // after the results: nothing waits
     }
-    const int exit_code = cancelled ? exit_cancelled : every_ok && written ? exit_ok : exit_failed;
+    const int exit_code = cancelled              ? exit_cancelled
+                          : input_unread         ? exit_input
+                          : every_ok && written  ? exit_ok
+                                                 : exit_failed;
     app_log::Logger("vml.cli").info("Command line finished: exit code " + std::to_string(exit_code));
     return exit_code;
 }

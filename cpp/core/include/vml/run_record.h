@@ -53,12 +53,28 @@ inline constexpr const char* metric_saved = "saved";  // taken from saved scores
 inline constexpr const char* metric_failed = "failed";
 inline constexpr const char* metric_cancelled = "cancelled";
 inline constexpr const char* metric_not_run = "not run";
+// The metric does not apply to the videos (HDR VMAF of a video that is not
+// PQ): left out, not a failure.
+inline constexpr const char* metric_not_applicable = "not applicable";
+
+// The codes a why comes with when the outcome gives none (MetricOutcome::code):
+// stable words for a program to act on, where the why is for a person.
+inline constexpr const char* calculation_failed_code = "calculation_failed";  // failed
+inline constexpr const char* not_planned_code = "not_planned";                // not run
+inline constexpr const char* not_applicable_code = "not_applicable";          // not applicable
 
 struct MetricOutcome {
     std::string status;  // one of the above
-    std::string why;     // for failed and not run
+    std::string why;     // for failed, not run and not applicable
+    // The why's code (docs/RESULTS_JSON.md lists them); empty: the status's
+    // own (outcome_code).
+    std::string code;
     bool operator==(const MetricOutcome&) const = default;
 };
+
+// The code written beside `outcome`'s why: its own, else its status's;
+// empty for an outcome with no why.
+std::string outcome_code(const MetricOutcome& outcome);
 
 // What a video's comparison was asked to do (its VmafJob's).
 struct VideoSettings {
