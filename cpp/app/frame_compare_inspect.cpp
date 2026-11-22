@@ -155,7 +155,10 @@ void FrameComparePanel::add_inspect_row(QBoxLayout* root) {
     loop_checkbox = new QCheckBox(app::tr("Loop"));
     loop_checkbox->setToolTip(app::tr("Plays the seconds around the frame you went to, again and again: Play starts "
                                       "them from the beginning."));
-    connect(loop_checkbox, &QCheckBox::toggled, this, [this](bool on) { on_loop_toggled(on); });
+    connect(loop_checkbox, &QCheckBox::toggled, this, [this](bool on) {
+        on_loop_toggled(on);
+        emit loop_changed(on);
+    });
     // Each side in seconds, to the millisecond, and in frames of the pair
     // shown: either one typed sets the other (refresh_loop_frames). The
     // seconds are what is saved, and what the loop plays.
@@ -272,6 +275,13 @@ void FrameComparePanel::set_loop_seconds(double before, double after) {
         loop_after_spin->setValue(after);
     }
     refresh_loop_frames();
+}
+
+void FrameComparePanel::set_loop_on(bool on) {
+    // As it was left: no loop starts (none is playing yet); the next frame
+    // gone to is its centre.
+    const QSignalBlocker blocker(loop_checkbox);
+    loop_checkbox->setChecked(on);
 }
 
 double FrameComparePanel::loop_fps() const {

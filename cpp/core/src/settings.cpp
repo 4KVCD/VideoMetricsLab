@@ -84,6 +84,7 @@ const std::unordered_map<std::string, Field>& fields() {
         {"remembered_reference", &Settings::remembered_reference},
         {"remembered_tests", &Settings::remembered_tests},
         {"highlight_best_worst", &Settings::highlight_best_worst},
+        {"compare_loop", &Settings::compare_loop},
         {"frame_preview_color_mode", &Settings::frame_preview_color_mode},
         {"compare_decoded_videos", &Settings::compare_decoded_videos},
         {"compare_loop_before_ms", &Settings::compare_loop_before_ms},
@@ -477,6 +478,7 @@ std::string Settings::text() const {
     data["highlight_best_worst"] = highlight_best_worst;
     data["frame_preview_color_mode"] = frame_preview_color_mode;
     data["compare_decoded_videos"] = compare_decoded_videos;
+    data["compare_loop"] = compare_loop;
     data["compare_loop_before_ms"] = compare_loop_before_ms;
     data["compare_loop_after_ms"] = compare_loop_after_ms;
     data["export_graph_theme"] = export_graph_theme;

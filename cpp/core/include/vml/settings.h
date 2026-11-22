@@ -162,7 +162,9 @@ struct Settings {
     bool highlight_best_worst = false;
     std::string frame_preview_color_mode = "display_aware";
     int compare_decoded_videos = 3;
-    // Video Compare's loop: how long it plays before and after its frame (ms).
+    // Video Compare's loop: whether it is on (Loop ticked), and how long it
+    // plays before and after its frame (ms).
+    bool compare_loop = false;
     int compare_loop_before_ms = 1000;
     int compare_loop_after_ms = 1000;
     // Exported graphs' colours (Metric Graphs' and the Bitrate tab's Export
