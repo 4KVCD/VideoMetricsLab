@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "主题默认",
+  "The theme's own accent: Mocha's amber.": "主题自带的强调色：Mocha 的琥珀色。",
   "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "指向图表可查看某帧的分数，或在列表中选择一行。双击一行可在视频对比中打开。",
   "Double-click the row to open it in Video Compare.": "双击该行可在视频对比中打开。",
   "Worst frames as CSV...": "最差帧导出为 CSV...",

@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "Як у темі",
+  "The theme's own accent: Mocha's amber.": "Власний акцент теми: бурштиновий Mocha.",
   "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "Наведіть вказівник на графік, щоб побачити оцінки кадру, або виберіть рядок у списках. Двічі клацніть рядок, щоб відкрити його в «Порівнянні відео».",
   "Double-click the row to open it in Video Compare.": "Двічі клацніть рядок, щоб відкрити його в «Порівнянні відео».",
   "Worst frames as CSV...": "Найгірші кадри у CSV...",

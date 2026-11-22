@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "Bawaan tema",
+  "The theme's own accent: Mocha's amber.": "Aksen milik tema: kuning amber Mocha.",
   "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "Arahkan ke grafik untuk skor sebuah frame, atau pilih baris di daftar. Klik dua kali sebuah baris untuk membukanya di Bandingkan video.",
   "Double-click the row to open it in Video Compare.": "Klik dua kali baris ini untuk membukanya di Bandingkan video.",
   "Worst frames as CSV...": "Bingkai terburuk sebagai CSV...",

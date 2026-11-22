@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "Mặc định của chủ đề",
+  "The theme's own accent: Mocha's amber.": "Màu nhấn riêng của chủ đề: màu hổ phách của Mocha.",
   "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "Trỏ vào biểu đồ để xem điểm của một khung hình, hoặc chọn một hàng trong danh sách. Nhấp đúp vào một hàng để mở trong So sánh video.",
   "Double-click the row to open it in Video Compare.": "Nhấp đúp vào hàng này để mở trong So sánh video.",
   "Worst frames as CSV...": "Khung tệ nhất dạng CSV...",

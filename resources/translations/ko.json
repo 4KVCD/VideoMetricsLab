@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "테마 기본값",
+  "The theme's own accent: Mocha's amber.": "테마 고유의 강조 색: Mocha의 호박색.",
   "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "그래프를 가리키면 프레임의 점수가 표시됩니다. 목록에서 행을 선택할 수도 있습니다. 행을 두 번 클릭하면 영상 비교에서 열립니다.",
   "Double-click the row to open it in Video Compare.": "행을 두 번 클릭하면 영상 비교에서 열립니다.",
   "Worst frames as CSV...": "가장 나쁜 프레임을 CSV로...",

@@ -307,7 +307,27 @@ QWidget* SettingsPanel::build_appearance_page() {
     if (theme_buttons->checkedButton() == nullptr) {
         theme_buttons->buttons().front()->setChecked(true);  // an unknown setting: the system's
     }
-    connect(theme_buttons, &QButtonGroup::buttonClicked, this, [this] { on_edited(); });
+    // The accent's first choice names what no accent gives: the system's,
+    // or, in a theme with an accent of its own (Mocha's amber), the theme's.
+    const auto name_system_accent = [this, system_accent] {
+        const QAbstractButton* theme = theme_buttons->checkedButton();
+        if (theme != nullptr && theme->property("value").toString() == "mocha") {
+            system_accent->setText(app::tr("Theme default"));
+            system_accent->setToolTip(app::tr("The theme's own accent: Mocha's amber."));
+        } else {
+#ifdef __APPLE__
+            system_accent->setText(app::tr("Same as macOS"));
+#else
+            system_accent->setText(app::tr("Same as Windows"));
+#endif
+            system_accent->setToolTip(QString());
+        }
+    };
+    name_system_accent();
+    connect(theme_buttons, &QButtonGroup::buttonClicked, this, [this, name_system_accent] {
+        name_system_accent();
+        on_edited();
+    });
     auto* modes_line = new QHBoxLayout;
     modes_line->addWidget(modes);
     modes_line->addStretch(1);

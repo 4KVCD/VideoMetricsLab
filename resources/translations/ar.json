@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "افتراضي السمة",
+  "The theme's own accent: Mocha's amber.": "لون التمييز الخاص بالسمة: كهرماني Mocha.",
   "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "أشِر إلى الرسم البياني لعرض درجات إطار، أو حدِّد صفًا في القائمتين. انقر نقرًا مزدوجًا على صف لفتحه في مقارنة الفيديو.",
   "Double-click the row to open it in Video Compare.": "انقر نقرًا مزدوجًا على الصف لفتحه في مقارنة الفيديو.",
   "Worst frames as CSV...": "أسوأ الإطارات بصيغة CSV...",

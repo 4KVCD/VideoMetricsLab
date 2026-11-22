@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "Tema varsayılanı",
+  "The theme's own accent: Mocha's amber.": "Temanın kendi vurgu rengi: Mocha'nın kehribarı.",
   "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "Bir karenin puanları için grafiğin üzerine gelin veya listelerden bir satır seçin. Bir satırı Video karşılaştırma'da açmak için çift tıklayın.",
   "Double-click the row to open it in Video Compare.": "Satırı Video karşılaştırma'da açmak için çift tıklayın.",
   "Worst frames as CSV...": "En kötü kareler CSV olarak...",

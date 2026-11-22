@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "テーマの既定",
+  "The theme's own accent: Mocha's amber.": "テーマ独自のアクセント: Mocha のアンバー。",
   "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "グラフを指すとフレームのスコアを表示します。リストの行を選択することもできます。行をダブルクリックすると動画比較で開きます。",
   "Double-click the row to open it in Video Compare.": "行をダブルクリックすると動画比較で開きます。",
   "Worst frames as CSV...": "最悪のフレームを CSV 形式で...",

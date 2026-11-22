@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "Par défaut du thème",
+  "The theme's own accent: Mocha's amber.": "L'accent propre au thème : l'ambre de Mocha.",
   "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "Pointez le graphique pour les scores d'une image, ou sélectionnez une ligne dans les listes. Double-cliquez sur une ligne pour l'ouvrir dans Comparaison vidéo.",
   "Double-click the row to open it in Video Compare.": "Double-cliquez sur la ligne pour l'ouvrir dans Comparaison vidéo.",
   "Worst frames as CSV...": "Pires images en CSV...",

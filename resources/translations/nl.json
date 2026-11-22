@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "Standaard van thema",
+  "The theme's own accent: Mocha's amber.": "Het eigen accent van het thema: het amber van Mocha.",
   "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "Wijs de grafiek aan voor de scores van een frame, of selecteer een rij in de lijsten. Dubbelklik op een rij om die te openen in Video vergelijken.",
   "Double-click the row to open it in Video Compare.": "Dubbelklik op de rij om die te openen in Video vergelijken.",
   "Worst frames as CSV...": "Slechtste frames als CSV...",

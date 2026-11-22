@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "Standard des Designs",
+  "The theme's own accent: Mocha's amber.": "Der eigene Akzent des Designs: Mochas Bernstein.",
   "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "Zeigen Sie auf das Diagramm für die Werte eines Bildes, oder wählen Sie eine Zeile in den Listen. Ein Doppelklick auf eine Zeile öffnet sie im Videovergleich.",
   "Double-click the row to open it in Video Compare.": "Ein Doppelklick auf die Zeile öffnet sie im Videovergleich.",
   "Worst frames as CSV...": "Schlechteste Bilder als CSV...",

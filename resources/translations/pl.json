@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "Domyślny motywu",
+  "The theme's own accent: Mocha's amber.": "Własny akcent motywu: bursztyn Mocha.",
   "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "Wskaż wykres, aby zobaczyć wyniki klatki, lub zaznacz wiersz na listach. Kliknij dwukrotnie wiersz, aby otworzyć go w Porównaniu wideo.",
   "Double-click the row to open it in Video Compare.": "Kliknij dwukrotnie wiersz, aby otworzyć go w Porównaniu wideo.",
   "Worst frames as CSV...": "Najgorsze klatki jako CSV...",

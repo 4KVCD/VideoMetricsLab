@@ -177,8 +177,9 @@ or one typed as `#RRGGBB` in the box beside it; text on it is dark or light,
 whichever reads. VML Classic keeps the system's accent. **Theme** is the
 system's (**Same as Windows**), **Light**, **Dark** or **Mocha**. **Mocha** is
 dark chocolate browns with cream text, and an amber accent while the accent
-is **Same as Windows** (after the Solar Dusk palette); it is VML Modern's
-alone, and VML Classic shows it as **Dark**.
+is **Theme default**, as the accent's first choice reads while Mocha is
+picked (after the Solar Dusk palette); it is VML Modern's alone, and VML
+Classic shows it as **Dark**.
 
 While metrics are calculated, Settings stays open, but the ffmpeg folder, the
 saved results' folder and **Clear saved results** are locked until the run

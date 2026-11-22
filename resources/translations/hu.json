@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "A téma alapértelmezése",
+  "The theme's own accent: Mocha's amber.": "A téma saját kiemelőszíne: a Mocha borostyánja.",
   "Point at the graph for a frame's scores, or select a row in the lists. Double-click a row to open it in Video Compare.": "Mutasson a grafikonra egy képkocka pontszámaiért, vagy jelöljön ki egy sort a listákban. Dupla kattintással a sor megnyílik a Videó-összehasonlításban.",
   "Double-click the row to open it in Video Compare.": "Dupla kattintással a sor megnyílik a Videó-összehasonlításban.",
   "Worst frames as CSV...": "Legrosszabb képkockák CSV-ként...",
