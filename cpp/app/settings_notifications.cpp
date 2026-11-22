@@ -165,7 +165,7 @@ QWidget* SettingsPanel::service_page(const QString& service, QCheckBox*& enabled
     form->addRow(row);
     // The list's tick and the page's box are one setting.
     QCheckBox* const box = enabled;
-    connect(box, &QCheckBox::toggled, this, [this, box, service](bool checked) {
+    connect(box, &QCheckBox::toggled, this, [this, service](bool checked) {
         for (int at = 0; at < notify_services->count(); ++at) {
             if (QListWidgetItem* item = notify_services->item(at); item->data(Qt::UserRole).toString() == service) {
                 const QSignalBlocker blocker(notify_services);

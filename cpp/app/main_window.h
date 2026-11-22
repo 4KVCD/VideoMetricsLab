@@ -533,9 +533,9 @@ private:
         bool numbered = false;
         // Saved comparisons' files drawn as their bitrate was saved
         // (saved_bitrates).
-        SavedBitrates saved_bitrate;
+        SavedBitrates saved_bitrate{};
         // Per-frame scores, made with the files (made_files).
-        std::vector<FrameFiles> frames;
+        std::vector<FrameFiles> frames{};
     };
     // The scored test videos of the reference the Videos tab compares with,
     // in its order; a row's, when it is one of them.
@@ -594,7 +594,7 @@ private:
         bool graphs = false;
         bool several = false;
         QString name;
-        SavedBitrates saved_bitrate;  // PendingBundle's
+        SavedBitrates saved_bitrate{};  // PendingBundle's
     };
     ExportPlan export_plan(std::vector<BundleVideo> videos, const std::filesystem::path& reference,
                            const std::function<nlohmann::ordered_json()>& document, const SegmentRules& rules,

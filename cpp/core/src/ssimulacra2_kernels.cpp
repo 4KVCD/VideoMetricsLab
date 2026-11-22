@@ -54,8 +54,17 @@ void PositiveXybRow(const float* HWY_RESTRICT red, const float* HWY_RESTRICT gre
                     float* HWY_RESTRICT y_out, float* HWY_RESTRICT b_out, size_t count) {
     const hn::ScalableTag<float> d;
     using V = hn::Vec<decltype(d)>;
-    V m[9];
-    for (int i = 0; i < 9; ++i) m[i] = hn::Set(d, opsin[i]);
+    // One variable per matrix entry, as libjxl writes them: an SVE vector has
+    // no compile-time size, so Highway's SVE targets cannot make an array of them.
+    const V m0 = hn::Set(d, opsin[0]);
+    const V m1 = hn::Set(d, opsin[1]);
+    const V m2 = hn::Set(d, opsin[2]);
+    const V m3 = hn::Set(d, opsin[3]);
+    const V m4 = hn::Set(d, opsin[4]);
+    const V m5 = hn::Set(d, opsin[5]);
+    const V m6 = hn::Set(d, opsin[6]);
+    const V m7 = hn::Set(d, opsin[7]);
+    const V m8 = hn::Set(d, opsin[8]);
     const V bias = hn::Set(d, opsin[9]);
     const V neg_cbrt_bias = hn::Set(d, opsin[10]);
     const V half = hn::Set(d, 0.5f);
@@ -64,9 +73,9 @@ void PositiveXybRow(const float* HWY_RESTRICT red, const float* HWY_RESTRICT gre
         const V g = hn::Load(d, green + i);
         const V b = hn::Load(d, blue + i);
         // OpsinAbsorbance, then ZeroIfNegative and CubeRootAndAdd per channel.
-        V mixed0 = hn::MulAdd(m[0], r, hn::MulAdd(m[1], g, hn::MulAdd(m[2], b, bias)));
-        V mixed1 = hn::MulAdd(m[3], r, hn::MulAdd(m[4], g, hn::MulAdd(m[5], b, bias)));
-        V mixed2 = hn::MulAdd(m[6], r, hn::MulAdd(m[7], g, hn::MulAdd(m[8], b, bias)));
+        V mixed0 = hn::MulAdd(m0, r, hn::MulAdd(m1, g, hn::MulAdd(m2, b, bias)));
+        V mixed1 = hn::MulAdd(m3, r, hn::MulAdd(m4, g, hn::MulAdd(m5, b, bias)));
+        V mixed2 = hn::MulAdd(m6, r, hn::MulAdd(m7, g, hn::MulAdd(m8, b, bias)));
         mixed0 = CubeRootAndAdd(d, hn::ZeroIfNegative(mixed0), neg_cbrt_bias);
         mixed1 = CubeRootAndAdd(d, hn::ZeroIfNegative(mixed1), neg_cbrt_bias);
         mixed2 = CubeRootAndAdd(d, hn::ZeroIfNegative(mixed2), neg_cbrt_bias);

@@ -97,13 +97,13 @@ struct NotificationRequest {
     std::string content_type;
     std::string body;
     // Headers besides Content-Type, by name and value (a token sent in one).
-    std::vector<std::pair<std::string, std::string>> headers;
+    std::vector<std::pair<std::string, std::string>> headers{};
     // Whether an http:// URL is sent to: a server of the user's own, on
     // their network. Otherwise https only.
     bool plain_http = false;
     // The keys in it that are not in its URL (a header's token), taken out
     // of any error text shown with without_secrets.
-    std::vector<std::string> secrets;
+    std::vector<std::string> secrets{};
 };
 
 // `text` (an error's, or what a service answered) with the request's keys

@@ -45,11 +45,11 @@ std::vector<double> scores(const VideoColour& source, const VideoColour& test, s
 }
 
 const VideoColour bt709{1, 1, 1, false};
-const VideoColour pq_bt2020{9, 16, 9, false};
-const VideoColour hlg_bt2020{9, 18, 9, false};
 
 TEST(CpuPairScorer, GivesTheOfficialToolsScores) {
 #if defined(_WIN32)
+    const VideoColour pq_bt2020{9, 16, 9, false};
+    const VideoColour hlg_bt2020{9, 18, 9, false};
     // ssimulacra2.exe and butteraugli_main.exe of libjxl 0.12.0's Windows
     // release, run with the source first (Butteraugli with --intensity_target
     // 203 where neither picture is HDR), the map's 3-norm taken as
