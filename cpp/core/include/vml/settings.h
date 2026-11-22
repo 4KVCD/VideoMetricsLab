@@ -15,16 +15,16 @@ namespace vml {
 
 // What an export can include (Settings::export_items), in the order Settings
 // shows them: results, per-frame scores ("frames"), graphs (every metric's,
-// and the bitrate with the reference's) and weak segments. A new kind of
-// export is added here.
+// and the bitrate with the reference's), worst frames (every metric's) and
+// weak segments. A new kind of export is added here.
 const std::vector<std::string>& export_item_keys();
 // The formats the files of an export are written in (Settings::export_formats),
 // in Settings' order: "json" and "csv". Graphs are images whatever is ticked.
 const std::vector<std::string>& export_format_keys();
 
 struct Settings;
-// What an export saves files of: Settings::export_items, less results and
-// weak segments while no format is ticked.
+// What an export saves files of: Settings::export_items, less all but the
+// graphs while no format is ticked.
 std::vector<std::string> exported_items(const Settings& settings);
 
 // Above this many logical cores, a new install scores two videos at once.
@@ -44,7 +44,7 @@ struct Settings {
     // right-click menus' and the one after each run alike: export_items' keys,
     // in any order; and whether as a .zip file or loose files.
     // Per-frame scores are left out until asked for: a long video's are big.
-    std::vector<std::string> export_items = {"results", "graphs", "weak_segments"};
+    std::vector<std::string> export_items = {"results", "graphs", "worst_frames", "weak_segments"};
     // The formats results and weak segments are written in, each ticked one:
     // export_format_keys' keys.
     std::vector<std::string> export_formats = {"json", "csv"};

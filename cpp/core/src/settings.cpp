@@ -180,7 +180,7 @@ void log_unfit(const std::string& name, const Json& value, const std::string& ki
 }  // namespace
 
 const std::vector<std::string>& export_item_keys() {
-    static const std::vector<std::string> items{"results", "frames", "graphs", "weak_segments"};
+    static const std::vector<std::string> items{"results", "frames", "graphs", "worst_frames", "weak_segments"};
     return items;
 }
 

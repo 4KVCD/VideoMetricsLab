@@ -18,3 +18,4 @@ Include shareable before/after screenshots when relevant.
 
 - [ ] Checked in VML Classic and VML Modern, light and dark (`vml_appearance_tests` with `VML_UI_SNAPSHOTS` saves every tab in each)
 - [ ] New controls have their role where one fits (docs/ARCHITECTURE.md, "The window's interfaces")
+- [ ] A new or changed export follows docs/ARCHITECTURE.md, "Exports" (a quick grab of what is shown, or the archive)

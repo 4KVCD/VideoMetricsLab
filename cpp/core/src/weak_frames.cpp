@@ -482,6 +482,46 @@ std::string worst_frames_csv(const MetricResultSet& results, const std::vector<W
 
 std::string worst_frames_file_suffix(const std::string& key) { return key + ".worst"; }
 
+namespace {
+
+// Each scored metric's worst frames of `dips` dips, in the registry's order.
+std::vector<std::pair<std::string, std::vector<WorstFrame>>> every_metrics_worst(const MetricResultSet& results,
+                                                                                 std::size_t dips) {
+    std::vector<std::pair<std::string, std::vector<WorstFrame>>> every;
+    for (const auto& [key, samples] : scored_metrics(results)) {
+        every.emplace_back(key, worst_frames(samples, metric_definition(key).direction, dips));
+    }
+    return every;
+}
+
+}  // namespace
+
+Json worst_frames_report_json(const MetricResultSet& results, std::size_t dips) {
+    Json list = Json::array();
+    for (const auto& [key, worst] : every_metrics_worst(results, dips)) {
+        Json one = worst_frames_json(results, key, worst, dips, {});
+        list.push_back(Json{{"metric", key}, {"worst_frames", std::move(one["worst_frames"])}});
+    }
+    return Json{{"dips", dips}, {"metrics", std::move(list)}};
+}
+
+std::string worst_frames_report_csv(const MetricResultSet& results, std::size_t dips) {
+    std::string text;
+    for (const auto& [key, worst] : every_metrics_worst(results, dips)) {
+        const std::string table = worst_frames_csv(results, worst);
+        const std::size_t header_end = table.find('\n') + 1;
+        if (text.empty()) {
+            text = "metric," + table.substr(0, header_end);
+        }
+        for (std::size_t start = header_end; start < table.size();) {
+            const std::size_t end = table.find('\n', start) + 1;
+            text += key + "," + table.substr(start, end - start);
+            start = end;
+        }
+    }
+    return text;
+}
+
 Json segments_report_json(const std::vector<SegmentsReportVideo>& videos, const SegmentRules& rules) {
     SegmentRules without_ranges = rules;
     without_ranges.ranges.clear();

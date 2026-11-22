@@ -150,7 +150,8 @@ TEST(Settings, ExportsCarryOverTheOldAfterRunChoices) {
     EXPECT_TRUE(settings.export_zip);
     EXPECT_EQ(settings.after_run_place, "beside");
     settings = load(R"({"auto_export": ""})");
-    EXPECT_EQ(settings.export_items, (Items{"results", "graphs", "weak_segments"}));  // per-frame: asked for
+    EXPECT_EQ(settings.export_items,
+              (Items{"results", "graphs", "worst_frames", "weak_segments"}));  // per-frame: asked for
     EXPECT_EQ(settings.export_formats, export_format_keys());
     EXPECT_TRUE(settings.export_zip);
     EXPECT_FALSE(settings.after_run_export);

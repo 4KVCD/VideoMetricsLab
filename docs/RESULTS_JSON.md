@@ -219,3 +219,10 @@ shown there.
 
 The CSV has a row per dip, in the same order: `rank`, `frame`, `time`, then
 a column per scored metric (blank where it has no score).
+
+In an export of what Settings > Storage > Exports include ticks (**Worst
+frames**), each video's `<video> - worst frames.json` holds every scored
+metric's worst frames, as many dips as the Worst Frames tab lists, over the
+whole video: `dips`, then `metrics`, one object a metric (in the app's order
+of metrics) with its `metric` and `worst_frames` as above. Its CSV is the
+rows above, each led by a `metric` column, one metric after another.
