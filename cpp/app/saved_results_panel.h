@@ -13,6 +13,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -57,7 +58,14 @@ class SavedResultsPanel : public QWidget {
 
 public:
     // `contents`: what Settings' Exports include (the right-click menu's).
-    enum class Export { contents, results_json, results_csv, frames_json, frames_csv, graphs, segments };
+    enum class Export { contents, results_json, results_csv, frames_json, frames_csv, graphs, segments, run_file };
+
+    // The quick grabs the Videos table's and Saved Results' menus share
+    // (docs/ARCHITECTURE.md, "Exports"), after their archive item: results
+    // and per-frame scores as JSON or CSV, the graphs as a .zip, the weak
+    // segments, then the run file; each calling `chosen` with its kind,
+    // usable where `enabled`.
+    static void add_quick_grabs(QMenu& menu, bool enabled, const std::function<void(Export)>& chosen);
 
     // `settings` are the window's (the saved results' folder, the weak
     // segment profiles); `dialogs` the window's, which outlive the panel;
@@ -119,9 +127,9 @@ public:
     // The score read for `file` (details_read_), or nothing where it could
     // not be read.
     const SavedScore* read_score(const std::filesystem::path& file) const;
-    // The Export button's menu, made as it opens: the right-click menu's
-    // export, then results, per-frame scores, graphs and weak segments each
-    // on its own.
+    // The Export button's menu, made as it opens: the selection's archive,
+    // the quick grabs (add_quick_grabs), and the weak segment rules they're
+    // found by (add_export_items).
     QMenu* export_menu() const { return export_menu_; }
     void fill_export_menu(QMenu& menu);
     void delete_selected();
@@ -131,8 +139,10 @@ public:
     // action added, or nullptr.
     QAction* fill_menu(QMenu& menu) const;
     // The table's right-click menu, made as it opens: Open in Metric Graphs,
-    // then fill_menu's export; nothing with nothing selected.
+    // then the Export menu's items; nothing with nothing selected.
     void fill_context_menu(QMenu& menu);
+    // The Export menu's items, added to `menu`.
+    void add_export_items(QMenu& menu);
     // The header's right-click menu: every column with a tick, unticked
     // hiding it (the test video's always shown), then Reset column widths.
     void fill_column_menu(QMenu& menu);

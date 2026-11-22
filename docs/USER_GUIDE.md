@@ -873,14 +873,15 @@ videos again:
 - **Open in Metric Graphs** (or double-click, or the first entry of the
   right-click menu) adds them as lines of their own, named "*video*
   (saved)".
-- **Export** opens a menu. Its first entry, **Export this video's...** (one
-  selected) or **Export the selected videos'...** (several), exports what
-  the other tabs' menus export (see [Exporting from the right-click
-  menus](#exporting-from-the-right-click-menus)); right-click them for the
-  same entry, under Open in Metric Graphs. Below it, each kind on its own:
-  - **Results**, **As JSON...** or **As CSV...**, as Export results saves
-    them;
-  - **Per-frame scores**, **As JSON...** or **As CSV...**: a file per
+- **Export**, at the right end beside Delete, opens a menu; right-click
+  the selected comparisons for the same, under Open in Metric Graphs. Its
+  first entry, **Export this video's...** (one selected) or **Export the
+  selected videos'...** (several), exports what the other tabs' menus
+  export (see [Exporting from the right-click
+  menus](#exporting-from-the-right-click-menus)). Below it, each kind on its
+  own, as the Videos tab's Export offers them:
+  - **Results as JSON...** or **as CSV...**, as Export results saves them;
+  - **Per-frame scores as JSON...** or **as CSV...**: a file per
     comparison to a folder (the JSON is the CSV's table: see [Per-frame
     scores as JSON](RESULTS_JSON.md#per-frame-scores-as-json));
   - **Graphs as ZIP...**: the graphs the Videos tab's Graphs as ZIP saves, for
@@ -888,11 +889,13 @@ videos again:
     disk, or replaced since by another file of the same name (a new
     encode), come from its saved bitrate, where the Bitrate Viewer or the
     command line read it before;
-  - **Weak segments**: **Export weak segments...** saves the weak segments
-    report by the rules ticked below it: the profile in use, any profile or
-    a preset. The first entry's weak segments use the same rules. Weak
+  - **Weak segments as JSON or CSV...**: the weak segments report, by the
+    rules ticked under **Weak segments by**: the profile in use, any profile
+    or a preset. The first entry's weak segments use the same rules. Weak
     segments are not saved with the scores; they are found from them as they
-    are exported.
+    are exported;
+  - **Run file (.metrics.json)...**: each comparison as a run file, which
+    **Import run file...** reads back, as the Videos tab's.
 - **Delete...** removes their saved scores, after asking: the videos are
   scored again the next time they are compared. While metrics are
   calculated, it is locked for the comparisons the run is calculating (its
@@ -938,13 +941,15 @@ selected:
 - its first entry is the right-click menu's export (**Export this video's...**,
   **Export the selected videos'...** or **Export all videos'...**), of what
   Settings' Exports include ticks;
-- **Results** and **Per-frame scores**, **As JSON...** or **As CSV...**, as
-  Saved Results' Export offers them;
+- **Results as JSON...** / **as CSV...** and **Per-frame scores as
+  JSON...** / **as CSV...**, as Saved Results' Export offers them;
 - **Graphs as ZIP...** (below);
-- **Export weak segments...**, by the profile in use;
+- **Weak segments as JSON or CSV...**, by the profile in use;
 - **Run file (.metrics.json)...**: each video's whole run, which **Import
   run file...** reads back, on this PC or another. One is saved where
   you say; several into a folder, each named after its video.
+
+The table's right-click menu has the same entries under its own export.
 
 Metric Graphs has its own tab: the Videos tab no longer has a button to open
 it. A video removed from the graph with its ✕ stays away when you come back

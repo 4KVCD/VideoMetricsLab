@@ -191,9 +191,8 @@ When you add to the window:
 ## Exports
 
 The window offers two kinds of export, and a new one is one of them. (Still
-to be brought into line: the Videos and Saved Results menus, which mix the
-archive with quick grabs of their own; and BD-rate's table, which has CSV
-but not yet JSON, nor its chart as PNG.)
+to come: BD-rate's table as JSON, and its chart as PNG, to share one BD-rate
+JSON with the command line.)
 
 **A quick grab exports what is shown.** Every view that shows something
 exportable (a graph, a list or table, the statistics) has a right-click menu
