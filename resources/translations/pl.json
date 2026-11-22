@@ -19,7 +19,6 @@
   "Keeps these conditions and options in the profile picked, in Settings > Weak segments.": "Zapisuje te warunki i opcje w wybranym profilu, w Ustawienia > Słabe odcinki.",
   "Metric": "Metryka",
   "No video has scores yet: calculate metrics on the Videos tab, or open saved results in Metric Graphs.": "Żaden film nie ma jeszcze wyników: oblicz metryki na karcie Wideo lub otwórz zapisane wyniki w Wykresach metryk.",
-  "Opens the Worst Frames tab on the metric shown: the worst frame of each of its worst dips, and the stretches where scores fall past a threshold.": "Otwiera kartę Najgorsze klatki dla pokazanej metryki: najgorszą klatkę każdego z jej najgorszych spadków i odcinki, w których wyniki przekraczają próg.",
   "Segments": "Odcinki",
   "Video": "Wideo",
   "Worst": "Najgorszy",

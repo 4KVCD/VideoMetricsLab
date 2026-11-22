@@ -518,8 +518,6 @@ private:
     // The Worst Frames tab given the graph's lines and its highlighted
     // frames, as they are now.
     void sync_worst_frames();
-    // Metric Graphs' Worst frames: the tab, on metric `key`.
-    void open_worst_frames(const std::string& key);
     void open_or_update_graph(const std::vector<std::shared_ptr<CompletedRun>>& runs, bool show = true);
     // Video Compare at `frame` of the pair `identity` (a graph line's), or
     // why it cannot show it; with Worst frames' `list` to step through, if

@@ -19,7 +19,6 @@
   "Keeps these conditions and options in the profile picked, in Settings > Weak segments.": "これらの条件とオプションを、設定 > 弱い区間 の選択したプロファイルに保存します。",
   "Metric": "メトリクス",
   "No video has scores yet: calculate metrics on the Videos tab, or open saved results in Metric Graphs.": "まだスコアのある動画がありません。動画タブでメトリクスを計算するか、指標グラフで保存済みの結果を開いてください。",
-  "Opens the Worst Frames tab on the metric shown: the worst frame of each of its worst dips, and the stretches where scores fall past a threshold.": "表示中のメトリクスで「最悪のフレーム」タブを開きます。最悪の落ち込みそれぞれの最悪フレームと、スコアがしきい値を超える区間です。",
   "Segments": "区間",
   "Video": "動画",
   "Worst": "最悪",

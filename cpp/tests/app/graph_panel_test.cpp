@@ -91,7 +91,6 @@ protected:
         }
         return texts;
     }
-    static QPushButton& worst_button(GraphPanel& panel) { return *panel.worst_button_; }
     // Every cell's text, row by row.
     static std::vector<QStringList> cell_texts(GraphPanel& panel) {
         std::vector<QStringList> rows;
@@ -1004,19 +1003,6 @@ TEST_F(GraphPanelTest, AShiftDragAcrossTheGraphSelectsFrames) {
     EXPECT_LT(in_view(vmaf).first, 0.1);  // panned
     EXPECT_EQ(range_end_spin(panel).value(), 6);
     EXPECT_TRUE(chart.highlight());
-}
-
-TEST_F(GraphPanelTest, WorstFramesOpensItsTabOnTheMetricShown) {
-    // Worst frames: the Worst Frames tab (the window's), on the page shown.
-    VideoColors colors;
-    GraphPanel panel(&colors);
-    panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(90, 95.0F))), "a", "row:a", true});
-    page(panel, "vmaf");
-    QStringList asked;
-    QObject::connect(&panel, &GraphPanel::worst_frames_requested, [&asked](const QString& key) { asked.append(key); });
-    worst_button(panel).click();
-    EXPECT_EQ(asked, QStringList{"vmaf"});
-    EXPECT_FALSE(worst_button(panel).isCheckable());
 }
 }  // namespace
 }  // namespace vml::app

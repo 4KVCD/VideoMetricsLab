@@ -66,9 +66,6 @@ public:
     // The videos to choose from (the graph's lines, in their order). The
     // video chosen stays chosen while it is among them; else the first is.
     void set_videos(std::vector<WeakFramesVideo> videos);
-    // Shows `identity`'s video on metric `key` (Metric Graphs' Worst frames
-    // button), within frames `range` (nothing: all).
-    void show_video(const std::string& identity, const std::string& key, std::optional<std::pair<int, int>> range);
     // Only frames within `range` (Metric Graphs' highlighted frames; nothing: all).
     void set_range(std::optional<std::pair<int, int>> range);
     // The weak segment profiles (Settings > Weak segments) and the one in

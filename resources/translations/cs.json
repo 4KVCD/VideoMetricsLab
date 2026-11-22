@@ -19,7 +19,6 @@
   "Keeps these conditions and options in the profile picked, in Settings > Weak segments.": "Uloží tyto podmínky a možnosti do vybraného profilu, v Nastavení > Slabé úseky.",
   "Metric": "Metrika",
   "No video has scores yet: calculate metrics on the Videos tab, or open saved results in Metric Graphs.": "Zatím žádné video nemá skóre: spočítejte metriky na kartě Videa nebo otevřete uložené výsledky v Grafech metrik.",
-  "Opens the Worst Frames tab on the metric shown: the worst frame of each of its worst dips, and the stretches where scores fall past a threshold.": "Otevře kartu Nejhorší snímky pro zobrazenou metriku: nejhorší snímek každého z jejích nejhorších propadů a úseky, kde skóre překročí práh.",
   "Segments": "Úseky",
   "Video": "Video",
   "Worst": "Nejhorší",

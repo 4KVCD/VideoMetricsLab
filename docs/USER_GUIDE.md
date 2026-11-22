@@ -72,8 +72,6 @@ calculated in resolution tests.
    **Clear range** goes back to the whole videos. The CSV export always holds
    every frame. **Go to time** moves to the frame shown at a time, as **Go to
    frame** does to a frame.
-   **Worst frames** opens the Worst Frames tab on the metric shown, with the
-   highlighted range if there is one (step 6).
 6. Find a video's weak spots in **Worst Frames**. On the left, every video
    with its number of weak segments and its worst score on the metric shown,
    so the weakest encode stands out; click one to work on it. Under the

@@ -19,7 +19,6 @@
   "Keeps these conditions and options in the profile picked, in Settings > Weak segments.": "Guarda estas condiciones y opciones en el perfil elegido, en Configuración > Segmentos débiles.",
   "Metric": "Métrica",
   "No video has scores yet: calculate metrics on the Videos tab, or open saved results in Metric Graphs.": "Ningún vídeo tiene puntuaciones todavía: calcula métricas en la pestaña Vídeos o abre resultados guardados en Gráficos de métricas.",
-  "Opens the Worst Frames tab on the metric shown: the worst frame of each of its worst dips, and the stretches where scores fall past a threshold.": "Abre la pestaña Peores fotogramas en la métrica mostrada: el peor fotograma de cada uno de sus peores descensos y los tramos donde las puntuaciones cruzan un umbral.",
   "Segments": "Segmentos",
   "Video": "Vídeo",
   "Worst": "Peor",

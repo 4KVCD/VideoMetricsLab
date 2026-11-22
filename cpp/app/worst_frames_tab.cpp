@@ -515,29 +515,6 @@ void WorstFramesTab::set_videos(std::vector<WeakFramesVideo> videos) {
     }
 }
 
-void WorstFramesTab::show_video(const std::string& identity, const std::string& key,
-                                std::optional<std::pair<int, int>> range) {
-    range_ = range;
-    const auto found = std::find_if(videos_.begin(), videos_.end(),
-                                    [&](const WeakFramesVideo& video) { return video.identity == identity; });
-    if (found != videos_.end()) {
-        wanted_identity_ = identity;
-        const int index = static_cast<int>(found - videos_.begin());
-        {
-            const QSignalBlocker blocker(videos_table_);
-            videos_table_->setCurrentCell(index, 0);
-        }
-        if (found->identity != chosen_identity_ || editor_ == nullptr) {
-            choose_video(index);
-        }
-    }
-    if (std::find(keys_.begin(), keys_.end(), key) != keys_.end()) {
-        choose_metric(key);
-    } else {
-        refresh();
-    }
-}
-
 void WorstFramesTab::set_range(std::optional<std::pair<int, int>> range) {
     if (range != range_) {
         range_ = range;

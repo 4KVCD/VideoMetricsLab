@@ -19,7 +19,6 @@
   "Keeps these conditions and options in the profile picked, in Settings > Weak segments.": "이 조건과 옵션을 설정 > 약한 구간의 선택한 프로필에 저장합니다.",
   "Metric": "지표",
   "No video has scores yet: calculate metrics on the Videos tab, or open saved results in Metric Graphs.": "아직 점수가 있는 영상이 없습니다. 영상 탭에서 지표를 계산하거나 지표 그래프에서 저장된 결과를 여세요.",
-  "Opens the Worst Frames tab on the metric shown: the worst frame of each of its worst dips, and the stretches where scores fall past a threshold.": "표시된 지표로 가장 나쁜 프레임 탭을 엽니다. 가장 나쁜 하락 구간마다의 최악 프레임과 점수가 임계값을 넘는 구간입니다.",
   "Segments": "구간",
   "Video": "영상",
   "Worst": "최악",

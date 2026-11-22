@@ -19,7 +19,6 @@
   "Keeps these conditions and options in the profile picked, in Settings > Weak segments.": "เก็บเงื่อนไขและตัวเลือกเหล่านี้ไว้ในโปรไฟล์ที่เลือก ใน การตั้งค่า > ช่วงที่อ่อน",
   "Metric": "เมตริก",
   "No video has scores yet: calculate metrics on the Videos tab, or open saved results in Metric Graphs.": "ยังไม่มีวิดีโอใดมีคะแนน: คำนวณเมตริกในแท็บวิดีโอ หรือเปิดผลที่บันทึกไว้ในกราฟเมตริก",
-  "Opens the Worst Frames tab on the metric shown: the worst frame of each of its worst dips, and the stretches where scores fall past a threshold.": "เปิดแท็บเฟรมที่แย่ที่สุดบนเมตริกที่แสดง: เฟรมที่แย่ที่สุดของแต่ละช่วงตกที่แย่ที่สุด และช่วงที่คะแนนข้ามเกณฑ์",
   "Segments": "ช่วง",
   "Video": "วิดีโอ",
   "Worst": "แย่ที่สุด",

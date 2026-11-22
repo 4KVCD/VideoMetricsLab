@@ -19,7 +19,6 @@
   "Keeps these conditions and options in the profile picked, in Settings > Weak segments.": "Menyimpan kondisi dan opsi ini di profil yang dipilih, di Pengaturan > Segmen lemah.",
   "Metric": "Metrik",
   "No video has scores yet: calculate metrics on the Videos tab, or open saved results in Metric Graphs.": "Belum ada video yang punya skor: hitung metrik di tab Video, atau buka hasil tersimpan di Grafik metrik.",
-  "Opens the Worst Frames tab on the metric shown: the worst frame of each of its worst dips, and the stretches where scores fall past a threshold.": "Membuka tab Bingkai terburuk pada metrik yang ditampilkan: bingkai terburuk dari setiap penurunan terburuknya, dan bagian tempat skor melewati ambang.",
   "Segments": "Segmen",
   "Video": "Video",
   "Worst": "Terburuk",

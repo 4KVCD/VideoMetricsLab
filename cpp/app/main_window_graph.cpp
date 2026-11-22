@@ -57,15 +57,6 @@ void MainWindow::sync_worst_frames() {
     worst_tab_->set_range(graph_panel_->highlighted_frames());
 }
 
-void MainWindow::open_worst_frames(const std::string& key) {
-    if (tabs_->currentIndex() == tab_worst_frames) {
-        sync_worst_frames();
-    } else {
-        tabs_->setCurrentIndex(tab_worst_frames);  // on_tab_changed: sync_worst_frames
-    }
-    worst_tab_->show_video({}, key, graph_panel_->highlighted_frames());
-}
-
 void MainWindow::sync_graph() {
     // Every row's result on the graph. add_runs updates a line of the same
     // identity rather than adding another, leaves one already showing its

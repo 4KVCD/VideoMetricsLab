@@ -19,7 +19,6 @@
   "Keeps these conditions and options in the profile picked, in Settings > Weak segments.": "将这些条件和选项保存到所选配置，即 设置 > 弱片段 中。",
   "Metric": "指标",
   "No video has scores yet: calculate metrics on the Videos tab, or open saved results in Metric Graphs.": "还没有视频有分数：请在视频标签页计算指标，或在指标图表中打开已保存的结果。",
-  "Opens the Worst Frames tab on the metric shown: the worst frame of each of its worst dips, and the stretches where scores fall past a threshold.": "在所示指标上打开“最差帧”标签页：其各最差下降的最差帧，以及分数越过阈值的片段。",
   "Segments": "片段",
   "Video": "视频",
   "Worst": "最差",

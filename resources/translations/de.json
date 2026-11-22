@@ -19,7 +19,6 @@
   "Keeps these conditions and options in the profile picked, in Settings > Weak segments.": "Speichert diese Bedingungen und Optionen im gewählten Profil, unter Einstellungen > Schwache Abschnitte.",
   "Metric": "Metrik",
   "No video has scores yet: calculate metrics on the Videos tab, or open saved results in Metric Graphs.": "Noch kein Video hat Werte: Berechnen Sie Metriken im Tab Videos oder öffnen Sie gespeicherte Ergebnisse in Metrik-Diagramme.",
-  "Opens the Worst Frames tab on the metric shown: the worst frame of each of its worst dips, and the stretches where scores fall past a threshold.": "Öffnet den Tab Schlechteste Bilder für die gezeigte Metrik: das schlechteste Bild jedes ihrer schlechtesten Einbrüche und die Abschnitte, in denen die Werte eine Schwelle überschreiten.",
   "Segments": "Abschnitte",
   "Video": "Video",
   "Worst": "Schlechtester",

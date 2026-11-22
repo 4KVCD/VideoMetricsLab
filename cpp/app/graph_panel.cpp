@@ -1373,7 +1373,8 @@ void GraphPanel::select_available_metric() {
 QWidget* GraphPanel::build_action_bar() {
     // The buttons under the graph, a toolbar of its own in VML Modern, in
     // groups a line apart: add saved results and export; go to a frame and
-    // the range; the view (Difference, Worst frames).
+    // the range; the view (Difference). A video's worst frames and weak
+    // segments are the Worst Frames tab's.
     auto* bar = new QWidget;
     theme::set_role(bar, "toolbar");
     auto* layout = new QHBoxLayout(bar);
@@ -1405,13 +1406,6 @@ QWidget* GraphPanel::build_action_bar() {
         }
     });
     layout->addWidget(difference_box_);
-    layout->addSpacing(16);
-    worst_button_ = new QPushButton(app::tr("Worst frames"));
-    worst_button_->setToolTip(app::tr("Opens the Worst Frames tab on the metric shown: the worst frame of each of "
-                                      "its worst dips, and the stretches where scores fall past a threshold."));
-    connect(worst_button_, &QPushButton::clicked, this,
-            [this] { emit worst_frames_requested(QString::fromLatin1(current_metric().key)); });
-    layout->addWidget(worst_button_);
     layout->addStretch(1);
     return bar;
 }

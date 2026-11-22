@@ -19,7 +19,6 @@
   "Keeps these conditions and options in the profile picked, in Settings > Weak segments.": "Bu koşulları ve seçenekleri seçilen profilde, Ayarlar > Zayıf bölümler altında saklar.",
   "Metric": "Metrik",
   "No video has scores yet: calculate metrics on the Videos tab, or open saved results in Metric Graphs.": "Henüz hiçbir videonun puanı yok: Videolar sekmesinde metrikleri hesaplayın veya Metrik grafikleri sekmesinde kaydedilmiş sonuçları açın.",
-  "Opens the Worst Frames tab on the metric shown: the worst frame of each of its worst dips, and the stretches where scores fall past a threshold.": "Gösterilen metrikte En kötü kareler sekmesini açar: en kötü düşüşlerinin her birinin en kötü karesi ve puanların bir eşiği geçtiği bölümler.",
   "Segments": "Bölümler",
   "Video": "Video",
   "Worst": "En kötü",

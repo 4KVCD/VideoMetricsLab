@@ -584,8 +584,6 @@ void MainWindow::build_ui() {
         settings_.graph_metric = key.toStdString();  // the metric chosen, shown again next time
         save_settings();
     });
-    connect(graph_panel_, &GraphPanel::worst_frames_requested, this,
-            [this](const QString& key) { open_worst_frames(key.toStdString()); });
     tabs_->addTab(new ScrollingPage(graph_panel_), app::tr("Metric Graphs"));
     // Worst Frames: a video's worst frames and weak segments (issue #24).
     worst_tab_ = new WorstFramesTab(dialogs_);

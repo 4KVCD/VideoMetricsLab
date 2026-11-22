@@ -339,9 +339,6 @@ signals:
     // video's export, or all the videos', of what Settings' Exports include.
     void video_export_requested(const std::string& identity);
     void all_videos_export_requested();
-    // Worst frames: the Worst Frames tab, on metric `key` (the page shown),
-    // with the frames highlighted here (highlighted_frames).
-    void worst_frames_requested(const QString& key);
     // Show removed videos: the rows' lines removed here, to add again with
     // restore (the window has their results).
     void restore_removed_requested();
@@ -428,8 +425,6 @@ private:
     // shows exactly two lines.
     bool difference_on_ = false;
     QCheckBox* difference_box_ = nullptr;
-    // Worst frames: opens its tab (worst_frames_requested).
-    QPushButton* worst_button_ = nullptr;
     QPushButton* restore_button_ = nullptr;  // Show removed videos
     QLabel* status_label_ = nullptr;
     QLabel* metric_hint_ = nullptr;
