@@ -336,40 +336,39 @@ QWidget* SettingsPanel::build_appearance_page() {
     looks_grid->setColumnMinimumWidth(0, 180);
     looks_grid->setColumnStretch(1, 1);
     looks_grid->addWidget(row_name(app::tr("Light look"), app::tr("VML Modern only")), 0, 0);
-    looks_grid->addLayout(
-        segments("lightLooks", light_look_buttons,
-                 {
-                     {app::tr("Light"), "light", QString()},
-                     {app::tr("Dim"), "dim", app::tr("Light, a step darker throughout, for less glare. VML Classic shows Light.")},
-                     {app::tr("Paper"), "paper", app::tr("Dim, warmed a little, like unbleached paper. VML Classic shows Light.")},
-                     {app::tr("Desert"), "desert",
-                      app::tr("Warm cream with dark text and edges and a burnt-orange accent, after Windows' Desert "
-                              "contrast theme. VML Classic shows Light.")},
-                 },
-                 settings_.light_look, true),
-        0, 1);
+    // Each look's description, for its button's tooltip.
+    const auto look_tip = [](const QString& look) {
+        return look == "dim"     ? app::tr("Light, a step darker throughout, for less glare. VML Classic shows Light.")
+               : look == "paper" ? app::tr("Dim, warmed a little, like unbleached paper. VML Classic shows Light.")
+               : look == "desert"
+                   ? app::tr("Warm cream with dark text and edges and a burnt-orange accent, after Windows' Desert "
+                             "contrast theme. VML Classic shows Light.")
+               : look == "mocha" ? app::tr("Dark chocolate browns with an amber accent. VML Classic shows Dark.")
+               : look == "joker" ? app::tr("Plum purples with a vivid green accent. VML Classic shows Dark.")
+               : look == "nitrate"
+                   ? app::tr("Green-black shadows with cream text and a gold accent, like an old film print. VML "
+                             "Classic shows Dark.")
+               : look == "phosphor"
+                   ? app::tr("Near-black with umber edges, bright cream text and a gold accent, for the most "
+                             "contrast. VML Classic shows Dark.")
+                   : QString();
+    };
+    const auto looks_of = [&look_tip](bool dark) {
+        std::vector<Choice> choices;
+        for (const auto& [name, value] : theme::look_choices(dark)) {
+            choices.push_back({name, value, look_tip(value)});
+        }
+        return choices;
+    };
+    looks_grid->addLayout(segments("lightLooks", light_look_buttons, looks_of(false), settings_.light_look, true), 0,
+                          1);
     looks_grid->addWidget(row_name(app::tr("Dark look"), app::tr("VML Modern only")), 1, 0);
-    looks_grid->addLayout(
-        segments("darkLooks", dark_look_buttons,
-                 {
-                     {app::tr("Dark"), "dark", QString()},
-                     {app::tr("Mocha"), "mocha",
-                      app::tr("Dark chocolate browns with an amber accent. VML Classic shows Dark.")},
-                     {app::tr("Joker"), "joker",
-                      app::tr("Plum purples with a vivid green accent. VML Classic shows Dark.")},
-                     {app::tr("Nitrate"), "nitrate",
-                      app::tr("Green-black shadows with cream text and a gold accent, like an old film print. VML "
-                              "Classic shows Dark.")},
-                     {app::tr("Phosphor"), "phosphor",
-                      app::tr("Near-black with umber edges, bright cream text and a gold accent, for the most "
-                              "contrast. VML Classic shows Dark.")},
-                 },
-                 settings_.dark_look, true),
-        1, 1);
+    looks_grid->addLayout(segments("darkLooks", dark_look_buttons, looks_of(true), settings_.dark_look, true), 1, 1);
     grid->addWidget(look_controls, 2, 0, 1, 2);
     // The accent's first choice names what no accent gives: the system's,
     // or, in a look with an accent of its own (Mocha's amber, Joker's green,
-    // Nitrate's and Phosphor's gold, Desert's burnt orange), the look's. The look is the one the theme picked shows; for
+    // Nitrate's and Phosphor's gold, Desert's burnt orange), the look's.
+    // The look is the one the theme picked shows; for
     // the system's, the one the window shows now.
     const auto name_system_accent = [this, system_accent] {
         const QString mode = theme_buttons->checkedButton()->property("value").toString();
@@ -418,6 +417,25 @@ QWidget* SettingsPanel::build_appearance_page() {
         on_edited();
     });
     return page;
+}
+
+void SettingsPanel::choose_theme(const QString& value) {
+    for (QAbstractButton* button : theme_buttons->buttons()) {
+        if (button->property("value").toString() == value) {
+            button->setChecked(true);
+            on_edited();
+            return;
+        }
+    }
+}
+
+void SettingsPanel::choose_look(bool dark, const QString& value) {
+    for (QAbstractButton* button : (dark ? dark_look_buttons : light_look_buttons)->buttons()) {
+        if (button->property("value").toString() == value) {
+            button->click();  // as a click in Settings: saved, applied, the accent's first choice named
+            return;
+        }
+    }
 }
 
 void SettingsPanel::set_accent(const QString& hex) {

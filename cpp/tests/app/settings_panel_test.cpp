@@ -272,6 +272,12 @@ TEST(SettingsPanel, AppearanceSavesEachChoice) {
     EXPECT_EQ(system->text(), system_name);
     modes[0]->click();
     EXPECT_EQ(settings.theme, "");
+    // The title bar's menu: a look chosen there as by its button here.
+    panel.choose_look(true, "joker");
+    EXPECT_EQ(settings.dark_look, "joker");
+    EXPECT_TRUE(dark_looks[2]->isChecked());
+    panel.choose_look(false, "dim");
+    EXPECT_EQ(settings.light_look, "dim");
 }
 
 TEST(SettingsPanel, ExportsAreChosenOneByOne) {

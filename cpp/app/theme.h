@@ -21,6 +21,8 @@
 
 #include <optional>
 #include <string>
+#include <utility>
+#include <vector>
 
 class QBoxLayout;
 class QPixmap;
@@ -115,6 +117,16 @@ void refresh();
 // (a theme before there were looks) is dark in Mocha's look.
 void apply_theme(const QString& theme, const QString& light_look = QStringLiteral("light"),
                  const QString& dark_look = QStringLiteral("dark"));
+
+// The themes to choose from, in order, each as its name (translated) and its
+// Settings.theme value: the system's (""), "light", "dark" and "mocha".
+// Settings > Appearance and the title bar's theme menu both offer these.
+std::vector<std::pair<QString, QString>> theme_choices();
+
+// The looks for light (`dark` false) or for dark, as Settings > Appearance
+// and the title bar's theme menu offer them: each one's name and its value
+// in Settings' light_look or dark_look.
+std::vector<std::pair<QString, QString>> look_choices(bool dark);
 
 // The window's interface (Settings > Window > Interface).
 //

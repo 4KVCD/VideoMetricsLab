@@ -210,6 +210,25 @@ Phosphor) is the one the theme
 shows, the accent's first choice reads **Theme default** and gives that
 accent. The looks are VML Modern's alone: VML Classic shows Light or Dark.
 
+In VML Modern on Windows, the window's title bar is the app's own, in the
+theme's colours, with Windows' minimize, maximize and close (hovering
+maximize shows Windows 11's snap layouts, and Alt+Space or a click on the
+icon opens the window menu). Three small buttons sit in it:
+
+- **Progress**, while metrics are calculated: how many videos are done and
+  about how far the run has got, with a thin bar. Its tooltip is the status
+  line; a click opens the Videos tab.
+- **Theme**: a menu of the themes (Same as Windows, Light, Dark) and, below
+  them, **Light look** and **Dark look** menus of the looks, as in Settings >
+  Appearance.
+- **Update to ...**, when a newer version is available: a click shows what's
+  new and the download. VML Classic asks with a dialog when the app starts
+  instead.
+
+On macOS and Linux, and on Windows in high-contrast mode or when VML Modern
+was chosen since the app started, the title bar stays the system's and the
+three buttons sit at the right end of the tab bar.
+
 While metrics are calculated, Settings stays open, but the ffmpeg folder, the
 saved results' folder and **Clear saved results** are locked until the run
 ends, as a note at the top of the tab says, above the sub-tabs: the run uses

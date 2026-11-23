@@ -134,6 +134,7 @@ if(TARGET vml_app)
         app/frame_compare_test.cpp
         app/graph_panel_test.cpp
         app/worst_frames_tab_test.cpp
+        app/title_bar_test.cpp
         app/i18n_test.cpp
         app/main.cpp
         app/options_panel_test.cpp

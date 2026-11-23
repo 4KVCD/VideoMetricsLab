@@ -51,6 +51,7 @@
 #include "stream_records.h"
 #include "theme.h"
 #include "video_names.h"
+#include "title_bar.h"
 #include "vml/app_log.h"
 #include "vml/append.h"
 #include "vml/ffmpeg_tools.h"
@@ -317,6 +318,10 @@ void MainWindow::apply_theme_colours() {
     }
     theme_applied_ = applied;
     theme::refresh();
+    make_title_buttons();  // VML Modern chosen in Settings: its buttons too
+    if (title_buttons_ != nullptr) {
+        show_theme_in_title();
+    }
     // Only the cells with a colour of their own, each to its counterpart.
     for (int row = 0; row < distorted_table_->rowCount(); ++row) {
         for (int column = 0; column < distorted_table_->columnCount(); ++column) {
@@ -526,6 +531,16 @@ void MainWindow::save_settings() {
 // ------------------------------------------------------------- construction
 
 void MainWindow::build_ui() {
+#ifdef _WIN32
+    // VML Modern's own title bar, in the theme's colours, as the window's
+    // menu widget: along its top, the full width, above the central widget's
+    // margins. Asked for before the window is first shown (TitleBar::prepare).
+    if (TitleBar::wanted()) {
+        title_bar_ = new TitleBar(this);
+        title_bar_->prepare();
+        setMenuWidget(title_bar_);
+    }
+#endif
     auto* central = new QWidget;
     setCentralWidget(central);
     auto* root = new QVBoxLayout(central);
@@ -754,6 +769,64 @@ void MainWindow::build_ui() {
     tabs_->addTab(new ScrollingPage(saved_results_panel_), app::tr("Saved Results"));
     tabs_->addTab(new ScrollingPage(settings_panel_), app::tr("Settings"));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
+    make_title_buttons();
+}
+
+void MainWindow::show_theme_in_title() {
+    title_buttons_->set_theme(QString::fromStdString(settings_.theme), QString::fromStdString(settings_.light_look),
+                              QString::fromStdString(settings_.dark_look));
+}
+
+void MainWindow::make_title_buttons() {
+    if (title_buttons_ != nullptr || theme::current_interface() != theme::Interface::modern) {
+        return;
+    }
+#ifdef _WIN32
+    if (title_bar_ != nullptr) {
+        title_buttons_ = title_bar_->buttons();
+    }
+#endif
+    if (title_buttons_ == nullptr) {
+        // No bar of the app's own (another system, high contrast, or Modern
+        // chosen since the start): at the tab bar's right end.
+        title_buttons_ = new TitleButtons;
+        tabs_->setCornerWidget(title_buttons_, Qt::TopRightCorner);
+        title_buttons_->show();
+    }
+    show_theme_in_title();
+    connect(title_buttons_, &TitleButtons::progress_clicked, this, [this] { tabs_->setCurrentIndex(0); });
+    connect(title_buttons_, &TitleButtons::theme_chosen, this, [this](const QString& value) {
+        settings_panel_->choose_theme(value);
+        show_theme_in_title();
+    });
+    connect(title_buttons_, &TitleButtons::look_chosen, this, [this](bool dark, const QString& value) {
+        settings_panel_->choose_look(dark, value);
+        show_theme_in_title();
+    });
+    connect(title_buttons_, &TitleButtons::theme_menu_opening, this, [this] { show_theme_in_title(); });
+    connect(title_buttons_, &TitleButtons::update_clicked, this, [this] {
+        if (pending_update_) {
+            show_update(*pending_update_);
+        }
+    });
+}
+
+bool MainWindow::nativeEvent(const QByteArray& type, void* message, qintptr* result) {
+#ifdef _WIN32
+    if (title_bar_ != nullptr && title_bar_->native_event(message, result)) {
+        return true;
+    }
+#endif
+    return QMainWindow::nativeEvent(type, message, result);
+}
+
+void MainWindow::showEvent(QShowEvent* event) {
+#ifdef _WIN32
+    if (title_bar_ != nullptr) {
+        title_bar_->attach();  // the native window is made now
+    }
+#endif
+    QMainWindow::showEvent(event);
 }
 
 QWidget* MainWindow::build_files_panel() {
@@ -1162,6 +1235,21 @@ void MainWindow::offer_update(const Release& release) {
     if (release.version == settings_.skipped_update_version) {
         return;
     }
+    if (title_buttons_ != nullptr) {
+        // VML Modern: a badge in the title bar, not a dialog taking the focus
+        // at the start; a click on it shows the dialog.
+        pending_update_ = release;
+        title_buttons_->set_update(QString::fromStdString(release.version));
+        return;
+    }
+    show_update(release);
+}
+
+void MainWindow::show_update(const Release& release) {
+    if (update_box_ != nullptr) {
+        update_box_->raise();
+        return;
+    }
     auto* box = new QMessageBox(this);
     box->setAttribute(Qt::WA_DeleteOnClose);
     box->setIcon(QMessageBox::Information);
@@ -1189,6 +1277,10 @@ void MainWindow::offer_update(const Release& release) {
         } else if (box->clickedButton() == skip) {
             settings_.skipped_update_version = release.version;
             save_settings();
+            pending_update_.reset();
+            if (title_buttons_ != nullptr) {
+                title_buttons_->set_update({});
+            }
         }
     });
     update_box_ = box;

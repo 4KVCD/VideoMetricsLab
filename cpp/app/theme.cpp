@@ -28,6 +28,8 @@
 #include <utility>
 #include <vector>
 
+#include "i18n.h"
+
 namespace vml::app::theme {
 
 namespace {
@@ -1023,6 +1025,26 @@ QWidget[vmlRole="toolbar"] { background: {raised}; border: 1px solid {border}; b
         sheet.replace("{" + name + "}", value);
     }
     return sheet.trimmed();
+}
+
+std::vector<std::pair<QString, QString>> theme_choices() {
+    return {
+#ifdef __APPLE__
+        {app::tr("Same as macOS"), ""},
+#else
+        {app::tr("Same as Windows"), ""},
+#endif
+        {app::tr("Light"), "light"},
+        {app::tr("Dark"), "dark"},
+    };
+}
+
+std::vector<std::pair<QString, QString>> look_choices(bool dark) {
+    if (dark) {
+        return {{app::tr("Dark"), "dark"},         {app::tr("Mocha"), "mocha"},       {app::tr("Joker"), "joker"},
+                {app::tr("Nitrate"), "nitrate"}, {app::tr("Phosphor"), "phosphor"}};
+    }
+    return {{app::tr("Light"), "light"}, {app::tr("Dim"), "dim"}, {app::tr("Paper"), "paper"}, {app::tr("Desert"), "desert"}};
 }
 
 void apply_theme(const QString& theme, const QString& light_look, const QString& dark_look) {
