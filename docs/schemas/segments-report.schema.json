@@ -56,7 +56,10 @@
           "reference",
           "segment_count",
           "weak_frames",
-          "segments"
+          "segments",
+          "weak_seconds",
+          "weak_percent",
+          "condition_counts"
         ],
         "properties": {
           "name": {
@@ -85,6 +88,37 @@
             "items": {
               "$ref": "#/$defs/segment"
             }
+          },
+          "weak_seconds": {
+            "type": "number"
+          },
+          "weak_percent": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "condition_counts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "condition",
+                "holds",
+                "in_segments"
+              ],
+              "properties": {
+                "condition": {
+                  "type": "string"
+                },
+                "holds": {
+                  "type": "integer"
+                },
+                "in_segments": {
+                  "type": "integer"
+                }
+              }
+            }
           }
         }
       }
@@ -99,7 +133,9 @@
         "start_time",
         "end_time",
         "frames",
-        "metrics"
+        "metrics",
+        "weak_by",
+        "condition_frames"
       ],
       "properties": {
         "first_frame": {
@@ -176,6 +212,18 @@
                 ]
               }
             }
+          }
+        },
+        "weak_by": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "condition_frames": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
           }
         }
       }

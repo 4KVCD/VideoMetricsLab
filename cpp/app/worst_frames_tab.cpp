@@ -1331,7 +1331,7 @@ void WorstFramesTab::export_segments(ExportKind kind) {
     case ExportKind::json:
         suffix += QStringLiteral(".json");
         filter = app::tr("JSON file (*.json)");
-        text = python_json_dumps(segments_file_json(segments_, current)) + "\n";
+        text = python_json_dumps(segments_file_json(*video->result, segments_, current)) + "\n";
         break;
     case ExportKind::csv:
         suffix += QStringLiteral(".csv");
