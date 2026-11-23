@@ -1805,7 +1805,7 @@ struct Comparison {
     VideoInfo source;
     std::optional<ComparisonPlanner> planner;  // once the reference is read
     std::string error;  // why it is not compared (--batch: the others still are)
-    std::string error_code;  // error's (codes.h)
+    std::string error_code{};  // error's (codes.h)
 };
 
 // With --test-remuxes on (or Settings'), each test video calculated and

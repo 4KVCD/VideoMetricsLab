@@ -42,7 +42,7 @@ struct TestVideo {
     std::vector<std::string> notes;
     std::vector<std::string> note_codes;
     std::string error;  // why it was not compared at all
-    std::string error_code;  // error's (codes.h)
+    std::string error_code{};  // error's (codes.h)
     std::optional<ComparisonResult> result;
     // The metrics that failed and why, in the order they failed.
     std::vector<std::pair<std::string, std::string>> failures;

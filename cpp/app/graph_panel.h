@@ -79,8 +79,8 @@ struct SeriesEntry {
     // The video's name alone (label without the film grain note), and the
     // label as the window shows it: the name shortened with the other lines'
     // (video_names.h). Empty until the panel sets it.
-    QString name;
-    QString shown;
+    QString name{};
+    QString shown{};
 };
 
 // The label the window shows for the line (SeriesEntry::shown, else its label).
@@ -260,7 +260,7 @@ public:
         bool restore = true;
         // Given by runs() only: the line's name as the window shows it (the
         // Video names setting: SeriesEntry::shown). add_run ignores it.
-        QString shown;
+        QString shown{};
     };
     void add_run(const Run& run);
     // add_run for each, with the table and the frame range brought up to
