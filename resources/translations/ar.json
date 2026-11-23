@@ -1156,6 +1156,8 @@
   "is below": "أقل من",
   "{metric} mean": "{metric} المتوسط",
   "{metric} worst": "{metric} الأسوأ",
+  "{metric} highest": "{metric} الأعلى",
+  "{metric} lowest": "{metric} الأدنى",
   "Previous worst": "الأسوأ السابق",
   "Next worst": "الأسوأ التالي",
   "Steps through the worst frames listed in the Worst Frames tab.": "يتنقل عبر أسوأ الإطارات المدرجة في تبويب «أسوأ الإطارات».",

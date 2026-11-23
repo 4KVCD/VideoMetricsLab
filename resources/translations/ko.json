@@ -1156,6 +1156,8 @@
   "is below": "보다 낮음",
   "{metric} mean": "{metric} 평균",
   "{metric} worst": "{metric} 최악",
+  "{metric} highest": "{metric} 최고",
+  "{metric} lowest": "{metric} 최저",
   "Previous worst": "이전 최악",
   "Next worst": "다음 최악",
   "Steps through the worst frames listed in the Worst Frames tab.": "'가장 나쁜 프레임' 탭 목록의 가장 나쁜 프레임을 차례로 이동합니다.",

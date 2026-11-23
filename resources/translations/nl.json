@@ -1156,6 +1156,8 @@
   "is below": "ligt onder",
   "{metric} mean": "{metric} gemiddeld",
   "{metric} worst": "{metric} slechtste",
+  "{metric} highest": "{metric} hoogste",
+  "{metric} lowest": "{metric} laagste",
   "Previous worst": "Vorige slechtste",
   "Next worst": "Volgende slechtste",
   "Steps through the worst frames listed in the Worst Frames tab.": "Loopt door de slechtste frames uit het tabblad Slechtste frames.",

@@ -233,6 +233,28 @@ SegmentRules saved_segment_rules(const std::vector<std::string>& conditions, boo
     return rules;
 }
 
+SegmentEnd segment_end(const SegmentRules& rules, const MetricDefinition& metric) {
+    bool above = false;
+    bool below = false;
+    for (const WeakCondition& condition : rules.conditions) {
+        if (condition.key == metric.key) {
+            (condition.comparison == '>' ? above : below) = true;
+        }
+    }
+    if (above != below) {
+        return above ? SegmentEnd::highest : SegmentEnd::lowest;
+    }
+    return metric.direction == MetricDirection::lower_is_better ? SegmentEnd::highest : SegmentEnd::lowest;
+}
+
+std::optional<double> segment_end_value(const SegmentMetric& metric, SegmentEnd end) {
+    return end == SegmentEnd::highest ? metric.max : metric.min;
+}
+
+bool is_worst_end(SegmentEnd end, const MetricDefinition& metric) {
+    return (end == SegmentEnd::highest) == (metric.direction == MetricDirection::lower_is_better);
+}
+
 std::vector<std::string> condition_texts(const std::vector<WeakCondition>& conditions) {
     std::vector<std::string> texts;
     for (const WeakCondition& condition : conditions) {

@@ -117,6 +117,15 @@ int natural_width(const QTableWidget* table) {
     return table->horizontalHeader()->length() + 2 * table->frameWidth() + table->verticalScrollBar()->sizeHint().width();
 }
 
+// The heading of a segment's score beside its mean: its worst, as for most
+// conditions, else the end its conditions look for (vmaf>98: the highest).
+QString end_heading(const MetricDefinition& metric, SegmentEnd end) {
+    const QString label = qt_text(metric.short_label);
+    return is_worst_end(end, metric)       ? app::tr("{metric} worst", {{"metric", label}})
+           : end == SegmentEnd::highest ? app::tr("{metric} highest", {{"metric", label}})
+                                        : app::tr("{metric} lowest", {{"metric", label}});
+}
+
 // `samples`' worst score within `ranges` (all: none given), by `direction`.
 std::optional<double> worst_score(const ScoreSamples& samples, MetricDirection direction,
                                   const std::vector<FrameInterval>& ranges) {
@@ -1047,9 +1056,9 @@ void WorstFramesTab::fill_segments() {
     for (const WeakCondition& condition : current.conditions) {
         if (std::find(keys.begin(), keys.end(), condition.key) == keys.end()) {
             keys.push_back(condition.key);
-            const QString label = qt_text(metric_definition(condition.key).short_label);
-            headers.append(app::tr("{metric} worst", {{"metric", label}}));
-            headers.append(app::tr("{metric} mean", {{"metric", label}}));
+            const MetricDefinition& definition = metric_definition(condition.key);
+            headers.append(end_heading(definition, segment_end(current, definition)));
+            headers.append(app::tr("{metric} mean", {{"metric", qt_text(definition.short_label)}}));
         }
     }
     segments_table_->clearContents();
@@ -1084,10 +1093,8 @@ void WorstFramesTab::fill_segments() {
         }
         for (const SegmentMetric& metric : segment.metrics) {
             const MetricDefinition& definition = metric_definition(metric.key);
-            // The worst end: Butteraugli's highest.
-            const std::optional<double> worst =
-                definition.direction == MetricDirection::lower_is_better ? metric.max : metric.min;
-            segments_table_->setItem(r, column++, cell(qt_text(definition.format_value(worst))));
+            const std::optional<double> end = segment_end_value(metric, segment_end(current, definition));
+            segments_table_->setItem(r, column++, cell(qt_text(definition.format_value(end))));
             segments_table_->setItem(r, column++, cell(qt_text(definition.format_value(metric.mean))));
         }
     }
@@ -1323,10 +1330,8 @@ QString WorstFramesTab::segment_details(const WeakSegment& segment) const {
     for (const SegmentMetric& metric : segment.metrics) {
         const MetricDefinition& definition = metric_definition(metric.key);
         const QString label = qt_text(definition.short_label);
-        // The worst end: Butteraugli's highest.
-        const std::optional<double> worst =
-            definition.direction == MetricDirection::lower_is_better ? metric.max : metric.min;
-        rows.emplace_back(app::tr("{metric} worst", {{"metric", label}}), qt_text(definition.format_value(worst)));
+        const SegmentEnd end = segment_end(current, definition);
+        rows.emplace_back(end_heading(definition, end), qt_text(definition.format_value(segment_end_value(metric, end))));
         rows.emplace_back(app::tr("{metric} mean", {{"metric", label}}), qt_text(definition.format_value(metric.mean)));
     }
     lines << QString() << aligned(rows);

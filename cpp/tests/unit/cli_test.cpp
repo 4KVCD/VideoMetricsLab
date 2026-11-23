@@ -282,6 +282,29 @@ TEST(CommandLine, SegmentsSavedTakesTheWindowsRulesAndReportsEveryVideo) {
 
 }
 
+// A segment's worst score under the heading that names it: a metric whose
+// lower scores are better (Butteraugli) has its highest, under "max".
+TEST(CommandLine, SegmentsTableNamesEachMetricsWorstEnd) {
+    std::vector<TestVideo> videos(1);
+    videos[0].path = "a.mkv";
+    ComparisonResult& result = videos[0].result.emplace();
+    result.fps = 25.0;
+    result.metric_results.add(
+        FrameMetricResult{"butteraugli", {0, 1, 2, 3}, {0.0, 0.04, 0.08, 0.12}, {1.0F, 2.5F, 3.0F, 1.0F}, {}});
+    result.metric_results.add(
+        FrameMetricResult{"vmaf", {0, 1, 2, 3}, {0.0, 0.04, 0.08, 0.12}, {96.0F, 70.0F, 60.0F, 96.0F}, {}});
+    SegmentRules rules;
+    rules.conditions = {*parse_weak_condition("butteraugli>2"), *parse_weak_condition("vmaf<90")};
+    rules.all = true;
+    rules.min_frames = 1;
+    rules.merge_frames = 0;
+    const std::string text = segments_text(videos, rules, 10);
+    EXPECT_NE(text.find("Butteraugli max"), std::string::npos) << text;
+    EXPECT_EQ(text.find("Butteraugli min"), std::string::npos) << text;
+    EXPECT_NE(text.find("VMAF v0.6.1 min"), std::string::npos) << text;
+    EXPECT_NE(text.find("3.0000"), std::string::npos) << text;
+}
+
 TEST(CommandLine, FindsTestVideosAsThePythonApp) {
     const Json reference = test::load_reference("cli.json")["patterns"];
     const std::filesystem::path folder =

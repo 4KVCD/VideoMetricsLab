@@ -254,8 +254,11 @@ std::string segments_text(const std::vector<TestVideo>& videos, const SegmentRul
         std::vector<std::vector<std::string>> rows;
         std::vector<std::string> header{"First", "Last", "Frames", "Start", "End"};
         for (const SegmentMetric& metric : segments.front().metrics) {
-            const std::string label(metric_definition(metric.key).short_label);
-            header.push_back(label + " min");
+            // The end the metric's conditions look for (segment_end):
+            // VMAF's lowest, or its highest for vmaf>98; Butteraugli's highest.
+            const MetricDefinition& definition = metric_definition(metric.key);
+            const std::string label(definition.short_label);
+            header.push_back(label + (segment_end(rules, definition) == SegmentEnd::highest ? " max" : " min"));
             header.push_back(label + " mean");
         }
         if (weak_by) {
@@ -269,9 +272,7 @@ std::string segments_text(const std::vector<TestVideo>& videos, const SegmentRul
                                          format_hms(segment.end_time, 3)};
             for (const SegmentMetric& metric : segment.metrics) {
                 const MetricDefinition& definition = metric_definition(metric.key);
-                // The worst end: Butteraugli's highest.
-                row.push_back(definition.format_value(
-                    definition.direction == MetricDirection::lower_is_better ? metric.max : metric.min));
+                row.push_back(definition.format_value(segment_end_value(metric, segment_end(rules, definition))));
                 row.push_back(definition.format_value(metric.mean));
             }
             if (weak_by) {

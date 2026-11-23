@@ -422,6 +422,29 @@ TEST(SettingsPanel, WeakSegmentsEditsTheProfiles) {
 // The wheel over a spin box or a combo box of the Settings tab scrolls the
 // tab: their values stay as they were, and the focus stays where it was. A
 // box elsewhere keeps the wheel.
+// A condition is edited as it was written: vmaf>98 (what is better than it
+// need be) stays above, not turned to the metric's usual "below".
+TEST(SegmentRulesEditor, KeepsEachConditionsDirection) {
+    SegmentRulesEditor editor({"vmaf", "butteraugli"}, false);
+    editor.set_rules(SegmentRules{{{"vmaf", '>', 98.0}, {"butteraugli", '>', 2.5}, {"vmaf", '<', 80.0}}});
+    EXPECT_EQ(condition_texts(editor.rules().conditions),
+              (std::vector<std::string>{"vmaf>98", "butteraugli>2.5", "vmaf<80"}));
+}
+
+// A value written with more decimals than the metric shows keeps them: the
+// box shows as many as it has (up to 6), and the editor gives it back
+// whole, rather than rounded to VMAF's 2 and saved so at the next edit.
+TEST(SegmentRulesEditor, KeepsAValuesOwnDecimals) {
+    EXPECT_EQ(threshold_decimals(98.0, 2), 2);
+    EXPECT_EQ(threshold_decimals(80.125, 2), 3);
+    EXPECT_EQ(threshold_decimals(0.5, 4), 4);
+    EXPECT_EQ(threshold_decimals(0.123456789, 4), 6);
+    SegmentRulesEditor editor({"vmaf", "ssim"}, false);
+    editor.set_rules(SegmentRules{{{"vmaf", '<', 80.125}, {"ssim", '<', 0.987654}, {"vmaf", '<', 90.0}}});
+    EXPECT_EQ(condition_texts(editor.rules().conditions),
+              (std::vector<std::string>{"vmaf<80.125", "ssim<0.987654", "vmaf<90"}));
+}
+
 TEST(SettingsPanel, TheWheelScrollsPastValueBoxes) {
     auto* window = new QWidget;
     auto* window_layout = new QVBoxLayout(window);

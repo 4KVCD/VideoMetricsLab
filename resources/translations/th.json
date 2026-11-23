@@ -1156,6 +1156,8 @@
   "is below": "ต่ำกว่า",
   "{metric} mean": "{metric} เฉลี่ย",
   "{metric} worst": "{metric} แย่ที่สุด",
+  "{metric} highest": "{metric} สูงสุด",
+  "{metric} lowest": "{metric} ต่ำสุด",
   "Previous worst": "แย่ที่สุดก่อนหน้า",
   "Next worst": "แย่ที่สุดถัดไป",
   "Steps through the worst frames listed in the Worst Frames tab.": "เลื่อนไปตามเฟรมที่แย่ที่สุดที่แสดงในแท็บ เฟรมที่แย่ที่สุด",

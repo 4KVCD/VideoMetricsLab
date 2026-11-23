@@ -1156,6 +1156,8 @@
   "is below": "dưới",
   "{metric} mean": "{metric} trung bình",
   "{metric} worst": "{metric} tệ nhất",
+  "{metric} highest": "{metric} cao nhất",
+  "{metric} lowest": "{metric} thấp nhất",
   "Previous worst": "Tệ nhất trước",
   "Next worst": "Tệ nhất tiếp",
   "Steps through the worst frames listed in the Worst Frames tab.": "Đi qua các khung tệ nhất được liệt kê trong thẻ Khung tệ nhất.",

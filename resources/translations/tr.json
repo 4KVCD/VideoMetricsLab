@@ -1156,6 +1156,8 @@
   "is below": "altında",
   "{metric} mean": "{metric} ortalama",
   "{metric} worst": "{metric} en kötü",
+  "{metric} highest": "{metric} en yüksek",
+  "{metric} lowest": "{metric} en düşük",
   "Previous worst": "Önceki en kötü",
   "Next worst": "Sonraki en kötü",
   "Steps through the worst frames listed in the Worst Frames tab.": "En kötü kareler sekmesinde listelenen en kötü kareler arasında gezinir.",

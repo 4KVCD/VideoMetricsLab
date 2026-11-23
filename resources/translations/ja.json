@@ -1156,6 +1156,8 @@
   "is below": "より下",
   "{metric} mean": "{metric} 平均",
   "{metric} worst": "{metric} 最悪",
+  "{metric} highest": "{metric} 最高",
+  "{metric} lowest": "{metric} 最低",
   "Previous worst": "前の最悪",
   "Next worst": "次の最悪",
   "Steps through the worst frames listed in the Worst Frames tab.": "「最悪のフレーム」タブの一覧にある最悪のフレームを順に移動します。",

@@ -134,6 +134,18 @@ struct ConditionCount {
 // have; a shortest segment below 1 frame taken as 1, a gap below 0 as 0.
 SegmentRules saved_segment_rules(const std::vector<std::string>& conditions, bool all, int min_frames,
                                  int merge_frames);
+// Which end of a segment's scores of a metric is shown beside its mean: the
+// one its conditions look for. The highest where every condition on the
+// metric is ">" (vmaf>98: better than it need be), the lowest where every
+// one is "<"; with none, or both, the metric's worst (Butteraugli's
+// highest, the others' lowest).
+enum class SegmentEnd { lowest, highest };
+SegmentEnd segment_end(const SegmentRules& rules, const MetricDefinition& metric);
+std::optional<double> segment_end_value(const SegmentMetric& metric, SegmentEnd end);
+// Whether `end` is the metric's worst, as it is unless its conditions look
+// the other way.
+bool is_worst_end(SegmentEnd end, const MetricDefinition& metric);
+
 // The conditions' texts, for Settings.
 std::vector<std::string> condition_texts(const std::vector<WeakCondition>& conditions);
 

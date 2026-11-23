@@ -1156,6 +1156,8 @@
   "is below": "低于",
   "{metric} mean": "{metric} 平均",
   "{metric} worst": "{metric} 最差",
+  "{metric} highest": "{metric} 最高",
+  "{metric} lowest": "{metric} 最低",
   "Previous worst": "上一个最差",
   "Next worst": "下一个最差",
   "Steps through the worst frames listed in the Worst Frames tab.": "逐个浏览“最差帧”标签页中列出的最差帧。",

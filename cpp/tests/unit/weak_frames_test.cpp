@@ -87,6 +87,29 @@ TEST(WeakFrames, WorstFramesGivesEachDipsWorstFrame) {
 // Weak frames: a frame metric's own, a subsample's frames between two weak
 // samples, CVVDP's whole second; combined with any or all, merged across
 // short gaps, short segments left out; each with its metrics' scores.
+// The score shown beside a segment's mean is the end its metric's conditions
+// look for: vmaf>98's highest, vmaf<80's lowest; with none, or both, the
+// metric's worst (Butteraugli's highest).
+TEST(WeakFrames, ASegmentShowsTheEndItsConditionsLookFor) {
+    const MetricDefinition& vmaf = metric_definition("vmaf");
+    const MetricDefinition& butteraugli = metric_definition("butteraugli");
+    const auto end = [](std::vector<WeakCondition> conditions, const MetricDefinition& metric) {
+        return segment_end(SegmentRules{std::move(conditions)}, metric);
+    };
+    EXPECT_EQ(end({{"vmaf", '>', 98.0}}, vmaf), SegmentEnd::highest);
+    EXPECT_EQ(end({{"vmaf", '<', 80.0}}, vmaf), SegmentEnd::lowest);
+    EXPECT_EQ(end({{"vmaf", '>', 98.0}, {"vmaf", '<', 80.0}}, vmaf), SegmentEnd::lowest);
+    EXPECT_EQ(end({}, vmaf), SegmentEnd::lowest);
+    EXPECT_EQ(end({{"vmaf", '>', 98.0}}, butteraugli), SegmentEnd::highest);  // none on it: its worst
+    EXPECT_EQ(end({{"butteraugli", '<', 1.0}}, butteraugli), SegmentEnd::lowest);
+    EXPECT_TRUE(is_worst_end(SegmentEnd::lowest, vmaf));
+    EXPECT_FALSE(is_worst_end(SegmentEnd::highest, vmaf));
+    EXPECT_TRUE(is_worst_end(SegmentEnd::highest, butteraugli));
+    const SegmentMetric scores{"vmaf", 98.1, 99.4, 98.7};
+    EXPECT_EQ(segment_end_value(scores, SegmentEnd::highest), 99.4);
+    EXPECT_EQ(segment_end_value(scores, SegmentEnd::lowest), 98.1);
+}
+
 TEST(WeakFrames, WeakSegmentsFollowTheRules) {
     MetricResultSet results;
     results.add(frame_metric(

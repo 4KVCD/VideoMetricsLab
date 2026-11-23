@@ -1156,6 +1156,8 @@
   "is below": "je pod",
   "{metric} mean": "{metric} průměr",
   "{metric} worst": "{metric} nejhorší",
+  "{metric} highest": "{metric} nejvyšší",
+  "{metric} lowest": "{metric} nejnižší",
   "Previous worst": "Předchozí nejhorší",
   "Next worst": "Další nejhorší",
   "Steps through the worst frames listed in the Worst Frames tab.": "Prochází nejhorší snímky ze seznamu na kartě Nejhorší snímky.",

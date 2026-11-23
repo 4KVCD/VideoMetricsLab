@@ -1156,6 +1156,8 @@
   "is below": "alatt van:",
   "{metric} mean": "{metric} átlag",
   "{metric} worst": "{metric} legrosszabb",
+  "{metric} highest": "{metric} legmagasabb",
+  "{metric} lowest": "{metric} legalacsonyabb",
   "Previous worst": "Előző legrosszabb",
   "Next worst": "Következő legrosszabb",
   "Steps through the worst frames listed in the Worst Frames tab.": "Végiglépked a Legrosszabb képkockák lapon felsorolt legrosszabb képkockákon.",

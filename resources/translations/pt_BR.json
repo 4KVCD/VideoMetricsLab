@@ -1156,6 +1156,8 @@
   "is below": "está abaixo de",
   "{metric} mean": "{metric} média",
   "{metric} worst": "{metric} pior",
+  "{metric} highest": "{metric} máximo",
+  "{metric} lowest": "{metric} mínimo",
   "Previous worst": "Pior anterior",
   "Next worst": "Próximo pior",
   "Steps through the worst frames listed in the Worst Frames tab.": "Percorre os piores quadros listados na aba Piores quadros.",

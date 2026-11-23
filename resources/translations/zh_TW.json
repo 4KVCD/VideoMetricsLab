@@ -1156,6 +1156,8 @@
   "is below": "低於",
   "{metric} mean": "{metric} 平均",
   "{metric} worst": "{metric} 最差",
+  "{metric} highest": "{metric} 最高",
+  "{metric} lowest": "{metric} 最低",
   "Previous worst": "上一個最差",
   "Next worst": "下一個最差",
   "Steps through the worst frames listed in the Worst Frames tab.": "逐一瀏覽「最差影格」分頁中列出的最差影格。",

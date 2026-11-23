@@ -1156,6 +1156,8 @@
   "is below": "нижче",
   "{metric} mean": "{metric} середнє",
   "{metric} worst": "{metric} найгірше",
+  "{metric} highest": "{metric} найбільше",
+  "{metric} lowest": "{metric} найменше",
   "Previous worst": "Попередній найгірший",
   "Next worst": "Наступний найгірший",
   "Steps through the worst frames listed in the Worst Frames tab.": "Переходить найгіршими кадрами зі списку на вкладці «Найгірші кадри».",
