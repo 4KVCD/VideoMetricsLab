@@ -541,10 +541,13 @@ BdRateReport bd_rate_report(const RateTable& anchor, const RateTable& test, cons
     // A metric a table has no scores of: said once, not for every sequence
     std::set<std::string> unscored;
     for (const std::string& metric : report.metrics) {
+        const bool neither = !has_scores(anchor, metric) && !has_scores(test, metric);
         for (const auto& [table, whose] : {std::pair{&anchor, "anchor"}, std::pair{&test, "test"}}) {
             if (!has_scores(*table, metric)) {
                 unscored.insert(metric);
-                report.warnings.push_back(metric + ": the " + whose + " has no scores of it, n/a");
+                if (!neither || options.warn_of_metrics_neither_has) {
+                    report.warnings.push_back(metric + ": the " + whose + " has no scores of it, n/a");
+                }
             }
         }
     }

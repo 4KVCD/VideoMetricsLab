@@ -587,6 +587,7 @@ void BdRatePanel::recalculate() {
     } else {
         BdRateOptions options;
         options.metrics = all_metric_keys();
+        options.warn_of_metrics_neither_has = false;  // their columns' n/a says it
         if (const QString column = group_combo->currentData().toString(); !column.isEmpty()) {
             options.group_by = column.toStdString();
         }

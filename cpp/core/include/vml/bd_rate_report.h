@@ -123,6 +123,10 @@ struct BdRateOptions {
     std::optional<std::vector<std::string>> metrics;
     // A text column of the anchor's (group_columns) to group the sequences by.
     std::optional<std::string> group_by;
+    // Whether a metric neither table has scores of is warned of, for each
+    // side. The BD-rate tab asks for every metric and shows those as n/a,
+    // which says it: a warning per side for each would bury the others.
+    bool warn_of_metrics_neither_has = true;
 };
 
 // The BD-rates of `test` against `anchor` for the sequences both have; with

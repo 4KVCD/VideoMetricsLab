@@ -242,6 +242,28 @@ TEST(BdRate, FindsTheSettingForAScore) {
     EXPECT_TRUE(setting_for_score(std::vector<SettingPoint>{{0, 90}, {2000, 94}}, 92, false).setting);  // CRF 0
 }
 
+// A metric a side has no scores of is warned of; one neither side has is
+// warned of only where asked (the command line's -m), not on the BD-rate tab,
+// whose n/a column says it.
+TEST(BdRate, WarnsOfAMetricOneSideLacks) {
+    const RateTable anchor = read_rate_table(
+        "sequence,kbps,psnr,vmaf\nclip,1000,35,80\nclip,2000,37,85\nclip,3000,38.5,88\nclip,4000,39.5,90\n",
+        "anchor.csv");
+    const RateTable test = read_rate_table(
+        "sequence,kbps,psnr\nclip,900,35\nclip,1800,37\nclip,2700,38.5\nclip,3600,39.5\n", "test.csv");
+    BdRateOptions options;
+    options.metrics = std::vector<std::string>{"vmaf", "psnr", "ssim"};
+    EXPECT_EQ(bd_rate_report(anchor, test, options).warnings,
+              (std::vector<std::string>{"vmaf: the test has no scores of it, n/a",
+                                        "ssim: the anchor has no scores of it, n/a",
+                                        "ssim: the test has no scores of it, n/a"}));
+    options.warn_of_metrics_neither_has = false;
+    const BdRateReport tab = bd_rate_report(anchor, test, options);
+    EXPECT_EQ(tab.warnings, std::vector<std::string>{"vmaf: the test has no scores of it, n/a"});
+    ASSERT_EQ(tab.sequences.size(), 1U);
+    EXPECT_NEAR(*tab.sequences[0].row.percent.at("psnr"), -10.0, 1e-6);
+}
+
 // numpy's nanmean and nanmedian.
 TEST(BdRate, AveragesSequences) {
     EXPECT_EQ(mean_of({1.0, std::nullopt, 3.0}), 2.0);
