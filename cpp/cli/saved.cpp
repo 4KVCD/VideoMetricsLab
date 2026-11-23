@@ -207,9 +207,12 @@ std::string size_text(std::uintmax_t bytes) {
 }
 
 std::string metrics_text(const SavedComparison& comparison) {
+    // A metric this build doesn't know (a score saved by a newer version
+    // sharing the folder) by its key, as the Saved Results tab lists it.
     std::string text;
     for (const std::string& key : comparison.keys()) {
-        text += (text.empty() ? "" : ", ") + std::string(metric_definition(key).short_label);
+        const MetricDefinition* metric = find_metric(key);
+        text += (text.empty() ? "" : ", ") + (metric != nullptr ? std::string(metric->short_label) : key);
     }
     return text;
 }

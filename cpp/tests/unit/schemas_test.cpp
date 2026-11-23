@@ -258,6 +258,15 @@ TEST(Schemas, SavedComparisonsAreNamedAndListed) {
     EXPECT_EQ(listed["comparisons"][1]["id"], all[1].folder.filename().string());
     EXPECT_EQ(listed["comparisons"][0]["metrics"], nlohmann::ordered_json::array({"vmaf"}));
     EXPECT_EQ(schema_errors("saved-list", listed), std::vector<std::string>{});
+
+    // A score file of a metric this build doesn't know (saved by a newer
+    // version sharing the folder, say) is listed by its key, as the Saved
+    // Results tab lists it, rather than ending the list with an error.
+    SavedComparison newer = comparison(std::string(64, 'e'), "Y:/clips/e.mkv");
+    newer.scores.push_back(SavedScoreFile{newer.folder / "futuremetric_1.npz", "futuremetric", {}, 4096});
+    std::string text;
+    EXPECT_NO_THROW(text = saved_list_text({&all[0], &newer}));
+    EXPECT_NE(text.find("futuremetric"), std::string::npos) << text;
 }
 
 // saved show and report take --segments saved as compare does: a wrong
