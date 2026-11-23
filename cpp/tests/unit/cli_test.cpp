@@ -981,6 +981,13 @@ TEST(CommandLine, GpuNamesAGpuThePcHas) {
               "--gpu radeon: more than one GPU here has that in its name: AMD Radeon RX 7900 XTX, AMD Radeon(TM) "
               "Graphics. Give more of the name.");
     EXPECT_EQ(gpu_refusal(std::string("radeon(tm)"), radeons), std::nullopt);
+    // Chosen by the settings or VML_GPU, one not here is said, not refused.
+    EXPECT_EQ(chosen_gpu_problem(std::string("titan"), true, adapters),
+              "The GPU the settings choose, titan: no GPU here has that name. The GPUs here: NVIDIA GeForce RTX 5090, "
+              "AMD Radeon(TM) Graphics; or auto. No GPU is used for the GPU metrics: choose one with --gpu.");
+    EXPECT_NE(chosen_gpu_problem(std::string("radeon"), false, radeons), std::nullopt);
+    EXPECT_EQ(chosen_gpu_problem(std::string("AMD Radeon(TM) Graphics"), true, adapters), std::nullopt);
+    EXPECT_EQ(chosen_gpu_problem(std::nullopt, true, adapters), std::nullopt);
 }
 
 // A run can be held apart from the app's profile: VML_HOME names the folder

@@ -125,6 +125,14 @@ std::optional<std::string> found_nothing(const std::filesystem::path& path);
 std::optional<std::string> gpu_refusal(const std::optional<std::string>& gpu,
                                        const std::vector<platform::GpuAdapter>& adapters);
 
+// The same for a GPU chosen without --gpu: by the settings
+// (`from_settings`), else by VML_GPU. Not refused (a choice made in the
+// window, of an eGPU now unplugged, should not stop a script), but said as
+// a problem: the GPU metrics then use no GPU. Nothing where gpu_refusal
+// finds nothing.
+std::optional<std::string> chosen_gpu_problem(const std::optional<std::string>& gpu, bool from_settings,
+                                              const std::vector<platform::GpuAdapter>& adapters);
+
 // Why --difference cannot be used with `test_count` test videos (as
 // expand_tests finds them): it needs exactly two. Nothing when it can.
 std::optional<std::string> difference_refusal(std::size_t test_count);

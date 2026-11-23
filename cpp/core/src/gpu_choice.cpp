@@ -108,6 +108,9 @@ void resolve_chosen_gpu() {
         app_log::write(app_log::Level::warning, "vml.gpu_choice",
                        "The GPU chosen, " + *chosen +
                            ", is part of more than one GPU's name: no GPU is used for the GPU metrics");
+    } else if (!names.empty()) {
+        app_log::write(app_log::Level::warning, "vml.gpu_choice",
+                       "The GPU chosen, " + *chosen + ", is not one here: no GPU is used for the GPU metrics");
     }
 }
 

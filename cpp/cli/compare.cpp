@@ -1201,16 +1201,17 @@ std::vector<std::filesystem::path> expand_tests(const std::vector<std::string>& 
     return expand_videos(patterns, reference);
 }
 
-std::optional<std::string> gpu_refusal(const std::optional<std::string>& gpu,
-                                       const std::vector<platform::GpuAdapter>& adapters) {
-    if (!gpu || *gpu == "auto" || adapters.empty()) {
-        return std::nullopt;
-    }
+namespace {
+
+// Why `gpu` names no one GPU of `adapters` (more than one, or none), or
+// nothing where it names one: the reason both --gpu's refusal and a chosen
+// GPU's problem give, after what chose it.
+std::optional<std::string> gpu_name_problem(const std::string& gpu, const std::vector<platform::GpuAdapter>& adapters) {
     std::vector<std::string> names;
     for (const platform::GpuAdapter& adapter : adapters) {
         names.push_back(adapter.name);
     }
-    const std::vector<std::size_t> found = gpus_named(names, *gpu);
+    const std::vector<std::size_t> found = gpus_named(names, gpu);
     if (found.size() == 1) {
         return std::nullopt;
     }
@@ -1219,13 +1220,37 @@ std::optional<std::string> gpu_refusal(const std::optional<std::string>& gpu,
         listed += (listed.empty() ? "" : ", ") + names[index];
     }
     if (!found.empty()) {
-        return "--gpu " + *gpu + ": more than one GPU here has that in its name: " + listed +
-               ". Give more of the name.";
+        return "more than one GPU here has that in its name: " + listed + ". Give more of the name.";
     }
     for (const std::string& name : names) {
         listed += (listed.empty() ? "" : ", ") + name;
     }
-    return "--gpu " + *gpu + ": no GPU here has that name. The GPUs here: " + listed + "; or auto.";
+    return "no GPU here has that name. The GPUs here: " + listed + "; or auto.";
+}
+
+}  // namespace
+
+std::optional<std::string> gpu_refusal(const std::optional<std::string>& gpu,
+                                       const std::vector<platform::GpuAdapter>& adapters) {
+    if (!gpu || *gpu == "auto" || adapters.empty()) {
+        return std::nullopt;
+    }
+    if (const std::optional<std::string> why = gpu_name_problem(*gpu, adapters)) {
+        return "--gpu " + *gpu + ": " + *why;
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string> chosen_gpu_problem(const std::optional<std::string>& gpu, bool from_settings,
+                                              const std::vector<platform::GpuAdapter>& adapters) {
+    if (!gpu || *gpu == "auto" || adapters.empty()) {
+        return std::nullopt;
+    }
+    if (const std::optional<std::string> why = gpu_name_problem(*gpu, adapters)) {
+        return std::string(from_settings ? "The GPU the settings choose, " : "The GPU VML_GPU chooses, ") + *gpu +
+               ": " + *why + " No GPU is used for the GPU metrics: choose one with --gpu.";
+    }
+    return std::nullopt;
 }
 
 std::optional<std::string> difference_refusal(std::size_t test_count) {
@@ -2561,6 +2586,12 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
     if (const std::optional<std::string> refused = gpu_refusal(arguments.gpu, platform::gpu_adapters())) {
         print_error(*refused);
         return exit_usage;
+    }
+    if (!arguments.gpu) {
+        if (const std::optional<std::string> problem =
+                chosen_gpu_problem(chosen_gpu(), gpu_from_settings, platform::gpu_adapters())) {
+            progress->problem(*problem);
+        }
     }
     if (arguments.black_bars_given && (arguments.source_crop || arguments.test_crop)) {
         print_error("--black-bars cannot be given with --source-crop or --test-crop: the crops given are cut, and no "
