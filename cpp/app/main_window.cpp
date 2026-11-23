@@ -775,10 +775,16 @@ QWidget* MainWindow::build_files_panel() {
     tests_layout->setContentsMargins(0, 0, 0, 0);
     QBoxLayout* table_area = nullptr;
     tests_layout->addWidget(theme::container("padding", false, &table_area), 1);
-    // One block, heading row and table, with no spacing between them.
+    // One block, heading row and table, with no spacing between them in
+    // Classic, where the metric picker sits on the table's corner. VML
+    // Modern's taller button would touch the table's header there: a gap.
     auto* table_block = new QVBoxLayout;
     table_block->setSpacing(0);
     table_block->addLayout(build_table_heading());
+    auto* heading_gap = new QWidget;
+    heading_gap->setFixedHeight(8);
+    theme::modern_only(heading_gap);
+    table_block->addWidget(heading_gap);
     build_test_table();
     table_block->addWidget(distorted_table_, 1);
     table_area->addLayout(table_block, 1);
