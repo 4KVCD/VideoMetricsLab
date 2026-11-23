@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "Як у темі",
+  "The theme's own accent: Mocha's amber.": "Власний акцент теми: бурштиновий Mocha.",
   "Results as JSON...": "Результати у JSON...",
   "Results as CSV...": "Результати у CSV...",
   "Per-frame scores as JSON...": "Покадрові оцінки у JSON...",

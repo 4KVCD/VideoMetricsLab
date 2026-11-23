@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "ค่าเริ่มต้นของธีม",
+  "The theme's own accent: Mocha's amber.": "สีเน้นของธีมเอง: สีอำพันของ Mocha",
   "Results as JSON...": "ผลลัพธ์เป็น JSON...",
   "Results as CSV...": "ผลลัพธ์เป็น CSV...",
   "Per-frame scores as JSON...": "คะแนนรายเฟรมเป็น JSON...",

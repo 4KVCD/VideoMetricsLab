@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "Predefinito del tema",
+  "The theme's own accent: Mocha's amber.": "L'accento proprio del tema: l'ambra di Mocha.",
   "Results as JSON...": "Risultati come JSON...",
   "Results as CSV...": "Risultati come CSV...",
   "Per-frame scores as JSON...": "Punteggi per fotogramma come JSON...",

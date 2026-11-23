@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "Domyślny motywu",
+  "The theme's own accent: Mocha's amber.": "Własny akcent motywu: bursztyn Mocha.",
   "Results as JSON...": "Wyniki jako JSON...",
   "Results as CSV...": "Wyniki jako CSV...",
   "Per-frame scores as JSON...": "Wyniki klatek jako JSON...",

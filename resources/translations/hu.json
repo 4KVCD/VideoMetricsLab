@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "A téma alapértelmezése",
+  "The theme's own accent: Mocha's amber.": "A téma saját kiemelőszíne: a Mocha borostyánja.",
   "Results as JSON...": "Eredmények JSON-ként...",
   "Results as CSV...": "Eredmények CSV-ként...",
   "Per-frame scores as JSON...": "Képkockánkénti pontszámok JSON-ként...",

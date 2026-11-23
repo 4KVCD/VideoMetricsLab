@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "テーマの既定",
+  "The theme's own accent: Mocha's amber.": "テーマ独自のアクセント: Mocha のアンバー。",
   "Results as JSON...": "結果を JSON 形式で...",
   "Results as CSV...": "結果を CSV 形式で...",
   "Per-frame scores as JSON...": "フレームごとのスコアを JSON 形式で...",

@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "Výchozí pro motiv",
+  "The theme's own accent: Mocha's amber.": "Vlastní barva zvýraznění motivu: jantarová Mocha.",
   "Results as JSON...": "Výsledky jako JSON...",
   "Results as CSV...": "Výsledky jako CSV...",
   "Per-frame scores as JSON...": "Skóre po snímcích jako JSON...",

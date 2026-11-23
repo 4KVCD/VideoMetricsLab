@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "主題預設",
+  "The theme's own accent: Mocha's amber.": "主題自帶的強調色：Mocha 的琥珀色。",
   "Results as JSON...": "結果匯出為 JSON...",
   "Results as CSV...": "結果匯出為 CSV...",
   "Per-frame scores as JSON...": "逐格分數匯出為 JSON...",

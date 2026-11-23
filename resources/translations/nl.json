@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "Standaard van thema",
+  "The theme's own accent: Mocha's amber.": "Het eigen accent van het thema: het amber van Mocha.",
   "Results as JSON...": "Resultaten als JSON...",
   "Results as CSV...": "Resultaten als CSV...",
   "Per-frame scores as JSON...": "Scores per frame als JSON...",

@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "Standard des Designs",
+  "The theme's own accent: Mocha's amber.": "Der eigene Akzent des Designs: Mochas Bernstein.",
   "Results as JSON...": "Ergebnisse als JSON...",
   "Results as CSV...": "Ergebnisse als CSV...",
   "Per-frame scores as JSON...": "Werte pro Bild als JSON...",

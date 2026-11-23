@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "Mặc định của chủ đề",
+  "The theme's own accent: Mocha's amber.": "Màu nhấn riêng của chủ đề: màu hổ phách của Mocha.",
   "Results as JSON...": "Kết quả dạng JSON...",
   "Results as CSV...": "Kết quả dạng CSV...",
   "Per-frame scores as JSON...": "Điểm từng khung hình dạng JSON...",

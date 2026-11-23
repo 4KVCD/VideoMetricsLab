@@ -232,10 +232,18 @@ TEST(SettingsPanel, AppearanceSavesEachChoice) {
     EXPECT_EQ(settings.theme, "light");
     modes[2]->click();
     EXPECT_EQ(settings.theme, "dark");
+#ifdef __APPLE__
+    const QString system_name = "Same as macOS";
+#else
+    const QString system_name = "Same as Windows";
+#endif
+    EXPECT_EQ(system->text(), system_name);
     modes[3]->click();
     EXPECT_EQ(settings.theme, "mocha");
+    EXPECT_EQ(system->text(), "Theme default");  // Mocha's amber, not the system's
     modes[0]->click();
     EXPECT_EQ(settings.theme, "");
+    EXPECT_EQ(system->text(), system_name);
 }
 
 TEST(SettingsPanel, ExportsAreChosenOneByOne) {

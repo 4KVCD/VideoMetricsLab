@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "Bawaan tema",
+  "The theme's own accent: Mocha's amber.": "Aksen milik tema: kuning amber Mocha.",
   "Results as JSON...": "Hasil sebagai JSON...",
   "Results as CSV...": "Hasil sebagai CSV...",
   "Per-frame scores as JSON...": "Skor per frame sebagai JSON...",

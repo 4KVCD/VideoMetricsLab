@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "Tema varsayılanı",
+  "The theme's own accent: Mocha's amber.": "Temanın kendi vurgu rengi: Mocha'nın kehribarı.",
   "Results as JSON...": "Sonuçlar JSON olarak...",
   "Results as CSV...": "Sonuçlar CSV olarak...",
   "Per-frame scores as JSON...": "Kare başına puanlar JSON olarak...",

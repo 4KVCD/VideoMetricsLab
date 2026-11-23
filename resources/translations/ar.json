@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "افتراضي السمة",
+  "The theme's own accent: Mocha's amber.": "لون التمييز الخاص بالسمة: كهرماني Mocha.",
   "Results as JSON...": "النتائج بصيغة JSON...",
   "Results as CSV...": "النتائج بصيغة CSV...",
   "Per-frame scores as JSON...": "الدرجات لكل إطار بصيغة JSON...",

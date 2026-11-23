@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Theme default": "테마 기본값",
+  "The theme's own accent: Mocha's amber.": "테마 고유의 강조 색: Mocha의 호박색.",
   "Results as JSON...": "결과를 JSON으로...",
   "Results as CSV...": "결과를 CSV로...",
   "Per-frame scores as JSON...": "프레임별 점수를 JSON으로...",
