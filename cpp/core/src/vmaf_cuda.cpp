@@ -7,8 +7,11 @@
 #include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <map>
+#include <mutex>
 #include <system_error>
 
+#include "vml/gpu_choice.h"
 #include "vml/platform/library.h"
 #include "vml/platform/system.h"
 #include "vml/vmaf_vulkan.h"
@@ -49,17 +52,14 @@ constexpr unsigned memory_host = 1, memory_device = 2;  // CU_MEMORYTYPE_HOST, C
 constexpr unsigned host_alloc_portable = 1;              // CU_MEMHOSTALLOC_PORTABLE
 constexpr unsigned stream_non_blocking = 1;              // CU_STREAM_NON_BLOCKING
 
-// The GPU libvmaf scores on: CUDA's first, which in CUDA's default order is
-// the fastest. NVIDIA's decoder and FFmpeg's -hwaccel cuda take the same one
-// (the Python app's gpu_frames.CUDA_DEVICE).
-constexpr int cuda_device = 0;
-
 // The driver's library and the functions of it the uploads call.
 struct CudaDriver {
     explicit CudaDriver(platform::DynamicLibrary loaded)
         : library(std::move(loaded)),
           init(library.function<decltype(init)>("cuInit")),
           device_get(library.function<decltype(device_get)>("cuDeviceGet")),
+          device_count(library.function<decltype(device_count)>("cuDeviceGetCount")),
+          device_name(library.function<decltype(device_name)>("cuDeviceGetName")),
           primary_retain(library.function<decltype(primary_retain)>("cuDevicePrimaryCtxRetain")),
           primary_release(library.function<decltype(primary_release)>("cuDevicePrimaryCtxRelease_v2")),
           push_current(library.function<decltype(push_current)>("cuCtxPushCurrent_v2")),
@@ -74,6 +74,8 @@ struct CudaDriver {
     platform::DynamicLibrary library;
     CudaResult (*init)(unsigned flags);
     CudaResult (*device_get)(CudaDevice* device, int ordinal);
+    CudaResult (*device_count)(int* count);
+    CudaResult (*device_name)(char* name, int length, CudaDevice device);
     CudaResult (*primary_retain)(CudaContext* context, CudaDevice device);
     CudaResult (*primary_release)(CudaDevice device);
     CudaResult (*push_current)(CudaContext context);
@@ -143,12 +145,12 @@ void pack_plane(Plane plane, std::size_t rows, std::size_t row_bytes, std::uint8
 // the caller's thread.
 class CudaUpload {
 public:
-    CudaUpload(int width, int height, int sample)
+    CudaUpload(int width, int height, int sample, int device)
         : cu_(cuda_driver()),
           row_bytes_(static_cast<std::size_t>(width) * static_cast<std::size_t>(sample)),
           rows_(static_cast<std::size_t>(height)) {
         check_cuda(cu_.init(0), "Starting CUDA");
-        check_cuda(cu_.device_get(&device_, cuda_device), "Finding the GPU");
+        check_cuda(cu_.device_get(&device_, device), "Finding the GPU");
         check_cuda(cu_.primary_retain(&context_, device_), "Taking the GPU");
         try {
             const Current current(*this);
@@ -259,6 +261,51 @@ private:
 
 std::string cuda_library_build() { return "libvmaf-fast " + libvmaf_fast_version() + " (CUDA)"; }
 
+namespace {
+
+// The names of CUDA's GPUs, in its order (CUDA_VISIBLE_DEVICES's, else the
+// fastest first); none where CUDA cannot start.
+std::vector<std::string> cuda_device_names() {
+    std::vector<std::string> names;
+    try {
+        const CudaDriver& cu = cuda_driver();
+        int count = 0;
+        if (cu.init(0) != 0 || cu.device_count(&count) != 0) {
+            return names;
+        }
+        for (int index = 0; index < count; ++index) {
+            CudaDevice device = 0;
+            std::array<char, 256> name{};
+            if (cu.device_get(&device, index) != 0 ||
+                cu.device_name(name.data(), static_cast<int>(name.size()), device) != 0) {
+                name[0] = '\0';  // a place kept, so that the others keep their numbers
+            }
+            names.emplace_back(name.data(), strnlen(name.data(), name.size()));
+        }
+    } catch (const LibvmafError&) {
+        // No NVIDIA driver: no CUDA GPUs.
+    }
+    return names;
+}
+
+}  // namespace
+
+std::optional<int> chosen_cuda_device() {
+    const std::optional<std::string> chosen = chosen_gpu();
+    if (!chosen) {
+        return 0;
+    }
+    static std::mutex mutex;
+    static std::map<std::string, std::optional<int>> known;
+    const std::lock_guard lock(mutex);
+    if (const auto found = known.find(*chosen); found != known.end()) {
+        return found->second;
+    }
+    const std::optional<int> device = chosen_cuda_device_among(chosen, platform::gpu_adapters(), cuda_device_names);
+    known.emplace(*chosen, device);
+    return device;
+}
+
 CudaScorer::CudaScorer(int width, int height, int bit_depth,
                        const std::vector<std::pair<std::string, std::string>>& models, int n_subsample,
                        bool on_device)
@@ -274,10 +321,26 @@ CudaScorer::CudaScorer(int width, int height, int bit_depth,
     check_libvmaf(library_.init(&context, configuration), "Starting libvmaf");
     context_ = context;
     try {
+        const std::optional<int> device = chosen_cuda_device();
+        if (!device) {
+            throw LibvmafError("the GPU chosen is not one CUDA lists");
+        }
+        device_ = *device;
+        // libvmaf takes CUDA's first GPU unless given a context on another.
+        if (device_ != 0) {
+            const CudaDriver& cu = cuda_driver();
+            check_cuda(cu.init(0), "Starting CUDA");
+            CudaDevice handle = 0;
+            check_cuda(cu.device_get(&handle, device_), "Finding the GPU");
+            CudaContext primary = nullptr;
+            check_cuda(cu.primary_retain(&primary, handle), "Taking the GPU");
+            device_handle_ = handle;
+            device_context_ = primary;
+        }
         // libvmaf keeps a copy of the state; the state itself, a few bytes,
         // is never freed, as in libvmaf's own vmaf tool.
         VmafCudaState* state = nullptr;
-        check_libvmaf(library_.cuda_state_init(&state, VmafCudaConfiguration{nullptr}), "Starting CUDA");
+        check_libvmaf(library_.cuda_state_init(&state, VmafCudaConfiguration{device_context_}), "Starting CUDA");
         check_libvmaf(library_.cuda_import_state(context_, state), "Starting CUDA");
         for (const auto& [name, version] : models) {
             // Loading a model can fail after making it, and leaves it set; it
@@ -301,7 +364,8 @@ CudaScorer::CudaScorer(int width, int height, int bit_depth,
         pictures.pic_prealloc_method = VMAF_CUDA_PICTURE_PREALLOCATION_METHOD_DEVICE;
         check_libvmaf(library_.cuda_preallocate_pictures(context_, pictures), "Allocating pictures");
         if (!on_device) {
-            upload_ = std::make_unique<CudaUpload>(width, height, static_cast<int>(bytes_per_sample(bit_depth)));
+            upload_ = std::make_unique<CudaUpload>(width, height, static_cast<int>(bytes_per_sample(bit_depth)),
+                                                   device_);
         }
     } catch (...) {
         close();
@@ -323,6 +387,10 @@ void CudaScorer::close() {
     if (context_ != nullptr) {
         library_.close(context_);
         context_ = nullptr;
+    }
+    if (device_context_ != nullptr) {
+        cuda_driver().primary_release(device_handle_);
+        device_context_ = nullptr;
     }
 }
 

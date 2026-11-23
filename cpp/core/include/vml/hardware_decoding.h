@@ -205,8 +205,9 @@ HardwareDecoding plan_hardware_decoding(const DecodingCapabilities& capabilities
 std::vector<std::string> hwaccel_args(const std::optional<std::string>& hwaccel);
 // The GPU `hwaccel` decodes on: for D3D11VA, the adapter use_d3d11va_adapter
 // named, as -hwaccel_device; FFmpeg would otherwise take D3D11's default
-// adapter, which can be another maker's GPU. None for the others, which pick
-// their maker's GPU themselves.
+// adapter, which can be another maker's GPU. For CUDA, the NVIDIA GPU
+// chosen where it is not CUDA's first (chosen_cuda_device). None for the
+// others, which pick their maker's GPU themselves.
 std::vector<std::string> hwaccel_device_args(const std::string& hwaccel);
 // Names the adapter D3D11VA decodes on in this process (d3d11va_adapter, the
 // AMD GPU's): set as the app, the command line and the processes they start

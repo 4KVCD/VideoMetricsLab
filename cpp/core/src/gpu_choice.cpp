@@ -111,4 +111,28 @@ void resolve_chosen_gpu() {
     }
 }
 
+std::optional<int> chosen_cuda_device_among(const std::optional<std::string>& chosen,
+                                            const std::vector<platform::GpuAdapter>& adapters,
+                                            const std::function<std::vector<std::string>()>& cuda_names) {
+    if (!chosen) {
+        return 0;
+    }
+    if (!adapters.empty()) {
+        std::vector<std::string> names;
+        std::size_t nvidia = 0;
+        for (const platform::GpuAdapter& adapter : adapters) {
+            names.push_back(adapter.name);
+            nvidia += adapter.vendor_id == platform::nvidia_pci_vendor ? 1 : 0;
+        }
+        const std::optional<std::size_t> index = chosen_among(names, *chosen);
+        if (!index || adapters[*index].vendor_id != platform::nvidia_pci_vendor || nvidia < 2) {
+            return 0;
+        }
+    }
+    if (const std::optional<std::size_t> found = chosen_among(cuda_names(), *chosen)) {
+        return static_cast<int>(*found);
+    }
+    return adapters.empty() ? std::optional(0) : std::nullopt;
+}
+
 }  // namespace vml

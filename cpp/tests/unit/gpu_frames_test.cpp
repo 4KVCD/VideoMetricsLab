@@ -23,6 +23,7 @@
 #include "vml/ffmpeg_tools.h"
 #include "vml/film_grain_detect.h"
 #include "vml/ffprobe.h"
+#include "vml/gpu_choice.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/model_select.h"
 #include "vml/platform/process.h"
@@ -124,17 +125,20 @@ TEST(GpuFrames, OnlyTheSoftwareDecoderLendsThePicturesItWouldOnlyCopy) {
 // AMD's decoders (AMF, and Windows' own) decode on the adapter D3D11VA does
 // (the GPU chosen where it is an AMD one): given none, they would open the
 // first AMD GPU DirectX lists, which on a PC with two may be the one the
-// choice keeps free. The others keep the GPU they are given (NVIDIA's CUDA
-// device).
+// choice keeps free. NVIDIA's decodes on CUDA's number for the GPU chosen
+// (chosen_cuda_device): CUDA's first where none is chosen.
 TEST(GpuFrames, AmdsDecodersDecodeOnTheAdapterD3d11vaDoes) {
     use_d3d11va_adapter(2);
     const int amf = decoder_device(amd_decoder, 0);
     const int windows = decoder_device(media_foundation_decoder, 0);
+    const std::optional<std::string> before = chosen_gpu();
+    choose_gpu(std::nullopt);
     const int nvidia = decoder_device(nvidia_decoder, 1);
+    choose_gpu(before);
     use_d3d11va_adapter(std::nullopt);
     EXPECT_EQ(amf, 2);
     EXPECT_EQ(windows, 2);
-    EXPECT_EQ(nvidia, 1);
+    EXPECT_EQ(nvidia, 0);
     EXPECT_EQ(decoder_device(amd_decoder, 0), -1);  // none named: the first AMD GPU
 }
 

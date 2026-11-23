@@ -275,7 +275,8 @@ Butteraugli are calculated on the CPU, and CVVDP is not.
 
 On a PC with more than one GPU (Windows), Settings > Metrics > GPU metrics >
 GPU chooses the one that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP; with
-GPU decoding automatic, its maker's decoder is tried first. Automatic, the
+GPU decoding automatic, its maker's decoder is tried first. AMD's and NVIDIA's
+decoders decode on the chosen GPU when it is theirs. Automatic, the
 default, uses a discrete GPU first. Two GPUs of one name are told apart by
 their place, as Windows lists them (`#1`, `#2`). A metric the chosen GPU cannot calculate
 is calculated on the CPU, not on another GPU, so a GPU kept free (one that is
