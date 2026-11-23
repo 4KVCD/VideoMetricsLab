@@ -222,24 +222,33 @@ TEST(Schemas, HoldEveryDocument) {
 // (at least 6 to show, 12 to delete) or, to show, by its test video's path;
 // saved list --json holds to its schema.
 TEST(Schemas, SavedComparisonsAreNamedAndListed) {
-    const auto comparison = [](const std::string& id, const char* test) {
+    // An absolute path on each system; a path given in another case finds
+    // its video on Windows only, as its file names are compared there.
+#ifdef _WIN32
+    const std::string clips = "Y:/clips/";
+    const std::string other_case = "Y:/clips/A.mkv";
+#else
+    const std::string clips = "/clips/";
+    const std::string other_case = "/clips/a.mkv";
+#endif
+    const auto comparison = [&clips](const std::string& id, const std::string& test) {
         SavedComparison saved;
-        saved.folder = std::filesystem::path("Y:/cache/v2") / id;
-        saved.source = "Y:/clips/reference.mkv";
-        saved.distorted = test;
+        saved.folder = std::filesystem::path(clips + "cache/v2") / id;
+        saved.source = clips + "reference.mkv";
+        saved.distorted = clips + test;
         saved.bytes = 4096;
         saved.scores = {SavedScoreFile{saved.folder / "vmaf_1.npz", "vmaf", {}, 4096}};
         return saved;
     };
-    const std::vector<SavedComparison> all{comparison(std::string(64, 'a'), "Y:/clips/a.mkv"),
-                                           comparison("ab" + std::string(62, 'c'), "Y:/clips/b.mkv"),
-                                           comparison(std::string(64, 'd'), "Y:/clips/a.mkv")};
+    const std::vector<SavedComparison> all{comparison(std::string(64, 'a'), "a.mkv"),
+                                           comparison("ab" + std::string(62, 'c'), "b.mkv"),
+                                           comparison(std::string(64, 'd'), "a.mkv")};
     EXPECT_EQ(saved_named(all, "AAAAAA", 6), std::vector<const SavedComparison*>{&all[0]});  // any case
     EXPECT_EQ(saved_named(all, "abcccc", 6), std::vector<const SavedComparison*>{&all[1]});
     EXPECT_TRUE(saved_named(all, "eeeeee", 6).empty());
     EXPECT_THROW(saved_named(all, "aaa", 6), UsageError);          // too short, and no path
     EXPECT_THROW(saved_named(all, "aaaaaaaaa", 12), UsageError);   // delete's 12
-    EXPECT_EQ(saved_named(all, "Y:/clips/A.mkv", 6),               // every comparison of that video
+    EXPECT_EQ(saved_named(all, other_case, 6),                     // every comparison of that video
               (std::vector<const SavedComparison*>{&all[0], &all[2]}));
 
     const nlohmann::ordered_json listed = saved_list_json({&all[0], &all[1]});

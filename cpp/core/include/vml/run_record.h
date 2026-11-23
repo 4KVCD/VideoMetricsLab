@@ -68,7 +68,7 @@ struct MetricOutcome {
     std::string why;     // for failed, not run and not applicable
     // The why's code (docs/RESULTS_JSON.md lists them); empty: the status's
     // own (outcome_code).
-    std::string code;
+    std::string code{};
     bool operator==(const MetricOutcome&) const = default;
 };
 

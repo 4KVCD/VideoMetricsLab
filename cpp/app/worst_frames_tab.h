@@ -53,7 +53,7 @@ struct WeakFramesVideo {
     std::string identity;  // the line's (SeriesEntry::identity), Video Compare's pair
     QString label;  // its whole name: the graph's title, tooltips and exports
     std::shared_ptr<const ComparisonResult> result;
-    QString shown;  // its name in the videos list, as Metric Graphs shows it; empty: label
+    QString shown{};  // its name in the videos list, as Metric Graphs shows it; empty: label
 };
 
 // How many dips Worst frames can list.
