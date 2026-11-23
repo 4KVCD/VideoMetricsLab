@@ -734,8 +734,21 @@ void WorstFramesTab::choose_video(int index) {
                           return std::find(keys_.begin(), keys_.end(), condition.key) != keys_.end();
                       });
     if (keep) {
+        // With the conditions set aside for the video before (on metrics it
+        // lacked) that are on this one's: judged by them as the exports and
+        // the command line judge it, and each saved once.
+        SegmentRules taken = shown;
+        std::vector<WeakCondition> still_unshown;
+        for (const WeakCondition& condition : unshown_) {
+            if (std::find(keys_.begin(), keys_.end(), condition.key) != keys_.end()) {
+                taken.conditions.push_back(condition);
+            } else {
+                still_unshown.push_back(condition);
+            }
+        }
+        unshown_ = std::move(still_unshown);
         editor_->set_remembered(saved_.conditions);
-        editor_->set_rules(shown);
+        editor_->set_rules(taken);
     } else {
         start_from_profile();
     }

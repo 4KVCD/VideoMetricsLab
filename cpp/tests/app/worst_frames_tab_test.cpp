@@ -12,6 +12,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <memory>
 #include <optional>
@@ -415,6 +416,41 @@ TEST(WorstFramesTab, SavesTheHiddenConditionsSettingsHasNow) {
     ASSERT_EQ(bench.saved.size(), 1U);
     EXPECT_EQ(condition_texts(bench.saved[0].second.conditions),
               (std::vector<std::string>{"vmaf<85", "ssimulacra2<55"}));
+}
+
+TEST(WorstFramesTab, TakesTheProfilesConditionsOnTheMetricsOfTheVideoPicked) {
+    // The profile's condition on a metric the first video lacks is set
+    // aside for it; picked next, a video that has the metric is judged by
+    // it too, as the exports and the command line judge it, and saving
+    // keeps it once.
+    Settings settings;
+    settings.weak_segment_conditions = {"vmaf<90", "ssimulacra2<65"};
+    Bench bench(settings);
+    WorstFramesTab& tab = bench.tab;
+    auto b = std::make_shared<ComparisonResult>(*vmaf_result("b.mkv", std::vector<float>(30, 95.0F)));
+    FrameMetricResult ssimulacra2{"ssimulacra2", {}, {}, {}, current_ffmpeg_provenance("ssimulacra2", "9.0.1")};
+    for (int i = 0; i < 30; ++i) {
+        ssimulacra2.frame.push_back(i);
+        ssimulacra2.time.push_back(i / 30.0);
+        ssimulacra2.values.push_back(i >= 10 && i < 15 ? 50.0F : 80.0F);
+    }
+    b->metric_results.add(ssimulacra2);
+    tab.set_videos({{"row:a", "a", vmaf_result("a.mkv", std::vector<float>(30, 95.0F))}, {"row:b", "b", b}});
+    EXPECT_EQ(condition_texts(tab.rules().conditions), (std::vector<std::string>{"vmaf<90"}));
+
+    tab.videos_table()->setCurrentCell(1, 0);
+    std::vector<std::string> shown = condition_texts(tab.rules().conditions);
+    std::ranges::sort(shown);
+    EXPECT_EQ(shown, (std::vector<std::string>{"ssimulacra2<65", "vmaf<90"}));
+    ASSERT_EQ(tab.segments().size(), 1U);
+    EXPECT_EQ(tab.segments()[0].first_frame, 10);
+    EXPECT_FALSE(tab.save_button()->isEnabled());  // as saved
+
+    bench.threshold()->setValue(bench.threshold()->value() - 1);  // a change, then saved
+    ASSERT_TRUE(tab.save_button()->isEnabled());
+    tab.save_button()->click();
+    ASSERT_EQ(bench.saved.size(), 1U);
+    EXPECT_EQ(bench.saved[0].second.conditions.size(), 2U);  // each condition once
 }
 
 TEST(WorstFramesTab, KeepsTheChosenVideoWhileItIsRecalculated) {
