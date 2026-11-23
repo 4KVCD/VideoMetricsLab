@@ -695,13 +695,15 @@ TEST(MetricCache, StoresAResultAsThePythonApp) {
 // A comparison whose reference is no longer where its scores were saved from
 // (gone, or another file there now) has the only scores there are: listed as
 // such, and kept by Clear saved results unless it is asked to take them too.
+// One touched since (the same bytes, another time) is still there, known by
+// its sampled hash as the lookup knows it.
 TEST(MetricCache, ClearingKeepsTheComparisonsWhoseReferenceIsGone) {
     const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
     const test::Folder folder;
     const AnalysisRequest request = request_from(stored);
     const std::filesystem::path cache = folder / "cache";
     std::map<std::string, std::filesystem::path> saved;
-    for (const char* name : {"here", "gone", "replaced"}) {
+    for (const char* name : {"here", "gone", "touched", "replaced"}) {
         const std::filesystem::path reference = folder / (std::string(name) + ".mp4");
         touch(reference, name);
         touch(folder / "t.mp4", "t");
@@ -712,7 +714,10 @@ TEST(MetricCache, ClearingKeepsTheComparisonsWhoseReferenceIsGone) {
     }
     std::filesystem::remove(folder / "gone.mp4");
     touch(folder / "replaced.mp4", "another file, of another size");
+    const std::filesystem::path touched = folder / "touched.mp4";
+    std::filesystem::last_write_time(touched, std::filesystem::last_write_time(touched) - std::chrono::hours(1));
     EXPECT_TRUE(reference_where_saved(saved["here"]));
+    EXPECT_TRUE(reference_where_saved(saved["touched"]));
     EXPECT_FALSE(reference_where_saved(saved["gone"]));
     EXPECT_FALSE(reference_where_saved(saved["replaced"]));
     // The file at a path is the one saved for (#134): not where another is
@@ -723,7 +728,7 @@ TEST(MetricCache, ClearingKeepsTheComparisonsWhoseReferenceIsGone) {
     EXPECT_FALSE(saved_file_at(saved["gone"], true, folder / "gone.mp4"));
     EXPECT_FALSE(saved_file_at(saved["replaced"], true, folder / "replaced.mp4"));
     for (const SavedComparison& listed : list_saved_comparisons(cache)) {
-        EXPECT_EQ(listed.reference_found, listed.label == "here") << listed.label;
+        EXPECT_EQ(listed.reference_found, listed.label == "here" || listed.label == "touched") << listed.label;
     }
 
     // Issue #134: the bitrate of the kept ones' files is kept too, the only
@@ -732,16 +737,17 @@ TEST(MetricCache, ClearingKeepsTheComparisonsWhoseReferenceIsGone) {
     bitrate.data = bitrate_data(folder / "t.mp4", {0.0}, {1 / 24.0}, {1000}, {true});
     save_bitrate(cache, saved_content_hash(saved["here"], true), bitrate);
     save_bitrate(cache, saved_content_hash(saved["gone"], true), bitrate);
-    save_bitrate(cache, saved_content_hash(saved["gone"], false), bitrate);  // t.mp4, of all three
+    save_bitrate(cache, saved_content_hash(saved["gone"], false), bitrate);  // t.mp4, of all four
     save_bitrate(cache, "of no comparison", bitrate);
     const ClearedResults cleared = clear_saved_results(cache, true);
     EXPECT_FALSE(load_saved_bitrate(cache, saved_content_hash(saved["here"], true), folder / "here.mp4"));
     EXPECT_TRUE(load_saved_bitrate(cache, saved_content_hash(saved["gone"], true), folder / "gone.mp4"));
     EXPECT_TRUE(load_saved_bitrate(cache, saved_content_hash(saved["gone"], false), folder / "t.mp4"));
     EXPECT_FALSE(load_saved_bitrate(cache, "of no comparison", folder / "t.mp4"));
-    EXPECT_EQ(cleared.removed, 1);
+    EXPECT_EQ(cleared.removed, 2);  // here and touched
     EXPECT_EQ(cleared.kept, 2);
     EXPECT_FALSE(std::filesystem::exists(saved["here"]));
+    EXPECT_FALSE(std::filesystem::exists(saved["touched"]));
     EXPECT_TRUE(std::filesystem::exists(saved["gone"] / "context.json"));
     EXPECT_TRUE(std::filesystem::exists(saved["replaced"] / "context.json"));
     EXPECT_EQ(list_saved_comparisons(cache).size(), 2U);

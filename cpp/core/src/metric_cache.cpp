@@ -2162,7 +2162,15 @@ bool reference_where_saved(const std::filesystem::path& folder) {
     const std::optional<nlohmann::json> identity = read_json(folder / "identity.json");
     const std::string recorded =
         identity && identity->is_object() ? text_at(*identity, "source", "path") : std::string();
-    return recorded.empty() || recorded == file_identity(source);
+    if (recorded.empty() || recorded == file_identity(source)) {
+        return true;
+    }
+    // Touched, or copied back, since (another time, the same bytes): known
+    // by its content, as the saved scores' lookup knows it (sampled_of,
+    // read once for each of the file's times). Else the Videos tab would use
+    // these scores while Saved Results called their reference gone.
+    const std::string sampled = text_at(*identity, "source", "sampled");
+    return !sampled.empty() && sampled_of(source) == sampled;
 }
 
 namespace {
