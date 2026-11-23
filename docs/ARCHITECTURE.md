@@ -35,7 +35,7 @@ libvmaf, Vship and FFmpeg's libraries are loaded the same way, from
 | SSIMULACRA2, Butteraugli, CVVDP | `vship.cpp`, `vship_run.cpp` (on the GPU), `perceptual_cpu.cpp`, `cpu_pair_scorer.cpp`, `ssimulacra2.cpp`, `butteraugli.cpp` (on the CPU, the app's own engines), `perceptual.cpp`, `cvvdp.cpp` |
 | Metric registry | `metrics.cpp` |
 | Results and persistence | `results.cpp`, `metric_cache.cpp`, `run_file.cpp`, `result_json.cpp`, `export_csv.cpp`, `settings.cpp` |
-| Statistics and graphs | `stats.cpp`; `app/graph_panel.cpp`, `app/chart.cpp`, `app/export_image.cpp` (Export graph as PNG) |
+| Statistics and graphs | `stats.cpp`; `app/graph_panel.cpp`, `app/chart.cpp`, `app/export_image.cpp` (Graph as PNG) |
 | The window's runs | `app/run_worker.cpp`, `app/main_window_run.cpp`, `run_line.cpp` |
 | Still comparison | `frame_extract.cpp`, `app/frame_compare_panel.cpp` |
 | Native playback | `native_playback.cpp`, `soundtrack_clock.cpp`; `app/native_pool.cpp`, `native_decoder.cpp`, `native_device.cpp`, `native_presentation.cpp`, `native_soundtrack.cpp`, `native_dav1d.cpp` |
@@ -187,6 +187,55 @@ When you add to the window:
 - **Look at the change in both interfaces**, light and dark.
   `vml_appearance_tests` saves every tab in each when `VML_UI_SNAPSHOTS` names
   a folder (`CONTRIBUTING.md`).
+
+## Exports
+
+The window offers two kinds of export, and a new one is one of them. (Still
+to come: BD-rate's table as JSON, and its chart as PNG, to share one BD-rate
+JSON with the command line.)
+
+**A quick grab exports what is shown.** Every view that shows something
+exportable (a graph, a list or table, the statistics) has a right-click menu
+on it, and the same items in an **Export** menu: a `QPushButton` with a
+`QMenu`, labelled "Export", at the right end of that view's bar or card
+header, left of its primary button if it has one. The menu is there even
+with one item, so that it always looks and sits the same.
+- Items read "{What} as {FORMAT}...": "Graph as PNG...", "Worst frames as
+  CSV...". Where there is a choice of scope it comes first: "This video's
+  results as JSON...", "All videos' weak segments as JSON or CSV...". "..."
+  (three ASCII dots) ends every item that opens a dialog.
+- A table or list offers CSV and JSON; a graph PNG.
+- It exports the metric, conditions, dips, range and videos on screen. It
+  ignores Settings' *Exports include* and zip choice; it uses the export
+  folder and, for a graph, Settings' *Exported graphs* colours.
+- It opens the save dialog (`Dialogs::save_file`) with a
+  `suggested_file_name`. The one exception, a capture that names itself
+  (Video Compare's frames), says in the status line where it saved.
+
+**The archive exports the saved recipe.** One item, "Export {this video's |
+the selected videos' | all videos'} {contents}..." (`export_action_text`),
+first in every Export and right-click menu that has videos, and after each
+run when Settings asks for it.
+- It follows Settings > Storage > *Exports include*: the items (results,
+  per-frame scores, graphs, worst frames, weak segments), the formats (JSON,
+  CSV or both, for data; graphs are always PNG), a .zip or loose files; the
+  weak segment profile in use and the Worst Frames tab's number of dips; the
+  whole videos.
+- One video's files are at the top. With several, each video's own files
+  (`"<video> - ..."`) are in a folder of its name (`in_video_folders`), and
+  the files of all of them together (results, the weak segments report,
+  "All test videos - ..." graphs) at the top.
+- Nothing is replaced: where a name is taken, the new files are numbered
+  (`unique_output_names`). The user's own choice in a save dialog is the
+  exception: they were asked.
+
+**Same data, same items.** Views of the same kind of data (the Videos
+table, Saved Results, Metric Graphs' statistics) offer the same archive and
+quick-grab items. A right-click on a table acts on the selection when the
+row clicked is in it, and on the row clicked otherwise.
+
+Not exports, and so not in these menus: *Copy as markdown* (the clipboard),
+*Export log* (Settings, for diagnosis) and *Import run file...*.
 
 ## Performance rules
 

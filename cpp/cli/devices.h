@@ -9,6 +9,7 @@
 
 #include "vml/ffmpeg_tools.h"
 #include "vml/gpu_vmaf.h"
+#include "vml/settings.h"
 #include "vml/vmaf_v1_gpu.h"
 #include "vml/vship.h"
 
@@ -34,8 +35,8 @@ struct DeviceFindings {
 std::vector<std::string> device_lines(const DeviceFindings& found);
 
 // Runs the devices command: prints the app's name and version, then
-// device_lines for this PC. Returns the exit code: 0, or 2 when FFmpeg
-// cannot be used.
-int devices();
+// device_lines for this PC, by `settings` (the app's, --settings' or the
+// defaults). Returns the exit code: 0, or 2 when FFmpeg cannot be used.
+int devices(const Settings& settings);
 
 }  // namespace vml::cli

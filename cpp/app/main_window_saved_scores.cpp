@@ -417,24 +417,42 @@ void MainWindow::show_table_menu(const QPoint& position) {
         recalculate = menu.addAction(app::tr("Recalculate selected metrics (ignore cached/previous results)"));
         menu.addSeparator();
     }
-    // The video clicked, once all its metrics are scored: its own export;
-    // then all the videos'. Each of what Settings' Exports include.
+    // The rows selected, where the row clicked is one of several selected,
+    // as the Export button takes them; else the video clicked, once all its
+    // metrics are scored; then all the videos'. Each of what Settings'
+    // Exports include.
     const int clicked = distorted_table_->rowAt(position.y());
     const bool scored = clicked >= 0 && scored_video(*rows_[static_cast<std::size_t>(clicked)]).has_value();
+    const bool in_selection = selected.size() > 1 && selected.contains(clicked);
     const std::vector<std::string> items = exported_items(settings_);
     const bool anything = !export_contents(items).isEmpty();
     QAction* this_video = nullptr;
-    if (scored) {
+    QAction* selected_videos = nullptr;
+    if (in_selection) {
+        // Usable where one of them has every ticked metric scored, as the
+        // export takes only those (export_rows).
+        const bool any_scored = std::any_of(selected.begin(), selected.end(), [this](int row) {
+            return scored_video(*rows_[static_cast<std::size_t>(row)]).has_value();
+        });
+        selected_videos = menu.addAction(export_action_text(ExportScope::selected_videos, items));
+        selected_videos->setEnabled(anything && any_scored);
+    } else if (scored) {
         this_video = menu.addAction(export_action_text(ExportScope::this_video, items));
         this_video->setEnabled(anything);
     }
     QAction* all_videos = menu.addAction(export_action_text(ExportScope::all_videos, items));
     all_videos->setEnabled(anything && !exported_runs().empty());
+    // Then the Export button's quick grabs, of the same rows.
+    menu.addSeparator();
+    SavedResultsPanel::add_quick_grabs(menu, !export_menu_rows().empty(),
+                                       [this](SavedResultsPanel::Export kind) { export_rows_as(kind); });
     const QAction* chosen = menu.exec(distorted_table_->viewport()->mapToGlobal(position));
     if (chosen != nullptr && chosen == recalculate) {
         recompute_rows(std::vector<int>(selected.begin(), selected.end()));
     } else if (chosen != nullptr && chosen == this_video) {
         export_this_video(clicked);
+    } else if (chosen != nullptr && chosen == selected_videos) {
+        export_rows();
     } else if (chosen != nullptr && chosen == all_videos) {
         export_all_videos();
     }

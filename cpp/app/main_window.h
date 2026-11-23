@@ -532,9 +532,9 @@ private:
     void take_read_details_of_file(const Probed& probed);
     bool offer_to_switch_source(const ComparisonResult& result);
     bool offer_to_take_reference_film_grain(const ComparisonResult& result);
-    // Saves `runs` as run files (.metrics.json): one where the user says,
-    // several into a folder, each named after its run.
-    void save_run_files(const std::vector<std::shared_ptr<CompletedRun>>& runs);
+    // Saves `runs` (a result and its name) as run files (.metrics.json):
+    // one where the user says, several into a folder, each named after it.
+    void save_run_files(const std::vector<std::pair<const ComparisonResult*, QString>>& runs);
     void submit_save(const ComparisonResult& result, const std::filesystem::path& path, const QString& label);
     std::vector<ExportedRun> exported_runs() const;
 
@@ -561,6 +561,11 @@ private:
         SavedBitrates saved_bitrate{};
         // Per-frame scores, made with the files (made_files).
         std::vector<FrameFiles> frames{};
+        // With several videos, the folders their own files go in, and the
+        // stems of the files of all of them (in_video_folders); none: as
+        // they are.
+        std::vector<QString> folders{};
+        std::vector<std::string> shared{};
     };
     // The scored test videos of the reference the Videos tab compares with,
     // in its order; a row's, when it is one of them.

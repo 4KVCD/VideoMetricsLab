@@ -276,14 +276,15 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     theme::set_role(open_button_, "primary");  // the tab's own action (VML Modern)
     connect(open_button_, &QPushButton::clicked, this, [this] { emit open_requested(selected_results()); });
     buttons->addWidget(open_button_);
-    // One Export button: its menu is made as it opens (fill_export_menu).
+    buttons->addStretch(1);
+    // One Export button, at the right end beside Delete (docs/ARCHITECTURE.md,
+    // "Exports"): its menu is made as it opens (fill_export_menu).
     export_button_ = new QPushButton(app::tr("Export"));
     export_menu_ = new QMenu(export_button_);
     export_menu_->setToolTipsVisible(true);
     connect(export_menu_, &QMenu::aboutToShow, this, [this] { fill_export_menu(*export_menu_); });
     export_button_->setMenu(export_menu_);
     buttons->addWidget(export_button_);
-    buttons->addStretch(1);
     delete_button_ = new QPushButton(app::tr("Delete..."));
     theme::set_role(delete_button_, "danger");
     connect(delete_button_, &QPushButton::clicked, this, [this] { delete_selected(); });
@@ -917,41 +918,48 @@ void SavedResultsPanel::update_buttons() {
                                       : QString());
 }
 
+void SavedResultsPanel::add_quick_grabs(QMenu& menu, bool enabled, const std::function<void(Export)>& chosen) {
+    const auto add = [&menu, enabled, &chosen](const QString& text, Export kind) {
+        QAction* action = menu.addAction(text);
+        action->setEnabled(enabled);
+        QObject::connect(action, &QAction::triggered, &menu, [chosen, kind] { chosen(kind); });
+        return action;
+    };
+    add(app::tr("Results as JSON..."), Export::results_json);
+    add(app::tr("Results as CSV..."), Export::results_csv);
+    add(app::tr("Per-frame scores as JSON..."), Export::frames_json);
+    add(app::tr("Per-frame scores as CSV..."), Export::frames_csv);
+    add(app::tr("Graphs as ZIP..."), Export::graphs)
+        ->setToolTip(app::tr("Each video's graph of every metric, and with several of one reference every metric "
+                             "with all of them; the bitrate graphs where the videos are still there."));
+    add(app::tr("Weak segments as JSON or CSV..."), Export::segments);
+    menu.addSeparator();
+    add(app::tr("Run file (.metrics.json)..."), Export::run_file);
+}
+
 void SavedResultsPanel::fill_export_menu(QMenu& menu) {
-    // The right-click menu's export first; then each kind on its own, for a
-    // one-off: results and per-frame scores as JSON or CSV, the graphs as a
-    // .zip, and the weak segments, by the rules picked under them.
     menu.clear();
     for (QMenu* kind : menu.findChildren<QMenu*>(Qt::FindDirectChildrenOnly)) {
         delete kind;  // clear() leaves the menus addMenu made
     }
-    if (const QAction* contents = fill_menu(menu)) {
-        connect(contents, &QAction::triggered, this,
-                [this] { emit export_requested(Export::contents, selected_results()); });
-    }
-    if (menu.isEmpty()) {
+    add_export_items(menu);
+}
+
+void SavedResultsPanel::add_export_items(QMenu& menu) {
+    // The selection's archive first; then the quick grabs, for a one-off;
+    // then the rules the weak segments are found by.
+    const QAction* contents = fill_menu(menu);
+    if (contents == nullptr) {
         return;
     }
+    connect(contents, &QAction::triggered, this,
+            [this] { emit export_requested(Export::contents, selected_results()); });
     menu.addSeparator();
-    const auto add_formats = [this, &menu](const QString& title, Export json, Export csv) {
-        QMenu* kind = menu.addMenu(title);
-        connect(kind->addAction(app::tr("As JSON...")), &QAction::triggered, this,
-                [this, json] { emit export_requested(json, selected_results()); });
-        connect(kind->addAction(app::tr("As CSV...")), &QAction::triggered, this,
-                [this, csv] { emit export_requested(csv, selected_results()); });
-    };
-    add_formats(app::tr("Results"), Export::results_json, Export::results_csv);
-    add_formats(app::tr("Per-frame scores"), Export::frames_json, Export::frames_csv);
-    QAction* graphs = menu.addAction(app::tr("Graphs as ZIP..."));
-    graphs->setToolTip(app::tr("Each video's graph of every metric, and with several of one reference every metric "
-                               "with all of them; the bitrate graphs where the videos are still there."));
-    connect(graphs, &QAction::triggered, this, [this] { emit export_requested(Export::graphs, selected_results()); });
-    QMenu* segments = menu.addMenu(app::tr("Weak segments"));
+    add_quick_grabs(menu, true, [this](Export kind) { emit export_requested(kind, selected_results()); });
+    QMenu* segments = menu.addMenu(app::tr("Weak segments by"));
     segments->setToolTipsVisible(true);
-    connect(segments->addAction(app::tr("Export weak segments...")), &QAction::triggered, this,
-            [this] { emit export_requested(Export::segments, selected_results()); });
-    segments->addSeparator();
-    // The rules, one picked: this export's and the first entry's.
+    // The rules, one picked: the weak segments' quick grab's and the
+    // archive's.
     auto* rules = new QActionGroup(segments);
     const QString picked = segment_rule_choice();
     for (const auto& [choice, text] : segment_rule_choices()) {
@@ -994,10 +1002,7 @@ void SavedResultsPanel::fill_context_menu(QMenu& menu) {
     connect(menu.addAction(app::tr("Open in Metric Graphs")), &QAction::triggered, this,
             [this] { emit open_requested(selected_results()); });
     menu.addSeparator();
-    if (const QAction* contents = fill_menu(menu)) {
-        connect(contents, &QAction::triggered, this,
-                [this] { emit export_requested(Export::contents, selected_results()); });
-    }
+    add_export_items(menu);
 }
 
 void SavedResultsPanel::delete_selected() {

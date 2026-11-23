@@ -86,6 +86,22 @@ QString export_action_text(ExportScope scope, const std::vector<std::string>& it
 std::vector<std::filesystem::path> write_loose_export(const std::filesystem::path& folder,
                                                       const std::vector<BundleFile>& files);
 
+// The files of an archive of several videos laid out: each video's own
+// files, named "<name> - ..." (`names`, bundle_names': its graphs, per-frame
+// scores and worst frames), in a folder of its name ("<name>/..."); the files
+// of all of them together where they are: those named "<stem>.<extension>"
+// for a stem of `shared` (the results, the weak segments report: a test
+// video may be named as the reference they are named after), and the rest
+// named after no video ("All test videos - ..."). Names are matched longest
+// first, so that a video "a - b" keeps its files from a video "a". No
+// `names`: as they are (one video's export).
+std::vector<BundleFile> in_video_folders(std::vector<BundleFile> files, const std::vector<QString>& names,
+                                         const std::vector<std::string>& shared);
+
+// The stems of an archive's files of all its videos together, named after
+// `name` (export_files'): its results and its weak segments report.
+std::vector<std::string> shared_stems(const QString& name);
+
 // CSV text as the command line writes it: CR LF on Windows.
 std::string text_lines(const std::string& text);
 
@@ -104,10 +120,11 @@ std::vector<BundleFile> made_files(std::vector<BundleFile> files, const std::vec
 
 // The files of an export besides its graphs, as Settings' Exports include
 // (exported_items) and its formats say, named after `name`: the results
-// (`document`, made only when they're included), and the weak segments by
-// `rules` of the one video, or (`several`) a report of all of `videos`; each
-// video's per-frame scores ("<video> - frames", named as its graphs are) in
-// `frames`, made later. Weak segments need a condition in `rules`: without
+// (`document`, made only when they're included), each video's worst frames
+// of every metric ("<video> - worst frames", Settings' graph_worst_frames
+// dips each), and the weak segments by `rules` of the one video, or
+// (`several`) a report of all of `videos`; each video's per-frame scores
+// ("<video> - frames", named as its graphs are) in `frames`, made later. Weak segments need a condition in `rules`: without
 // one there are none, and `segments_skipped` is set.
 std::vector<BundleFile> export_files(const Settings& settings, const std::vector<BundleVideo>& videos,
                                      const std::filesystem::path& reference,

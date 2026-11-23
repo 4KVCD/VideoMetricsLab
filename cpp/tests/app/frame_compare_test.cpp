@@ -43,6 +43,7 @@
 #include "video_compare_view.h"
 #include "vml/ffprobe.h"
 #include "vml/platform/system.h"
+#include "vml/settings.h"
 #include "widgets.h"
 
 namespace vml::app {
@@ -292,6 +293,29 @@ TEST_F(FramePanelTest, TheWorstFramesListIsSteppedThroughOnItsVideo) {
     panel->save_still_button->click();
     EXPECT_EQ(failure.toStdString(), "No export folder: choose one in Settings.");
     EXPECT_TRUE(idle(*panel));
+}
+
+// Loop stays as it was left: the window gives it back (set_loop_on, without
+// saying it changed), and a tick or untick is said, to save. It was
+// forgotten at every start, though its seconds were kept.
+TEST_F(FramePanelTest, LoopIsKeptAsItWasLeft) {
+    const auto panel = make_panel();
+    std::vector<bool> said;
+    QObject::connect(panel.get(), &FrameComparePanel::loop_changed, [&said](bool on) { said.push_back(on); });
+    panel->set_loop_on(true);
+    EXPECT_TRUE(panel->loop_checkbox->isChecked());
+    EXPECT_TRUE(said.empty());
+    panel->loop_checkbox->setChecked(false);
+    panel->loop_checkbox->setChecked(true);
+    EXPECT_EQ(said, (std::vector<bool>{false, true}));
+
+    // Saved with the settings, and read back.
+    const test::Folder folder;
+    Settings settings;
+    settings.compare_loop = true;
+    ASSERT_EQ(settings.save_to(folder / "settings.json"), std::nullopt);
+    EXPECT_TRUE(Settings::load_from(folder / "settings.json").compare_loop);
+    EXPECT_FALSE(Settings{}.compare_loop);  // off until ticked
 }
 
 // The loop's seconds are to the millisecond, and beside each its frames at

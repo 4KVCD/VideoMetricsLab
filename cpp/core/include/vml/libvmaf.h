@@ -12,6 +12,7 @@
 #include <libvmaf/feature.h>
 #include <libvmaf/libvmaf.h>
 #include <libvmaf/libvmaf_cuda.h>
+#include <libvmaf/picture_gpu_plan.h>
 
 #include <filesystem>
 #include <span>
@@ -71,6 +72,10 @@ struct Libvmaf {
     decltype(&::vmaf_picture_convert_context_init) picture_convert_context_init = nullptr;
     decltype(&::vmaf_picture_convert) picture_convert = nullptr;
     decltype(&::vmaf_picture_convert_context_close) picture_convert_context_close = nullptr;
+    // The same conversion as a plan of steps for the Vulkan engine to run
+    // (vv_v1_convert), each nullptr in a library without it.
+    decltype(&::vmaf_picture_convert_gpu_plan) picture_convert_gpu_plan = nullptr;
+    decltype(&::vmaf_picture_convert_gpu_plan_free) picture_convert_gpu_plan_free = nullptr;
     // Its CUDA code, for VMAF and NEG with CUDA (vmaf_cuda.h), each nullptr
     // in a build without it: the CUDA state, imported into a context, and
     // the context's pictures in GPU memory.

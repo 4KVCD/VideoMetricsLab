@@ -378,9 +378,13 @@ std::vector<std::filesystem::path> unique_output_names(const std::filesystem::pa
         [&](const std::string& number) {
             std::vector<std::filesystem::path> paths;
             for (const std::string& name : names) {
+                // In its folder within `folder`, where it names one
+                // ("<video>/<file>"): the number goes on the file.
                 const std::filesystem::path file = platform::path_from_text(name);
-                paths.push_back(folder / (file.stem().native() + platform::path_from_text(number).native() +
-                                          file.extension().native()));
+                std::filesystem::path path = folder / file;
+                path.replace_filename(file.stem().native() + platform::path_from_text(number).native() +
+                                      file.extension().native());
+                paths.push_back(std::move(path));
             }
             return paths;
         },

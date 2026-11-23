@@ -94,10 +94,12 @@ std::optional<std::vector<BitrateVideo>> read_videos(const std::vector<std::file
 }
 
 // Reads each video's packets, showing how far it has got.
-// `store`: the saved results' folder, whose saved bitrate (bitrate_store.h)
-// a file's packets are taken from where saved, and saved to when read.
-void read_packets(std::vector<BitrateVideo>& videos, const std::string& ffprobe, const std::filesystem::path& store,
+// `saved`: the saved results' folder, whose saved bitrate (bitrate_store.h)
+// a file's packets are taken from where saved (`saved.read`), and saved to
+// when read (`saved.save`).
+void read_packets(std::vector<BitrateVideo>& videos, const std::string& ffprobe, const SavedScoresUse& saved,
                   Progress& progress) {
+    const std::filesystem::path& store = saved.folder;
     for (std::size_t index = 0; index < videos.size(); ++index) {
         BitrateVideo& video = videos[index];
         const std::string name = name_of(video.path);
@@ -108,8 +110,9 @@ void read_packets(std::vector<BitrateVideo>& videos, const std::string& ffprobe,
         // A raw stream's times are counted from --fps, which can change: it is always read.
         const std::string content =
             video.info->is_raw_stream() ? std::string() : sampled_file_hash(video.path).value_or("");
-        if (std::optional<SavedBitrate> saved = load_saved_bitrate(store, content, video.path)) {
-            video.data = std::move(saved->data);
+        if (std::optional<SavedBitrate> kept = saved.read ? load_saved_bitrate(store, content, video.path)
+                                                          : std::nullopt) {
+            video.data = std::move(kept->data);
             progress.finished(index, name + ": " + with_thousands(video.data->frame_count()) + " packets saved before");
             continue;
         }
@@ -124,7 +127,9 @@ void read_packets(std::vector<BitrateVideo>& videos, const std::string& ffprobe,
             video.data = analyze_video_bitrate(ffprobe, *video.info, CancelToken(), on_progress);
             progress.finished(index, name + ": " + with_thousands(video.data->frame_count()) + " packets read");
             try {
-                save_bitrate(store, content, {*video.info, *video.data, std::nullopt});
+                if (saved.save) {
+                    save_bitrate(store, content, {*video.info, *video.data, std::nullopt});
+                }
             } catch (const std::exception&) {
                 // Not saved: read again next time.
             }
@@ -338,11 +343,11 @@ std::vector<std::filesystem::path> write_difference_csvs(const BitrateVideo& fir
     return paths;
 }
 
-int bitrate(const BitrateArguments& arguments) {
+int bitrate(const BitrateArguments& arguments, const ChosenSettings& chosen) {
     // Ctrl+C ends the command at once: nothing it makes is left half done but a file being written, and ffprobe
     // ends with this process's job.
     platform::on_interrupt([] { platform::end_process_now(exit_cancelled); });
-    const Settings settings = Settings::load();
+    const Settings& settings = chosen.settings;
     const ToolStatus ffprobe = check_tool("ffprobe", settings);
     if (!ffprobe.runnable) {
         print_error("ffprobe cannot be used: " + platform::executable_name(ffprobe.name) + " could not be run (" +
@@ -361,7 +366,8 @@ int bitrate(const BitrateArguments& arguments) {
         return exit_usage;
     }
     progress.start();
-    read_packets(*videos, ffprobe.path, settings.cache_dir_path().value_or(default_cache_dir()), progress);
+    const SavedScoresUse saved = saved_scores_use(arguments.profile, settings);
+    read_packets(*videos, ffprobe.path, saved, progress);
 
     // A video not read is an input not read (exit_input): the others are still given.
     const bool all_read = std::all_of(videos->begin(), videos->end(),
@@ -379,7 +385,12 @@ int bitrate(const BitrateArguments& arguments) {
     if (arguments.csv && !write_csvs(*videos, difference, arguments, progress)) {
         ok = false;
     }
-    const Json document = bitrate_json(*videos, difference);
+    Json document = bitrate_json(*videos, difference);
+    std::vector<std::string> from_settings;
+    if (!arguments.profile.cache_dir && !arguments.profile.no_cache) {
+        from_settings.emplace_back("--cache-dir");
+    }
+    document["profile"] = profile_json(chosen, saved, from_settings);
     if (arguments.json_path && *arguments.json_path == "-") {
         ok = print_results(python_json_dumps(document) + "\n") && ok;
     } else {

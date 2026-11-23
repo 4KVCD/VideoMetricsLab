@@ -170,10 +170,9 @@ std::vector<int> MainWindow::export_menu_rows() const {
 }
 
 void MainWindow::fill_videos_export_menu(QMenu& menu) {
-    // The shared export first, named as the right-click menu names it; then
-    // each kind on its own, as Saved Results' Export offers them, and the
-    // run file the app reads back (Import run file...). Of the selected
-    // rows scored, else of every scored row.
+    // The archive first, named as the right-click menu names it; then the
+    // quick grabs Saved Results' Export offers too (add_quick_grabs), the
+    // run file last. Of the selected rows scored, else of every scored row.
     menu.clear();
     for (QMenu* kind : menu.findChildren<QMenu*>(Qt::FindDirectChildrenOnly)) {
         delete kind;  // clear() leaves the menus addMenu made
@@ -196,36 +195,7 @@ void MainWindow::fill_videos_export_menu(QMenu& menu) {
     // partial is not exported.
     connect(contents, &QAction::triggered, this, [this] { export_rows(); });
     menu.addSeparator();
-    const auto add_formats = [this, &menu, any](const QString& title, SavedResultsPanel::Export json,
-                                                       SavedResultsPanel::Export csv) {
-        QMenu* kind = menu.addMenu(title);
-        kind->setEnabled(any);
-        connect(kind->addAction(app::tr("As JSON...")), &QAction::triggered, this,
-                [this, json] { export_rows_as(json); });
-        connect(kind->addAction(app::tr("As CSV...")), &QAction::triggered, this,
-                [this, csv] { export_rows_as(csv); });
-    };
-    add_formats(app::tr("Results"), SavedResultsPanel::Export::results_json, SavedResultsPanel::Export::results_csv);
-    add_formats(app::tr("Per-frame scores"), SavedResultsPanel::Export::frames_json,
-                SavedResultsPanel::Export::frames_csv);
-    QAction* graphs = menu.addAction(app::tr("Graphs as ZIP..."));
-    graphs->setEnabled(any);
-    connect(graphs, &QAction::triggered, this,
-            [this] { export_rows_as(SavedResultsPanel::Export::graphs); });
-    QAction* segments = menu.addAction(app::tr("Export weak segments..."));
-    segments->setEnabled(any);
-    connect(segments, &QAction::triggered, this,
-            [this] { export_rows_as(SavedResultsPanel::Export::segments); });
-    menu.addSeparator();
-    QAction* run_files = menu.addAction(app::tr("Run file (.metrics.json)..."));
-    run_files->setEnabled(any);
-    connect(run_files, &QAction::triggered, this, [this] {
-        std::vector<std::shared_ptr<CompletedRun>> runs;
-        for (const int row : export_menu_rows()) {  // finished runs only (exportable_video)
-            runs.push_back(rows_[static_cast<std::size_t>(row)]->completed_run);
-        }
-        save_run_files(runs);
-    });
+    SavedResultsPanel::add_quick_grabs(menu, any, [this](SavedResultsPanel::Export kind) { export_rows_as(kind); });
 }
 
 void MainWindow::export_rows() {
@@ -279,6 +249,15 @@ void MainWindow::export_rows_as(SavedResultsPanel::Export kind) {
     case SavedResultsPanel::Export::contents:
         export_rows();
         return;
+    case SavedResultsPanel::Export::run_file: {
+        std::vector<std::pair<const ComparisonResult*, QString>> runs;
+        for (const int row : rows) {  // finished runs only (exportable_video)
+            const CompletedRun& run = *rows_[static_cast<std::size_t>(row)]->completed_run;
+            runs.emplace_back(&run.result, run.label);
+        }
+        save_run_files(runs);
+        return;
+    }
     case SavedResultsPanel::Export::results_json:
     case SavedResultsPanel::Export::results_csv: {
         // As Export results lists them (exported_runs), with what each run
@@ -402,6 +381,11 @@ void MainWindow::save_export(ExportPlan plan, const std::optional<std::filesyste
         return;
     }
     const bool automatic = folder.has_value();
+    // The folders the videos' files go in (in_video_folders): their names,
+    // with several videos; none for one.
+    const std::vector<QString> folders =
+        plan.several && plan.videos.size() > 1 ? bundle_names(plan.videos) : std::vector<QString>{};
+    const std::vector<std::string> shared = shared_stems(plan.name);
     if (settings_.export_zip) {
         const QString file_name = file_safe(plan.name + QStringLiteral(" - VideoMetricsLab")) + ".zip";
         std::filesystem::path destination;
@@ -419,12 +403,15 @@ void MainWindow::save_export(ExportPlan plan, const std::optional<std::filesyste
         // name, which another video's may share).
         if (plan.graphs) {
             queue_bundle({plan.videos, plan.reference, destination, std::move(plan.files), plan.several, automatic,
-                          false, automatic, std::move(plan.saved_bitrate), std::move(plan.frames)});
+                          false, automatic, std::move(plan.saved_bitrate), std::move(plan.frames), folders, shared});
             return;
         }
         file_writes_->submit(app::tr("export {name}", {{"name", name_of(destination)}}),
                              [files = std::move(plan.files), frames = std::move(plan.frames), out = destination,
-                              automatic] { write_zip(automatic ? free_path(out) : out, made_files(files, frames)); });
+                              automatic, folders, shared] {
+                                 write_zip(automatic ? free_path(out) : out,
+                                           in_video_folders(made_files(files, frames), folders, shared));
+                             });
         if (!automatic) {
             show_status(app::tr("Exported to {path}", {{"path", text_of(destination)}}));
         }
@@ -445,11 +432,12 @@ void MainWindow::save_export(ExportPlan plan, const std::optional<std::filesyste
     // they are all numbered alike (write_loose_export).
     if (plan.graphs) {
         queue_bundle({plan.videos, plan.reference, destination, std::move(plan.files), plan.several, automatic, true,
-                      false, std::move(plan.saved_bitrate), std::move(plan.frames)});
+                      false, std::move(plan.saved_bitrate), std::move(plan.frames), folders, shared});
     } else {
         file_writes_->submit(app::tr("export {name}", {{"name", plan.name}}),
-                             [files = std::move(plan.files), frames = std::move(plan.frames), destination] {
-                                 write_loose(destination, made_files(files, frames));
+                             [files = std::move(plan.files), frames = std::move(plan.frames), destination,
+                              folders, shared] {
+                                 write_loose(destination, in_video_folders(made_files(files, frames), folders, shared));
                              });
     }
     if (!plan.graphs && !automatic) {
@@ -660,16 +648,20 @@ void MainWindow::write_ready_bundles() {
         files.insert(files.end(), std::make_move_iterator(bitrate_graphs.begin()),
                      std::make_move_iterator(bitrate_graphs.end()));
         const QString destination = text_of(ready.destination);
+        // An archive of several videos: each one's files in a folder of its
+        // own (save_export's folders).
         if (ready.loose) {
             file_writes_->submit(app::tr("export {name}", {{"name", name_of(ready.destination)}}),
-                                 [files = std::move(files), frames = ready.frames, out = ready.destination] {
-                                     write_loose(out, made_files(files, frames));
+                                 [files = std::move(files), frames = ready.frames, out = ready.destination,
+                                  folders = ready.folders, shared = ready.shared] {
+                                     write_loose(out, in_video_folders(made_files(files, frames), folders, shared));
                                  });
         } else {
             file_writes_->submit(app::tr("export {name}", {{"name", name_of(ready.destination)}}),
                                  [files = std::move(files), frames = ready.frames, out = ready.destination,
-                                  numbered = ready.numbered] {
-                                     write_zip(numbered ? free_path(out) : out, made_files(files, frames));
+                                  numbered = ready.numbered, folders = ready.folders, shared = ready.shared] {
+                                     write_zip(numbered ? free_path(out) : out,
+                                               in_video_folders(made_files(files, frames), folders, shared));
                                  });
         }
         logger.info("Graphs exported to " + platform::path_text(ready.destination) +
@@ -701,6 +693,15 @@ void MainWindow::export_saved_results(SavedResultsPanel::Export kind, const std:
     case SavedResultsPanel::Export::contents:
         export_saved_contents(results);
         return;
+    case SavedResultsPanel::Export::run_file: {
+        // As the Videos table's: a saved comparison is a run's result.
+        std::vector<std::pair<const ComparisonResult*, QString>> runs;
+        for (const LoadedSavedResult& saved : results) {
+            runs.emplace_back(saved.result.get(), saved.label);
+        }
+        save_run_files(runs);
+        return;
+    }
     case SavedResultsPanel::Export::results_json:
     case SavedResultsPanel::Export::results_csv: {
         std::vector<ExportedRun> runs;

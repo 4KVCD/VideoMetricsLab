@@ -149,6 +149,10 @@ Libvmaf::Libvmaf(const std::filesystem::path& path)
     picture_convert = library.function<decltype(picture_convert)>("vmaf_picture_convert");
     picture_convert_context_close =
         library.function<decltype(picture_convert_context_close)>("vmaf_picture_convert_context_close");
+    picture_convert_gpu_plan =
+        reinterpret_cast<decltype(picture_convert_gpu_plan)>(library.find("vmaf_picture_convert_gpu_plan"));
+    picture_convert_gpu_plan_free =
+        reinterpret_cast<decltype(picture_convert_gpu_plan_free)>(library.find("vmaf_picture_convert_gpu_plan_free"));
     cuda_state_init = reinterpret_cast<decltype(cuda_state_init)>(library.find("vmaf_cuda_state_init"));
     cuda_import_state = reinterpret_cast<decltype(cuda_import_state)>(library.find("vmaf_cuda_import_state"));
     cuda_preallocate_pictures =

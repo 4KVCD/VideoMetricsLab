@@ -273,6 +273,7 @@ if (Test-Path $profileFolder) { Remove-Item $profileFolder -Recurse -Force }
 New-Item -ItemType Directory -Path $profileFolder -Force | Out-Null
 $environment = @{
     USERPROFILE = $profileFolder
+    VML_HOME = $null  # (a profile named there would take the place of USERPROFILE's)
     PATH = "$system32;$env:SystemRoot;$(Split-Path $ffmpeg.Source)"
     VML_RESOURCES = $null; QT_PLUGIN_PATH = $null; QT_QPA_PLATFORM_PLUGIN_PATH = $null; QT_QPA_PLATFORM = $null
 }

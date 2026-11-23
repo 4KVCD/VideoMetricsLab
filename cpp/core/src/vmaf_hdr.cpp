@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <future>
 #include <stdexcept>
 #include <thread>
 #include <utility>
@@ -175,6 +176,56 @@ struct Converter {
     SideThread thread;  // last, so that it goes first
 };
 
+// A libvmaf picture given back however the work ends.
+struct OwnedPicture {
+    explicit OwnedPicture(const Libvmaf& from) : library(from) {}
+    ~OwnedPicture() {
+        if (picture.priv != nullptr) {
+            library.picture_unref(&picture);
+        }
+    }
+    OwnedPicture(const OwnedPicture&) = delete;
+    OwnedPicture& operator=(const OwnedPicture&) = delete;
+
+    const Libvmaf& library;
+    VmafPicture picture{};
+};
+
+// libvmaf's conversion of `input` to `target`.
+std::unique_ptr<OwnedPicture> libvmaf_conversion(const Libvmaf& library, const VmafPicture& input,
+                                                 const VmafPictureConvertTarget& target) {
+    VmafPictureConvertContext* context = nullptr;
+    check_libvmaf(library.picture_convert_context_init(&context, &input, &target),
+                  "Readying the conversion of the pictures for HDR VMAF");
+    auto converted = std::make_unique<OwnedPicture>(library);
+    const int error = library.picture_convert(context, &converted->picture, &input);
+    library.picture_convert_context_close(context);
+    check_libvmaf(error, "Converting a picture for HDR VMAF");
+    return converted;
+}
+
+// A plan of vmaf_picture_convert_gpu_plan's, freed by libvmaf.
+using ConversionPlan = std::unique_ptr<std::uint32_t, decltype(&::vmaf_picture_convert_gpu_plan_free)>;
+
+// Fills a picture of 16-bit samples with every luma code its bit depth has,
+// in order, row after row, and the chroma codes in two scrambled orders
+// (each also every code, the multipliers being odd), so that the codes meet
+// in many combinations: the check of the GPU's conversion.
+void fill_every_code(VmafPicture& picture) {
+    const unsigned codes = 1u << picture.bpc;
+    constexpr std::array<unsigned, 3> multipliers{1, 37, 101};
+    for (std::size_t plane = 0; plane < 3; ++plane) {
+        for (unsigned y = 0; y < picture.h[plane]; ++y) {
+            auto* const row = reinterpret_cast<std::uint16_t*>(static_cast<std::uint8_t*>(picture.data[plane]) +
+                                                               static_cast<std::ptrdiff_t>(y) * picture.stride[plane]);
+            for (unsigned x = 0; x < picture.w[plane]; ++x) {
+                const unsigned index = y * picture.w[plane] + x;
+                row[x] = static_cast<std::uint16_t>(index * multipliers[plane] % codes);
+            }
+        }
+    }
+}
+
 }  // namespace
 
 HdrModelTarget hdr_model_target(const std::filesystem::path& file) {
@@ -281,10 +332,35 @@ struct HdrScorer::State {
     // `converter` converted, as frame `fed`.
     void feed(Converter& converter);
 
+    // The features' scorer on the GPU, or nullptr (the log says why).
+    std::unique_ptr<V1Scorer> make_gpu_scorer() const;
+    // libvmaf's own extractors for the features (`handles`).
+    void start_cpu_features();
+    // The conversion threads.
+    void start_converters();
+    // Has `gpu` convert the pictures, if it and libvmaf can (the log says
+    // why not): gpu_converts. The first pair is checked (check_gpu_conversion).
+    void start_gpu_conversion();
+    // The first sample, as text, where the GPU's conversion of `given`
+    // (side `side`) differs from libvmaf's (`cpu`), or an empty text.
+    std::string conversion_difference(std::size_t side, const VmafPicture& given, const VmafPicture& cpu) const;
+    // Holds the GPU's conversion to libvmaf's on the first pair and on a
+    // picture with every luma code. On a difference (a driver that rounds
+    // otherwise), the pictures are converted on the CPU from here on, with
+    // a new scorer for the features, and the log says why.
+    void check_gpu_conversion(const FramePlanes& reference, const FramePlanes& distorted);
+
     const Libvmaf& library;
+    std::filesystem::path model_file;
+    int n_subsample = 1;
+    int threads = 1;
+    std::optional<int> device;  // the features' GPU, if any (-1 the best)
     // The features on the GPU (VMAF v1's engine, with the HDR model's
     // options), or nullptr: libvmaf's own extractors (`handles`).
     std::unique_ptr<V1Scorer> gpu;
+    // Whether `gpu` converts the pictures too: the pairs then go to it as the
+    // videos give them, and there are no converters.
+    bool gpu_converts = false;
     LibvmafHandles handles;
     std::array<VmafPictureConvertTarget, 2> targets{};
     HdrColours colours;
@@ -367,31 +443,199 @@ HdrScorer::HdrScorer(int width, int height, int bit_depth, const std::filesystem
     s.bit_depth = static_cast<unsigned>(bit_depth);
     s.packed = PackedFrame(width, height, bit_depth);
     s.step = static_cast<unsigned>(std::max(1, n_subsample));
-    if (gpu) {
-        // The converted pictures' features on the GPU: VMAF v1's engine
-        // takes the HDR model's options (CAMBI and SpEED on the GPU too),
-        // and gives libvmaf's values; every frame goes to it (motion reads
-        // the one before), and it scores every n_subsample-th, as libvmaf.
-        const VmafPictureConvertTarget& converted = s.targets[0];
-        try {
-            s.gpu = std::make_unique<V1Scorer>(
-                static_cast<int>(converted.w), static_cast<int>(converted.h), static_cast<int>(converted.bpc),
-                model_file, n_subsample, *gpu >= 0 ? gpu : std::nullopt, std::max(1, threads), "vmaf_hdr");
-            logger.info("HDR VMAF's features on the GPU (Vulkan)");
-        } catch (const LibvmafError& error) {
-            logger.info(std::string("HDR VMAF's features on the CPU: ") + error.what());
+    s.model_file = model_file;
+    s.n_subsample = n_subsample;
+    s.threads = std::max(1, threads);
+    s.device = gpu;
+    s.gpu = s.make_gpu_scorer();
+    if (s.gpu) {
+        s.start_gpu_conversion();
+    } else {
+        s.start_cpu_features();
+    }
+    if (!s.gpu_converts) {
+        s.start_converters();
+    }
+}
+
+std::unique_ptr<V1Scorer> HdrScorer::State::make_gpu_scorer() const {
+    if (!device) {
+        return nullptr;
+    }
+    // The converted pictures' features on the GPU: VMAF v1's engine takes
+    // the HDR model's options (CAMBI and SpEED on the GPU too), and gives
+    // libvmaf's values; every frame goes to it (motion reads the one
+    // before), and it scores every n_subsample-th, as libvmaf.
+    const VmafPictureConvertTarget& converted = targets[0];
+    try {
+        auto scorer = std::make_unique<V1Scorer>(
+            static_cast<int>(converted.w), static_cast<int>(converted.h), static_cast<int>(converted.bpc),
+            model_file, n_subsample, *device >= 0 ? device : std::nullopt, threads, "vmaf_hdr");
+        logger.info("HDR VMAF's features on the GPU (Vulkan)");
+        return scorer;
+    } catch (const LibvmafError& error) {
+        logger.info(std::string("HDR VMAF's features on the CPU: ") + error.what());
+        return nullptr;
+    }
+}
+
+void HdrScorer::State::start_cpu_features() {
+    handles.start(threads, n_subsample);
+    handles.load_model(model_file);
+    check_libvmaf(library.use_features_from_model(handles.context, handles.model), "Readying HDR VMAF's features");
+}
+
+void HdrScorer::State::start_converters() {
+    const int count = hdr_conversion_threads(std::thread::hardware_concurrency(), gpu != nullptr);
+    for (int i = 0; i < count; ++i) {
+        converters.push_back(std::make_unique<Converter>(library));
+    }
+}
+
+void HdrScorer::State::start_gpu_conversion() {
+    std::string why;
+    if (bit_depth <= 8) {
+        why = "the GPU converts 10- and 12-bit pictures";
+    } else if (library.picture_convert_gpu_plan == nullptr || library.picture_convert_gpu_plan_free == nullptr) {
+        why = "the bundled libvmaf has no conversion plan";
+    } else if (gpu->can_convert_on_gpu(why)) {
+        // Each video's plan, from a picture as the videos give them (only its
+        // format, size and colours are read).
+        const std::array<VmafColor, 2> given_colours{colours.source, colours.distorted};
+        std::array<ConversionPlan, 2> plans{ConversionPlan(nullptr, library.picture_convert_gpu_plan_free),
+                                            ConversionPlan(nullptr, library.picture_convert_gpu_plan_free)};
+        std::array<std::span<const std::uint32_t>, 2> words;
+        for (std::size_t side = 0; side < 2 && why.empty(); ++side) {
+            OwnedPicture input(library);
+            check_libvmaf(library.picture_alloc(&input.picture, VMAF_PIX_FMT_YUV420P, bit_depth,
+                                                static_cast<unsigned>(width), static_cast<unsigned>(height)),
+                          "Making a picture for HDR VMAF");
+            input.picture.color = given_colours[side];
+            std::uint32_t* plan = nullptr;
+            std::size_t count = 0;
+            if (const int error = library.picture_convert_gpu_plan(&input.picture, &targets[side], &plan, &count);
+                error != 0) {
+                why = "libvmaf has no plan of this conversion for the GPU (" + std::to_string(error) + ")";
+            } else {
+                plans[side].reset(plan);
+                words[side] = {plan, count};
+            }
+        }
+        if (why.empty()) {
+            if (gpu->convert_on_gpu(words, why)) {
+                gpu_converts = true;
+                logger.info("HDR VMAF's pictures converted on the GPU (to be checked against libvmaf's on the "
+                            "first frame)");
+                return;
+            }
+            // The engine refused: a scorer that is not half set up (the old
+            // one's GPU memory given back first).
+            gpu.reset();
+            gpu = make_gpu_scorer();
+            if (!gpu) {
+                start_cpu_features();
+            }
         }
     }
-    if (!s.gpu) {
-        s.handles.start(std::max(1, threads), n_subsample);
-        s.handles.load_model(model_file);
-        check_libvmaf(s.library.use_features_from_model(s.handles.context, s.handles.model),
-                      "Readying HDR VMAF's features");
+    logger.info("HDR VMAF's pictures converted on the CPU: " + why);
+}
+
+std::string HdrScorer::State::conversion_difference(std::size_t side, const VmafPicture& input,
+                                                   const VmafPicture& cpu) const {
+    std::array<std::vector<std::uint16_t>, 3> out;
+    std::array<std::uint16_t*, 3> out_planes{};
+    std::array<std::ptrdiff_t, 3> out_strides{};
+    std::array<const std::uint16_t*, 3> planes{};
+    std::array<std::ptrdiff_t, 3> strides{};
+    for (std::size_t plane = 0; plane < 3; ++plane) {
+        out[plane].resize(static_cast<std::size_t>(cpu.w[plane]) * cpu.h[plane]);
+        out_planes[plane] = out[plane].data();
+        out_strides[plane] = static_cast<std::ptrdiff_t>(cpu.w[plane]) * 2;
+        planes[plane] = static_cast<const std::uint16_t*>(input.data[plane]);
+        strides[plane] = input.stride[plane];
     }
-    const int converters = hdr_conversion_threads(std::thread::hardware_concurrency(), s.gpu != nullptr);
-    for (int i = 0; i < converters; ++i) {
-        s.converters.push_back(std::make_unique<Converter>(s.library));
+    gpu->test_convert(static_cast<int>(side), planes, strides, out_planes, out_strides);
+    for (std::size_t plane = 0; plane < 3; ++plane) {
+        for (unsigned y = 0; y < cpu.h[plane]; ++y) {
+            const auto* const row = reinterpret_cast<const std::uint16_t*>(
+                static_cast<const std::uint8_t*>(cpu.data[plane]) + static_cast<std::ptrdiff_t>(y) * cpu.stride[plane]);
+            const std::uint16_t* const gpu_row = out[plane].data() + static_cast<std::size_t>(y) * cpu.w[plane];
+            for (unsigned x = 0; x < cpu.w[plane]; ++x) {
+                if (row[x] != gpu_row[x]) {
+                    return "plane " + std::to_string(plane) + " sample (" + std::to_string(x) + ", " +
+                           std::to_string(y) + "): libvmaf " + std::to_string(row[x]) + ", the GPU " +
+                           std::to_string(gpu_row[x]);
+                }
+            }
+        }
     }
+    return {};
+}
+
+void HdrScorer::State::check_gpu_conversion(const FramePlanes& reference, const FramePlanes& distorted) {
+    const std::size_t sample = bytes_per_sample(static_cast<int>(bit_depth));
+    const std::array<const FramePlanes*, 2> frames{&reference, &distorted};
+    const std::array<VmafColor, 2> given_colours{colours.source, colours.distorted};
+    const std::array<const char*, 2> sides{"the source's", "the test video's"};
+    // Each side's first frame and picture of every code. libvmaf converts
+    // the four at once, on threads of their own (each conversion runs on one
+    // thread), and the GPU converts each, here, as libvmaf finishes it.
+    struct Case {
+        std::size_t side = 0;
+        bool made = false;  // the picture of every code, else the first frame
+        std::unique_ptr<OwnedPicture> input;
+        std::future<std::unique_ptr<OwnedPicture>> cpu;  // last, so that it waits before `input` goes
+    };
+    std::string difference;
+    try {
+        std::vector<Case> cases;
+        cases.reserve(4);
+        for (std::size_t side = 0; side < 2; ++side) {
+            for (const bool made : {false, true}) {
+                auto input = std::make_unique<OwnedPicture>(library);
+                VmafPicture& picture = input->picture;
+                check_libvmaf(library.picture_alloc(&picture, VMAF_PIX_FMT_YUV420P, bit_depth,
+                                                    static_cast<unsigned>(width), static_cast<unsigned>(height)),
+                              "Making a picture for HDR VMAF");
+                picture.color = given_colours[side];
+                if (made) {
+                    fill_every_code(picture);
+                } else {
+                    fill_picture(picture, *frames[side], sample, {0, 1, 2});
+                }
+                std::future<std::unique_ptr<OwnedPicture>> cpu =
+                    std::async(std::launch::async,
+                               [this, side, &picture] { return libvmaf_conversion(library, picture, targets[side]); });
+                cases.push_back({side, made, std::move(input), std::move(cpu)});
+            }
+        }
+        for (Case& checked : cases) {
+            const std::unique_ptr<OwnedPicture> cpu = checked.cpu.get();
+            if (difference.empty()) {
+                if (std::string at = conversion_difference(checked.side, checked.input->picture, cpu->picture);
+                    !at.empty()) {
+                    difference = std::string(sides[checked.side]) +
+                                 (checked.made ? " picture of every code" : " first frame") + " differs at " + at;
+                }
+            }
+        }
+    } catch (const std::exception& error) {
+        difference = error.what();
+    }
+    if (difference.empty()) {
+        logger.info("HDR VMAF's pictures converted on the GPU: the first frame and a picture of every code came out "
+                    "as libvmaf's");
+        return;
+    }
+    logger.warning("HDR VMAF's pictures converted on the CPU: the GPU's conversion is not libvmaf's (" + difference +
+                   ")");
+    gpu_converts = false;
+    gpu.reset();  // its GPU memory given back before the new scorer takes its own
+    gpu = make_gpu_scorer();
+    if (!gpu) {
+        start_cpu_features();
+    }
+    start_converters();
 }
 
 HdrScorer::~HdrScorer() = default;
@@ -404,6 +648,15 @@ void HdrScorer::add(std::span<const std::uint8_t> reference, std::span<const std
 
 void HdrScorer::add_planes(const FramePlanes& reference, const FramePlanes& distorted) {
     State& s = *state_;
+    if (s.gpu_converts && s.given == 0) {
+        s.check_gpu_conversion(reference, distorted);
+    }
+    if (s.gpu_converts) {  // the GPU copies the pictures in as the videos give them
+        ++s.given;
+        ++s.fed;
+        s.gpu->add_planes(reference, distorted);
+        return;
+    }
     Converter& converter = *s.converters[s.given % s.converters.size()];
     if (converter.busy) {  // its pair is the oldest not yet given to libvmaf
         converter.busy = false;
