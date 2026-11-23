@@ -56,7 +56,11 @@ QTableWidgetItem* cell(const QString& text, bool number = true) {
     return item;
 }
 
-QTableWidget* make_table() {
+// `measured`: the columns sized to their contents as they change, for a
+// short table; else sized once a fill ends (fit_list). A list of up to 1000
+// rows measured as it fills is measured again for each cell set: minutes
+// for a long video's segments, on the window's thread.
+QTableWidget* make_table(bool measured = true) {
     auto* table = new QTableWidget;
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -65,7 +69,8 @@ QTableWidget* make_table() {
     // its end whatever the elide mode.
     table->setWordWrap(false);
     table->verticalHeader()->hide();
-    table->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(measured ? QHeaderView::ResizeToContents
+                                                             : QHeaderView::Interactive);
     return table;
 }
 
@@ -473,7 +478,7 @@ QWidget* WorstFramesTab::build_lists() {
     worst_head->addWidget(count_combo_);
     worst_head->addWidget(export_button([this](QMenu* menu) { fill_worst_menu(menu); }));
     worst->addLayout(worst_head);
-    worst_table_ = make_table();
+    worst_table_ = make_table(false);  // sized by fit_list
     offer_menu(worst_table_, [this](QMenu* menu) { fill_worst_menu(menu); });
     connect(worst_table_, &QTableWidget::itemSelectionChanged, this, [this] {
         const QList<QTableWidgetItem*> selected = worst_table_->selectedItems();
@@ -513,7 +518,7 @@ QWidget* WorstFramesTab::build_lists() {
     segments_head->addStretch(1);
     segments_head->addWidget(export_button([this](QMenu* menu) { fill_segments_menu(menu); }));
     segments->addLayout(segments_head);
-    segments_table_ = make_table();
+    segments_table_ = make_table(false);  // sized by fit_list
     offer_menu(segments_table_, [this](QMenu* menu) { fill_segments_menu(menu); });
     connect(segments_table_, &QTableWidget::itemSelectionChanged, this, [this] {
         const QList<QTableWidgetItem*> selected = segments_table_->selectedItems();

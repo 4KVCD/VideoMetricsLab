@@ -4,6 +4,7 @@
 #include <QAction>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QHeaderView>
 #include <QLabel>
 #include <QMenu>
 #include <QPushButton>
@@ -122,6 +123,15 @@ TEST(WorstFramesTab, ListsTheDipsAndTheSegmentsAndOpensThemInVideoCompare) {
         << tab.conditions_note()->text().toStdString();
     for (int column = 0; column < tab.segments_table()->columnCount(); ++column) {
         EXPECT_NE(header(*tab.segments_table(), column), "Weak by");
+    }
+    // The two lists, of up to 1000 rows, are sized once a fill ends
+    // (fit_list), not measured again for each cell set: a long video's
+    // segments took over a minute on the window's thread each time the tab
+    // was shown again. Their columns still fit what they hold.
+    for (QTableWidget* table : {tab.worst_table(), tab.segments_table()}) {
+        EXPECT_EQ(table->horizontalHeader()->sectionResizeMode(0), QHeaderView::Interactive);
+        EXPECT_GE(table->horizontalHeader()->sectionSize(0),
+                  table->fontMetrics().horizontalAdvance(table->horizontalHeaderItem(0)->text()));
     }
     // The graph: the segments shaded.
     ASSERT_NE(tab.chart(), nullptr);

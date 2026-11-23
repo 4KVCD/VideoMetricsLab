@@ -134,6 +134,34 @@ TEST_F(ChartTest, DrawsItsAxesAsItsReference) {
     }
 }
 
+// Shaded stretches that share pixel columns are drawn as one (weak
+// segments by the thousand, a long video's): each column the same tint as a
+// single stretch's, not darkened by each stretch laid over it (and not
+// 200 ms a paint).
+TEST_F(ChartTest, ManyShadedStretchesTintAsOne) {
+    std::vector<double> times(1001);
+    std::vector<float> values(1001, 95.0F);
+    for (std::size_t i = 0; i < times.size(); ++i) {
+        times[i] = static_cast<double>(i) / 10.0;  // 0 to 100 s
+    }
+    ChartWidget chart(QStringLiteral("VMAF"), 100.0);
+    chart.resize(800, 400);
+    chart.set_series(0, line_of(std::move(times), std::move(values)));
+    std::vector<std::pair<double, double>> shaded{{10.0, 20.0}};
+    for (int i = 0; i < 2000; ++i) {  // 50 to 70 s in 2000 stretches of 0.01 s
+        shaded.emplace_back(50.0 + i * 0.01, 50.0 + (i + 1) * 0.01);
+    }
+    chart.set_shaded(std::move(shaded));
+    const QImage image = chart.render_to_pixmap().toImage();
+    const QRect rect = chart.plot_rect();
+    const int row = rect.bottom() - rect.height() / 4;  // under the line, over the shading
+    const auto column = [&rect](double seconds) { return rect.left() + static_cast<int>(seconds / 100.0 * rect.width()); };
+    const QColor single = image.pixelColor(column(15.0), row);
+    const QColor many = image.pixelColor(column(60.0), row);
+    EXPECT_NE(single, image.pixelColor(column(35.0), row));  // shaded at all
+    EXPECT_EQ(many, single);
+}
+
 TEST_F(ChartTest, ANarrowDipSurvivesAndASettledSizeIsDrawnOnce) {
     // A 3-frame dip in 200,000 frames: drawn as one min/max stroke per pixel
     // column, it is still there, not averaged away or skipped. It is off its
