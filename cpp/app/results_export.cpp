@@ -181,6 +181,22 @@ QString export_action_text(ExportScope scope, const std::vector<std::string>& it
     return contents;
 }
 
+bool settled_for_export(const std::vector<std::string>& requested, const std::vector<std::string>& kept,
+                        const std::vector<std::string>& failed) {
+    const auto in = [](const std::vector<std::string>& keys, const std::string& key) {
+        return std::find(keys.begin(), keys.end(), key) != keys.end();
+    };
+    bool any = false;
+    for (const std::string& key : requested) {
+        if (in(kept, key)) {
+            any = true;
+        } else if (!in(failed, key)) {
+            return false;
+        }
+    }
+    return any;
+}
+
 std::vector<std::filesystem::path> write_loose_export(const std::filesystem::path& folder,
                                                       const std::vector<BundleFile>& files) {
     std::vector<std::string> names;

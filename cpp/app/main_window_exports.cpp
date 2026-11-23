@@ -99,7 +99,15 @@ std::vector<std::filesystem::path> bitrate_paths(const std::filesystem::path& re
 std::optional<BundleVideo> MainWindow::scored_video(const RowData& row_data) const {
     const std::shared_ptr<CompletedRun>& run = row_data.completed_run;
     if (!source_info_ || !run || run->partial || row_data.cvvdp_display_of ||
-        !same_path(run->result.source, source_info_->path) || !has_requested_results(row_data)) {
+        !same_path(run->result.source, source_info_->path)) {
+        return std::nullopt;
+    }
+    // Every ticked metric scored, or failed on the run (settled_for_export).
+    std::vector<std::string> failed;
+    for (const auto& [key, why] : row_data.metric_failures) {
+        failed.push_back(key);
+    }
+    if (!settled_for_export(requested_metrics(row_data), reusable_metric_keys(row_data), failed)) {
         return std::nullopt;
     }
     return BundleVideo{std::shared_ptr<const ComparisonResult>(run, &run->result), run->label,
@@ -184,7 +192,8 @@ void MainWindow::fill_videos_export_menu(QMenu& menu) {
                               : rows.size() == 1 ? ExportScope::this_video
                                                  : ExportScope::selected_videos;
     QAction* contents = menu.addAction(export_action_text(scope, items));
-    // As the right-click menu's: of videos whose ticked metrics are all scored.
+    // As the right-click menu's: of videos whose ticked metrics are all
+    // scored, or failed on the run (scored_video).
     const bool all_scored = std::all_of(rows.begin(), rows.end(), [this](int row) {
         return scored_video(*rows_[static_cast<std::size_t>(row)]).has_value();
     });
@@ -199,7 +208,8 @@ void MainWindow::fill_videos_export_menu(QMenu& menu) {
 }
 
 void MainWindow::export_rows() {
-    // Of videos whose ticked metrics are all scored, as the menu offered it.
+    // Of videos whose ticked metrics are all scored (or failed), as the menu
+    // offered it.
     std::vector<int> rows = export_menu_rows();
     std::erase_if(rows, [this](int row) { return !scored_video(*rows_[static_cast<std::size_t>(row)]); });
     if (rows.empty() || !source_info_) {

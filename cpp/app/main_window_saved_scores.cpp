@@ -429,8 +429,8 @@ void MainWindow::show_table_menu(const QPoint& position) {
     QAction* this_video = nullptr;
     QAction* selected_videos = nullptr;
     if (in_selection) {
-        // Usable where one of them has every ticked metric scored, as the
-        // export takes only those (export_rows).
+        // Usable where one of them has every ticked metric scored, or failed
+        // on its run, as the export takes only those (export_rows).
         const bool any_scored = std::any_of(selected.begin(), selected.end(), [this](int row) {
             return scored_video(*rows_[static_cast<std::size_t>(row)]).has_value();
         });

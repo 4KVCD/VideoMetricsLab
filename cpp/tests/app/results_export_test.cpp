@@ -218,6 +218,21 @@ TEST(ResultsExport, FilesAreWrittenInTheFormatsTicked) {
 // file name, which another test video's may share (x265\movie.mkv and
 // svt\movie.mkv, or clip.mkv and clip.mp4): the second replaced the first's
 // files. Now an export replaces none, and its files are numbered alike.
+// A video whose run scored VMAF and PSNR while HDR VMAF, ticked too, failed
+// is exported with the scores it has (the Export menu, and Settings'
+// after-run export); one with a metric ticked since the run, never
+// calculated, waits for it; one whose every ticked metric failed has
+// nothing to export.
+TEST(ResultsExport, AMetricThatFailedHoldsNoExportBack) {
+    const std::vector<std::string> ticked{"vmaf", "psnr", "vmaf_hdr"};
+    const std::vector<std::string> scored{"vmaf", "psnr"};
+    EXPECT_TRUE(settled_for_export(ticked, scored, {"vmaf_hdr"}));
+    EXPECT_FALSE(settled_for_export(ticked, scored, {}));
+    EXPECT_TRUE(settled_for_export(scored, scored, {}));
+    EXPECT_FALSE(settled_for_export({"vmaf_hdr"}, {}, {"vmaf_hdr"}));
+    EXPECT_FALSE(settled_for_export({}, scored, {}));
+}
+
 TEST(ResultsExport, AnExportIntoAFolderReplacesNoneOfAnothersFiles) {
     QTemporaryDir temporary;
     ASSERT_TRUE(temporary.isValid());
