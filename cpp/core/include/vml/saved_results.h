@@ -65,7 +65,10 @@ std::optional<std::pair<ComparisonResult, std::string>> load_saved_comparison(
     const std::function<std::optional<SavedScore>(const std::filesystem::path&)>& read = read_saved_score);
 
 // Deletes the comparison's folder, which must be one under `base`'s v2
-// folder: whether it is gone.
+// folder: whether it is gone. Whole or not at all: where one of its files
+// is in use, either nothing of it is deleted (it is still listed), or it is
+// moved out of the comparisons (v2/.deleted) and what was in use is deleted
+// at the next delete.
 bool delete_saved_comparison(const std::filesystem::path& base, const SavedComparison& comparison);
 
 }  // namespace vml

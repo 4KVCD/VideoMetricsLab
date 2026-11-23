@@ -12,8 +12,13 @@
 
 #include <gtest/gtest.h>
 
+#ifdef _WIN32
+#include <share.h>
+#endif
+
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -828,8 +833,34 @@ TEST(MetricCache, SavedComparisonsAreListedReadAndDeleted) {
     elsewhere.folder = folder / "s.mp4";  // not a folder under v2
     EXPECT_FALSE(delete_saved_comparison(cache, elsewhere));
     EXPECT_TRUE(std::filesystem::exists(folder / "s.mp4"));
+#ifdef _WIN32
+    // A comparison one of whose files is open, without leave to delete it
+    // (the tab's details reader, a lookup, an antivirus): nothing of it is
+    // deleted, and it is still listed, to be deleted again. Deleted file by
+    // file, its context.json went first, and the half left was listed by
+    // nothing and deletable by nothing.
+    {
+        const std::filesystem::path held = list[1].scores.front().file;
+        std::FILE* open = _wfsopen(held.c_str(), L"rb", _SH_DENYNO);
+        ASSERT_NE(open, nullptr);
+        EXPECT_FALSE(delete_saved_comparison(cache, list[1]));
+        EXPECT_TRUE(std::filesystem::exists(second / "context.json"));
+        EXPECT_EQ(list_saved_comparisons(cache).size(), 2U);
+        std::fclose(open);
+    }
+    // A leftover of the same comparison in .deleted, one of its files still
+    // open, does not block deleting it (#221's review: its name was taken).
+    const std::filesystem::path leftover = cache / "v2" / ".deleted" / second.filename();
+    std::filesystem::create_directories(leftover);
+    touch(leftover / "vmaf_0.npz", "held");
+    std::FILE* still_open = _wfsopen((leftover / "vmaf_0.npz").c_str(), L"rb", _SH_DENYNO);
+    ASSERT_NE(still_open, nullptr);
+#endif
     EXPECT_TRUE(delete_saved_comparison(cache, list[1]));
     EXPECT_FALSE(std::filesystem::exists(second));
+#ifdef _WIN32
+    std::fclose(still_open);
+#endif
     list = list_saved_comparisons(cache);
     ASSERT_EQ(list.size(), 1U);
     EXPECT_EQ(list[0].label, "t");
