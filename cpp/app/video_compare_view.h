@@ -261,6 +261,8 @@ private:
     bool showing_source_ = false;
     bool audio_enabled_ = true;
     std::optional<platform::ChildProcess> audio_;
+    // Why ffplay can't play the soundtrack was logged (start_audio): once.
+    bool no_sound_logged_ = false;
     // The soundtrack is to start (again) with the frames, not before
     // audio_resume_at_ (playback fell behind until then).
     bool audio_due_ = false;

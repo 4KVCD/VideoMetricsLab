@@ -12,6 +12,7 @@
 #include <mutex>
 
 #include "i18n.h"
+#include "vml/app_log.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
 #include "vml/platform/system.h"
@@ -1291,6 +1292,14 @@ void VideoCompareView::start_audio(long long frame) {
     stop_audio();
     const std::optional<std::filesystem::path> ffplay = ffplay_beside(ffmpeg_());
     if (!ffplay) {
+        // Said once: without it, a silent Video Compare left nothing in the
+        // log to say why (issue #204).
+        if (!no_sound_logged_) {
+            no_sound_logged_ = true;
+            app_log::write(app_log::Level::info, "vml.playback",
+                           "Video Compare plays no sound: the FFmpeg fallback plays it with ffplay, and there is no "
+                           "ffplay beside FFmpeg");
+        }
         return;
     }
     const std::optional<std::vector<std::string>> command = build_audio_command(*ffplay, source, frame);
@@ -1300,7 +1309,14 @@ void VideoCompareView::start_audio(long long frame) {
     try {
         audio_.emplace(platform::ChildProcess::start(*command));
     } catch (const platform::ProcessError&) {
-        // No soundtrack: the pictures play on.
+        // No soundtrack: the pictures play on. (Its message, which may name
+        // the program's path, is left out.)
+        if (!no_sound_logged_) {
+            no_sound_logged_ = true;
+            app_log::write(app_log::Level::info, "vml.playback",
+                           "Video Compare plays no sound: ffplay, which the FFmpeg fallback plays it with, could not "
+                           "start");
+        }
     }
 }
 

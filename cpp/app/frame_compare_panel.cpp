@@ -551,6 +551,9 @@ void FrameComparePanel::add_seek_rows(QBoxLayout* root) {
         if (video_view != nullptr) {
             video_view->set_audio_enabled(enabled);
         }
+        if (is_video_mode()) {
+            update_frame_line();  // "No sound" is said only while Audio is ticked
+        }
     });
     previous_frame_button = new QPushButton(app::tr("\xE2\x88\x92 Frame"));
     connect(previous_frame_button, &QPushButton::clicked, this, [this] { set_frame(frame_ - 1); });
@@ -1146,9 +1149,24 @@ QString FrameComparePanel::concise_playback_status() const {
     // info. The view's messages are in English, read here for their words.
     const QString message = QString(video_status_).replace("distorted", "test");
     const QString separator = QString::fromUtf8(" \xC2\xB7 ");
-    // Errors stay visible. A reference without a soundtrack ("audio
-    // unavailable") is not one.
-    const QString problem = message.toLower().replace("audio unavailable", "");
+    // No soundtrack: "audio unavailable", then why (NativePool::
+    // description). Not an error of the pictures', so left out of the check
+    // below; said as "No sound: why" while Audio is ticked (issue #204: it
+    // was said nowhere but Advanced info).
+    QString no_sound;
+    QStringList others;
+    const QStringList all = message.split(separator);
+    for (qsizetype i = 0; i < all.size(); ++i) {
+        if (all[i] == QStringLiteral("audio unavailable")) {
+            if (i + 1 < all.size()) {
+                no_sound = all[++i];
+            }
+            continue;
+        }
+        others.append(all[i]);
+    }
+    // Errors stay visible.
+    const QString problem = others.join(separator).toLower();
     if (problem.contains("failed") || problem.contains("could not") || problem.contains("error") ||
         problem.contains("unavailable")) {
         QStringList parts;
@@ -1166,6 +1184,9 @@ QString FrameComparePanel::concise_playback_status() const {
             const QString mode = used == "software" || used == "cpu" ? QStringLiteral("CPU") : QStringLiteral("GPU");
             parts.append(app::tr("{side}: {mode} decode", {{"side", app::tr(shown)}, {"mode", mode}}));
         }
+    }
+    if (!no_sound.isEmpty() && audio_checkbox->isChecked()) {
+        parts.append(app::tr("No sound: {reason}", {{"reason", tr_message(no_sound)}}));
     }
     return parts.join(separator);
 }

@@ -609,7 +609,10 @@ QString NativePool::description() const {
     // Paused on the pair on screen is not buffering, even after a seek.
     const QString state = !shown_ || (buffering_ && playing_) ? QStringLiteral("Buffering locked pair")
                                                              : QStringLiteral("Frame-locked GPU pair");
-    const QString audio = audio_->failed() ? QStringLiteral("audio unavailable") : QStringLiteral("source soundtrack");
+    // Without a soundtrack, why, as a part of its own after "audio
+    // unavailable" (FrameComparePanel's status line reads it there).
+    const std::optional<QString> no_sound = audio_->failed();
+    const QString audio = no_sound ? QStringLiteral("audio unavailable") : QStringLiteral("source soundtrack");
     QStringList parts{NativePresentation::name()};
     for (const std::string& key : {source_key_, distorted_key(selected_)}) {
         if (const auto detail = status_details_.find(key); detail != status_details_.end() && !detail->second.isEmpty()) {
@@ -617,7 +620,8 @@ QString NativePool::description() const {
         }
     }
     const QString separator = QString::fromUtf8(" \xC2\xB7 ");
-    return state + separator + audio + separator + parts.join(separator);
+    return state + separator + audio + (no_sound ? separator + *no_sound : QString()) + separator +
+           parts.join(separator);
 }
 
 void NativePool::resize() {

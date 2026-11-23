@@ -443,6 +443,12 @@ TEST_F(NativePoolTest, AStalledDecoderStopsTheSoundAndWaitsBeforePlayingOn) {
     set_frame(*pool_, 15);  // sought to a frame not decoded yet
     pool_->poll();
     EXPECT_TRUE(pool_->description().startsWith("Buffering locked pair")) << pool_->description().toStdString();
+    // Without a soundtrack, why, after "audio unavailable" (issue #204).
+    EXPECT_TRUE(pool_->description().contains("source soundtrack"));
+    sound_->failure = QStringLiteral("no sound device");
+    EXPECT_TRUE(pool_->description().contains(QString::fromUtf8("audio unavailable \xC2\xB7 no sound device \xC2\xB7 ")))
+        << pool_->description().toStdString();
+    sound_->failure.reset();
     // A video whose seek is still to be made gives the pool no frames: until
     // then it can still give frames from before the seek.
     for (FakeVideo* video : videos_) {

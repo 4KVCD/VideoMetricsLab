@@ -428,6 +428,11 @@ const char* const templates[] = {
     "Frame-locked GPU pair",
     "source soundtrack",
     "audio unavailable",
+    // why (native_soundtrack.cpp), after "audio unavailable"
+    "the reference has no audio track the app plays",
+    "the reference's audio could not be read: {error}",
+    "no sound device",
+    "the sound device can't play",
     "hardware decode + GPU tone mapping/RGB (host transfer)",
     "software decode + GPU tone mapping/RGB",
     "CPU fallback (GPU processing unavailable)",
