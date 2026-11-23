@@ -597,6 +597,46 @@ void MainWindow::export_automatically(const RowData& row_data) {
                 folder);
 }
 
+void MainWindow::export_when_whole(const RowData& row_data) {
+    if (!settings_.after_run_export) {
+        return;
+    }
+    // The row whose entry holds `row_data`'s scores: its own, or the video's
+    // it scores another display for.
+    std::shared_ptr<RowData> owner;
+    for (const std::shared_ptr<RowData>& candidate : rows_) {
+        if (row_data.cvvdp_display_of ? !candidate->cvvdp_display_of && candidate->path == *row_data.cvvdp_display_of
+                                      : candidate.get() == &row_data) {
+            owner = candidate;
+            break;
+        }
+    }
+    // Its own video run and finished in this run (not a result left from
+    // an earlier one): else its own end exports it, or nothing does.
+    const auto owner_job = std::find(job_rows_.begin(), job_rows_.end(), owner);
+    if (!owner || owner_job == job_rows_.end() ||
+        !finished_jobs_.contains(static_cast<int>(owner_job - job_rows_.begin())) || !owner->completed_run ||
+        owner->completed_run->partial || owner->completed_run->record != run_record_) {
+        return;
+    }
+    // Each display row of its in this run, still in the table, over:
+    // finished or failed (mark_job_over).
+    bool whole = true;
+    for (std::size_t job = 0; job < job_rows_.size(); ++job) {
+        const RowData& job_row = *job_rows_[job];
+        if (job_row.cvvdp_display_of && *job_row.cvvdp_display_of == owner->path && row_index_of(&job_row) &&
+            !finished_jobs_.contains(static_cast<int>(job))) {
+            whole = false;
+        }
+    }
+    std::erase(auto_export_waiting_, owner);
+    if (whole) {
+        export_automatically(*owner);
+    } else {
+        auto_export_waiting_.push_back(owner);
+    }
+}
+
 void MainWindow::queue_bundle(PendingBundle bundle) {
     // What the Bitrate tab has not read, nor is reading, is read now: a
     // video loaded with saved scores, say, or one encoded again under its

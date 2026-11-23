@@ -664,6 +664,12 @@ private:
     // Settings > Storage > After each run, for a video just scored: what
     // Exports include, next to it or in the export folder.
     void export_automatically(const RowData& row_data);
+    // The same once `row_data`'s entry is whole: a video's own row, or the
+    // row a CVVDP display row scores for (its entry lists the display's
+    // scores), exported once it and each display row of its in the run have
+    // ended. Until then it waits in auto_export_waiting_, which the run's
+    // end exports as they are (a display that failed or was cancelled).
+    void export_when_whole(const RowData& row_data);
     // The document Export results makes with `row_data`'s video alone.
     std::optional<nlohmann::ordered_json> row_document(const RowData& row_data) const;
     // Saves `bundle` when its bitrate is read, starting to read what is not.
@@ -867,6 +873,8 @@ private:
     // display each job started with.
     RunWorker* worker_ = nullptr;
     std::vector<std::shared_ptr<RowData>> job_rows_;
+    // Rows whose after-run export waits for their CVVDP display rows (export_when_whole).
+    std::vector<std::shared_ptr<RowData>> auto_export_waiting_;
     std::vector<VmafOptions> job_options_;
     std::vector<CvvdpSettings> job_cvvdp_;
     std::vector<int> running_jobs_;  // in the order they started
