@@ -4,6 +4,7 @@
 
 #include <QTemporaryDir>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -204,10 +205,39 @@ TEST(ResultsExport, FilesAreWrittenInTheFormatsTicked) {
     EXPECT_EQ(made_names, (Names{"x.json", "a - frames.json", "a - frames.csv", "b - frames.json", "b - frames.csv"}));
     EXPECT_EQ(made[1].second, per_frame_json(*result));
     EXPECT_EQ(made[2].second, per_frame_csv(*result));
-    // Worst frames: a file for each video, every metric's.
-    settings.export_items = {"worst_frames"};
-    EXPECT_EQ(names({one[0], {result, QStringLiteral("b"), "b.mkv"}}, true),
-              (Names{"a - worst frames.json", "a - worst frames.csv", "b - worst frames.json", "b - worst frames.csv"}));
+    // Worst frames: a file for each video, every metric's. Listed where
+    // they are among the files, but made only as they are written, as the
+    // per-frame scores are: a 2-hour video's took a tenth of a second on
+    // the window's thread, before the save dialog.
+    settings.export_items = {"results", "worst_frames"};
+    bool skipped = false;
+    const std::vector<BundleFile> listed =
+        export_files(settings, {one[0], {result, QStringLiteral("b"), "b.mkv"}}, "r.mkv",
+                     [&document] { return document; }, rules, true, QStringLiteral("a"), frames, skipped);
+    Names listed_names;
+    for (const BundleFile& file : listed) {
+        listed_names.push_back(file.first);
+    }
+    EXPECT_EQ(listed_names, (Names{"a - results.json", "a - results.csv", "a - worst frames.json",
+                                   "a - worst frames.csv", "b - worst frames.json", "b - worst frames.csv"}));
+    for (std::size_t i = 2; i < listed.size(); ++i) {
+        EXPECT_TRUE(listed[i].second.empty()) << listed[i].first;
+    }
+    ASSERT_EQ(frames.size(), 2U);
+    const std::vector<BundleFile> worst = made_files(listed, frames);
+    ASSERT_EQ(worst.size(), listed.size());  // made in place, in the same order
+    const auto dips = static_cast<std::size_t>(std::max(settings.graph_worst_frames, 1));
+    const std::string worst_json = python_json_dumps(worst_frames_report_json(result->metric_results, dips)) + "\n";
+    const std::string worst_csv = text_lines(worst_frames_report_csv(result->metric_results, dips));
+    for (std::size_t i = 0; i < worst.size(); ++i) {
+        EXPECT_EQ(worst[i].first, listed_names[i]);
+    }
+    EXPECT_EQ(worst[0].second, listed[0].second);  // the results, as they were
+    for (const std::size_t i : {2U, 4U}) {
+        EXPECT_EQ(worst[i].second, worst_json) << worst[i].first;
+        EXPECT_EQ(worst[i + 1].second, worst_csv) << worst[i + 1].first;
+    }
+    EXPECT_NE(worst_csv.find("vmaf,1,1,"), std::string::npos) << worst_csv;  // frame 1, the dip
     settings.export_items = export_item_keys();
     settings.export_formats.clear();
     EXPECT_EQ(names(one, false), Names{});
