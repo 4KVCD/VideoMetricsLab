@@ -1455,6 +1455,7 @@ std::shared_ptr<const RecordedList> recorded_comparisons(const std::filesystem::
     }
     // Read without `mutex`: only this thread changes the listing's folders.
     std::map<std::filesystem::path, ReadComparison> now;
+    bool listed_whole = false;  // the folder listed to its end
     std::vector<std::pair<std::filesystem::path, std::optional<ReadComparison>>> updates;
     if (whole) {
         std::filesystem::directory_iterator folder(root, error);
@@ -1472,6 +1473,7 @@ std::shared_ptr<const RecordedList> recorded_comparisons(const std::filesystem::
             }
             now.emplace(folder->path(), read_comparison(folder->path(), time));
         }
+        listed_whole = !error;
     } else {
         for (const std::filesystem::path& folder : changed) {
             std::error_code unread;
@@ -1486,7 +1488,10 @@ std::shared_ptr<const RecordedList> recorded_comparisons(const std::filesystem::
     const std::lock_guard lock(known.mutex);
     if (whole) {
         listing->folders = std::move(now);
-        listing->listed = true;
+        // A listing that could not be made, or stopped part-way (a share
+        // gone, access refused), serves this lookup only: kept, it would
+        // stand for the rest of the session while the folder's time stays.
+        listing->listed = listed_whole;
         listing->folder_time = folder_time;
         if (listing->forgotten <= changes) {
             listing->forgotten = 0;  // else cleared meanwhile: listed again next time
@@ -1746,7 +1751,11 @@ std::vector<std::filesystem::path> folders_without_stream(const std::filesystem:
     for (int tries = 0; tries < 4; ++tries) {
         std::vector<std::filesystem::path> folders;
         bool changed = false;
-        for (const std::shared_ptr<const RecordedComparison>& recorded : *recorded_comparisons(base)) {
+        // Held while it is looked through: in a range-for, the temporary
+        // shared_ptr would be gone before the loop's body (C++20), and
+        // another thread's listing would free the list under it.
+        const std::shared_ptr<const RecordedList> listed = recorded_comparisons(base);
+        for (const std::shared_ptr<const RecordedComparison>& recorded : *listed) {
             if (recorded->distorted_path == path) {
                 changed = !as_read(*recorded) || changed;
                 if (recorded->distorted_stream.empty()) {
