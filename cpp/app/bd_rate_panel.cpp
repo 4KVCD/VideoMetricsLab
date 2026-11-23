@@ -588,6 +588,7 @@ void BdRatePanel::recalculate() {
         BdRateOptions options;
         options.metrics = all_metric_keys();
         options.warn_of_metrics_neither_has = false;  // their columns' n/a says it
+        options.copies_once = true;                   // one encode's run file added twice: one point
         if (const QString column = group_combo->currentData().toString(); !column.isEmpty()) {
             options.group_by = column.toStdString();
         }
@@ -749,7 +750,7 @@ void BdRatePanel::refresh_chart() {
         }
         // The curve the BD-rate integrates, only where it took every encode
         if (curve.points.size() == encodes) {
-            curve.line = pchip_curve(curve.points, lower_is_better, curve_samples);
+            curve.line = pchip_curve(curve.points, lower_is_better, curve_samples, true);  // as its BD-rate counts them
         }
         return curve;
     };

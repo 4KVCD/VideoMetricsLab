@@ -178,6 +178,9 @@ void MainWindow::load_saved_run(const std::filesystem::path& path) {
     auto run = std::make_shared<CompletedRun>();
     run->result = result;
     run->label = QString::fromStdString(loaded.second);
+    // Metric Graphs' line of the same file, if it is there: replaced, not
+    // joined by a second (Import run file... there names it so too).
+    run->graph_identity = saved_run_identity(path);
     const int row = add_table_row(result.distorted);
     RowData& row_data = *rows_[static_cast<std::size_t>(row)];
     row_data.video_info = result.distorted_info;

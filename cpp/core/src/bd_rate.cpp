@@ -49,8 +49,9 @@ struct Curve {
     std::vector<double> slopes;
 };
 
-// The curve of `points`, or why there is none.
-BdRateGap make_curve(std::span<const RatePoint> points, bool lower_is_better, Curve& curve) {
+// The curve of `points`, or why there is none; with `copies_once`, a point
+// exactly like another is left out (bd_rate).
+BdRateGap make_curve(std::span<const RatePoint> points, bool lower_is_better, Curve& curve, bool copies_once) {
     if (points.size() < 2) {
         return BdRateGap::too_few_points;
     }
@@ -63,11 +64,20 @@ BdRateGap make_curve(std::span<const RatePoint> points, bool lower_is_better, Cu
     }
     std::ranges::stable_sort(sorted, {}, &RatePoint::score);
     for (std::size_t index = 0; index < sorted.size(); ++index) {
+        if (copies_once && index > 0 && sorted[index].score == sorted[index - 1].score &&
+            sorted[index].kbps == sorted[index - 1].kbps) {
+            continue;  // the same encode twice: one point
+        }
         if (index > 0 && sorted[index].score <= sorted[index - 1].score) {
             return BdRateGap::tied_scores;
         }
         curve.x.push_back(sorted[index].score);
         curve.y.push_back(std::log(sorted[index].kbps));
+    }
+    if (curve.x.size() < 2) {
+        curve.x.clear();
+        curve.y.clear();
+        return BdRateGap::too_few_points;
     }
     curve.slopes = pchip_slopes(curve.x, curve.y);
     return BdRateGap::none;
@@ -189,11 +199,12 @@ TargetResult setting_for_score(std::span<const SettingPoint> points, double scor
     return result;
 }
 
-BdRateResult bd_rate(std::span<const RatePoint> anchor, std::span<const RatePoint> test, bool lower_is_better) {
+BdRateResult bd_rate(std::span<const RatePoint> anchor, std::span<const RatePoint> test, bool lower_is_better,
+                     bool copies_once) {
     Curve anchor_curve;
     Curve test_curve;
     for (const auto& [points, curve] : {std::pair{anchor, &anchor_curve}, std::pair{test, &test_curve}}) {
-        if (const BdRateGap gap = make_curve(points, lower_is_better, *curve); gap != BdRateGap::none) {
+        if (const BdRateGap gap = make_curve(points, lower_is_better, *curve, copies_once); gap != BdRateGap::none) {
             return {std::nullopt, gap};
         }
     }
@@ -206,9 +217,10 @@ BdRateResult bd_rate(std::span<const RatePoint> anchor, std::span<const RatePoin
     return {(std::exp(mean_log_ratio) - 1) * 100, BdRateGap::none};
 }
 
-std::vector<RatePoint> pchip_curve(std::span<const RatePoint> points, bool lower_is_better, int samples) {
+std::vector<RatePoint> pchip_curve(std::span<const RatePoint> points, bool lower_is_better, int samples,
+                                   bool copies_once) {
     Curve curve;
-    if (make_curve(points, lower_is_better, curve) != BdRateGap::none || samples < 2) {
+    if (make_curve(points, lower_is_better, curve, copies_once) != BdRateGap::none || samples < 2) {
         return {};
     }
     std::vector<RatePoint> line;

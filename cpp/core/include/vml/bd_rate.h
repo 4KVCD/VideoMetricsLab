@@ -29,7 +29,8 @@ struct RatePoint {
 enum class BdRateGap {
     none,
     too_few_points,  // a curve has fewer than 2 points
-    tied_scores,     // a curve's scores are not all different (fasteval: not strictly increasing)
+    tied_scores,     // a curve's scores are not all different (fasteval: not strictly increasing);
+                     // with copies_once, a point exactly like another (rate and score) counts once
     no_overlap,      // the curves' score ranges do not overlap
     bad_number,      // a rate that is not above 0, or a number that is not finite
 };
@@ -40,15 +41,20 @@ struct BdRateResult {
 };
 
 // `test`'s BD-rate against `anchor`; with `lower_is_better` (Butteraugli) the
-// scores are negated first, as fasteval does.
-BdRateResult bd_rate(std::span<const RatePoint> anchor, std::span<const RatePoint> test, bool lower_is_better = false);
+// scores are negated first, as fasteval does. With `copies_once`, a point
+// exactly like another (rate and score) is the same encode and counts once
+// (the BD-rate tab: one run file of an encode added twice); else it ties,
+// as fasteval has it.
+BdRateResult bd_rate(std::span<const RatePoint> anchor, std::span<const RatePoint> test, bool lower_is_better = false,
+                     bool copies_once = false);
 
 // The curve bd_rate integrates for `points`, for drawing: `samples` points
 // evenly spaced in score across the points' scores, lowest score first (for
 // lower_is_better, highest first), each with its interpolated rate. Empty
 // where bd_rate would have no curve (fewer than 2 points, tied scores, a
 // number that is not finite or a rate not above 0).
-std::vector<RatePoint> pchip_curve(std::span<const RatePoint> points, bool lower_is_better, int samples);
+std::vector<RatePoint> pchip_curve(std::span<const RatePoint> points, bool lower_is_better, int samples,
+                                   bool copies_once = false);
 
 // An encode's score with what made it: its rate in kb/s, or a setting such
 // as its CRF.

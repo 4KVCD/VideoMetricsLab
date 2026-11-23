@@ -127,6 +127,11 @@ struct BdRateOptions {
     // side. The BD-rate tab asks for every metric and shows those as n/a,
     // which says it: a warning per side for each would bury the others.
     bool warn_of_metrics_neither_has = true;
+    // Whether a point exactly like another (rate and score) is the same
+    // encode, counted once (bd_rate's copies_once): the BD-rate tab's, where
+    // one encode's run file may be added twice. The command line ties them,
+    // as fasteval does.
+    bool copies_once = false;
 };
 
 // The BD-rates of `test` against `anchor` for the sequences both have; with

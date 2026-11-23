@@ -2144,6 +2144,13 @@ std::vector<std::string> GraphPanel::scored_metrics() const {
     return keys;
 }
 
+std::string saved_run_identity(const std::filesystem::path& file) {
+    std::error_code error;
+    const std::filesystem::path resolved =
+        std::filesystem::weakly_canonical(std::filesystem::absolute(file, error), error);
+    return "saved-file:" + platform::path_text(resolved);
+}
+
 void GraphPanel::on_add_saved_run() {
     // A saved run's line.
     const QString chosen = dialogs.open_file(
@@ -2156,11 +2163,8 @@ void GraphPanel::on_add_saved_run() {
     const std::filesystem::path path = path_of(chosen);
     try {
         auto [result, label] = load_run(path);
-        std::error_code error;
-        const std::filesystem::path resolved =
-            std::filesystem::weakly_canonical(std::filesystem::absolute(path, error), error);
         add_run({std::make_shared<const ComparisonResult>(std::move(result)), QString::fromStdString(label),
-                 "saved-file:" + platform::path_text(resolved), true});
+                 saved_run_identity(path), true});
     } catch (const RunFileError& error) {
         dialogs.alert(app::tr("Failed to load run"), QString::fromStdString(error.what()));
     }

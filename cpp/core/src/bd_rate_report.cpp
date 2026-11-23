@@ -143,7 +143,8 @@ std::vector<std::string> shown_metrics(const RateTable& anchor, const RateTable&
 // A sequence's BD-rates, with a warning for each metric that has none.
 BdRateSequence sequence_rates(const std::string& name, const std::vector<const RateTable::Encode*>& anchor,
                               const std::vector<const RateTable::Encode*>& test, const BdRateReport& report,
-                              const std::set<std::string>& unscored, std::vector<std::string>& warnings) {
+                              const std::set<std::string>& unscored, std::vector<std::string>& warnings,
+                              bool copies_once) {
     BdRateSequence sequence{name, {}, anchor.size(), test.size(), {}, {}};
     if (anchor.size() < enough_encodes || test.size() < enough_encodes) {
         warnings.push_back(name + ": " + std::to_string(anchor.size()) + " encodes in the anchor and " +
@@ -158,7 +159,8 @@ BdRateSequence sequence_rates(const std::string& name, const std::vector<const R
             why = N_("not scored at every encode");
         } else {
             const bool lower_is_better = find_metric(metric)->direction == MetricDirection::lower_is_better;
-            const BdRateResult result = bd_rate(*anchor_points, *test_points, lower_is_better);
+            const BdRateResult result =
+                bd_rate(*anchor_points, *test_points, lower_is_better, copies_once);
             sequence.row.percent[metric] = result.percent;
             why = bd_rate_gap_text(result.gap);
         }
@@ -561,7 +563,7 @@ BdRateReport bd_rate_report(const RateTable& anchor, const RateTable& test, cons
             continue;
         }
         report.sequences.push_back(
-            sequence_rates(name, encodes, theirs->second, report, unscored, report.warnings));
+            sequence_rates(name, encodes, theirs->second, report, unscored, report.warnings, options.copies_once));
     }
     for (const auto& [name, encodes] : test_sequences) {
         if (!anchor_sequences.contains(name)) {
