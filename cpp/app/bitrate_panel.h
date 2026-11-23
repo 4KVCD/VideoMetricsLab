@@ -57,6 +57,9 @@ enum class BitrateState { ready, queued, reading, packets_read, complete, failed
 // its line is shown, how far it has got, and its graphs worked out so far.
 struct BitrateEntry {
     std::filesystem::path path;
+    // Its name where its file's is not enough: the second of one file name
+    // in an export's panel, numbered (adopt_read). Empty: its file's name.
+    QString label;
     QColor color;
     int series = 0;  // its line's key on the chart
     std::optional<VideoInfo> info;
@@ -150,7 +153,10 @@ public:
     // colours; the first as the reference), reading nothing: the panel an
     // export draws apart from the tab (graph_bundle.h). Those `from` has not
     // read are left out. A path of `saved` is listed as its saved bitrate
-    // instead, or left out where it has none.
+    // instead, or left out where it has none, under its file's path (its
+    // SavedBitrate's info), not the export's key for it (BundleVideo's
+    // bitrate_key), in the key's colour. Two of one file name: the second
+    // and on are numbered.
     void adopt_read(const BitratePanel& from, const std::vector<std::filesystem::path>& paths,
                     const std::map<std::filesystem::path, std::optional<SavedBitrate>>& saved = {});
 

@@ -471,25 +471,21 @@ void MainWindow::export_all_videos() {
                 std::nullopt);
 }
 
-SavedBitrates MainWindow::saved_bitrates(const std::vector<LoadedSavedResult>& results) const {
+SavedBitrates MainWindow::saved_bitrates(std::vector<BundleVideo>& videos,
+                                         const std::vector<LoadedSavedResult>& results) const {
     // The file at a path is read by the Bitrate tab, which knows files by
     // their path, only where it is the one the scores were saved for. Issue
     // #134: a newer encode under the same name had its bitrate drawn beside
     // the older one's scores.
-    const std::filesystem::path base = cache_folder();
-    SavedBitrates saved;
-    const auto add = [&](const std::filesystem::path& file, const std::filesystem::path& folder, bool reference) {
-        if (!saved.contains(file) && !saved_file_at(folder, reference, file)) {
-            saved[file] = load_saved_bitrate(base, saved_content_hash(folder, reference), file);
-        }
-    };
-    add(results.front().result->source, results.front().folder, true);
+    std::vector<std::filesystem::path> folders;
     for (const LoadedSavedResult& result : results) {
-        if (!result.result->resample_target) {
-            add(result.result->distorted, result.folder, false);
-        }
+        folders.push_back(result.folder);
     }
-    return saved;
+    return vml::app::saved_bitrates(
+        videos, folders, results.front().result->source, saved_file_at,
+        [base = cache_folder()](const std::filesystem::path& folder, bool reference, const std::filesystem::path& file) {
+            return load_saved_bitrate(base, saved_content_hash(folder, reference), file);
+        });
 }
 
 void MainWindow::export_saved_contents(const std::vector<LoadedSavedResult>& results) {
@@ -523,7 +519,7 @@ void MainWindow::export_saved_contents(const std::vector<LoadedSavedResult>& res
                                   [this, &runs, &source] { return export_document(source, runs, current_machine()); },
                                   saved_results_panel_->segment_rules(), several, name);
     if (plan.graphs) {
-        plan.saved_bitrate = saved_bitrates(results);
+        plan.saved_bitrate = saved_bitrates(plan.videos, results);
     }
     save_export(std::move(plan), std::nullopt);
 }
@@ -740,7 +736,8 @@ void MainWindow::export_saved_results(SavedResultsPanel::Export kind, const std:
         if (path.isEmpty()) {
             return;
         }
-        queue_bundle({videos, first_reference, path_of(path), {}, true, false, false, false, saved_bitrates(results)});
+        SavedBitrates saved = saved_bitrates(videos, results);
+        queue_bundle({videos, first_reference, path_of(path), {}, true, false, false, false, std::move(saved)});
         return;
     }
     case SavedResultsPanel::Export::segments: {

@@ -48,6 +48,11 @@ namespace vml::app {
 
 namespace {
 
+// A file's name as the table, the graphs and their legends show it.
+QString entry_name(const BitrateEntry& entry) {
+    return entry.label.isEmpty() ? name_of(entry.path) : entry.label;
+}
+
 enum Column { col_use, col_file, col_media, col_duration, col_frames, col_average, col_minimum, col_maximum, col_status };
 
 const char* const hover_hint =
@@ -891,7 +896,7 @@ void BitratePanel::set_table_row(int row, const BitrateEntry& entry) {
     use->setCheckState(entry.enabled ? Qt::Checked : Qt::Unchecked);
     use->setData(Qt::DecorationRole, swatch_of(entry.color));
     use->setToolTip(app::tr("Click the color square to change this video's color in both graphs."));
-    QStringList values{name_of(entry.path),
+    QStringList values{entry_name(entry),
                        entry.info ? media_info_string(*entry.info) : QString(),
                        entry.data ? qt_text(format_hms(entry.data->duration(), 2)) : QString(),
                        entry.data ? python_format("{count:,}", {{"count", entry.data->frame_count()}}) : QString(),
@@ -1055,7 +1060,7 @@ void BitratePanel::refresh_plot() {
         }
         chart->set_series(entry->series, std::move(series));
         const double start = adjust_start_checkbox->isChecked() ? entry->data->start_time() : 0;
-        current_plots_.push_back({name_of(entry->path), plot, line->frame_types, entry->data, start});
+        current_plots_.push_back({entry_name(*entry), plot, line->frame_types, entry->data, start});
     }
     // Go to frame and the range boxes reach the longest video's last frame.
     long long frames = 0;
@@ -1341,7 +1346,7 @@ ExportTable BitratePanel::export_table() const {
             continue;
         }
         const std::optional<BitrateSummary> summary = shown_summary(entry);
-        const QString name = name_of(entry.path);
+        const QString name = entry_name(entry);
         exported.second.emplace_back(
             entry.reference ? app::tr("{name} (the reference)", {{"name", name}}) : name, entry.color,
             std::vector<QString>{qt_text(format_hms(entry.data->duration(), 2)),
@@ -1401,7 +1406,10 @@ void BitratePanel::adopt_read(const BitratePanel& from, const std::vector<std::f
                 continue;
             }
             const SavedBitrate& bitrate = *as_saved->second;
-            entry.path = path;
+            // Named by its file's path, not the export's key for it; but
+            // coloured by the key: an older comparison of the file now at
+            // that path, drawn beside it, is a line of its own.
+            entry.path = bitrate.info.path.empty() ? path : bitrate.info.path;
             entry.color = colors_->for_path(path);
             entry.info = bitrate.info;
             entry.data = std::make_shared<const BitrateData>(bitrate.data);
@@ -1424,6 +1432,15 @@ void BitratePanel::adopt_read(const BitratePanel& from, const std::vector<std::f
         entry.reference = reference;
         entry.state = BitrateState::complete;
         entries_.emplace_back(key, std::move(entry));
+    }
+    // Two of one file name (saved comparisons of an encode and of another
+    // over it): the second and on numbered, as the export's files are.
+    std::map<QString, int> uses;
+    for (auto& [key, entry] : entries_) {
+        const QString name = name_of(entry.path);
+        if (const int use = ++uses[name]; use > 1) {
+            entry.label = name + QStringLiteral(" (%1)").arg(use);
+        }
     }
     rebuild_table();
     refresh_plot();

@@ -457,6 +457,40 @@ TEST_F(BitratePanelTest, AnExportDrawsTheSavedBitrateOfAFileReplacedSince) {
     EXPECT_EQ(exported->table->rowCount(), 2);  // none for the one without saved bitrate
 }
 
+// Two comparisons of one file name exported together (an encode, and a new
+// encode over it): the older's saved bitrate, under the export's key for it
+// (graph_bundle.h's bitrate_key), is shown by its file's name, numbered as
+// the second of it, never by the key; in a colour of its own, the newer's
+// line beside it being another.
+TEST_F(BitratePanelTest, AnExportsSavedBitrateIsShownByItsFilesName) {
+    VideoColors colors;
+    const auto tab = make_panel(colors);
+    const std::filesystem::path reference("ref.mkv");
+    const std::filesystem::path encode("encode.mkv");
+    tab->add_files({reference, encode});
+    analyzed(*tab, reference, two_seconds(reference));
+    analyzed(*tab, encode, two_seconds(encode));  // the newer encode's
+    std::filesystem::path key = encode;
+    key += "|older";
+    SavedBitrate saved;
+    saved.info.path = encode;
+    saved.data = bitrate_data(encode, {0.0, 0.5}, {0.5, 0.5}, {7000, 3000}, {true, false});
+    const auto exported = make_panel(colors);
+    exported->adopt_read(*tab, {reference, encode, key}, {{key, saved}});
+    ASSERT_EQ(exported->table->rowCount(), 3);
+    EXPECT_EQ(cell(*exported, 1, col_file).toStdString(), "encode.mkv");
+    EXPECT_EQ(cell(*exported, 2, col_file).toStdString(), "encode.mkv (2)");
+    EXPECT_EQ(entry(*exported, 2).path, encode);
+    EXPECT_EQ(entry(*exported, 2).data->sizes, saved.data.sizes);
+    EXPECT_EQ(entry(*exported, 2).color, colors.for_path(key));
+    EXPECT_NE(entry(*exported, 2).color, entry(*exported, 1).color);
+    // Alone with the reference (its own graph): its file's name.
+    const auto alone = make_panel(colors);
+    alone->adopt_read(*tab, {reference, key}, {{key, saved}});
+    ASSERT_EQ(alone->table->rowCount(), 2);
+    EXPECT_EQ(cell(*alone, 1, col_file).toStdString(), "encode.mkv");
+}
+
 // A video has the session's colour, whatever order the tabs met it in; a
 // colour picked repaints its square and its line, the graph's zoom kept.
 TEST_F(BitratePanelTest, ALinesColourIsTheSessionsForItsVideo) {

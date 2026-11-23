@@ -59,5 +59,48 @@ TEST(GraphBundle, BitrateIsReadFromTheFilesWhereTheyAreNow) {
     EXPECT_TRUE(bitrate_files("new/ref.mkv", {}).empty());
 }
 
+// Issue #134: two saved comparisons of one file name, an older encode
+// replaced since by the newer, exported together: each draws its own
+// bitrate, whichever comes first. The newer's is read from the file; the
+// older's, as saved, under a key of its own, with which no file is read.
+// (Keyed by path, the older's saved bitrate was drawn for both.)
+TEST(GraphBundle, ComparisonsOfOneFileNameEachDrawTheirOwnBitrate) {
+    auto result = std::make_shared<ComparisonResult>();
+    result->source_info.path = "ref.mkv";
+    result->distorted_info.path = "enc.mkv";
+    const std::shared_ptr<const ComparisonResult> scored = result;
+    const auto own = [](const std::filesystem::path& folder, bool, const std::filesystem::path&) {
+        return folder == "cache/newer";
+    };
+    const auto load = [](const std::filesystem::path& folder, bool reference, const std::filesystem::path& file) {
+        SavedBitrate saved;
+        saved.info.path = file;
+        saved.info.codec_name = folder.filename().string() + (reference ? " reference" : "");
+        return std::optional(saved);
+    };
+    for (const bool newer_first : {true, false}) {
+        std::vector<BundleVideo> videos{{scored, "enc", "enc.mkv"}, {scored, "enc", "enc.mkv"}};
+        std::vector<std::filesystem::path> folders{"cache/newer", "cache/older"};
+        if (!newer_first) {
+            std::swap(folders[0], folders[1]);
+        }
+        const SavedBitrates saved = saved_bitrates(videos, folders, "ref.mkv", own, load);
+        const BundleVideo& newer = videos[newer_first ? 0 : 1];
+        const BundleVideo& older = videos[newer_first ? 1 : 0];
+        EXPECT_EQ(newer.bitrate_path(), std::filesystem::path("enc.mkv"));
+        EXPECT_NE(older.bitrate_path(), newer.bitrate_path());
+        EXPECT_EQ(older.path, std::filesystem::path("enc.mkv"));  // its name and folder in the export
+        ASSERT_TRUE(saved.contains(older.bitrate_path()));
+        EXPECT_EQ(saved.at(older.bitrate_path())->info.codec_name, "older");
+        EXPECT_FALSE(saved.contains(newer.bitrate_path()));
+        // The reference, the first's: read from the file where it is its own.
+        EXPECT_EQ(saved.contains("ref.mkv"), !newer_first);
+        const std::vector<VideoInfo> files = bitrate_files("ref.mkv", videos, saved);
+        ASSERT_EQ(files.size(), newer_first ? 2u : 1u);
+        EXPECT_EQ(files.front().path, std::filesystem::path(newer_first ? "ref.mkv" : "enc.mkv"));
+        EXPECT_EQ(files.back().path, std::filesystem::path("enc.mkv"));  // the newer's: read from the file
+    }
+}
+
 }  // namespace
 }  // namespace vml::app
