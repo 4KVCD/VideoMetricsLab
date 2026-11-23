@@ -392,6 +392,28 @@ TEST_F(FramePanelTest, LoopIsKeptAsItWasLeft) {
     EXPECT_FALSE(Settings{}.compare_loop);  // off until ticked
 }
 
+// Loop ticked at the video's last frame, shown: playback stopped there
+// plays the loop again (restart_loop_at_end), and its jump back, played with
+// FFmpeg as here, says at once that playback is stopped, which called it
+// again, and again, until the stack ran out (the window closed). Now the
+// loop starts again once.
+TEST_F(FramePanelTest, LoopingAtTheLastFrameStartsTheLoopOnce) {
+    // Played with FFmpeg (the unmanaged preview), its decoders stand-ins.
+    const auto panel = std::make_unique<FrameComparePanel>([] { return std::string("ffmpeg"); },
+                                                           PreviewColorMode::unmanaged, 3);
+    idle_view(*panel);
+    const test::Folder folder;
+    panel->set_runs({tagged(folder, "bt709", "bt709")});  // a pair that plays, frames 0 to 119
+    panel->set_loop_seconds(1.0, 1.0);
+    panel->set_loop_on(true);
+    panel->set_frame(119);
+    panel->resize(1400, 900);
+    panel->show();  // stopped at the last frame: the loop plays again, once
+    QCoreApplication::processEvents();
+    EXPECT_TRUE(panel->loop_checkbox->isChecked());
+    EXPECT_TRUE(panel->video_view->playback_requested());  // the loop playing
+}
+
 // The loop's seconds are to the millisecond, and beside each its frames at
 // the pair's frame rate: either sets the other, and the seconds are saved.
 TEST_F(FramePanelTest, TheLoopIsSetInSecondsOrFrames) {

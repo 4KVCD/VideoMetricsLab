@@ -513,6 +513,8 @@ private:
     // pause was the user's (not playback's own stop at the end).
     long long loop_centre_ = 0;
     bool loop_jump_pending_ = false;
+    // restart_loop_at_end is under way (it is not entered again).
+    bool restarting_loop_ = false;
     bool user_paused_ = false;
     StillSaveWorker* still_worker_ = nullptr;
 };

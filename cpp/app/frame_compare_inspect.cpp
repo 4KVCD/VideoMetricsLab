@@ -424,12 +424,17 @@ void FrameComparePanel::follow_loop(long long frame) {
 // Playback stopped at the last frame while looping, on its own: plays the
 // loop again.
 void FrameComparePanel::restart_loop_at_end() {
-    if (!loop_checkbox->isChecked() || user_paused_ || !on_screen_ || video_view == nullptr ||
+    // Not again from inside: the jump back, played with FFmpeg, says at once
+    // that playback is stopped, which called this again, and again, until the
+    // stack ran out (the frame shown is still the last until the jump lands).
+    if (restarting_loop_ || !loop_checkbox->isChecked() || user_paused_ || !on_screen_ || video_view == nullptr ||
         current_entry() == nullptr || frame_ < last_frame()) {
         return;
     }
+    restarting_loop_ = true;
     loop_jump_to(loop_start(loop_centre_, loop_before_spin->value(), current_entry()->comparison.fps));
     video_view->set_playing(true);
+    restarting_loop_ = false;
 }
 
 // ------------------------------------------------------------ the stills
