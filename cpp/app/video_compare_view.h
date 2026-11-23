@@ -249,7 +249,14 @@ private:
     bool at_end() const;
     void start_audio(long long frame);
     void fell_behind();
-    void stop_audio();
+    void stop_audio(const char* why = "stopped");
+    // Each change of playback's state, and of the soundtrack's, said once in
+    // the log, as it happens (issues #204, #220): a silent or stuck play then
+    // shows where it stopped.
+    void log_playback(const std::string& state);
+    void log_sound(const std::string& state);
+    // The soundtrack's ffplay, ended by itself: said, with why.
+    void check_audio_ended();
     void stop_decoder(bool keep_frame = false);
     std::string source_key() const;
 
@@ -268,6 +275,8 @@ private:
     std::optional<platform::ChildProcess> audio_;
     // Why ffplay can't play the soundtrack was logged (start_audio): once.
     bool no_sound_logged_ = false;
+    std::string logged_playback_;
+    std::string logged_sound_;
     // The soundtrack is to start (again) with the frames, not before
     // audio_resume_at_ (playback fell behind until then).
     bool audio_due_ = false;

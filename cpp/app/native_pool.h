@@ -180,6 +180,9 @@ private:
     double anchor_ = 0;
     long long anchor_frame_ = 0;
     bool audio_running_ = false;
+    // The soundtrack's state, logged once per change (issue #204).
+    std::string logged_sound_;
+    void log_sound(const std::string& state);
     double audio_deadline_ = 0;
     std::map<std::string, QString> status_details_;
     PairedFrameWidget* surface_ = nullptr;

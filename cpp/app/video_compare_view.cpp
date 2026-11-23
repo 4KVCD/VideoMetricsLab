@@ -15,6 +15,7 @@
 #include "vml/app_log.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
+#include "vml/number_format.h"
 #include "vml/platform/system.h"
 #include "vml/video_playback.h"
 #include "window_helpers.h"
@@ -632,6 +633,7 @@ bool VideoCompareView::load(const FrameComparison& comparison, int position_ms, 
 }
 
 void VideoCompareView::clear() {
+    log_playback("stopped (nothing to play)");
     wanted_playing_ = false;
     is_playing_ = false;
     comparison_.reset();
@@ -665,6 +667,7 @@ void VideoCompareView::set_playing(bool playing) {
     if (native_pool_) {
         native_pool_->set_playing(playing);
         wanted_playing_ = is_playing_ = playing;
+        log_playback(playing ? "playing" : "paused");
         wake();
         emit playing_changed(playing);
         return;
@@ -673,6 +676,7 @@ void VideoCompareView::set_playing(bool playing) {
     if (!pool_active_) {
         // Nothing decoding: playing starts the decoders.
         wanted_playing_ = playing;
+        log_playback(playing ? "playing (starting the decoders)" : "paused");
         if (playing) {
             if (!is_playing_ && comparison_) {
                 restart_decoder(true);
@@ -685,6 +689,7 @@ void VideoCompareView::set_playing(bool playing) {
     }
     clock_frame_ = !playing && presented_ >= 0 ? presented_ : target_frame();
     wanted_playing_ = is_playing_ = playing;
+    log_playback(playing ? (buffering_ ? "playing, waiting for the first pair" : "playing") : "paused");
     // Said at once: said only as a frame is shown, it would go on saying
     // "Playing" when paused (by minimizing the window, say).
     pool_status();
@@ -1005,6 +1010,7 @@ void VideoCompareView::tick() {
         return;
     }
     launch_missing();
+    check_audio_ended();
     const long long target = target_frame();
     const std::string source = source_key();
     const std::string distorted = "d:" + std::to_string(selected_);
@@ -1089,6 +1095,9 @@ std::optional<long long> VideoCompareView::newest_common_frame(const std::string
 // behind, and the status says why.
 void VideoCompareView::wait_for_pair(long long target, const std::string& source, const std::string& distorted) {
     buffering_ = true;
+    if (wanted_playing_) {
+        log_playback("buffering: no pair of frames to show");
+    }
     if (wanted_playing_ && target - std::max(0LL, presented_) > 2) {
         // Starting (a seek, another test video) is not falling behind:
         // the soundtrack starts with the first frame.
@@ -1135,6 +1144,9 @@ void VideoCompareView::show_pair(long long frame, long long target, const std::s
         audio_due_ = true;
     }
     buffering_ = false;
+    if (wanted_playing_) {
+        log_playback("playing");
+    }
     if (audio_due_ && wanted_playing_ && clock() >= audio_resume_at_) {
         audio_due_ = false;
         start_audio(frame_);
@@ -1298,6 +1310,7 @@ void VideoCompareView::check_end() {
     // frame is shown).
     if (wanted_playing_ && at_end()) {
         set_playing(false);
+        log_playback("ended");
         status(QStringLiteral("Playback ended"));
     }
 }
@@ -1331,7 +1344,9 @@ void VideoCompareView::start_audio(long long frame) {
     }
     try {
         audio_.emplace(platform::ChildProcess::start(*command));
+        log_sound("started, with ffplay, at " + format_fixed(static_cast<double>(frame) / source.fps, 3) + " s");
     } catch (const platform::ProcessError&) {
+        log_sound("could not start ffplay");
         // No soundtrack: the pictures play on. (Its message, which may name
         // the program's path, is left out.)
         if (!no_sound_logged_) {
@@ -1346,12 +1361,46 @@ void VideoCompareView::start_audio(long long frame) {
 void VideoCompareView::fell_behind() {
     // The soundtrack stops while the frames are behind the clock, and starts
     // again only once they have kept up for a while.
-    stop_audio();
+    stop_audio("stopped: the frames fell behind the clock");
     audio_resume_at_ = clock() + audio_resume_seconds;
 }
 
-void VideoCompareView::stop_audio() {
+void VideoCompareView::stop_audio(const char* why) {
+    if (audio_) {
+        log_sound(why);
+    }
     audio_.reset();  // ends ffplay
+}
+
+void VideoCompareView::check_audio_ended() {
+    if (!audio_ || !audio_->wait_for(std::chrono::milliseconds(0))) {
+        return;
+    }
+    // Its last line of errors (loglevel error: why it stopped, if it says).
+    std::string error = audio_->standard_error();
+    while (!error.empty() && (error.back() == '\n' || error.back() == '\r')) {
+        error.pop_back();
+    }
+    if (const std::size_t line = error.rfind('\n'); line != std::string::npos) {
+        error.erase(0, line + 1);
+    }
+    log_sound("ended by itself (ffplay's exit code " + std::to_string(audio_->wait()) + ")" +
+              (error.empty() ? std::string() : ": " + error));
+    audio_.reset();
+}
+
+void VideoCompareView::log_playback(const std::string& state) {
+    if (state != logged_playback_) {
+        logged_playback_ = state;
+        app_log::write(app_log::Level::info, "vml.playback", "Video Compare: " + state);
+    }
+}
+
+void VideoCompareView::log_sound(const std::string& state) {
+    if (state != logged_sound_) {
+        logged_sound_ = state;
+        app_log::write(app_log::Level::info, "vml.playback", "Video Compare's sound: " + state);
+    }
 }
 
 void VideoCompareView::stop_decoder(bool keep_frame) {

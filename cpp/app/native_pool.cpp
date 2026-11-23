@@ -19,6 +19,7 @@
 
 #include "native_device.h"
 #include "video_compare_view.h"
+#include "vml/app_log.h"
 #include "vml/native_playback.h"
 #include "vml/platform/system.h"
 #include "vml/video_playback.h"
@@ -395,6 +396,7 @@ void NativePool::seek(int position_ms) {
     audio_->set_playing(false);
     audio_running_ = false;
     audio_->seek(static_cast<int>(round_even(static_cast<double>(target) * 1000 / fps_)));
+    log_sound("sought: prerolling");
     const double now = view_.clock();
     audio_deadline_ = now + audio_preroll_seconds;
     ended_ = false;
@@ -427,6 +429,7 @@ void NativePool::set_playing(bool playing) {
     if (!playing) {
         audio_->set_playing(false);
         audio_running_ = false;
+        log_sound("paused");
     }
 }
 
@@ -439,6 +442,9 @@ int NativePool::poll() {
     double polled_at = view_.clock();
     if (!audio_->ready() && !audio_->failed() && view_.clock() > audio_deadline_) {
         audio_->set_failed(QStringLiteral("Audio preroll timed out"));
+        log_sound("preroll timed out: no sound until the video is opened again");
+    } else if (audio_->ready() && !audio_running_ && logged_sound_.starts_with("sought")) {
+        log_sound("prerolled, ready");
     }
     long long target = frame_;
     std::optional<double> clock_ms;
@@ -562,6 +568,8 @@ void NativePool::keep_up(bool matched, long long target) {
                 audio_->seek(position_);
                 audio_deadline_ = view_.clock() + audio_preroll_seconds;
             }
+            log_sound(matched ? "sought again for buffering: the frames fell behind the sound"
+                              : "sought again for buffering: the pair due is not there");
         }
         buffering_ = true;
     } else if (playing_ && (audio_->ready() || audio_->failed())) {
@@ -573,7 +581,15 @@ void NativePool::keep_up(bool matched, long long target) {
         if (!audio_running_ && !audio_->failed()) {
             audio_->set_playing(true);
             audio_running_ = true;
+            log_sound("playing");
         }
+    }
+}
+
+void NativePool::log_sound(const std::string& state) {
+    if (state != logged_sound_) {
+        logged_sound_ = state;
+        app_log::write(app_log::Level::info, "vml.playback", "Video Compare's sound (native): " + state);
     }
 }
 
@@ -584,6 +600,7 @@ void NativePool::check_ended() {
         if (eos_.contains(key) && (queue.empty() || queue.rbegin()->first <= frame_)) {
             ended_ = true;
             audio_->set_playing(false);
+            log_sound("stopped: the video ended");
         }
     }
 }

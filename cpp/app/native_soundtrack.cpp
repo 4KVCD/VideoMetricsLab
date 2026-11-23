@@ -561,6 +561,12 @@ bool FfmpegSoundtrack::Player::open_file() {
         fail(QStringLiteral("the reference's audio could not be read: %1").arg(error_text(result)));
         return false;
     }
+    // Which of the reference's tracks plays, and what it is (issue #204: a
+    // 7.1 TrueHD default track among eleven was suspected).
+    app_log::write(app_log::Level::info, "vml.playback",
+                   "Video Compare's sound (native): the reference's track " + std::to_string(reader_.stream) + ", " +
+                       decoder->name + ", " + std::to_string(reader_.codec->ch_layout.nb_channels) + " channels, " +
+                       std::to_string(reader_.codec->sample_rate) + " Hz");
     return true;
 }
 
@@ -684,6 +690,9 @@ bool FfmpegSoundtrack::Player::open_device() {
         fail(QStringLiteral("the sound device can't play"));
         return false;
     }
+    app_log::write(app_log::Level::info, "vml.playback",
+                   "Video Compare's sound (native): the sound device opened, " + std::to_string(channels_) +
+                       " channels, " + std::to_string(rate_) + " Hz");
     return true;
 }
 
