@@ -597,13 +597,14 @@ void MainWindow::export_automatically(const RowData& row_data) {
 
 void MainWindow::queue_bundle(PendingBundle bundle) {
     // What the Bitrate tab has not read, nor is reading, is read now: a
-    // video loaded with saved scores, say. A file it could not read is not
-    // tried again. They are read where they are now, the paths the export
-    // looks their bitrate up by, not where saved scores say they were.
+    // video loaded with saved scores, say, or one encoded again under its
+    // name since the tab read it (add_files reads that again). A file it
+    // could not read is not tried again. They are read where they are now,
+    // the paths the export looks their bitrate up by, not where saved scores
+    // say they were.
     const std::vector<VideoInfo> files = bitrate_files(bundle.reference, bundle.videos, bundle.saved_bitrate);
     const bool unread = std::any_of(files.begin(), files.end(), [this](const VideoInfo& file) {
-        const std::optional<BitrateState> state = bitrate_panel_->state_of(file.path);
-        return !state || state == BitrateState::ready || state == BitrateState::stopped;
+        return bitrate_panel_->wants_reading(file.path);
     });
     if (unread) {
         bitrate_panel_->add_and_analyze(files);

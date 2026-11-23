@@ -430,6 +430,35 @@ TEST_F(BitratePanelTest, AFileChangedSinceItWasReadIsNotShownAsItWas) {
     EXPECT_EQ(cell(*panel, 0, col_average).toStdString(), "");
 }
 
+// #205: a graph export asks the tab to read only the files it wants read. A
+// file read before and encoded again under its name since counted as read
+// (state_of: complete), so the export drew the old encode's bitrate beside
+// the new one's scores. It is wanted again; one that failed is not.
+TEST_F(BitratePanelTest, AnExportWantsAFileReplacedSinceItWasReadReadAgain) {
+    VideoColors colors;
+    const auto panel = make_panel(colors, "no-such-ffprobe");
+    const test::Folder folder;
+    const std::filesystem::path path = folder / "encode.mkv";
+    const std::filesystem::path broken = folder / "broken.mkv";
+    EXPECT_TRUE(panel->wants_reading(path));  // not listed
+    std::ofstream(path) << "first encode";
+    std::ofstream(broken) << "not a video";
+    panel->add_files({path, broken});
+    EXPECT_TRUE(panel->wants_reading(path));  // listed, not read
+    analyzed(*panel, path, two_seconds(path));
+    failed(*panel, broken, "unreadable");
+    EXPECT_FALSE(panel->wants_reading(path));
+    EXPECT_FALSE(panel->wants_reading(broken));
+
+    std::ofstream(path) << "the second encode, of another size";
+    EXPECT_EQ(panel->state_of(path), BitrateState::complete);  // what the export went by
+    EXPECT_TRUE(panel->wants_reading(path));
+    VideoInfo info;
+    info.path = path;
+    panel->add_and_analyze({info});
+    EXPECT_FALSE(entry(*panel, 0).data);  // the old encode's reading gone
+}
+
 // Issue #134: a saved comparison's graph export drew whatever the tab had
 // read at its file's path, a newer encode under the same name say. The
 // export's panel takes the comparison's saved bitrate for such a file, and

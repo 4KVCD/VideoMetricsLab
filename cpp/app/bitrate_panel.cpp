@@ -1391,6 +1391,19 @@ std::optional<BitrateState> BitratePanel::state_of(const std::filesystem::path& 
     return std::nullopt;
 }
 
+bool BitratePanel::wants_reading(const std::filesystem::path& path) const {
+    const QString key = path_key(path);
+    for (const auto& [listed, entry] : entries_) {
+        if (listed == key) {
+            if (entry.data) {
+                return file_identity(path) != entry.read_as;
+            }
+            return entry.state == BitrateState::ready || entry.state == BitrateState::stopped;
+        }
+    }
+    return true;
+}
+
 void BitratePanel::adopt_read(const BitratePanel& from, const std::vector<std::filesystem::path>& paths,
                               const std::map<std::filesystem::path, std::optional<SavedBitrate>>& saved) {
     bool first = true;
