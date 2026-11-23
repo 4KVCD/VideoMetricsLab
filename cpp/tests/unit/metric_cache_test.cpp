@@ -744,7 +744,14 @@ TEST(MetricCache, ClearingKeepsTheComparisonsWhoseReferenceIsGone) {
     save_bitrate(cache, saved_content_hash(saved["gone"], true), bitrate);
     save_bitrate(cache, saved_content_hash(saved["gone"], false), bitrate);  // t.mp4, of all four
     save_bitrate(cache, "of no comparison", bitrate);
+    // A folder that is no comparison (half-written, or left by a delete cut
+    // short): no scores anyone can list or delete, so cleared with the rest,
+    // as everything was when nothing was kept.
+    const std::filesystem::path stray = cache / "v2" / "no comparison";
+    std::filesystem::create_directories(stray);
+    touch(stray / "psnr_1.npz", "scores of no comparison");
     const ClearedResults cleared = clear_saved_results(cache, true);
+    EXPECT_FALSE(std::filesystem::exists(stray));
     EXPECT_FALSE(load_saved_bitrate(cache, saved_content_hash(saved["here"], true), folder / "here.mp4"));
     EXPECT_TRUE(load_saved_bitrate(cache, saved_content_hash(saved["gone"], true), folder / "gone.mp4"));
     EXPECT_TRUE(load_saved_bitrate(cache, saved_content_hash(saved["gone"], false), folder / "t.mp4"));

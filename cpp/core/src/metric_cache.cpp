@@ -2219,11 +2219,16 @@ ClearedResults clear_saved_results(const std::filesystem::path& base, bool keep_
     }
     std::vector<std::filesystem::path> kept;
     std::vector<std::filesystem::path> deleted;
+    // What is no comparison (a folder half-written, or left by a delete cut
+    // short) is deleted too, as it was with everything when nothing is kept:
+    // no list shows it, nothing else deletes it.
+    std::vector<std::filesystem::path> strays;
     // increment(error), not a range-for: its ++ throws if reading fails.
     for (std::filesystem::directory_iterator entry(root, error);
          !error && entry != std::filesystem::directory_iterator(); entry.increment(error)) {
         std::error_code ignored;
         if (!std::filesystem::is_regular_file(entry->path() / "context.json", ignored)) {
+            strays.push_back(entry->path());
             continue;
         }
         if (keep_without_reference && !reference_where_saved(entry->path())) {
@@ -2245,6 +2250,10 @@ ClearedResults clear_saved_results(const std::filesystem::path& base, bool keep_
         std::error_code not_removed;
         std::filesystem::remove_all(folder, not_removed);
         all = all && !not_removed;
+    }
+    for (const std::filesystem::path& stray : strays) {
+        std::error_code not_removed;
+        std::filesystem::remove_all(stray, not_removed);  // counted as no comparison either way
     }
     recorded_forgotten(base);
     cleared.removed = all ? static_cast<int>(deleted.size()) : 0;
