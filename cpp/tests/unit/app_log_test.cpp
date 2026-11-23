@@ -131,5 +131,21 @@ TEST(AppLog, ThreadsNamedForTheLogEndCleanly) {
     }
 }
 
+// The lines for standard error go where console_lines_to says instead
+// (--progress jsonl's events), at the level log_to_console says, and to
+// standard error again once that is undone.
+TEST(AppLog, ConsoleLinesGoWhereTheyAreSent) {
+    std::vector<std::string> said;
+    app_log::log_to_console(app_log::Level::error);
+    app_log::console_lines_to([&said](std::string_view level, std::string_view name, std::string_view text) {
+        said.push_back(std::string(level) + " " + std::string(name) + ": " + std::string(text));
+    });
+    app_log::write(app_log::Level::info, "vml.test", "not an error");
+    app_log::write(app_log::Level::error, "vml.test", "it failed");
+    app_log::console_lines_to({});
+    app_log::log_to_console(app_log::Level::critical);  // as near to none as it goes, for the tests after
+    EXPECT_EQ(said, std::vector<std::string>{"ERROR vml.test: it failed"});
+}
+
 }  // namespace
 }  // namespace vml

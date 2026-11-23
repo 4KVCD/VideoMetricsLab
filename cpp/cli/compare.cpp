@@ -932,7 +932,9 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
                 who["cvvdp_display"] = video(index).display;
             }
             progress.name_job(index, who);
-            progress.event({{"event", "video_started"}, {"job", index}, {"path", who["path"]}});
+            nlohmann::ordered_json started{{"event", "video_started"}, {"job", index}};
+            started.update(who);  // its path, and its display (a further one)
+            progress.event(std::move(started));
             return;
         }
         progress.message(video(index).label() + ": started");
@@ -2504,6 +2506,25 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
     const Clock::time_point began = Clock::now();
     CancelToken cancel;
     const auto progress = std::make_shared<Progress>(given.quiet, given.progress == "jsonl");
+    // --progress jsonl: every line on standard error an event, the app's log
+    // (its failures, everything with -v) and the errors said as well, until
+    // the command returns.
+    const struct LinesAsEvents {
+        bool on;
+        ~LinesAsEvents() {
+            if (on) {
+                app_log::console_lines_to({});
+                print_errors_to({});
+            }
+        }
+    } lines_as_events{progress->jsonl()};
+    if (progress->jsonl()) {
+        app_log::console_lines_to([progress](std::string_view level, std::string_view name, std::string_view text) {
+            progress->event(
+                {{"event", "log"}, {"level", std::string(level)}, {"logger", std::string(name)}, {"text", std::string(text)}});
+        });
+        print_errors_to([progress](const std::string& text) { progress->problem(text); });
+    }
     const auto stage = std::make_shared<std::atomic<RunStage>>(RunStage::outside);
     const std::function<void(const std::string&)> interrupt = cancel_on_interrupt(cancel, progress, stage);
     if (given.cancel_on_stdin_eof) {

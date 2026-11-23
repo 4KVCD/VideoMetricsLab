@@ -4,6 +4,7 @@
 #include <cerrno>
 #include <fstream>
 #include <iterator>
+#include <mutex>
 #include <stdexcept>
 #include <system_error>
 
@@ -78,7 +79,30 @@ std::string right_justified(const std::string& text, std::size_t width) {
 
 std::string name_of(const std::filesystem::path& path) { return platform::path_text(path.filename()); }
 
-void print_error(const std::string& text) { platform::write_text(platform::Stream::error, text + "\n"); }
+namespace {
+
+std::mutex errors_mutex;
+std::function<void(const std::string&)> errors_to;  // print_errors_to's
+
+}  // namespace
+
+void print_errors_to(std::function<void(const std::string&)> problem) {
+    const std::lock_guard lock(errors_mutex);
+    errors_to = std::move(problem);
+}
+
+void print_error(const std::string& text) {
+    std::function<void(const std::string&)> problem;
+    {
+        const std::lock_guard lock(errors_mutex);
+        problem = errors_to;
+    }
+    if (problem) {
+        problem(text);
+        return;
+    }
+    platform::write_text(platform::Stream::error, text + "\n");
+}
 
 bool print_results(const std::string& text) {
     if (platform::write_text(platform::Stream::output, text)) {

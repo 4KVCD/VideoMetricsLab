@@ -70,7 +70,11 @@ int main(int argc, char** argv) {
             try {
                 chosen = cli::choose_settings(*profile);
             } catch (const cli::SettingsUnreadable& error) {
-                platform::write_text(platform::Stream::error, std::string(error.what()) + "\n");
+                if (arguments.command == cli::Command::compare && arguments.compare.progress == "jsonl") {
+                    cli::Progress(false, true).problem(error.what());  // every line an event
+                } else {
+                    platform::write_text(platform::Stream::error, std::string(error.what()) + "\n");
+                }
                 if (arguments.command == cli::Command::compare) {
                     cli::write_error_json(arguments.compare, error.what(), cli::codes::settings_unreadable);
                 }

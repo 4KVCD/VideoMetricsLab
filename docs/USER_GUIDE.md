@@ -744,7 +744,8 @@ started, then what the event says:
 | `video_started` | A job starts: its `job` (from 0) and its video's `path` (and `cvvdp_display` for a further display). |
 | `progress` | A job's figures, at most once a second: `job`, `path` and its `tasks`, each with its `metrics`, `state` (`starting`, `waiting`, `running`, `done`, `failed`), the frames `done` of `total` and `fps`. |
 | `video_done` | A job ended: `job`, `path`, `status` (`done`, `partial`, `failed`, `cancelled` or `timed_out`) and its line as `text`. |
-| `message`, `problem` | Any other progress line, as `text`; a `problem` is one `-q` would still show. |
+| `message`, `problem` | Any other progress line, as `text`; a `problem` is one `-q` would still show, and every error the command says is one. |
+| `log` | A line of the app's log (its failures, and everything with `-v`): its `level` (`ERROR`, `WARNING`, `INFO`), the `logger` it is from, and its `text`. |
 | `run_done` | Last, once the command got as far as reading its videos: its `exit_code`, and whether it was `cancelled` and `timed_out`. |
 
 A reader should skip events and keys it does not know: later versions may
