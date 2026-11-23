@@ -375,6 +375,11 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         }
         frame_compare_panel_->cancel();
         bitrate_panel_->cancel();
+        // An export waiting for the bitrate the Bitrate tab was reading is
+        // written now, without the bitrate not read, rather than lost: the
+        // user was told it would be written (queue_bundle), and the writes
+        // are waited for below.
+        write_ready_bundles(true);
         stream_records_->set_reporting({}, {});  // nothing more for the window
         stream_records_->stop();                 // a test stream being read is recorded at its next save
         cancel_stream_check();

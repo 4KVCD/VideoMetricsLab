@@ -668,7 +668,9 @@ private:
     std::optional<nlohmann::ordered_json> row_document(const RowData& row_data) const;
     // Saves `bundle` when its bitrate is read, starting to read what is not.
     void queue_bundle(PendingBundle bundle);
-    void write_ready_bundles();
+    // Writes the exports whose bitrate is read; with `now`, every one,
+    // without the bitrate of a file not read (the window closing).
+    void write_ready_bundles(bool now = false);
 
     // ------------------------------------------------------------ the scores
     std::vector<std::string> reusable_metric_keys(const RowData& row_data) const;

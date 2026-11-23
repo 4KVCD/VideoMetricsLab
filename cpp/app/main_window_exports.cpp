@@ -626,7 +626,7 @@ void MainWindow::queue_bundle(PendingBundle bundle) {
     }
 }
 
-void MainWindow::write_ready_bundles() {
+void MainWindow::write_ready_bundles(bool now) {
     const BundleStyle style{video_colors_,
                             theme::export_chart_colours(settings_.export_graph_theme,
                                                         settings_.export_graph_background,
@@ -634,7 +634,7 @@ void MainWindow::write_ready_bundles() {
     for (auto bundle = pending_bundles_.begin(); bundle != pending_bundles_.end();) {
         const std::vector<std::filesystem::path> paths =
             bitrate_paths(bundle->reference, bundle->videos, bundle->saved_bitrate);
-        if (std::any_of(paths.begin(), paths.end(), [this](const auto& path) {
+        if (!now && std::any_of(paths.begin(), paths.end(), [this](const auto& path) {
                 return still_reading(*bitrate_panel_, path);
             })) {
             ++bundle;
