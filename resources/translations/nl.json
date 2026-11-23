@@ -40,6 +40,7 @@
   "Whole names": "Volledige namen",
   "Characters from the start:": "Tekens vanaf het begin:",
   "from the end:": "vanaf het einde:",
+  "PQ (HDR10) videos only: another video fails HDR VMAF alone, with the reason, and its other metrics are calculated as usual.": "Alleen PQ-video's (HDR10): bij een andere video mislukt alleen HDR VMAF, met de reden, en worden de andere metrieken gewoon berekend.",
   "Progress of the metrics being calculated": "Voortgang van de metrieken die worden berekend",
   "Click to open the Videos tab.": "Klik om het tabblad Video's te openen.",
   "Update to {version}": "Bijwerken naar {version}",

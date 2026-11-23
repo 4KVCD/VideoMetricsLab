@@ -40,6 +40,7 @@
   "Whole names": "الأسماء كاملة",
   "Characters from the start:": "أحرف من البداية:",
   "from the end:": "من النهاية:",
+  "PQ (HDR10) videos only: another video fails HDR VMAF alone, with the reason, and its other metrics are calculated as usual.": "فيديوهات PQ (HDR10) فقط: يفشل HDR VMAF وحده لأي فيديو آخر، مع ذكر السبب، وتُحسب مقاييسه الأخرى كالمعتاد.",
   "Progress of the metrics being calculated": "تقدّم المقاييس قيد الحساب",
   "Click to open the Videos tab.": "انقر لفتح علامة التبويب الفيديو.",
   "Update to {version}": "التحديث إلى {version}",

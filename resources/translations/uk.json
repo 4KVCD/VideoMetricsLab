@@ -40,6 +40,7 @@
   "Whole names": "Повні назви",
   "Characters from the start:": "Символів з початку:",
   "from the end:": "з кінця:",
+  "PQ (HDR10) videos only: another video fails HDR VMAF alone, with the reason, and its other metrics are calculated as usual.": "Лише відео PQ (HDR10): для іншого відео не вдається лише HDR VMAF, із зазначенням причини, а решта метрик обчислюється як звичайно.",
   "Progress of the metrics being calculated": "Перебіг обчислення метрик",
   "Click to open the Videos tab.": "Натисніть, щоб відкрити вкладку «Відео».",
   "Update to {version}": "Оновити до {version}",

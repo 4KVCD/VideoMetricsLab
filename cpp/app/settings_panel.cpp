@@ -640,6 +640,13 @@ QGroupBox* SettingsPanel::build_defaults_box() {
         connect(box, &QCheckBox::toggled, this, [this] { on_edited(); });
         default_metrics[key] = box;
         metrics_row->addWidget(box);
+        if (key == "vmaf_hdr") {
+            box->setToolTip(app::tr("PQ (HDR10) videos only: another video fails HDR VMAF alone, with the reason, "
+                                    "and its other metrics are calculated as usual."));
+            // VML Modern: the four VMAFs, then a line, then the other
+            // metrics (theme::separator; nothing in Classic).
+            metrics_row->addWidget(theme::separator(0));
+        }
     }
     metrics_row->addStretch(1);
     defaults_layout->addLayout(metrics_row);

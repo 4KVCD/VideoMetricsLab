@@ -40,6 +40,7 @@
   "Whole names": "完整名稱",
   "Characters from the start:": "開頭字元數：",
   "from the end:": "結尾：",
+  "PQ (HDR10) videos only: another video fails HDR VMAF alone, with the reason, and its other metrics are calculated as usual.": "僅限 PQ（HDR10）影片：其他影片只有 HDR VMAF 會失敗並說明原因，其他指標照常計算。",
   "Progress of the metrics being calculated": "正在計算的指標進度",
   "Click to open the Videos tab.": "按一下以開啟「影片」索引標籤。",
   "Update to {version}": "更新至 {version}",

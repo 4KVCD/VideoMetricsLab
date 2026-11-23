@@ -40,6 +40,7 @@
   "Whole names": "Teljes nevek",
   "Characters from the start:": "Karakter az elejéről:",
   "from the end:": "a végéről:",
+  "PQ (HDR10) videos only: another video fails HDR VMAF alone, with the reason, and its other metrics are calculated as usual.": "Csak PQ (HDR10) videók: más videónál csak a HDR VMAF hiúsul meg, az okkal együtt, a többi metrikája a szokásos módon számolódik.",
   "Progress of the metrics being calculated": "A számított metrikák állapota",
   "Click to open the Videos tab.": "Kattintson a(z) Videók lap megnyitásához.",
   "Update to {version}": "Frissítés erre: {version}",

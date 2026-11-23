@@ -23,6 +23,7 @@
 #include <QImage>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMargins>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QSet>
@@ -163,6 +164,15 @@ protected:
         EXPECT_TRUE(modern_label_->isVisibleTo(layouts_)) << name;
         EXPECT_FALSE(classic_label_->isVisibleTo(layouts_)) << name;
         EXPECT_TRUE(box_->title().isEmpty()) << name;
+        // The Options' middle column, built in Classic: Modern's margins,
+        // none, after the switch, so that its cards line up (#182).
+        const auto* metric_box = window_->findChild<QGroupBox*>("metricSettings");
+        ASSERT_NE(metric_box, nullptr);
+        EXPECT_EQ(metric_box->layout()->contentsMargins(), QMargins()) << name;
+        // And no padding of the sheet's either, whether the box was untitled
+        // when the sheet came (built in Modern) or not (built in Classic):
+        // the cards' tops level with the side boxes'.
+        EXPECT_EQ(metric_box->contentsRect().top(), 0) << name;
 
         QWidget probes;
         auto* primary = new QPushButton("Run", &probes);

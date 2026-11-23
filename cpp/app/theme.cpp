@@ -614,8 +614,15 @@ std::vector<std::pair<QPointer<QGroupBox>, QString>>& classic_boxes() {
     static std::vector<std::pair<QPointer<QGroupBox>, QString>> boxes;
     return boxes;
 }
-std::vector<std::pair<QPointer<QWidget>, QMargins>>& containers() {
-    static std::vector<std::pair<QPointer<QWidget>, QMargins>> widgets;
+// A widget whose layout's margins are its interface's: containers' (with
+// Classic's none) and modern_margins'.
+struct Margins {
+    QPointer<QWidget> widget;
+    QMargins modern;
+    QMargins classic;
+};
+std::vector<Margins>& containers() {
+    static std::vector<Margins> widgets;
     return widgets;
 }
 
@@ -634,9 +641,9 @@ void show_for_interface() {
         box->setTitle(modern ? QString() : title);
     }
     auto& padded = containers();
-    std::erase_if(padded, [](const auto& item) { return item.first.isNull(); });
-    for (const auto& [widget, margins] : padded) {
-        widget->layout()->setContentsMargins(modern ? margins : QMargins());
+    std::erase_if(padded, [](const Margins& item) { return item.widget.isNull(); });
+    for (const Margins& item : padded) {
+        item.widget->layout()->setContentsMargins(modern ? item.modern : item.classic);
     }
 }
 
@@ -663,6 +670,12 @@ void classic_box(QGroupBox* box, const QString& title) {
     box->setTitle(appearance().ui == Interface::modern ? QString() : title);
 }
 
+void modern_margins(QWidget* widget, const QMargins& modern) {
+    const QMargins classic = widget->layout()->contentsMargins();
+    containers().push_back({widget, modern, classic});
+    widget->layout()->setContentsMargins(appearance().ui == Interface::modern ? modern : classic);
+}
+
 QWidget* container(const char* role, bool horizontal, QBoxLayout** layout) {
     auto* widget = new QWidget;
     set_role(widget, role);
@@ -674,7 +687,7 @@ QWidget* container(const char* role, bool horizontal, QBoxLayout** layout) {
                              : name == "footer"                  ? QMargins(14, 8, 14, 8)
                              : name == "toolbar"                 ? QMargins(10, 6, 10, 6)
                                                                  : QMargins();
-    containers().emplace_back(widget, margins);
+    containers().push_back({widget, margins, QMargins()});
     box->setContentsMargins(appearance().ui == Interface::modern ? margins : QMargins());
     if (layout != nullptr) {
         *layout = box;
@@ -738,6 +751,7 @@ QTabWidget[vmlRole="segmented"]::tab-bar { left: 0; }
 QFrame[vmlRole="separator"] { background: {border_strong}; border: 0; min-width: 1px; max-width: 1px; margin: 4px 6px; }
 QWidget[vmlRole="padding"] { background: transparent; }
 QGroupBox[vmlRole="unboxed"] { background: transparent; border: 0; border-radius: 0; margin: 0; padding: 0; }
+QGroupBox QGroupBox[vmlRole="unboxed"] { padding: 0; }
 QWidget[vmlRole="footer"] { background: {card_alt}; border: 0; border-top: 1px solid {border}; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; }
 QLabel[vmlRole="title"] { font-weight: 600; color: {text}; }
 QLabel[vmlRole="hint"] { color: {text_muted}; }

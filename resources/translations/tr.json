@@ -40,6 +40,7 @@
   "Whole names": "Tam adlar",
   "Characters from the start:": "Baştan karakter:",
   "from the end:": "sondan:",
+  "PQ (HDR10) videos only: another video fails HDR VMAF alone, with the reason, and its other metrics are calculated as usual.": "Yalnızca PQ (HDR10) videolar: başka bir videoda yalnızca HDR VMAF, nedeniyle birlikte başarısız olur; diğer ölçümleri her zamanki gibi hesaplanır.",
   "Progress of the metrics being calculated": "Hesaplanan ölçümlerin ilerlemesi",
   "Click to open the Videos tab.": "Videolar sekmesini açmak için tıklayın.",
   "Update to {version}": "{version} sürümüne güncelle",

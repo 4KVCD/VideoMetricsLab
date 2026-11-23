@@ -40,6 +40,7 @@
   "Whole names": "Nama lengkap",
   "Characters from the start:": "Karakter dari awal:",
   "from the end:": "dari akhir:",
+  "PQ (HDR10) videos only: another video fails HDR VMAF alone, with the reason, and its other metrics are calculated as usual.": "Hanya video PQ (HDR10): pada video lain hanya HDR VMAF yang gagal, beserta alasannya, dan metrik lainnya dihitung seperti biasa.",
   "Progress of the metrics being calculated": "Kemajuan metrik yang sedang dihitung",
   "Click to open the Videos tab.": "Klik untuk membuka tab Video.",
   "Update to {version}": "Perbarui ke {version}",

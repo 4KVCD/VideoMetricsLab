@@ -40,6 +40,7 @@
   "Whole names": "Celé názvy",
   "Characters from the start:": "Znaků od začátku:",
   "from the end:": "od konce:",
+  "PQ (HDR10) videos only: another video fails HDR VMAF alone, with the reason, and its other metrics are calculated as usual.": "Pouze videa PQ (HDR10): u jiného videa selže jen HDR VMAF, s uvedením důvodu, a jeho ostatní metriky se spočítají jako obvykle.",
   "Progress of the metrics being calculated": "Průběh počítaných metrik",
   "Click to open the Videos tab.": "Kliknutím otevřete kartu Videa.",
   "Update to {version}": "Aktualizovat na {version}",

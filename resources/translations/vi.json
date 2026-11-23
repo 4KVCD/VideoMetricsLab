@@ -40,6 +40,7 @@
   "Whole names": "Tên đầy đủ",
   "Characters from the start:": "Số ký tự từ đầu:",
   "from the end:": "từ cuối:",
+  "PQ (HDR10) videos only: another video fails HDR VMAF alone, with the reason, and its other metrics are calculated as usual.": "Chỉ video PQ (HDR10): với video khác, chỉ HDR VMAF thất bại, kèm lý do, và các chỉ số khác vẫn được tính như bình thường.",
   "Progress of the metrics being calculated": "Tiến độ các chỉ số đang tính",
   "Click to open the Videos tab.": "Nhấp để mở tab Video.",
   "Update to {version}": "Cập nhật lên {version}",

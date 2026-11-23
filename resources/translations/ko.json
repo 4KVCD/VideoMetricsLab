@@ -40,6 +40,7 @@
   "Whole names": "전체 이름",
   "Characters from the start:": "앞에서부터 글자 수:",
   "from the end:": "끝에서부터:",
+  "PQ (HDR10) videos only: another video fails HDR VMAF alone, with the reason, and its other metrics are calculated as usual.": "PQ(HDR10) 영상 전용: 다른 영상에서는 HDR VMAF만 이유와 함께 실패하고, 다른 지표는 평소처럼 계산됩니다.",
   "Progress of the metrics being calculated": "계산 중인 지표의 진행 상황",
   "Click to open the Videos tab.": "클릭하면 영상 탭을 엽니다.",
   "Update to {version}": "{version}(으)로 업데이트",
