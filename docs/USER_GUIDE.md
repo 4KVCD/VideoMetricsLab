@@ -473,13 +473,14 @@ optional. Use still mode for frame inspection or playback mode for motion.
   100% is the video's own pixels. Drag a zoomed frame to move it.
 - Opened from the Worst Frames tab's **Worst frames** list, **Previous worst** and
   **Next worst** step through that list's frames while its video is shown.
-- **Loop** plays the seconds around the frame you went to (**before** and
-  **after** it, 1 s each unless changed) again and again; Play starts them
-  from the beginning. Each side is set in seconds, to the millisecond, or
-  in frames of the video shown, in the box beside: either one sets the
-  other. The seconds are kept, so a video of another frame rate loops as
-  long, in its own frames.
-- **Export frame as PNG** saves the frame of the reference and of the test video as
+- **Loop around frame N** plays the seconds around the frame you went to
+  (from 1 s before to 1 s after it unless changed) again and again; Play
+  starts them from the beginning. The row names that frame and, after it,
+  the frames that repeat; while Loop is ticked the timeline shades them.
+  Each side is one value, in seconds to the millisecond or in frames of the
+  video shown: typing either one sets the other. The seconds are kept, so a
+  video of another frame rate loops as long, in its own frames.
+- **Export frame as PNG**, beside the frame controls, saves the frame of the reference and of the test video as
   two PNG files in Settings' Export folder (Documents unless set), named
   after the video, the frame, its time, the Worst frames score when it is
   one, and the side. They are cropped and scaled as compared, HDR mapped to
