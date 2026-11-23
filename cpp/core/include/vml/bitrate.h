@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "vml/cancel.h"
@@ -69,6 +70,18 @@ BitrateData bitrate_data(std::filesystem::path path, std::vector<double> times, 
 // one's start (the Bitrate tab's frame range). Nothing when the stream has
 // none of them.
 std::optional<BitrateSummary> frames_summary(const BitrateData& data, long long first, long long last);
+
+// The frames (in presentation order, counted from 0) shown from `from` to
+// `to` seconds, both included, in the file's time: the first starting at
+// `from` or after and the last starting at `to` or before. Nothing where no
+// frame starts between them. The Bitrate tab's range in seconds, for videos
+// whose frames are not the same moments (other frame rates).
+std::optional<std::pair<long long, long long>> frames_between(const BitrateData& data, double from, double to);
+
+// Whether `a` and `b` have other frame rates: their frames a second, from
+// the first frame's start to the last's, more than 1% apart. A stream of
+// fewer than 2 frames has none to differ by.
+bool other_frame_rates(const BitrateData& a, const BitrateData& b);
 
 // The one-second bins of a stream's bitrate: each one's start and end, and
 // its kb/s. With adjust_start, the stream starts at 0; without, the bins

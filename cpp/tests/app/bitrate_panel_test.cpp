@@ -260,6 +260,45 @@ TEST_F(BitratePanelTest, AFrameRangesFiguresAndGoToFrame) {
     EXPECT_EQ(controls.range_start_time->text().toStdString(), "0:00:01.000");
 }
 
+// Videos of other frame rates: frame 2 is 1 s into one and 0.5 s into the
+// other, so the range is in seconds. The frame boxes are greyed, and a range
+// of times gives each video its own frames' figures, shading those seconds.
+TEST_F(BitratePanelTest, ARangeAcrossOtherFrameRatesIsInSeconds) {
+    VideoColors colors;
+    const auto panel = make_panel(colors);
+    const test::Folder folder;
+    const std::filesystem::path first = folder / "first.mkv";  // 2 frames a second
+    const std::filesystem::path faster = folder / "faster.mkv";
+    panel->add_files({first, faster});
+    analyzed(*panel, first, two_seconds(first));
+    analyzed(*panel, faster,
+             std::make_shared<const BitrateData>(bitrate_data(
+                 faster, {0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75}, std::vector<double>(8, 0.25),
+                 std::vector<long long>(8, 500), {true, false, false, false, true, false, false, false})));
+    FrameControls& controls = *panel->frame_controls;
+    EXPECT_TRUE(controls.range_in_seconds());
+    EXPECT_FALSE(controls.range_start_spin->isEnabled());
+    EXPECT_TRUE(controls.range_start_spin->toolTip().contains("different frame rates"));
+    const auto type_time = [](QLineEdit& box, const QString& text) {
+        box.setText(text);
+        box.setModified(true);
+        emit box.editingFinished();
+    };
+    type_time(*controls.range_start_time, "0.5");
+    type_time(*controls.range_end_time, "1");
+    EXPECT_FALSE(controls.selected_frames());
+    EXPECT_EQ(controls.selected_seconds(), (std::optional<std::pair<double, double>>{{0.5, 1.0}}));
+    EXPECT_EQ(cell(*panel, 0, col_average).toStdString(), "20 kb/s");  // its frames 1 and 2: 2,500 bytes in 1 s
+    EXPECT_EQ(cell(*panel, 1, col_average).toStdString(), "16 kb/s");  // its frames 2 to 4: 1,500 bytes in 0.75 s
+    EXPECT_EQ(panel->range_label->text().toStdString(),
+              "Statistics of 0:00:00.500 to 0:00:01.000, each video's own frames.");
+    EXPECT_EQ(panel->chart->highlight(), (std::optional<std::pair<double, double>>{{0.5, 1.0}}));
+    controls.clear_range_button->click();
+    EXPECT_FALSE(controls.selected_seconds());
+    EXPECT_FALSE(panel->chart->highlight());
+    EXPECT_TRUE(panel->range_label->text().isEmpty());
+}
+
 // Issue #140: with a shorter video drawn first, a time past its end went to
 // its last frame, and a range of such times was cleared: only the first
 // line's times were looked at, while the frame boxes reach the longest

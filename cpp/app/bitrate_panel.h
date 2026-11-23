@@ -303,6 +303,8 @@ private:
         double start = 0;                         // the file's time at the graph's 0
     };
     std::vector<DrawnPlot> current_plots_;
+    // Whether a range is chosen, in frames or (other frame rates) in seconds.
+    bool range_chosen() const;
     // The graph's values are divided by this and shown in this unit (see
     // refresh_plot).
     double value_scale_ = 1;

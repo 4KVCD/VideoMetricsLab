@@ -130,6 +130,34 @@ std::optional<BitrateSummary> frames_summary(const BitrateData& data, long long 
     return summary_of(frames);  // keyframes play no part in it
 }
 
+std::optional<std::pair<long long, long long>> frames_between(const BitrateData& data, double from, double to) {
+    // A time typed to the millisecond is a frame's within half of one, as the
+    // tab's time boxes show it.
+    constexpr double half_a_millisecond = 0.0005;
+    // The times are in presentation order: found by halving, not read
+    // through at each redraw (#221's review).
+    const auto first = std::lower_bound(data.times.begin(), data.times.end(), from - half_a_millisecond);
+    const auto end = std::upper_bound(first, data.times.end(), to + half_a_millisecond);
+    if (first == end) {
+        return std::nullopt;
+    }
+    return std::pair(static_cast<long long>(first - data.times.begin()),
+                     static_cast<long long>(end - data.times.begin()) - 1);
+}
+
+bool other_frame_rates(const BitrateData& a, const BitrateData& b) {
+    const auto rate = [](const BitrateData& data) -> std::optional<double> {
+        if (data.frame_count() < 2) {
+            return std::nullopt;
+        }
+        const double span = data.times.back() - data.times.front();  // in presentation order
+        return span > 0 ? std::optional(static_cast<double>(data.frame_count() - 1) / span) : std::nullopt;
+    };
+    const std::optional<double> first = rate(a);
+    const std::optional<double> second = rate(b);
+    return first && second && std::abs(*first - *second) > 0.01 * std::max(*first, *second);
+}
+
 // ------------------------------------------------------------------ the graphs
 
 SecondBins second_bins(const BitrateData& data, bool adjust_start) {
