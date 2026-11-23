@@ -21,6 +21,8 @@
 
 #include <optional>
 #include <string>
+#include <utility>
+#include <vector>
 
 class QBoxLayout;
 class QFrame;
@@ -95,6 +97,11 @@ void refresh();
 // VML Modern's chocolate browns and amber, after the Solar Dusk palette), or
 // "" for Windows' own.
 void apply_theme(const QString& theme);
+
+// The themes to choose from, in order, each as its name (translated) and its
+// Settings.theme value: the system's (""), "light", "dark" and "mocha".
+// Settings > Appearance and the title bar's theme menu both offer these.
+std::vector<std::pair<QString, QString>> theme_choices();
 
 // The window's interface (Settings > Window > Interface).
 //

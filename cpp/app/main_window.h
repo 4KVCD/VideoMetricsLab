@@ -89,6 +89,8 @@ class OptionsPanel;
 class QuietTabWidget;
 class RunWorker;
 class SettingsPanel;
+class TitleBar;
+class TitleButtons;
 class VideoColors;
 
 // The test-video table's columns, by their stable physical index (the
@@ -276,6 +278,9 @@ protected:
     void changeEvent(QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
+    // The app's title bar's messages (TitleBar::native_event), on Windows.
+    bool nativeEvent(const QByteArray& type, void* message, qintptr* result) override;
+    void showEvent(QShowEvent* event) override;
 
 private:
     // ------------------------------------------------------------ the window
@@ -330,6 +335,15 @@ private:
     void on_update_answer(const std::string& body, const QString& error);
     // Offers a newer release, unless the user chose to skip it.
     void offer_update(const Release& release);
+    // The update offered: the dialog, from the title bar's badge or, without
+    // one, at once.
+    void show_update(const Release& release);
+    // VML Modern's title buttons (title_bar.h), made once Modern is in use:
+    // in the app's title bar where the window has one, else at the tab bar's
+    // right end.
+    void make_title_buttons();
+    // The run's progress on the title buttons' progress button.
+    void show_run_in_title(const QString& status);
 
     // ------------------------------------------------------ FFmpeg's presence
     bool check_ffmpeg(bool prompt);
@@ -914,6 +928,9 @@ private:
     BdRatePanel* bd_rate_panel_ = nullptr;
     // The newer release offered, while its message is open.
     QPointer<QMessageBox> update_box_;
+    TitleBar* title_bar_ = nullptr;          // Windows, VML Modern: the window's own title bar
+    TitleButtons* title_buttons_ = nullptr;  // VML Modern: the progress, theme and update buttons
+    std::optional<Release> pending_update_;  // offered on the badge, shown when it is clicked
     // The GPU checks a run is waiting for (wait_for_gpu_checks), while it is,
     // and what the status line said before it waited for something.
     QFutureWatcher<void>* gpu_check_watcher_ = nullptr;

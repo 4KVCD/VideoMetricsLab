@@ -77,6 +77,10 @@ public:
     // saved results) and says so at the top of the panel; the rest stays
     // editable. The window calls it as a run starts and ends.
     void set_run_active(bool active);
+    // Settings.theme set to `value` ("", "light", "dark" or "mocha") as its
+    // choice in Settings > Appearance would: saved and applied (the title
+    // bar's theme menu).
+    void choose_theme(const QString& value);
     // Lists every CVVDP preset in Settings, the default selected. The window
     // calls it again when a preset is saved or deleted.
     void fill_cvvdp_default_combo();
