@@ -1136,6 +1136,8 @@ void SettingsPanel::read_controls() {
     settings_.check_for_updates = check_updates->isChecked();
     settings_.language = language->currentData().toString().toStdString();
     settings_.theme = theme_buttons->checkedButton()->property("value").toString().toStdString();
+    settings_.light_look = light_look_buttons->checkedButton()->property("value").toString().toStdString();
+    settings_.dark_look = dark_look_buttons->checkedButton()->property("value").toString().toStdString();
     settings_.interface_style = interface_buttons->checkedId() == 1 ? "modern" : "classic";
     settings_.accent_colour = accent_value.toStdString();
     settings_.video_names = video_names->currentData().toString().toStdString();
@@ -1184,10 +1186,12 @@ void SettingsPanel::set_run_active(bool active) {
 }
 
 void SettingsPanel::apply_global_changes(const Settings& before) {
-    if (settings_.theme != before.theme) {
-        theme::apply_theme(text_of(settings_.theme));  // the window's changeEvent follows
+    if (settings_.theme != before.theme || settings_.light_look != before.light_look ||
+        settings_.dark_look != before.dark_look) {
+        // the window's changeEvent follows
+        theme::apply_theme(text_of(settings_.theme), text_of(settings_.light_look), text_of(settings_.dark_look));
         if (accent_value.isEmpty()) {
-            set_accent(QString());  // the accent box shows the one in use now (Mocha's amber, or the system's)
+            set_accent(QString());  // the accent box shows the one in use now (the look's, or the system's)
         }
     }
     // VML Modern at once, its accent too; VML Classic, chosen while Modern

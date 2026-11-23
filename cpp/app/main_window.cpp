@@ -320,7 +320,7 @@ void MainWindow::apply_theme_colours() {
     theme::refresh();
     make_title_buttons();  // VML Modern chosen in Settings: its buttons too
     if (title_buttons_ != nullptr) {
-        title_buttons_->set_theme(QString::fromStdString(settings_.theme));
+        show_theme_in_title();
     }
     // Only the cells with a colour of their own, each to its counterpart.
     for (int row = 0; row < distorted_table_->rowCount(); ++row) {
@@ -772,6 +772,11 @@ void MainWindow::build_ui() {
     make_title_buttons();
 }
 
+void MainWindow::show_theme_in_title() {
+    title_buttons_->set_theme(QString::fromStdString(settings_.theme), QString::fromStdString(settings_.light_look),
+                              QString::fromStdString(settings_.dark_look));
+}
+
 void MainWindow::make_title_buttons() {
     if (title_buttons_ != nullptr || theme::current_interface() != theme::Interface::modern) {
         return;
@@ -788,14 +793,17 @@ void MainWindow::make_title_buttons() {
         tabs_->setCornerWidget(title_buttons_, Qt::TopRightCorner);
         title_buttons_->show();
     }
-    title_buttons_->set_theme(QString::fromStdString(settings_.theme));
+    show_theme_in_title();
     connect(title_buttons_, &TitleButtons::progress_clicked, this, [this] { tabs_->setCurrentIndex(0); });
     connect(title_buttons_, &TitleButtons::theme_chosen, this, [this](const QString& value) {
         settings_panel_->choose_theme(value);
-        title_buttons_->set_theme(QString::fromStdString(settings_.theme));
+        show_theme_in_title();
     });
-    connect(title_buttons_, &TitleButtons::theme_menu_opening, this,
-            [this] { title_buttons_->set_theme(QString::fromStdString(settings_.theme)); });
+    connect(title_buttons_, &TitleButtons::look_chosen, this, [this](bool dark, const QString& value) {
+        settings_panel_->choose_look(dark, value);
+        show_theme_in_title();
+    });
+    connect(title_buttons_, &TitleButtons::theme_menu_opening, this, [this] { show_theme_in_title(); });
     connect(title_buttons_, &TitleButtons::update_clicked, this, [this] {
         if (pending_update_) {
             show_update(*pending_update_);

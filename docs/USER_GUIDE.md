@@ -182,11 +182,33 @@ the app is next started. **Accent**, usable with VML Modern, is the system's
 (**Same as Windows**), one of six colours, a colour picked with **Custom...**,
 or one typed as `#RRGGBB` in the box beside it; text on it is dark or light,
 whichever reads. VML Classic keeps the system's accent. **Theme** is the
-system's (**Same as Windows**), **Light**, **Dark** or **Mocha**. **Mocha** is
-dark chocolate browns with cream text, and an amber accent while the accent
-is **Theme default**, as the accent's first choice reads while Mocha is
-picked (after the Solar Dusk palette); it is VML Modern's alone, and VML
-Classic shows it as **Dark**.
+system's (**Same as Windows**), **Light** or **Dark**.
+
+VML Modern draws Light and Dark each in a look of its own, picked under
+**Light look** and **Dark look**; with **Same as Windows**, the window
+changes look as Windows changes between light and dark:
+
+- **Light**: VML Modern's own light colours.
+- **Dim**: Light, a step darker throughout (the cards, the window behind them,
+  the buttons, the edges and the graphs' background), for less glare; the
+  text as Light's.
+- **Paper**: Dim, warmed a little, like unbleached paper.
+- **Desert**: warm cream with dark text and edges, after Windows' Desert
+  contrast theme, with its burnt-orange accent.
+- **Dark**: VML Modern's own dark colours.
+- **Mocha**: dark chocolate browns with cream text and an amber accent (after
+  the Solar Dusk palette).
+- **Joker**: plum purples with lavender-white text, a vivid green accent and
+  purple links (after the Dracula palette).
+- **Nitrate**: sepia film noir: green-black shadows with cream text and a gold
+  accent, like an old film print.
+- **Phosphor**: sepia film noir at the most contrast: near-black with umber
+  edges, bright cream text and a gold accent.
+
+While a look with an accent of its own (Desert, Mocha, Joker, Nitrate,
+Phosphor) is the one the theme
+shows, the accent's first choice reads **Theme default** and gives that
+accent. The looks are VML Modern's alone: VML Classic shows Light or Dark.
 
 In VML Modern on Windows, the window's title bar is the app's own, in the
 theme's colours, with Windows' minimize, maximize and close (hovering
@@ -196,7 +218,9 @@ icon opens the window menu). Three small buttons sit in it:
 - **Progress**, while metrics are calculated: how many videos are done and
   about how far the run has got, with a thin bar. Its tooltip is the status
   line; a click opens the Videos tab.
-- **Theme**: a menu of the themes, as in Settings > Appearance.
+- **Theme**: a menu of the themes (Same as Windows, Light, Dark) and, below
+  them, **Light look** and **Dark look** menus of the looks, as in Settings >
+  Appearance.
 - **Update to ...**, when a newer version is available: a click shows what's
   new and the download. VML Classic asks with a dialog when the app starts
   instead.

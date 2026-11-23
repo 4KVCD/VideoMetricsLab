@@ -342,6 +342,8 @@ private:
     // in the app's title bar where the window has one, else at the tab bar's
     // right end.
     void make_title_buttons();
+    // The title bar's theme menu ticked as Settings has the theme and looks.
+    void show_theme_in_title();
     // The run's progress on the title buttons' progress button.
     void show_run_in_title(const QString& status);
 

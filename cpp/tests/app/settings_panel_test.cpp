@@ -206,8 +206,10 @@ TEST(SettingsPanel, AppearanceSavesEachChoice) {
     panel.interface_buttons->button(0)->click();
     EXPECT_EQ(settings.interface_style, "classic");
     EXPECT_FALSE(panel.accent_controls->isEnabled());
+    EXPECT_FALSE(panel.look_controls->isEnabled());
     // Usable again by hand: picking VML Modern would apply it.
     panel.accent_controls->setEnabled(true);
+    panel.look_controls->setEnabled(true);  // VML Modern's alone, as the accent is
 
     panel.accent_hex->setText("123ABC");
     emit panel.accent_hex->editingFinished();
@@ -226,8 +228,14 @@ TEST(SettingsPanel, AppearanceSavesEachChoice) {
     EXPECT_EQ(panel.accent_hex->text(), QApplication::palette().color(QPalette::Accent).name().toUpper());
 
     const QList<QAbstractButton*> modes = panel.theme_buttons->buttons();
-    ASSERT_EQ(modes.size(), 4);  // the system's, Light, Dark, Mocha
+    ASSERT_EQ(modes.size(), 3);  // the system's, Light, Dark
     EXPECT_TRUE(modes[0]->isChecked());
+    const QList<QAbstractButton*> light_looks = panel.light_look_buttons->buttons();
+    const QList<QAbstractButton*> dark_looks = panel.dark_look_buttons->buttons();
+    ASSERT_EQ(light_looks.size(), 4);  // Light, Dim, Paper, Desert
+    ASSERT_EQ(dark_looks.size(), 5);   // Dark, Mocha, Joker, Nitrate, Phosphor
+    EXPECT_TRUE(light_looks[0]->isChecked());
+    EXPECT_TRUE(dark_looks[0]->isChecked());
     modes[1]->click();
     EXPECT_EQ(settings.theme, "light");
     modes[2]->click();
@@ -238,12 +246,46 @@ TEST(SettingsPanel, AppearanceSavesEachChoice) {
     const QString system_name = "Same as Windows";
 #endif
     EXPECT_EQ(system->text(), system_name);
-    modes[3]->click();
-    EXPECT_EQ(settings.theme, "mocha");
+    // The accent's first choice is the look's own while the theme shows a
+    // look with one: Mocha in Dark, Desert in Light.
+    dark_looks[1]->click();
+    EXPECT_EQ(settings.dark_look, "mocha");
     EXPECT_EQ(system->text(), "Theme default");  // Mocha's amber, not the system's
+    dark_looks[2]->click();
+    EXPECT_EQ(settings.dark_look, "joker");
+    EXPECT_EQ(system->text(), "Theme default");  // Joker's green
+    dark_looks[3]->click();
+    EXPECT_EQ(settings.dark_look, "nitrate");
+    EXPECT_EQ(system->text(), "Theme default");  // Nitrate's gold
+    dark_looks[4]->click();
+    EXPECT_EQ(settings.dark_look, "phosphor");
+    EXPECT_EQ(system->text(), "Theme default");  // Phosphor's gold
+    EXPECT_FALSE(system->toolTip().isEmpty());
+    modes[1]->click();
+    EXPECT_EQ(settings.theme, "light");
+    EXPECT_EQ(system->text(), system_name);  // Light's own look: the system's
+    light_looks[3]->click();
+    EXPECT_EQ(settings.light_look, "desert");
+    EXPECT_EQ(system->text(), "Theme default");  // Desert's burnt orange
+    light_looks[2]->click();
+    EXPECT_EQ(settings.light_look, "paper");
+    EXPECT_EQ(system->text(), system_name);
     modes[0]->click();
     EXPECT_EQ(settings.theme, "");
+    // The title bar's menu: a theme chosen there as by its button here, the
+    // accent's first choice named for the look it shows (Mocha's amber).
+    panel.choose_look(true, "mocha");
+    modes[1]->click();
     EXPECT_EQ(system->text(), system_name);
+    panel.choose_theme("dark");
+    EXPECT_EQ(settings.theme, "dark");
+    EXPECT_EQ(system->text(), "Theme default");
+    // A look chosen there as by its button here.
+    panel.choose_look(true, "joker");
+    EXPECT_EQ(settings.dark_look, "joker");
+    EXPECT_TRUE(dark_looks[2]->isChecked());
+    panel.choose_look(false, "dim");
+    EXPECT_EQ(settings.light_look, "dim");
 }
 
 TEST(SettingsPanel, ExportsAreChosenOneByOne) {

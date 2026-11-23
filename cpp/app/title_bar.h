@@ -57,8 +57,9 @@ public:
     void set_progress(const std::optional<Progress>& progress);
     // An update's version on its badge; empty: none, the badge hidden.
     void set_update(const QString& version);
-    // The theme ticked in the theme menu ("", "light", "dark" or "mocha").
-    void set_theme(const QString& theme);
+    // The theme ticked in the theme menu ("", "light" or "dark"), and the
+    // looks ticked in its Light look and Dark look menus.
+    void set_theme(const QString& theme, const QString& light_look, const QString& dark_look);
 
     QWidget* progress_button() const;
     QWidget* update_button() const;
@@ -67,6 +68,8 @@ signals:
     void progress_clicked();
     void update_clicked();
     void theme_chosen(const QString& theme);
+    // A look picked in the Light look (`dark` false) or Dark look menu.
+    void look_chosen(bool dark, const QString& look);
     // The theme menu is about to open: set_theme, with the theme saved now.
     void theme_menu_opening();
 
@@ -75,6 +78,9 @@ private:
     QProgressBar* progress_bar_ = nullptr;
     QToolButton* theme_ = nullptr;
     QMenu* theme_menu_ = nullptr;
+    QActionGroup* modes_ = nullptr;        // the theme menu's Same as Windows, Light, Dark
+    QActionGroup* light_looks_ = nullptr;  // its Light look menu's
+    QActionGroup* dark_looks_ = nullptr;   // its Dark look menu's
     QToolButton* update_ = nullptr;
     QString theme_value_;
 };

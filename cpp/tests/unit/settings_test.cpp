@@ -65,6 +65,8 @@ const std::map<std::string, std::function<Json(const Settings&)>>& settings_by_k
         {"theme", [](const Settings& s) { return Json(s.theme); }},
         {"interface", [](const Settings& s) { return Json(s.interface_style); }},
         {"accent_colour", [](const Settings& s) { return Json(s.accent_colour); }},
+        {"light_look", [](const Settings& s) { return Json(s.light_look); }},
+        {"dark_look", [](const Settings& s) { return Json(s.dark_look); }},
         {"video_names", [](const Settings& s) { return Json(s.video_names); }},
         {"video_name_start", [](const Settings& s) { return Json(s.video_name_start); }},
         {"video_name_end", [](const Settings& s) { return Json(s.video_name_end); }},
@@ -180,6 +182,26 @@ TEST(Settings, ModernIsTheDefaultInterface) {
     EXPECT_EQ(Settings{}.interface_style, "modern");
     EXPECT_EQ(load(R"({"theme": "dark"})").interface_style, "modern");
     EXPECT_EQ(load(R"({"interface": "classic"})").interface_style, "classic");
+}
+
+// Mocha, a theme before there were looks, is Dark in Mocha's look; the
+// looks default to Light's and Dark's own.
+TEST(Settings, MochaThemeBecomesDarkInMochasLook) {
+    const test::Folder folder;
+    const auto load = [&folder](const std::string& text) {
+        std::ofstream(folder / "settings.json", std::ios::binary) << text;
+        return Settings::load_from(folder / "settings.json");
+    };
+    EXPECT_EQ(Settings{}.light_look, "light");
+    EXPECT_EQ(Settings{}.dark_look, "dark");
+    Settings settings = load(R"({"theme": "mocha"})");
+    EXPECT_EQ(settings.theme, "dark");
+    EXPECT_EQ(settings.dark_look, "mocha");
+    EXPECT_EQ(settings.light_look, "light");
+    settings = load(R"({"theme": "", "light_look": "paper", "dark_look": "joker"})");
+    EXPECT_EQ(settings.theme, "");
+    EXPECT_EQ(settings.light_look, "paper");
+    EXPECT_EQ(settings.dark_look, "joker");
 }
 
 // Exports as the first v2.7 builds saved them, results by format: Results in

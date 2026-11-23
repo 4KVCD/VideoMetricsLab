@@ -77,10 +77,13 @@ public:
     // saved results) and says so at the top of the panel; the rest stays
     // editable. The window calls it as a run starts and ends.
     void set_run_active(bool active);
-    // Settings.theme set to `value` ("", "light", "dark" or "mocha") as its
-    // choice in Settings > Appearance would: saved and applied (the title
-    // bar's theme menu).
+    // Settings.theme set to `value` ("", "light" or "dark") as its choice in
+    // Settings > Appearance would: saved and applied (the title bar's theme
+    // menu).
     void choose_theme(const QString& value);
+    // Settings.light_look (`dark` false) or dark_look set to `value`, as its
+    // button in Settings > Appearance would (the title bar's theme menu).
+    void choose_look(bool dark, const QString& value);
     // Lists every CVVDP preset in Settings, the default selected. The window
     // calls it again when a preset is saved or deleted.
     void fill_cvvdp_default_combo();
@@ -169,6 +172,9 @@ public:
     QWidget* modern_preview = nullptr;
     QString accent_value;
     QButtonGroup* theme_buttons = nullptr;
+    QButtonGroup* light_look_buttons = nullptr;  // Settings.light_look's
+    QButtonGroup* dark_look_buttons = nullptr;   // Settings.dark_look's
+    QWidget* look_controls = nullptr;            // both, VML Modern's alone
     // How test videos' names are shown (video_names.h), and for "ends" how
     // many characters of each end.
     QComboBox* video_names = nullptr;

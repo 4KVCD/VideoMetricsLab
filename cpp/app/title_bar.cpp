@@ -125,17 +125,32 @@ TitleButtons::TitleButtons(QWidget* parent) : QWidget(parent) {
     // No arrow: the button is its glyph alone.
     theme_->setStyleSheet(QStringLiteral("QToolButton::menu-indicator { image: none; width: 0; }"));
     theme_menu_ = new QMenu(theme_);
-    auto* choices = new QActionGroup(theme_menu_);
+    modes_ = new QActionGroup(theme_menu_);
     for (const auto& [name, value] : theme::theme_choices()) {  // Settings > Appearance's
         QAction* action = theme_menu_->addAction(name);
         action->setCheckable(true);
         action->setData(value);
-        choices->addAction(action);
+        modes_->addAction(action);
         connect(action, &QAction::triggered, this, [this, value] {
             if (value != theme_value_) {
                 emit theme_chosen(value);
             }
         });
+    }
+    // Below them, Settings > Appearance's looks, ticked as the themes are (no
+    // swatch: a checkable item's icon takes the place of its tick).
+    theme_menu_->addSeparator();
+    for (const bool dark : {false, true}) {
+        QMenu* looks = theme_menu_->addMenu(dark ? app::tr("Dark look") : app::tr("Light look"));
+        QActionGroup*& group = dark ? dark_looks_ : light_looks_;
+        group = new QActionGroup(looks);
+        for (const auto& [name, value] : theme::look_choices(dark)) {
+            QAction* action = looks->addAction(name);
+            action->setCheckable(true);
+            action->setData(value);
+            group->addAction(action);
+            connect(action, &QAction::triggered, this, [this, dark, value] { emit look_chosen(dark, value); });
+        }
     }
     // The theme ticked is the one saved when the menu opens: Settings may
     // have changed it meanwhile without changing the colours (the system's
@@ -171,23 +186,19 @@ void TitleButtons::set_update(const QString& version) {
     update_->updateGeometry();
 }
 
-void TitleButtons::set_theme(const QString& theme) {
+void TitleButtons::set_theme(const QString& theme, const QString& light_look, const QString& dark_look) {
     theme_value_ = theme;
-    QAction* fallback = nullptr;
-    for (QAction* action : theme_menu_->actions()) {
-        const bool match = action->data().toString() == theme;
-        action->setChecked(match);
-        if (fallback == nullptr) {
-            fallback = action;
-        }
-        if (match) {
-            fallback = nullptr;
-            break;
-        }
-    }
-    if (fallback != nullptr) {
-        fallback->setChecked(true);  // an unknown setting: the system's
-    }
+    // Each group's match ticked; an unknown setting, its first (the
+    // system's, Light's or Dark's own look).
+    const auto tick = [](QActionGroup* group, const QString& value) {
+        const QList<QAction*> actions = group->actions();
+        const auto match = std::find_if(actions.begin(), actions.end(),
+                                        [&value](const QAction* action) { return action->data().toString() == value; });
+        (match != actions.end() ? *match : actions.front())->setChecked(true);
+    };
+    tick(modes_, theme);
+    tick(light_looks_, light_look);
+    tick(dark_looks_, dark_look);
 }
 
 QWidget* TitleButtons::progress_button() const { return progress_; }
