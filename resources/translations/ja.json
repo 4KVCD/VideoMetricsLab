@@ -263,6 +263,7 @@
   "There is already a preset called \"{name}\". Choose another name.": "「{name}」という名前のプリセットはすでにあります。別の名前を選んでください。",
   "Partly failed": "一部失敗",
   "Finishing up; the window will close on its own.": "終了処理中です。ウィンドウは自動的に閉じます。",
+  "Sending the run's notification; the window will close on its own.": "実行の通知を送信中です。ウィンドウは自動的に閉じます。",
   "Locate ffmpeg.exe": "ffmpeg.exe の場所を指定",
   "Videos": "動画",
   "Metric Graphs": "指標グラフ",

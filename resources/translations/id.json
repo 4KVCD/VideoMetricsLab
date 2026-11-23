@@ -268,6 +268,7 @@
   "There is already a preset called \"{name}\". Choose another name.": "Sudah ada preset bernama \"{name}\". Pilih nama lain.",
   "Partly failed": "Sebagian gagal",
   "Finishing up; the window will close on its own.": "Sedang menyelesaikan; jendela akan tertutup sendiri.",
+  "Sending the run's notification; the window will close on its own.": "Sedang mengirim notifikasi proses; jendela akan tertutup sendiri.",
   "Locate ffmpeg.exe": "Cari ffmpeg.exe",
   "Videos": "Video",
   "Metric Graphs": "Grafik metrik",

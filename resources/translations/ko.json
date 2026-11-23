@@ -263,6 +263,7 @@
   "There is already a preset called \"{name}\". Choose another name.": "\"{name}\" 사전 설정이 이미 있습니다. 다른 이름을 선택하세요.",
   "Partly failed": "일부 실패",
   "Finishing up; the window will close on its own.": "마무리하는 중입니다. 창이 자동으로 닫힙니다.",
+  "Sending the run's notification; the window will close on its own.": "실행 알림을 보내는 중입니다. 창이 자동으로 닫힙니다.",
   "Locate ffmpeg.exe": "ffmpeg.exe 위치 지정",
   "Videos": "영상",
   "Metric Graphs": "지표 그래프",

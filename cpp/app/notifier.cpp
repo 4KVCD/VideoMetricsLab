@@ -94,15 +94,21 @@ Notifier::Notifier(QObject* parent) : QObject(parent), network_(new QNetworkAcce
 
 void Notifier::send(const std::vector<NotificationRequest>& requests) {
     for (const NotificationRequest& item : requests) {
+        ++pending_;
         post(item, false);
     }
+}
+
+void Notifier::finish(const QString& service, const QString& error) {
+    --pending_;
+    emit sent(service, error);
 }
 
 void Notifier::post(const NotificationRequest& item, bool again) {
     const QUrl url(QString::fromStdString(item.url));
     const QString service = QString::fromStdString(item.service);
     if (url.scheme() != "https" && !(item.plain_http && url.scheme() == "http")) {
-        emit sent(service, item.plain_http ? app::tr("its address isn't an http or https URL")
+        finish(service, item.plain_http ? app::tr("its address isn't an http or https URL")
                                            : app::tr("its address isn't an https URL"));
         return;
     }
@@ -120,7 +126,7 @@ void Notifier::post(const NotificationRequest& item, bool again) {
         reply->deleteLater();
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if (status >= 200 && status < 300) {
-            emit sent(service, QString());
+            finish(service, QString());
             return;
         }
         const std::string body = reply->readAll().toStdString();
@@ -134,7 +140,7 @@ void Notifier::post(const NotificationRequest& item, bool again) {
         const std::string why = status == 0 ? reply->errorString().toStdString()
                                 : body.empty() ? "HTTP " + std::to_string(status)
                                                : "HTTP " + std::to_string(status) + ": " + service_answer(body);
-        emit sent(service, QString::fromStdString(without_secrets(why, item)));
+        finish(service, QString::fromStdString(without_secrets(why, item)));
     });
 }
 

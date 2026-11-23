@@ -15,6 +15,7 @@
 // glue (main_window_graph.cpp, main_window_compare.cpp).
 #pragma once
 
+#include <QElapsedTimer>
 #include <QFutureWatcher>
 #include <QMainWindow>
 #include <QPointer>
@@ -797,6 +798,10 @@ private:
     int run_number_ = 0;  // counts runs: a run's saved-scores folders, told later, are its own (set_run_ui_active)
     bool defaults_changed_in_run_ = false;  // Settings' defaults changed during a run: applied as it ends
     bool closing_ = false;
+    // Since the window was first asked to close: a notification still being
+    // sent holds the close this long at most (notification_close_wait_ms).
+    QElapsedTimer close_clock_;
+    static constexpr qint64 notification_close_wait_ms = 3000;
     bool asking_frame_rates_ = false;           // a frame rate question is open
     bool reference_frame_rate_asked_ = false;   // RowData::frame_rate_asked, for the reference
     // Whether Vship-fast's metrics were last found to run on 5.1.2 here

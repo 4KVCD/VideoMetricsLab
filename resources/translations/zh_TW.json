@@ -263,6 +263,7 @@
   "There is already a preset called \"{name}\". Choose another name.": "已經有名為「{name}」的預設集。請換一個名稱。",
   "Partly failed": "部分失敗",
   "Finishing up; the window will close on its own.": "正在收尾；視窗會自動關閉。",
+  "Sending the run's notification; the window will close on its own.": "正在傳送執行通知；視窗會自動關閉。",
   "Locate ffmpeg.exe": "找出 ffmpeg.exe",
   "Videos": "影片",
   "Metric Graphs": "指標圖表",

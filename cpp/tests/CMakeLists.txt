@@ -140,6 +140,7 @@ if(TARGET vml_app)
         app/title_bar_test.cpp
         app/i18n_test.cpp
         app/main.cpp
+        app/notifier_test.cpp
         app/options_panel_test.cpp
         app/playback_test.cpp
         app/results_export_test.cpp

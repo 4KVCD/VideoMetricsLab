@@ -268,6 +268,7 @@
   "There is already a preset called \"{name}\". Choose another name.": "Já existe uma predefinição chamada \"{name}\". Escolha outro nome.",
   "Partly failed": "Falhou em parte",
   "Finishing up; the window will close on its own.": "Finalizando; a janela se fechará sozinha.",
+  "Sending the run's notification; the window will close on its own.": "Enviando a notificação da execução; a janela se fechará sozinha.",
   "Locate ffmpeg.exe": "Localizar ffmpeg.exe",
   "Videos": "Vídeos",
   "Metric Graphs": "Gráficos de métricas",

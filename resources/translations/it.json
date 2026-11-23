@@ -268,6 +268,7 @@
   "There is already a preset called \"{name}\". Choose another name.": "Esiste già un preset chiamato \"{name}\". Scegli un altro nome.",
   "Partly failed": "Non riuscito in parte",
   "Finishing up; the window will close on its own.": "Chiusura in corso; la finestra si chiuderà da sola.",
+  "Sending the run's notification; the window will close on its own.": "Invio della notifica dell'esecuzione in corso; la finestra si chiuderà da sola.",
   "Locate ffmpeg.exe": "Individua ffmpeg.exe",
   "Videos": "Video",
   "Metric Graphs": "Grafici metriche",

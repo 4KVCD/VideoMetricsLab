@@ -268,6 +268,7 @@
   "There is already a preset called \"{name}\". Choose another name.": "Пресет с названием «{name}» уже существует. Выберите другое название.",
   "Partly failed": "Частично не удалось",
   "Finishing up; the window will close on its own.": "Завершение работы; окно закроется само.",
+  "Sending the run's notification; the window will close on its own.": "Отправка уведомления о запуске; окно закроется само.",
   "Locate ffmpeg.exe": "Указать ffmpeg.exe",
   "Videos": "Видео",
   "Metric Graphs": "Графики метрик",

@@ -268,6 +268,7 @@
   "There is already a preset called \"{name}\". Choose another name.": "Đã có cài đặt sẵn tên \"{name}\". Hãy chọn tên khác.",
   "Partly failed": "Lỗi một phần",
   "Finishing up; the window will close on its own.": "Đang hoàn tất; cửa sổ sẽ tự đóng.",
+  "Sending the run's notification; the window will close on its own.": "Đang gửi thông báo của lượt chạy; cửa sổ sẽ tự đóng.",
   "Locate ffmpeg.exe": "Tìm ffmpeg.exe",
   "Videos": "Video",
   "Metric Graphs": "Biểu đồ chỉ số",

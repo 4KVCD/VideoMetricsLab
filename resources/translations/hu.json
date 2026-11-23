@@ -268,6 +268,7 @@
   "There is already a preset called \"{name}\". Choose another name.": "Már van ilyen nevű előbeállítás: „{name}”. Válasszon másik nevet.",
   "Partly failed": "Részben sikertelen",
   "Finishing up; the window will close on its own.": "Befejezés folyamatban; az ablak magától bezárul.",
+  "Sending the run's notification; the window will close on its own.": "A futás értesítésének küldése; az ablak magától bezárul.",
   "Locate ffmpeg.exe": "ffmpeg.exe keresése",
   "Videos": "Videók",
   "Metric Graphs": "Metrikagrafikonok",
