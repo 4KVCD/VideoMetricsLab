@@ -192,12 +192,14 @@ void MainWindow::fill_videos_export_menu(QMenu& menu) {
                               : rows.size() == 1 ? ExportScope::this_video
                                                  : ExportScope::selected_videos;
     QAction* contents = menu.addAction(export_action_text(scope, items));
-    // As the right-click menu's: of videos whose ticked metrics are all
-    // scored, or failed on the run (scored_video).
-    const bool all_scored = std::all_of(rows.begin(), rows.end(), [this](int row) {
+    // As the right-click menu's: usable where one of the rows is a video
+    // whose ticked metrics are all scored, or failed on the run
+    // (scored_video); the export takes those
+    // (export_rows), leaving out a row still to be calculated.
+    const bool any_scored = std::any_of(rows.begin(), rows.end(), [this](int row) {
         return scored_video(*rows_[static_cast<std::size_t>(row)]).has_value();
     });
-    contents->setEnabled(any && all_scored && !export_contents(items).isEmpty());
+    contents->setEnabled(any_scored && !export_contents(items).isEmpty());
     // Each entry takes the rows as they are when it is clicked
     // (export_menu_rows), not as the menu opened: the menu's own event loop
     // delivers a run's results while it is open, and a row's run that turned
