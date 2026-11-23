@@ -441,6 +441,9 @@ Json results_document(const VideoInfo& source, const std::vector<TestVideo>& vid
         }
         add_video_record(entry, video.facts ? &*video.facts : nullptr, video.result ? &*video.result : nullptr,
                          video.display);
+        if (!video.checks.empty()) {
+            entry["gate"] = gate_json(video.checks);
+        }
         document["videos"].push_back(entry);
     }
     if (difference) {

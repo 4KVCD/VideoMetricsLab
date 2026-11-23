@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "gates.h"
 #include "vml/analysis_request.h"
 #include "vml/options.h"
 #include "vml/results.h"
@@ -64,6 +65,8 @@ struct TestVideo {
     // with CVVDP alone, run as a comparison of its own.
     std::vector<TestVideo> other_displays;
     bool for_display_only = false;  // one of another TestVideo's other_displays
+    // Its quality gate's checks (--require, --fail-on-segments): none without one.
+    std::vector<GateCheck> checks;
     // How its run went (RunEvents::job_facts), or how its saved scores answered
     // it all: none for a video that was not compared.
     std::optional<RunFacts> facts;

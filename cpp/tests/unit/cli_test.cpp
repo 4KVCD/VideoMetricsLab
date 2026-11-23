@@ -1023,6 +1023,65 @@ TEST(CommandLine, SettingsAndSavedScoresCanBeChosen) {
 // The automation contract: every error, failure, note and why in the JSON has
 // a code beside it, a run that compared nothing still writes a document, and
 // an input not read is exit code 4, not a wrong command's 2.
+// A quality gate: --require's bars on a metric's score or another statistic
+// (CVVDP's of its seconds), and --fail-on-segments. A bar missed, or a
+// metric not scored, fails the gate; one that does not apply to the video
+// (HDR VMAF of SDR) is left out of it.
+TEST(CommandLine, QualityGatesCheckEachVideo) {
+    const Arguments parsed = parse_arguments({"compare", "r.mkv", "a.mkv", "--require", "vmaf>=85, vmaf.min>65",
+                                              "--require", "cvvdp.min>=8", "--segments", "vmaf<75",
+                                              "--fail-on-segments"});
+    const std::vector<GateRule>& rules = parsed.compare.require;
+    ASSERT_EQ(rules.size(), 3u);
+    EXPECT_EQ(rules[0].text(), "vmaf>=85");
+    EXPECT_EQ(rules[1].text(), "vmaf.min>65");
+    EXPECT_EQ(rules[2].statistic, "min");
+    EXPECT_TRUE(parsed.compare.fail_on_segments);
+    for (const char* wrong : {"vmaf=90", "vmaf.mean>=90", "foo>1", "vmaf>=x", ""}) {
+        EXPECT_THROW(parse_arguments({"compare", "r.mkv", "a.mkv", "--require", wrong}), UsageError) << wrong;
+    }
+    EXPECT_THROW(parse_arguments({"compare", "r.mkv", "a.mkv", "--fail-on-segments"}), UsageError);
+
+    std::vector<TestVideo> videos(2);
+    TestVideo& scored = videos[0];
+    scored.path = "a.mkv";
+    scored.metrics = {"vmaf", "cvvdp"};
+    scored.result.emplace().compared_frame_count = 3;
+    scored.result->metric_results.add(FrameMetricResult{"vmaf", {0, 1, 2}, {0.0, 0.5, 1.0}, {90, 80, 70}, {}});
+    scored.result->metric_results.add(SequenceMetricResult{"cvvdp", 8.5, {}, {0, 2}, {0.0, 1.0}, {8.0f, 9.0f}});
+    TestVideo& failed = videos[1];
+    failed.path = "b.mkv";
+    failed.metrics = {"vmaf"};
+    failed.failures = {{"vmaf", "Vulkan ran out of memory."}};
+    failed.not_applicable = {{"vmaf_hdr", {metric_not_applicable, "HDR VMAF scores PQ (HDR10) video only", ""}}};
+    const std::vector<Summaries> summaries = summarize(videos);
+    const SegmentRules segments = segment_rules(parsed.compare);
+
+    const std::vector<GateCheck> checks = gate_checks(scored, summaries[0], rules, &segments);
+    ASSERT_EQ(checks.size(), 4u);
+    EXPECT_EQ(checks[0].value, 80.0);
+    EXPECT_EQ(checks[0].passed, false);  // a mean of 80
+    EXPECT_EQ(checks[1].passed, true);   // its worst frame, 70
+    EXPECT_EQ(checks[2].value, 8.0);     // CVVDP's worst second
+    EXPECT_EQ(checks[2].passed, true);
+    EXPECT_EQ(checks[3].rule, "no weak segments");
+    EXPECT_EQ(checks[3].value, 1.0);
+    EXPECT_EQ(checks[3].passed, false);
+    EXPECT_FALSE(gate_passed(checks));
+    const nlohmann::ordered_json gate = gate_json(checks);
+    EXPECT_EQ(gate["passed"], false);
+    EXPECT_EQ(gate["checks"][1]["statistic"], "min");
+    EXPECT_FALSE(gate["checks"][3].contains("metric"));
+
+    const std::vector<GateCheck> unscored =
+        gate_checks(failed, summaries[1], read_gate_rules("vmaf_hdr>=50,vmaf>=85"), nullptr);
+    EXPECT_FALSE(unscored[0].passed);  // not applicable: left out of the gate
+    EXPECT_EQ(unscored[1].passed, false);
+    EXPECT_EQ(unscored[1].why, "Vulkan ran out of memory.");
+    EXPECT_FALSE(gate_passed(unscored));
+    EXPECT_TRUE(gate_passed({unscored[0]}));
+}
+
 TEST(CommandLine, ErrorsNotesAndWhysComeWithCodes) {
     std::vector<TestVideo> videos(2);
     videos[0].path = "Y:/v/missing.mkv";
