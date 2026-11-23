@@ -194,6 +194,44 @@ TEST_F(PlaybackTest, APairIsShownOnlyAtAFrameBothVideosHave) {
     EXPECT_EQ(shown(distorted_surface(*view)), pixels);
 }
 
+// The same pairs again with facts about their files found since (as the
+// window hands them over on opening the tab: bit rates, level, writing
+// library, encoder, the container) keep every decoder: nothing playing reads
+// them. They were all started again, and played natively, the whole pool
+// with its soundtrack.
+TEST_F(PlaybackTest, FactsNothingPlayingReadsKeepTheDecoders) {
+    const auto view = make_view(2);
+    const std::vector<FakeDecoder*> old = decoders(*view);
+    ASSERT_FALSE(old.empty());
+    std::vector<FrameComparison> rated = items_;
+    for (FrameComparison& item : rated) {
+        for (VideoInfo* info : {&item.source_info, &item.distorted_info}) {
+            info->bit_rate = 8'000'000;
+            info->bit_rate_estimated = true;
+            info->stream_bytes = 1'000'000;
+            info->level = 153;
+            info->writing_library = "Lavf";
+            info->encoder = "x265";
+            info->format_name = info->format_name.empty() ? "matroska,webm" : "";
+        }
+    }
+    EXPECT_FALSE(rated.front() == items_.front());
+    EXPECT_TRUE(VideoCompareView::plays_alike(items_.front(), rated.front()));
+    ASSERT_TRUE(view->load(rated.front(), 1000, false, {}, rated, true));
+    EXPECT_EQ(decoders(*view), old);
+    for (const FakeDecoder* worker : old) {
+        EXPECT_FALSE(worker->cancelled);
+    }
+    // Anything else that differs still loads them afresh, a container that
+    // makes the file a raw stream among them.
+    std::vector<FrameComparison> other = rated;
+    other.front().distorted_info.width = 8;
+    EXPECT_FALSE(VideoCompareView::plays_alike(rated.front(), other.front()));
+    other = rated;
+    other.front().distorted_info.format_name = "hevc";
+    EXPECT_FALSE(VideoCompareView::plays_alike(rated.front(), other.front()));
+}
+
 // A seek starts every decoder again at the new frame; a pause keeps them,
 // and says so at once (paused by minimizing the window, it went on saying
 // "Playing").

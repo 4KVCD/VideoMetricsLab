@@ -460,6 +460,28 @@ bool VideoCompareView::crops_change_nothing(const FrameComparison& pending, cons
     return true;
 }
 
+bool VideoCompareView::plays_alike(const FrameComparison& a, const FrameComparison& b) {
+    // `b` with `a`'s facts that nothing playing reads: compared, the rest.
+    const auto as_a = [](VideoInfo& info, const VideoInfo& from) {
+        info.take_bit_rate(from);
+        info.level = from.level;
+        info.writing_library = from.writing_library;
+        info.encoder = from.encoder;
+        info.encoder_settings = from.encoder_settings;
+        // The container is read only as a raw stream or not, rawvideo or
+        // not (is_raw_stream, the input and probe options): one known since
+        // ("matroska,webm" for none) plays alike.
+        if (info.is_raw_stream() == from.is_raw_stream() &&
+            (info.format_name == "rawvideo") == (from.format_name == "rawvideo")) {
+            info.format_name = from.format_name;
+        }
+    };
+    FrameComparison alike = b;
+    as_a(alike.source_info, a.source_info);
+    as_a(alike.distorted_info, a.distorted_info);
+    return alike == a;
+}
+
 bool VideoCompareView::only_crops_differ(const std::vector<FrameComparison>& playing,
                                          const std::vector<FrameComparison>& wanted) {
     if (playing.size() != wanted.size()) {
@@ -472,7 +494,7 @@ bool VideoCompareView::only_crops_differ(const std::vector<FrameComparison>& pla
         uncropped.source_crop = playing[index].source_crop;
         uncropped.distorted_crop = playing[index].distorted_crop;
         uncropped.auto_crop_pending = playing[index].auto_crop_pending;
-        if (!(uncropped == playing[index])) {
+        if (!plays_alike(uncropped, playing[index])) {
             return false;
         }
     }
@@ -518,8 +540,9 @@ bool VideoCompareView::load(const FrameComparison& comparison, int position_ms, 
     } else {
         played = {comparison};
     }
-    // The pairs playing, each as it is or with black bars found since that
-    // change nothing: then they play as they are. Loaded afresh instead,
+    // The pairs playing, each as it is (plays_alike: facts nothing playing reads aside) or with
+    // black bars found since that change nothing: then they play as they
+    // are. Loaded afresh instead,
     // every decoder would start again (seconds at 4K), and so would the
     // first switch to another test video after a pair's bars were found.
     const auto plays_as_is = [this, &played] {
@@ -528,7 +551,7 @@ bool VideoCompareView::load(const FrameComparison& comparison, int position_ms, 
         }
         for (std::size_t index = 0; index < played.size(); ++index) {
             const FrameComparison& playing = series_[index];
-            if (!(playing == played[index]) &&
+            if (!plays_alike(playing, played[index]) &&
                 !(playing.auto_crop_pending && !played[index].auto_crop_pending &&
                   crops_change_nothing(playing, played[index]))) {
                 return false;

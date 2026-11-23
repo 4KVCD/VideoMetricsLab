@@ -110,6 +110,11 @@ public:
     // side boxed while they were looked for. Then the frames playing are
     // the ones the crops give.
     static bool crops_change_nothing(const FrameComparison& pending, const FrameComparison& cropped);
+    // Whether `a` and `b` play alike: the same but for the files' facts
+    // nothing playing reads, which come in after the videos are opened:
+    // their bit rates, level, writing library and encoder, and a container
+    // that changes neither whether it is a raw stream nor rawvideo.
+    static bool plays_alike(const FrameComparison& a, const FrameComparison& b);
     // Whether `wanted` is `playing`, pair for pair, but for their black bars'
     // crops (found since, or other ones).
     static bool only_crops_differ(const std::vector<FrameComparison>& playing,
