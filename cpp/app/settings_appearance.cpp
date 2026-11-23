@@ -357,13 +357,19 @@ QWidget* SettingsPanel::build_appearance_page() {
                       app::tr("Dark chocolate browns with an amber accent. VML Classic shows Dark.")},
                      {app::tr("Joker"), "joker",
                       app::tr("Plum purples with a vivid green accent. VML Classic shows Dark.")},
+                     {app::tr("Nitrate"), "nitrate",
+                      app::tr("Green-black shadows with cream text and a gold accent, like an old film print. VML "
+                              "Classic shows Dark.")},
+                     {app::tr("Phosphor"), "phosphor",
+                      app::tr("Near-black with umber edges, bright cream text and a gold accent, for the most "
+                              "contrast. VML Classic shows Dark.")},
                  },
                  settings_.dark_look, true),
         1, 1);
     grid->addWidget(look_controls, 2, 0, 1, 2);
     // The accent's first choice names what no accent gives: the system's,
     // or, in a look with an accent of its own (Mocha's amber, Joker's green,
-    // Desert's burnt orange), the look's. The look is the one the theme picked shows; for
+    // Nitrate's and Phosphor's gold, Desert's burnt orange), the look's. The look is the one the theme picked shows; for
     // the system's, the one the window shows now.
     const auto name_system_accent = [this, system_accent] {
         const QString mode = theme_buttons->checkedButton()->property("value").toString();
@@ -373,6 +379,8 @@ QWidget* SettingsPanel::build_appearance_page() {
             system_accent->setText(app::tr("Theme default"));
             system_accent->setToolTip(look == "mocha"   ? app::tr("The theme's own accent: Mocha's amber.")
                                       : look == "joker" ? app::tr("The theme's own accent: Joker's green.")
+                                      : look == "nitrate" ? app::tr("The theme's own accent: Nitrate's gold.")
+                                      : look == "phosphor" ? app::tr("The theme's own accent: Phosphor's gold.")
                                                         : app::tr("The theme's own accent: Desert's burnt orange."));
         } else {
 #ifdef __APPLE__

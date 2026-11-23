@@ -200,8 +200,13 @@ changes look as Windows changes between light and dark:
   the Solar Dusk palette).
 - **Joker**: plum purples with lavender-white text, a vivid green accent and
   purple links (after the Dracula palette).
+- **Nitrate**: sepia film noir: green-black shadows with cream text and a gold
+  accent, like an old film print.
+- **Phosphor**: sepia film noir at the most contrast: near-black with umber
+  edges, bright cream text and a gold accent.
 
-While a look with an accent of its own (Desert, Mocha, Joker) is the one the theme
+While a look with an accent of its own (Desert, Mocha, Joker, Nitrate,
+Phosphor) is the one the theme
 shows, the accent's first choice reads **Theme default** and gives that
 accent. The looks are VML Modern's alone: VML Classic shows Light or Dark.
 

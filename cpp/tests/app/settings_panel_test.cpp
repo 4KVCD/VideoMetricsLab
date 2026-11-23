@@ -233,7 +233,7 @@ TEST(SettingsPanel, AppearanceSavesEachChoice) {
     const QList<QAbstractButton*> light_looks = panel.light_look_buttons->buttons();
     const QList<QAbstractButton*> dark_looks = panel.dark_look_buttons->buttons();
     ASSERT_EQ(light_looks.size(), 4);  // Light, Dim, Paper, Desert
-    ASSERT_EQ(dark_looks.size(), 3);   // Dark, Mocha, Joker
+    ASSERT_EQ(dark_looks.size(), 5);   // Dark, Mocha, Joker, Nitrate, Phosphor
     EXPECT_TRUE(light_looks[0]->isChecked());
     EXPECT_TRUE(dark_looks[0]->isChecked());
     modes[1]->click();
@@ -254,6 +254,13 @@ TEST(SettingsPanel, AppearanceSavesEachChoice) {
     dark_looks[2]->click();
     EXPECT_EQ(settings.dark_look, "joker");
     EXPECT_EQ(system->text(), "Theme default");  // Joker's green
+    dark_looks[3]->click();
+    EXPECT_EQ(settings.dark_look, "nitrate");
+    EXPECT_EQ(system->text(), "Theme default");  // Nitrate's gold
+    dark_looks[4]->click();
+    EXPECT_EQ(settings.dark_look, "phosphor");
+    EXPECT_EQ(system->text(), "Theme default");  // Phosphor's gold
+    EXPECT_FALSE(system->toolTip().isEmpty());
     modes[1]->click();
     EXPECT_EQ(settings.theme, "light");
     EXPECT_EQ(system->text(), system_name);  // Light's own look: the system's

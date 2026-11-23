@@ -150,7 +150,8 @@ struct Settings {
     // The accent colour, "#rrggbb", or "" for the system's.
     std::string accent_colour;
     // VML Modern's look for light ("light", "dim", "paper" or "desert") and
-    // for dark ("dark", "mocha" or "joker"); theme picks which is shown, "" (the
+    // for dark ("dark", "mocha", "joker", "nitrate" or "phosphor"); theme picks
+    // which is shown, "" (the
     // system's) either. A theme of "mocha", from before there were looks, is
     // read as "dark" with the dark look "mocha".
     std::string light_look = "light";

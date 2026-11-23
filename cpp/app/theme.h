@@ -46,7 +46,8 @@ struct ChartColours {
 bool is_dark();
 
 // The look the window is drawn in now: Settings' light_look or dark_look
-// ("light", "dim", "paper" or "desert"; "dark", "mocha" or "joker"), whichever its
+// ("light", "dim", "paper" or "desert"; "dark", "mocha", "joker", "nitrate" or
+// "phosphor"), whichever its
 // light or dark asks for, in VML Modern. Classic has no looks: "light" or
 // "dark".
 QString look();
@@ -58,7 +59,8 @@ bool is_mocha();
 QColor mocha_accent();
 
 // A look's own accent, used while no accent is chosen (Mocha's amber,
-// Joker's green, Desert's burnt orange); none for a look that takes the
+// Joker's green, Nitrate's and Phosphor's gold, Desert's burnt orange); none
+// for a look that takes the
 // system's.
 std::optional<QColor> look_accent(const QString& look);
 

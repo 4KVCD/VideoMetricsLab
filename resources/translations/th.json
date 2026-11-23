@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Nitrate": "ไนเตรต",
+  "Phosphor": "ฟอสฟอร์",
+  "Green-black shadows with cream text and a gold accent, like an old film print. VML Classic shows Dark.": "เงาดำอมเขียวกับตัวอักษรสีครีมและสีเน้นทอง เหมือนฟิล์มภาพยนตร์เก่า VML Classic แสดงเป็นมืด",
+  "Near-black with umber edges, bright cream text and a gold accent, for the most contrast. VML Classic shows Dark.": "เกือบดำ ขอบสีอัมเบอร์ ตัวอักษรสีครีมสว่าง และสีเน้นทอง เพื่อคอนทราสต์สูงสุด VML Classic แสดงเป็นมืด",
+  "The theme's own accent: Nitrate's gold.": "สีเน้นของธีมเอง: สีทองของไนเตรต",
+  "The theme's own accent: Phosphor's gold.": "สีเน้นของธีมเอง: สีทองของฟอสฟอร์",
   "Joker": "โจ๊กเกอร์",
   "Plum purples with a vivid green accent. VML Classic shows Dark.": "สีม่วงลูกพลัมพร้อมสีเน้นเขียวสด VML Classic แสดงเป็นมืด",
   "The theme's own accent: Joker's green.": "สีเน้นของธีมเอง: สีเขียวของโจ๊กเกอร์",

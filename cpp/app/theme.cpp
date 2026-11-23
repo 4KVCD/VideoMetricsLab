@@ -178,6 +178,34 @@ const std::map<QString, QString> joker_window_colours = {
     {"link_selected", "#e0ccff"}, {"muted", "#ab9fbf"},     {"faint", "#ab9fbf"},
 };
 
+// Nitrate and Phosphor: sepia film noir, from one palette (cream #f8dbaf,
+// gold #c2a269, khaki #b39966, umber #584625, green-black #0c130b). Nitrate's
+// surfaces are the green-tinged black, cold shadow under warm cream text, as
+// an old print; Phosphor's a neutral near-black with umber edges and brighter
+// cream, for the most contrast. Both take the gold as their accent.
+const std::map<QString, QString> nitrate_colours = {
+    {"window", "#0a0f09"},        {"card", "#121810"},       {"card_alt", "#161c13"}, {"inset", "#171d14"},
+    {"raised", "#1e2419"},        {"hover", "#2a2f22"},      {"pressed", "#0e130c"},  {"field", "#080c07"},
+    {"border", "#232a1e"},        {"border_strong", "#3a3f2c"}, {"text", "#f8dbaf"},  {"text_soft", "#e6c896"},
+    {"text_muted", "#b39966"},    {"disabled", "#6e6448"},   {"scroll", "#474530"},   {"danger", "#e07a5f"},
+    {"danger_border", "#6a3324"},
+};
+const std::map<QString, QString> nitrate_window_colours = {
+    {"mean_tint", "#1b2117"}, {"mean_selected", "#3b3420"}, {"link", "#c2a269"},
+    {"link_selected", "#f8dbaf"}, {"muted", "#b39966"},     {"faint", "#b39966"},
+};
+const std::map<QString, QString> phosphor_colours = {
+    {"window", "#080808"},        {"card", "#111110"},       {"card_alt", "#151513"}, {"inset", "#161614"},
+    {"raised", "#1c1b18"},        {"hover", "#2a2720"},      {"pressed", "#0c0c0b"},  {"field", "#050505"},
+    {"border", "#584625"},        {"border_strong", "#b39966"}, {"text", "#fbe6c6"},  {"text_soft", "#f8dbaf"},
+    {"text_muted", "#c2a269"},    {"disabled", "#7a6b50"},   {"scroll", "#584625"},   {"danger", "#ff8a70"},
+    {"danger_border", "#8a3b2a"},
+};
+const std::map<QString, QString> phosphor_window_colours = {
+    {"mean_tint", "#1a1814"}, {"mean_selected", "#3f331e"}, {"link", "#f8dbaf"},
+    {"link_selected", "#ffffff"}, {"muted", "#c2a269"},     {"faint", "#c2a269"},
+};
+
 // Light's chart on `card`: its lines and text as Light's.
 ChartColours light_chart_on(const QColor& card) {
     return {card, QColor(40, 40, 40), QColor(90, 90, 90), QColor(0, 0, 0, 40), QColor(120, 120, 120),
@@ -185,7 +213,8 @@ ChartColours light_chart_on(const QColor& card) {
 }
 
 // The looks by name; Light and Dark are none of them (Modern's own colours).
-// Light's: Dim, Paper, Desert; Dark's: Mocha, Joker (apply_theme).
+// Light's: Dim, Paper, Desert; Dark's: Mocha, Joker, Nitrate, Phosphor
+// (apply_theme, is_dark_look).
 const std::map<QString, Look>& looks() {
     static const std::map<QString, Look> all = {
         {"dim", {dim_colours, dim_window_colours, light_chart_on(QColor("#e4e4e4")), std::nullopt}},
@@ -206,8 +235,23 @@ const std::map<QString, Look>& looks() {
           ChartColours{QColor("#251e30"), QColor("#f6f2fa"), QColor("#ab9fbf"), QColor(246, 242, 250, 28),
                        QColor("#ab9fbf"), QColor("#ff79c6"), QColor(80, 250, 123, 40)},
           QColor("#50fa7b")}},
+        {"nitrate",
+         {nitrate_colours, nitrate_window_colours,
+          ChartColours{QColor("#121810"), QColor("#f8dbaf"), QColor("#b39966"), QColor(248, 219, 175, 26),
+                       QColor("#b39966"), QColor("#f8dbaf"), QColor(194, 162, 105, 44)},
+          QColor("#c2a269")}},
+        {"phosphor",
+         {phosphor_colours, phosphor_window_colours,
+          ChartColours{QColor("#111110"), QColor("#fbe6c6"), QColor("#c2a269"), QColor(248, 219, 175, 34),
+                       QColor("#c2a269"), QColor("#f8dbaf"), QColor(194, 162, 105, 50)},
+          QColor("#c2a269")}},
     };
     return all;
+}
+
+// Whether `name` is one of Dark's looks (not Dark itself).
+bool is_dark_look(const QString& name) {
+    return name == "mocha" || name == "joker" || name == "nitrate" || name == "phosphor";
 }
 
 // The looks Settings asks for (apply_theme).
@@ -525,7 +569,7 @@ std::optional<QColor> look_accent(const QString& name) {
 }
 
 QPixmap look_swatch(const QString& name, int size) {
-    const bool dark = name == "dark" || name == "mocha" || name == "joker";
+    const bool dark = name == "dark" || is_dark_look(name);
     const auto found = looks().find(name);
     const auto colour = [&](const char* key) {
         if (found != looks().end()) {
@@ -994,9 +1038,9 @@ void apply_theme(const QString& theme, const QString& light_look, const QString&
     // in dark colours.
     const bool light_known = light_look == "dim" || light_look == "paper" || light_look == "desert";
     looks_asked().light = light_known ? light_look : QStringLiteral("light");
-    looks_asked().dark = theme == "mocha"                           ? QStringLiteral("mocha")
-                         : dark_look == "mocha" || dark_look == "joker" ? dark_look
-                                                                        : QStringLiteral("dark");
+    looks_asked().dark = theme == "mocha"          ? QStringLiteral("mocha")
+                         : is_dark_look(dark_look) ? dark_look
+                                                   : QStringLiteral("dark");
     QGuiApplication::styleHints()->setColorScheme(scheme);
     // A look for another is no change of scheme, so nothing tells the
     // window: its palette and sheet are set here.

@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Nitrate": "硝酸片",
+  "Phosphor": "荧光",
+  "Green-black shadows with cream text and a gold accent, like an old film print. VML Classic shows Dark.": "墨绿黑的阴影配奶油色文字与金色强调色，如老电影拷贝。VML Classic 显示为深色。",
+  "Near-black with umber edges, bright cream text and a gold accent, for the most contrast. VML Classic shows Dark.": "近黑底色配赭褐边框、明亮的奶油色文字与金色强调色，对比度最高。VML Classic 显示为深色。",
+  "The theme's own accent: Nitrate's gold.": "主题自带的强调色：硝酸片的金色。",
+  "The theme's own accent: Phosphor's gold.": "主题自带的强调色：荧光的金色。",
   "Joker": "小丑",
   "Plum purples with a vivid green accent. VML Classic shows Dark.": "李子紫配鲜绿色强调色。VML Classic 显示为深色。",
   "The theme's own accent: Joker's green.": "主题自带的强调色：小丑的绿色。",
