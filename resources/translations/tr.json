@@ -852,6 +852,7 @@
   "the reference's audio could not be read: {error}": "referansın sesi okunamadı: {error}",
   "no sound device": "ses aygıtı yok",
   "the sound device can't play": "ses aygıtı oynatamıyor",
+  "the video plays slower than real time": "video gerçek zamandan daha yavaş oynatılıyor",
   "No sound: {reason}": "Ses yok: {reason}",
   "hardware decode + GPU tone mapping/RGB (host transfer)": "donanımla kod çözme + GPU ton eşleme/RGB (ana makine aktarımı)",
   "software decode + GPU tone mapping/RGB": "yazılımla kod çözme + GPU ton eşleme/RGB",

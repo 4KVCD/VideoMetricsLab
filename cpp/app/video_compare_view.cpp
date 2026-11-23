@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cmath>
 #include <mutex>
+#include <utility>
 
 #include "i18n.h"
 #include "vml/app_log.h"
@@ -690,6 +691,7 @@ void VideoCompareView::set_playing(bool playing) {
     clock_frame_ = !playing && presented_ >= 0 ? presented_ : target_frame();
     wanted_playing_ = is_playing_ = playing;
     log_playback(playing ? (buffering_ && presented_ < 0 ? "playing, waiting for the first pair" : "playing") : "paused");
+    sound_held_back_ = false;  // paused, or playing again: the sound starts with the frames
     // Said at once: said only as a frame is shown, it would go on saying
     // "Playing" when paused (by minimizing the window, say).
     pool_status();
@@ -734,6 +736,9 @@ void VideoCompareView::set_audio_enabled(bool enabled) {
 #endif
     if (!enabled) {
         stop_audio();
+        if (std::exchange(sound_held_back_, false) && pool_active_) {
+            pool_status();  // no longer said: no sound is wanted
+        }
     } else if (is_playing_) {
         start_audio(frame_);
     }
@@ -838,6 +843,7 @@ void VideoCompareView::start_ffmpeg(bool realtime, bool keep_frame, const QStrin
     clock_frame_ = static_cast<long long>(std::nearbyint(position() / 1000.0 * series_.front().fps));
     clock_started_.reset();
     buffering_ = true;
+    sound_held_back_ = false;  // a start: the sound comes with the first pair
     audio_due_ = false;
     audio_resume_at_ = 0.0;
     presented_ = -1;
@@ -1290,6 +1296,11 @@ void VideoCompareView::pool_status() {
                         only_the_app_adds(effective_film_grain(frame_video_info(*comparison_, FrameSide::distorted))))) {
         said += QString::fromUtf8(" \xC2\xB7 ") + QString::fromUtf8(N_("film grain not shown (FFmpeg playback)"));
     }
+    if (sound_held_back_ && wanted_playing_) {
+        // The frames come slower than real time: the sound would run ahead
+        // of them, so it waits until they keep up (fell_behind).
+        said += QString::fromUtf8(" \xC2\xB7 audio unavailable \xC2\xB7 the video plays slower than real time");
+    }
     status(QString::fromUtf8("%1 \xC2\xB7 %2/%3 streams \xC2\xB7 %4")
                .arg(wanted_playing_ ? QStringLiteral("Playing") : QStringLiteral("Paused"))
                .arg(pool_.size())
@@ -1349,6 +1360,7 @@ void VideoCompareView::start_audio(long long frame) {
     }
     try {
         audio_.emplace(platform::ChildProcess::start(*command));
+        sound_held_back_ = false;
         log_sound("started, with ffplay, at " + format_fixed(static_cast<double>(frame) / source.fps, 3) + " s");
     } catch (const platform::ProcessError&) {
         log_sound("could not start ffplay");
@@ -1368,6 +1380,10 @@ void VideoCompareView::fell_behind() {
     // again only once they have kept up for a while.
     stop_audio("stopped: the frames fell behind the clock");
     audio_resume_at_ = clock() + audio_resume_seconds;
+    if (!sound_held_back_ && audio_enabled_) {
+        sound_held_back_ = true;
+        pool_status();
+    }
 }
 
 void VideoCompareView::stop_audio(const char* why) {

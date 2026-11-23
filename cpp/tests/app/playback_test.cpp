@@ -412,4 +412,37 @@ TEST_F(PlaybackTest, PlayAfterAPauseWhileBehindGoesOn) {
     EXPECT_EQ(presented(*view), 27);
 }
 
+// Issue #204: while the frames are behind the clock, the sound waits for them
+// to keep up, and the status says so ("audio unavailable", then why, which
+// the frame line shows as "No sound: ..."). Not said while paused, nor once
+// played again.
+TEST_F(PlaybackTest, SoundHeldBackForSlowFramesIsSaid) {
+    const auto view = make_view(1);
+    view->set_audio_enabled(true);  // no ffplay beside this FFmpeg: nothing plays, which is not the point
+    double now = 0.0;
+    view->clock = [&now] { return now; };
+    const FramePixels pixels = frame_pixels();
+    view->set_playing(true);
+    for (const char* side : {"s:", "d:0"}) {
+        decoder(*view, side).frames = {{24, pixels}};
+    }
+    tick(*view);
+    ASSERT_EQ(presented(*view), 24);
+    const QString held = QString::fromUtf8("audio unavailable \xC2\xB7 the video plays slower than real time");
+    EXPECT_FALSE(last_status(*view).contains(held)) << last_status(*view).toStdString();
+    now = 1.0;
+    tick(*view);  // nothing newer: behind
+    EXPECT_TRUE(last_status(*view).contains(held)) << last_status(*view).toStdString();
+    view->set_playing(false);
+    EXPECT_FALSE(last_status(*view).contains(held)) << last_status(*view).toStdString();
+    view->set_playing(true);
+    EXPECT_FALSE(last_status(*view).contains(held)) << last_status(*view).toStdString();
+    // Audio unticked while it is held back: not said.
+    now += 1.0;
+    tick(*view);
+    ASSERT_TRUE(last_status(*view).contains(held));
+    view->set_audio_enabled(false);
+    EXPECT_FALSE(last_status(*view).contains(held)) << last_status(*view).toStdString();
+}
+
 }  // namespace vml::app

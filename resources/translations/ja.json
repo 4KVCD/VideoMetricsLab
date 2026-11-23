@@ -852,6 +852,7 @@
   "the reference's audio could not be read: {error}": "参照動画の音声を読み込めませんでした：{error}",
   "no sound device": "サウンドデバイスがありません",
   "the sound device can't play": "サウンドデバイスで再生できません",
+  "the video plays slower than real time": "動画の再生が実時間より遅れています",
   "No sound: {reason}": "音声なし：{reason}",
   "hardware decode + GPU tone mapping/RGB (host transfer)": "ハードウェアデコード + GPU トーンマッピング/RGB（ホスト転送）",
   "software decode + GPU tone mapping/RGB": "ソフトウェアデコード + GPU トーンマッピング/RGB",

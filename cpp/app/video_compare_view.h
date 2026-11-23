@@ -277,6 +277,9 @@ private:
     bool no_sound_logged_ = false;
     std::string logged_playback_;
     std::string logged_sound_;
+    // The soundtrack held back while the frames are behind the clock
+    // (fell_behind): said in the status, as no sound and why (issue #204).
+    bool sound_held_back_ = false;
     // The soundtrack is to start (again) with the frames, not before
     // audio_resume_at_ (playback fell behind until then).
     bool audio_due_ = false;

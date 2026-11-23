@@ -852,6 +852,7 @@
   "the reference's audio could not be read: {error}": "không đọc được âm thanh của video tham chiếu: {error}",
   "no sound device": "không có thiết bị âm thanh",
   "the sound device can't play": "thiết bị âm thanh không phát được",
+  "the video plays slower than real time": "video phát chậm hơn thời gian thực",
   "No sound: {reason}": "Không có âm thanh: {reason}",
   "hardware decode + GPU tone mapping/RGB (host transfer)": "Giải mã phần cứng + tone mapping/RGB trên GPU (chuyển qua host)",
   "software decode + GPU tone mapping/RGB": "Giải mã phần mềm + tone mapping/RGB trên GPU",

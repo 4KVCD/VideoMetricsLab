@@ -852,6 +852,7 @@
   "the reference's audio could not be read: {error}": "無法讀取參考影片的音訊：{error}",
   "no sound device": "沒有音效裝置",
   "the sound device can't play": "音效裝置無法播放",
+  "the video plays slower than real time": "影片播放慢於即時",
   "No sound: {reason}": "無聲音：{reason}",
   "hardware decode + GPU tone mapping/RGB (host transfer)": "硬體解碼 + GPU 色調映射/RGB（主機傳輸）",
   "software decode + GPU tone mapping/RGB": "軟體解碼 + GPU 色調映射/RGB",

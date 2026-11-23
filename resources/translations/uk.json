@@ -852,6 +852,7 @@
   "the reference's audio could not be read: {error}": "не вдалося прочитати звук еталона: {error}",
   "no sound device": "немає звукового пристрою",
   "the sound device can't play": "звуковий пристрій не може відтворювати",
+  "the video plays slower than real time": "відео відтворюється повільніше за реальний час",
   "No sound: {reason}": "Немає звуку: {reason}",
   "hardware decode + GPU tone mapping/RGB (host transfer)": "Апаратне декодування + тональна компресія/RGB на GPU (передача через хост)",
   "software decode + GPU tone mapping/RGB": "Програмне декодування + тональна компресія/RGB на GPU",

@@ -852,6 +852,7 @@
   "the reference's audio could not be read: {error}": "a referencia hangja nem olvasható be: {error}",
   "no sound device": "nincs hangeszköz",
   "the sound device can't play": "a hangeszköz nem tud lejátszani",
+  "the video plays slower than real time": "a videó lassabban játszódik le a valós időnél",
   "No sound: {reason}": "Nincs hang: {reason}",
   "hardware decode + GPU tone mapping/RGB (host transfer)": "Hardveres dekódolás + GPU-s tónusleképezés/RGB (átvitel a gazdagépen át)",
   "software decode + GPU tone mapping/RGB": "Szoftveres dekódolás + GPU-s tónusleképezés/RGB",

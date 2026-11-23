@@ -852,6 +852,7 @@
   "the reference's audio could not be read: {error}": "zvuk reference nelze přečíst: {error}",
   "no sound device": "žádné zvukové zařízení",
   "the sound device can't play": "zvukové zařízení nemůže přehrávat",
+  "the video plays slower than real time": "video se přehrává pomaleji než v reálném čase",
   "No sound: {reason}": "Bez zvuku: {reason}",
   "hardware decode + GPU tone mapping/RGB (host transfer)": "Hardwarové dekódování + mapování tónů/RGB na GPU (přenos přes hostitele)",
   "software decode + GPU tone mapping/RGB": "Softwarové dekódování + mapování tónů/RGB na GPU",
