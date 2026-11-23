@@ -36,14 +36,19 @@ std::string frame_digits(int frame) {
     return text;
 }
 
-// The worst sample of `segment` by `condition`'s metric.
+// The worst sample of `segment` by `condition`'s metric: only the segment's
+// own samples are looked at. They are in frame order (score_at relies on it
+// too), so the first is found by a binary search, and the scan stops after
+// the segment's last frame.
 std::optional<WorstFrame> segment_worst(const ScoreSamples& samples, const WeakCondition& condition,
                                         const WeakSegment& segment) {
     std::optional<WorstFrame> worst;
-    for (std::size_t index = 0; index < samples.frame.size(); ++index) {
+    const auto first = std::lower_bound(samples.frame.begin(), samples.frame.end(), segment.first_frame);
+    for (auto index = static_cast<std::size_t>(first - samples.frame.begin());
+         index < samples.frame.size() && samples.frame[index] <= segment.last_frame; ++index) {
         const int frame = samples.frame[index];
         const double score = samples.values[index];
-        if (frame < segment.first_frame || frame > segment.last_frame || std::isnan(score)) {
+        if (std::isnan(score)) {
             continue;
         }
         const bool worse = !worst || (condition.comparison == '>' ? score > worst->score : score < worst->score);
@@ -96,13 +101,18 @@ std::vector<StillFrame> still_frames(const ComparisonResult& result, const std::
     if (from == "segments") {
         const SegmentRules used = scored_rules(result.metric_results, rules);
         const std::vector<WeakSegment> segments = weak_segments(result, used);
+        // Each condition's samples, taken once
+        std::vector<std::optional<ScoreSamples>> samples_of;
+        for (const WeakCondition& condition : used.conditions) {
+            samples_of.push_back(score_samples(result.metric_results, condition.key));
+        }
         // Each segment's worst frame, by the first condition with scores
         std::vector<StillFrame> found;
         for (std::size_t index = 0; index < segments.size(); ++index) {
-            for (const WeakCondition& condition : used.conditions) {
-                const std::optional<ScoreSamples> samples = score_samples(result.metric_results, condition.key);
+            for (std::size_t c = 0; c < used.conditions.size(); ++c) {
+                const WeakCondition& condition = used.conditions[c];
                 const std::optional<WorstFrame> worst =
-                    samples ? segment_worst(*samples, condition, segments[index]) : std::nullopt;
+                    samples_of[c] ? segment_worst(*samples_of[c], condition, segments[index]) : std::nullopt;
                 if (!worst) {
                     continue;
                 }
