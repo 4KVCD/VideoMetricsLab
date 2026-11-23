@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/4KVCD/VideoMetricsLab/blob/release/v2.7/docs/schemas/devices.schema.json",
+  "title": "VideoMetricsLab devices (devices-1)",
+  "description": "devices --json: FFmpeg, and where each metric would be calculated on this PC.",
+  "type": "object",
+  "required": [
+    "app",
+    "version",
+    "commit",
+    "format",
+    "gpus",
+    "gpu_chosen",
+    "ffmpeg",
+    "metrics"
+  ],
+  "properties": {
+    "app": {
+      "const": "VideoMetricsLab"
+    },
+    "version": {
+      "type": "string"
+    },
+    "commit": {
+      "type": "string"
+    },
+    "format": {
+      "const": "devices-1"
+    },
+    "gpus": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "gpu_chosen": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ffmpeg": {
+      "type": "object",
+      "required": [
+        "usable",
+        "version",
+        "problems"
+      ],
+      "properties": {
+        "usable": {
+          "type": "boolean"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "problems": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": [
+        "vmaf",
+        "vmaf_neg",
+        "vmaf_v1",
+        "psnr",
+        "ssim",
+        "xpsnr",
+        "ssimulacra2",
+        "butteraugli",
+        "cvvdp"
+      ],
+      "additionalProperties": {
+        "$ref": "#/$defs/where"
+      }
+    },
+    "other_vship": {
+      "type": "object",
+      "required": [
+        "vship",
+        "gpu",
+        "detail"
+      ]
+    }
+  },
+  "$defs": {
+    "where": {
+      "type": "object",
+      "required": [
+        "on",
+        "gpu",
+        "detail"
+      ],
+      "properties": {
+        "on": {
+          "enum": [
+            "gpu",
+            "cpu",
+            null
+          ]
+        },
+        "gpu": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "detail": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

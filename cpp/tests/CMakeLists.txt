@@ -44,6 +44,7 @@ add_executable(vml_tests
     unit/results_summary_test.cpp
     unit/run_file_test.cpp
     unit/run_line_test.cpp
+    unit/schemas_test.cpp
     unit/settings_test.cpp
     unit/sha256_test.cpp
     unit/stats_test.cpp
@@ -68,6 +69,7 @@ target_include_directories(vml_tests PRIVATE ../../native)  # the decoders' head
 target_compile_definitions(vml_tests PRIVATE
     VML_SOURCE_DIR="${PROJECT_SOURCE_DIR}"  # the sources, for source_limits_test.cpp
     VML_REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/reference"
+    VML_SCHEMA_DIR="${PROJECT_SOURCE_DIR}/../docs/schemas"  # the JSON Schemas (schemas_test.cpp)
     VML_TEST_CHILD="$<TARGET_FILE:vml_test_child>"
     VML_TEST_LIBRARY="$<TARGET_FILE:vml_test_library>"
     VML_FAKE_VSHIP="$<TARGET_FILE:vml_fake_vship>"

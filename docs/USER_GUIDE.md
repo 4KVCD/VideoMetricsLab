@@ -626,6 +626,9 @@ $run.videos[0].metrics.vmaf.score
 
 # What would calculate each metric on this PC
 .\VideoMetricsLab-cli.exe devices
+
+# The same as JSON, for a script (devices --json FILE writes it to FILE)
+.\VideoMetricsLab-cli.exe devices --json -
 ```
 
 | Option | Meaning |
@@ -662,20 +665,27 @@ $run.videos[0].metrics.vmaf.score
 | `--difference` | With exactly two test videos: the first minus the second as well, frame by frame (CVVDP second by second), paired as **Difference** in Metric Graphs pairs them. The tables end with a difference table (Score: the two scores subtracted; Mean, Min, Max: of the frames' differences; Paired: the frames, or seconds, both have), the JSON gets a `difference` section, and with `--csv` it is written as `<first>_minus_<second>.csv` (the files' names). |
 | `--csv FOLDER` | Write each video's per-frame scores as `<video>.csv`, as the window's per-frame scores export writes them. |
 | `--json FILE` | Also write the results as JSON. `--json -` prints the JSON instead of the tables, for a script to read. |
+| `--frames-json FOLDER` | Write each video's per-frame scores as JSON, `<video>.frames.json`, as the window's per-frame JSON export writes them (see [The results file](RESULTS_JSON.md#per-frame-scores-as-json)). The same names and numbers after a name taken as `--csv`. |
 | `--batch CSV` | Compare the videos a CSV file lists, in place of REFERENCE and TEST, all in one run (the start-up and the GPU checks once, not once per reference). A row per test video, with the columns `reference` and `test` (a file or a pattern) and, if wanted, `sequence` and any others, which `--scores-csv` keeps; paths are relative to the CSV file's folder. The tables come per reference, and `--json` writes `{"batch": [...]}`, each reference's results as without `--batch`. A reference that cannot be read is said and the others are still compared (exit code 4). Not with `--difference`. |
-| `--scores-csv FILE` | Write each test video's bitrate (`kbps`) and scores to FILE, a row per video, with its `sequence` (the `--batch` row's, else the reference's file name), `test`, `reference` and the `--batch` row's other columns: the file `bdrate --anchor` and `--test` read. A video whose bitrate is not known, or with only a part compared (`--range`, `--duration`), is left out, said. |
+| `--scores-csv FILE` | Write each test video's bitrate (`kbps`) and scores to FILE, a row per video, with its `sequence` (the `--batch` row's, else the reference's file name), `test`, `reference` and the `--batch` row's other columns: the file `bdrate --anchor` and `--test` read. A video whose bitrate is not known, or with only a part compared (`--range`, `--duration`), is left out, said. A CSV file for programs: no byte order mark (before 2.7 it had one), its lines ended CR LF. |
 | `--worst N` | After the tables, each metric's N worst dips: the worst frame of each (a frame within 1 s of a worse one is part of its dip), with every metric's score there. |
-| `--segments CONDITIONS` | List the stretches where scores fall past a threshold, such as `"vmaf<90,ssimulacra2<70"` (quoted: `<` and `>` are the shell's; Butteraugli's worst are high: `"butteraugli>2"`). A frame is weak where any of them holds. Frames are numbered from the video's first, as its encoder numbers them; CVVDP is judged second by second. `--segments saved` takes the conditions of the weak segment profile in use in the app's Settings > Weak segments, `--segments profile:NAME` those of profile NAME (any case; `Default` too), and `--segments preset:KEY` those of a preset (see [Weak segment profiles](#weak-segment-profiles)); conditions after it change it: `"preset:grainy-film,vmaf<80"` replaces the preset's VMAF condition (all of those given on a metric replace its conditions on it: `"preset:grainy-film,vmaf<85,vmaf>20"` keeps both), and a metric it has none for is added; those on metrics not compared are left out, and said; the profile's any/every choice, shortest segment and gap apply where the command gives none. |
+| `--segments CONDITIONS` | List the stretches where scores fall past a threshold, such as `"vmaf<90,ssimulacra2<70"` (quoted: `<` and `>` are the shell's; Butteraugli's worst are high: `"butteraugli>2"`). A frame is weak where any of them holds. Frames are numbered from the video's first, as its encoder numbers them; CVVDP is judged second by second. `--segments saved` takes the conditions of the weak segment profile in use in the app's Settings > Weak segments, `--segments profile:NAME` those of profile NAME (any case; `Default` too), and `--segments preset:KEY` those of a preset (see [Weak segment profiles](#weak-segment-profiles)); conditions after it change it: `"preset:grainy-film,vmaf<80"` replaces the preset's VMAF condition (all of those given on a metric replace its conditions on it: `"preset:grainy-film,vmaf<85,vmaf>20"` keeps both), and a metric it has none for is added; those on metrics not compared are left out, and said; the profile's any/every choice, shortest segment and gap apply where the command gives none. A profile with no condition on the metrics compared takes one on the metric shown, as the Worst Frames tab starts: below the metric's first band of worse frames (`vmaf<85`), on the metric Metric Graphs shows where it is compared, else the first compared; a note says so. A preset none of whose conditions is on a metric compared is refused. |
 | `--segments-all`, `--segments-any` | A frame is weak only where every `--segments` condition holds; or where any one does, also when the profile or preset says every one must (any is the default otherwise). One or the other. |
 | `--segment-min-frames N`, `--segment-merge-frames N` | Leave out segments shorter than N frames (default 1); join segments at most N frames apart (default 0). |
 | `--segments-dir FOLDER` | Write each video's segments to FOLDER as `<video>.<metrics>.segments.json` and `.csv`, `<metrics>` the conditions' metrics joined by `+` (`<video>.vmaf+ssimulacra2.segments.json`), as the app names them. |
 | `--segments-report FILE` | Write every test video's segments (with `--batch`, every reference's) to FILE as one report, as the app's exports of all the videos with **Weak segments** ticked: JSON, or CSV when FILE ends in `.csv`. The fields of `--json`'s path are filled in in its path. |
+| `--require RULES` | A quality gate: the bars each test video's scores must reach, comma-separated, such as `"vmaf>=95,vmaf.worst_1_percent>=90,butteraugli<=1.5"` (quoted: `<` and `>` are the shell's). Each is METRIC, a statistic after a dot if wanted, then `>=`, `>`, `<=` or `<` and a number. The statistics are those of the JSON's `metrics`: `score` (the default), `median`, `min`, `max`, `worst_10_percent`, `worst_5_percent`, `worst_1_percent` and `worst_0.1_percent`; for CVVDP, all but its score are of its per-second scores (`cvvdp.min` is its worst second). Repeat it to add rules. A video that misses a bar, or whose metric was not scored, fails its gate and makes the exit code 3; a metric that does not apply to a video (HDR VMAF of SDR video) is left out of its gate. Each video's checks follow the tables, and are in the JSON's `gate`. A rule's metric must be one of those compared. |
+| `--fail-on-segments` | A quality gate: a test video with a weak segment, by `--segments`' conditions, fails its gate (exit code 3). With `--require`, both must pass. |
 | `--run-dir FOLDER` | Write each video's result to FOLDER as `<video>.metrics.json`, the file the Videos tab's **Export > Run file (.metrics.json)...** writes: **Import run file...**, on the Videos tab or Metric Graphs, opens it on any PC, without its saved scores. |
 | `--log-file FILE` | Also write the app's log to FILE, as the window writes its own: the whole run, whatever `-v` says, added to the end when FILE is there. |
 | `--name TEMPLATE` | Name each test video's files (`--csv`, `--segments-dir`, `--run-dir`) after TEMPLATE in place of `<video>`. Its fields: `{test}` and `{reference}` (the files' names without extension), `{version}` (the app's: `2.6`), `{date}` and `{time}` (the run's start: `20261117`, `180912`) and with `--batch` `{sequence}` (the row's, else the reference's name); `{{` and `}}` are braces. In the names, characters other than letters, digits, `-`, `_` and `.` become `_`, as in `<video>`. The same fields, but `{sequence}`, are filled in in `--json`'s, `--scores-csv`'s, `--segments-report`'s and `--log-file`'s paths, `{test}` and `{reference}` only when one video is compared. A name already taken gets a number, which the JSON's `csv`, `run_file` and `segment_files` give. |
 | `--notify` | Send a notification as the run ends, as **Settings > Notifications** in the app say: to the services on there, with its message, for the outcomes and run lengths it is on for (see [Notifications](#notifications)). Whether it was sent, or why not, is said on the progress lines (a problem with `-q` too); the exit code is the run's either way. On macOS and Linux it needs `curl`, which sends it. |
 | `-q`, `--quiet` | No progress, only the results. |
 | `-v`, `--verbose` | The app's log as well. |
+| `--progress text\|jsonl` | `text`: progress lines for a person (the default). `jsonl`: a JSON object a line on the error stream, for a program to read, `-q` or not (below). |
+| `--timeout SECONDS` | Cancel the run after SECONDS (whole seconds, or H:MM:SS) from the command's start, as Ctrl+C does: what finished is given and saved, the JSON says `"cancelled": true, "timed_out": true`, and the exit code is 124. Reached while the videos are read or the results written, it ends the command at once (exit code 124, no results), as Ctrl+C does then. |
+| `--video-timeout SECONDS` | Stop a video whose run takes more than SECONDS from its start (a further `--cvvdp-display`'s run counts as its own); the other videos go on. What it had not finished fails with the code `timed_out`, and the exit code is 124. |
+| `--cancel-on-stdin-eof` | Cancel the run, as Ctrl+C does, when the standard input ends. For a program that starts this one and cannot send it Ctrl+C: it keeps the input open, and closes it to cancel. Not with an input that is empty from the start (`< NUL`), which would cancel at once. |
 | `--settings FILE` | Read the settings from FILE (a `settings.json`, such as a copy of the app's, kept with a script) in place of the app's. Every option left out takes its value from it, as it would from the app's. It is never written; a FILE that is not there or is not JSON is an input not read (exit code 4). |
 | `--no-settings` | Take every setting at its default, as a new install has them, whatever the app's settings say: the same command gives the same run on any PC. |
 | `--cache-dir FOLDER` | Read and save the saved scores (and the black bars found) in FOLDER, in place of the folder Settings > Storage names. |
@@ -715,6 +725,24 @@ system's code page, so a script reads them as UTF-8 (in Python,
 `subprocess.run(..., encoding="utf-8")`); a console is sent every character
 as it is, whatever its code page.
 
+A note that is the same for several videos (no colour tags, say) is said
+once, with the videos it is of. With `--progress jsonl`, every line on the
+error stream is a JSON object: its `event`, then `seconds` since the command
+started, then what the event says:
+
+| `event` | What it says |
+| --- | --- |
+| `note` | A note on how videos are scored (as their JSON's `notes`): `code`, `text`, and the `videos` it is of. Notes found while the videos are read come before `run_started`. |
+| `run_started` | The run starts: how many `jobs` (a job is a video, or a further `--cvvdp-display` of one). |
+| `video_started` | A job starts: its `job` (from 0) and its video's `path` (and `cvvdp_display` for a further display). |
+| `progress` | A job's figures, at most once a second: `job`, `path` and its `tasks`, each with its `metrics`, `state` (`starting`, `waiting`, `running`, `done`, `failed`), the frames `done` of `total` and `fps`. |
+| `video_done` | A job ended: `job`, `path`, `status` (`done`, `partial`, `failed`, `cancelled` or `timed_out`) and its line as `text`. |
+| `message`, `problem` | Any other progress line, as `text`; a `problem` is one `-q` would still show. |
+| `run_done` | Last, once the command got as far as reading its videos: its `exit_code`, and whether it was `cancelled` and `timed_out`. |
+
+A reader should skip events and keys it does not know: later versions may
+add some.
+
 The exit code says how the run went, so that a script can act on it without
 reading the text:
 
@@ -723,11 +751,12 @@ reading the text:
 | 0 | Every video got every metric asked for that applies to it. A metric that does not apply to the videos, such as HDR VMAF of a video that is not PQ (HDR10), is left out with a note and its status `not applicable`, as is a metric ticked by default in the app that cannot be calculated (CVVDP with `--subsample`, say). |
 | 1 | A video failed or lost a metric (a metric asked for by name that cannot be calculated, such as `-m cvvdp` with `--subsample`, counts), or a file asked for could not be written. |
 | 2 | A wrong command: nothing was read or run. Among them a raw stream that stores no frame rate without `--fps`, a raw YUV file without `--size`, `--pix-fmt` and `--fps`, `--difference` without two test videos, patterns that find only the reference, and FFmpeg that cannot be used. |
-| 3 | Reserved for quality gates (a score below a bar the command sets), which are to come: every score asked for is there, but the encode does not reach the bar. Nothing gives it yet. |
+| 3 | A quality gate failed: every score asked for is there, but a test video misses a `--require` bar or has a weak segment with `--fail-on-segments`. |
 | 4 | An input could not be read: the reference, a test video, a pattern that finds no file, or the `--batch` list. The other videos are still compared, and the JSON says which could not be read. |
-| 130 | Cancelled with Ctrl+C (or Ctrl+Break, or the console window closed). |
+| 124 | Timed out: `--timeout` cancelled the run, or `--video-timeout` stopped a video. |
+| 130 | Cancelled with Ctrl+C (or Ctrl+Break, the console window closed, or the end of the standard input with `--cancel-on-stdin-eof`). |
 
-When more than one applies, 130 comes first, then 4, then 1. With `--json`,
+When more than one applies, 130 comes first, then 124, then 4, then 1, then 3. With `--json`,
 the results are written for every code but 2, also when nothing could be
 compared: a reference that cannot be read gives a document with its `error`
 and `error_code` and no videos, and a `--batch` list that cannot be read
@@ -736,10 +765,52 @@ has a code beside it, a word that stays the same from version to version
 where the text may change; [The results file](RESULTS_JSON.md#codes) lists
 them.
 Ctrl+C stops the run as **Cancel** does; scores that had finished are saved.
-Closing the console window does the same on Windows' classic console.
+Closing the console window does the same on Windows' classic console. A
+program that starts this one can send it Ctrl+Break (on Windows, start it in
+a new process group: in Python, `creationflags=subprocess.CREATE_NEW_PROCESS_GROUP`
+and `send_signal(signal.CTRL_BREAK_EVENT)`), or use `--cancel-on-stdin-eof`.
+Ending it outright (End task, `TerminateProcess`) ends the FFmpeg and other
+programs it started too, but gives no results.
 
 Unlike the app, the command line does not ask before a long SSIMULACRA2 or
 Butteraugli run on the CPU. Text is English whatever the app's language.
+
+### Saved results and run files
+
+The scores the app has saved (the Saved Results tab's, by the window or the
+command line) can be listed, read and deleted without their videos, which may
+be gone:
+
+```powershell
+# Every saved comparison, newest first, with its ID; --filter narrows them by file name
+.\VideoMetricsLab-cli.exe saved list --filter encode
+
+# One comparison's scores, by the first 6 or more hex digits of its ID, as compare gives them
+.\VideoMetricsLab-cli.exe saved show 3fa9c1 --segments "vmaf<90" --worst 5 --json -
+
+# Every comparison of a test video, by its path
+.\VideoMetricsLab-cli.exe saved show encodes\encode.mkv --frames-json scores
+
+# Delete one, by at least 12 hex digits of its ID (it asks nothing)
+.\VideoMetricsLab-cli.exe saved delete 3fa9c1d24b07
+
+# Run files (.metrics.json: compare --run-dir, the window's Export > Run file), reported the same way
+.\VideoMetricsLab-cli.exe report runs\*.metrics.json --segments saved
+```
+
+`saved show` and `report` take compare's outputs: `--json`, `--csv`,
+`--frames-json`, `--run-dir`, `--worst`, `--segments` (with `saved`,
+`profile:NAME` and `preset:KEY`) and its options, `--segments-dir` and
+`--segments-report`. The JSON is compare's results file, its `read_from`
+`"saved results"` or `"run files"`; a video's `settings`, `black_bars`,
+`metric_status`, `decode_plan` and `timings` are `null`, as for a saved run
+the window opens, which does not record them. With several references, it
+is `{"batch": [...]}`, as `compare --batch` writes it. `saved list --json`
+gives each comparison's `id`, `test`, `reference`, `reference_found`,
+`saved_utc`, `bytes` and `metrics` (format `saved-list-1`). The exit code is
+4 for an item that names no saved comparison (or a run file that cannot be
+read), 2 for an ID too short, or one that begins more than one comparison's
+ID to delete.
 
 ### Raw video streams
 
@@ -1126,15 +1197,31 @@ when every condition must hold; the JSON lists it under `left_out`.
   videos, without a highlighted range), in one file, JSON or CSV as its name
   says.
   The JSON gives the conditions and options, then each video's `name`,
-  `path`, `reference`, `segment_count`, `weak_frames` (the segments' frames
-  added up) and `segments`; the CSV is a row per segment, led by its video
-  and reference. With strict conditions it can be far smaller than the
+  `path`, `reference`, its segments in short and `segments`; the CSV is a row
+  per segment, led by its video and reference. With strict conditions it can be far smaller than the
   results file; with loose ones, on a film, far larger.
 - **Settings > Storage > After each run** saves each video's segments as
   `<video>.<metrics>.segments.json` and `.csv` once its run ends, with the
   rest that Exports include (see [Exporting from the right-click
   menus](#exporting-from-the-right-click-menus)). Nothing is saved while no
   condition is set.
+
+Every weak segments JSON tells, as the Worst Frames tab shows them:
+
+- for each segment, besides its frames, times and each condition's metric's
+  `min`, `max` and `mean` there: `weak_by`, the conditions that hold on any
+  of its frames (the tab's **Weak by** column), and `condition_frames`, how
+  many of its frames each holds on;
+- for each video: `segment_count`, `weak_frames` (the segments' frames added
+  up), `weak_seconds` (their lengths added up), `weak_percent` (of the
+  frames compared, or of those in the highlighted range), and
+  `condition_counts`, for each condition the frames it `holds` on and how
+  many of them are `in_segments`: fewer where a run was shorter than the
+  shortest segment, or, with every condition, where another did not hold.
+
+The command line's `--json` gives the same in each video's `weak_segments`,
+and its tables say each condition's frames and, with several conditions any
+of which makes a frame weak, a **Weak by** column.
 
 The command line does the same with `--segments saved`, `--segments-dir`
 and `--segments-report` (see [Command line](#command-line)).

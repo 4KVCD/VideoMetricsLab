@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/4KVCD/VideoMetricsLab/blob/release/v2.7/docs/schemas/saved-list.schema.json",
+  "title": "VideoMetricsLab saved comparisons (saved-list-1)",
+  "description": "saved list --json: every comparison the app has saved, newest first.",
+  "type": "object",
+  "required": [
+    "app",
+    "version",
+    "commit",
+    "format",
+    "comparisons"
+  ],
+  "properties": {
+    "app": {
+      "const": "VideoMetricsLab"
+    },
+    "version": {
+      "type": "string"
+    },
+    "commit": {
+      "type": "string"
+    },
+    "format": {
+      "const": "saved-list-1"
+    },
+    "comparisons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "test",
+          "reference",
+          "reference_found",
+          "saved_utc",
+          "bytes",
+          "metrics"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "test": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "reference_found": {
+            "type": "boolean"
+          },
+          "saved_utc": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

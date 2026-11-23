@@ -71,6 +71,9 @@ Json display_entry(const TestVideo& target) {
     if (target.for_display_only && target.csv_file) {
         entry["csv"] = platform::path_text(*target.csv_file);
     }
+    if (target.for_display_only && target.frames_json_file) {
+        entry["frames_json"] = platform::path_text(*target.frames_json_file);
+    }
     if (target.for_display_only && target.run_file) {
         entry["run_file"] = platform::path_text(*target.run_file);
     }
@@ -386,6 +389,9 @@ Json results_document(const VideoInfo& source, const std::vector<TestVideo>& vid
         if (video.csv_file) {
             entry["csv"] = platform::path_text(*video.csv_file);
         }
+        if (video.frames_json_file) {
+            entry["frames_json"] = platform::path_text(*video.frames_json_file);
+        }
         if (video.run_file) {
             entry["run_file"] = platform::path_text(*video.run_file);
         }
@@ -435,6 +441,9 @@ Json results_document(const VideoInfo& source, const std::vector<TestVideo>& vid
         }
         add_video_record(entry, video.facts ? &*video.facts : nullptr, video.result ? &*video.result : nullptr,
                          video.display);
+        if (!video.checks.empty()) {
+            entry["gate"] = gate_json(video.checks);
+        }
         document["videos"].push_back(entry);
     }
     if (difference) {
@@ -447,21 +456,28 @@ Json results_document(const VideoInfo& source, const std::vector<TestVideo>& vid
 
 namespace {
 
-// One video's (or one further display's) scores in `folder`, under a name no
-// other file has. False, and said, when the file cannot be written.
-bool write_csv_of(TestVideo& video, const std::string& name, const std::filesystem::path& folder,
-                  std::set<std::filesystem::path>& reserved, const std::function<void(const std::string&)>& message,
-                  const std::function<void(const std::string&)>& failed) {
-    const std::filesystem::path path = unique_output_path(folder, name, ".csv", reserved);
+// One video's (or one further display's) per-frame scores in `folder`, as
+// CSV or (`json`) JSON, under a name no other file has. False, and said, when
+// the file cannot be written.
+bool write_frames_of(TestVideo& video, const std::string& name, const std::filesystem::path& folder, bool json,
+                     std::set<std::filesystem::path>& reserved, const std::function<void(const std::string&)>& message,
+                     const std::function<void(const std::string&)>& failed) {
+    const char* suffix = json ? frames_json_suffix : ".csv";
+    const std::filesystem::path path = unique_output_path(folder, name, suffix, reserved);
     try {
-        export_csv(*video.result, path);
+        if (json) {
+            export_per_frame_json(*video.result, path);
+        } else {
+            export_csv(*video.result, path);
+        }
     } catch (const std::exception& failure) {
-        failed(video.label() + ": the CSV could not be written (" + failure.what() + ")");
+        failed(video.label() + ": the " + (json ? "per-frame JSON" : "CSV") + " could not be written (" +
+               failure.what() + ")");
         return false;
     }
-    video.csv_file = path;
+    (json ? video.frames_json_file : video.csv_file) = path;
     message(video.label() + ": per-frame scores in " + platform::path_text(path));
-    if (const std::optional<std::string> note = name_taken_note(path, name, ".csv")) {
+    if (const std::optional<std::string> note = name_taken_note(path, name, suffix)) {
         failed(*note);
     }
     return true;
@@ -471,11 +487,12 @@ bool write_csv_of(TestVideo& video, const std::string& name, const std::filesyst
 
 bool write_csvs(std::vector<TestVideo>& videos, const std::filesystem::path& folder,
                 const std::function<void(const std::string&)>& message,
-                const std::function<void(const std::string&)>& failed) {
+                const std::function<void(const std::string&)>& failed, bool json) {
     std::error_code error;
     std::filesystem::create_directories(folder, error);
     if (error) {
-        failed("The CSV folder could not be made: " + python_os_error(error, folder));
+        failed(std::string("The ") + (json ? "per-frame JSON" : "CSV") +
+               " folder could not be made: " + python_os_error(error, folder));
         return false;
     }
     bool written = true;
@@ -483,11 +500,13 @@ bool write_csvs(std::vector<TestVideo>& videos, const std::filesystem::path& fol
     for (TestVideo& video : videos) {
         const std::string name = video.file_stem();
         if (video.result) {
-            written = write_csv_of(video, name, folder, reserved, message, failed) && written;
+            written = write_frames_of(video, name, folder, json, reserved, message, failed) && written;
         }
         for (TestVideo& other : video.other_displays) {
             if (other.result) {
-                written = write_csv_of(other, name + "_" + other.display, folder, reserved, message, failed) && written;
+                written = write_frames_of(other, name + "_" + other.display, folder, json, reserved, message,
+                                          failed) &&
+                          written;
             }
         }
     }

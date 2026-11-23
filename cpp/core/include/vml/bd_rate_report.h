@@ -51,8 +51,9 @@ RateTable read_rate_table(std::string_view text, const std::string& name);
 RateTable read_rate_file(std::string_view text, const std::string& name);
 
 // `table` as a CSV file read_rate_table reads back as it is: its columns in
-// their order, numbers in full, an empty cell for a score not had. A UTF-8
-// byte order mark and CR LF line ends, as the app's other CSV files.
+// their order, numbers in full, an empty cell for a score not had. CR LF
+// line ends, as the app's other CSV files, but no byte order mark: it is
+// for programs (compare --scores-csv, read by bdrate and scripts).
 std::string rate_table_csv(const RateTable& table);
 
 // A scored comparison as an encode of its test video: the sequence is the

@@ -335,7 +335,9 @@ std::vector<BundleFile> export_files(const Settings& settings, const std::vector
                                 "." + qt_text(segments_file_suffix(used.conditions.empty() ? rules : used)))
                 .toStdString();
         if (json) {
-            files.push_back({stem + ".json", python_json_dumps(segments_json(segments, used, left_out)) + "\n"});
+            files.push_back(
+                {stem + ".json",
+                 python_json_dumps(segments_file_json(*video.result, segments, used, left_out)) + "\n"});
         }
         if (csv) {
             files.push_back({stem + ".csv", text_lines(segments_csv(segments, used))});

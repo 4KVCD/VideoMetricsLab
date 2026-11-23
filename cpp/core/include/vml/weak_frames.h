@@ -158,11 +158,36 @@ std::vector<ConditionCount> condition_counts(const ComparisonResult& result, con
                                              const std::vector<WeakSegment>& segments);
 
 // The segments as JSON: the rules used, then one object per segment with
-// first_frame, last_frame, start_time, end_time, frames and each metric's
-// min, max and mean. Conditions `left_out` (scored_rules') are given after
+// first_frame, last_frame, start_time, end_time, frames, each metric's
+// min, max and mean, and as the Worst Frames tab's Weak by column tells it,
+// "weak_by", the conditions that hold on any of its frames, and
+// "condition_frames", how many of its frames each holds on. Conditions `left_out` (scored_rules') are given after
 // the rules' as "left_out", where there are any.
 nlohmann::ordered_json segments_json(const std::vector<WeakSegment>& segments, const SegmentRules& rules,
                                      const std::vector<WeakCondition>& left_out = {});
+
+// A video's segments in short, as the Worst Frames tab tells them:
+// "segment_count", "weak_frames" (the segments' frames added up),
+// "weak_seconds" (their lengths added up), "weak_percent" (of the frames
+// compared, or of those in the rules' ranges where there are any), and
+// "condition_counts", for each of the rules' conditions its "condition",
+// the frames it "holds" on and how many of them are "in_segments"
+// (condition_counts: fewer where a run was shorter than the shortest
+// segment, or, with every condition, another did not hold). `segments` are
+// weak_segments' for `result` and `rules`.
+nlohmann::ordered_json segments_summary_json(const ComparisonResult& result, const SegmentRules& rules,
+                                             const std::vector<WeakSegment>& segments);
+// One video's segments as a file of them has them (<video>.<metrics>.segments
+// .json, the results' "weak_segments"): segments_json's keys, then
+// segments_summary_json's.
+nlohmann::ordered_json video_segments_json(const ComparisonResult& result, const std::vector<WeakSegment>& segments,
+                                           const SegmentRules& rules,
+                                           const std::vector<WeakCondition>& left_out = {});
+// video_segments_json as a file of its own (<video>.<metrics>.segments.json):
+// led by document_head's "app", "version", "commit" and "format" (segments-1).
+nlohmann::ordered_json segments_file_json(const ComparisonResult& result, const std::vector<WeakSegment>& segments,
+                                          const SegmentRules& rules,
+                                          const std::vector<WeakCondition>& left_out = {});
 
 // What an export of segments by `rules` is named after, before ".json" or
 // ".csv": its conditions' metrics, each once, in the conditions' order,
@@ -174,8 +199,9 @@ std::string segments_file_suffix(const SegmentRules& rules);
 // start_time, end_time, frames, then <metric>_min, _max and _mean.
 std::string segments_csv(const std::vector<WeakSegment>& segments, const SegmentRules& rules);
 
-// Worst frames `worst` (worst_frames' list, for metric `key`) as JSON: the
-// metric, the number of dips asked for, the frame ranges looked in (empty:
+// Worst frames `worst` (worst_frames' list, for metric `key`) as JSON, led
+// by document_head's keys (worst-frames-1): the metric, the number of dips
+// asked for, the frame ranges looked in (empty:
 // all), then "worst_frames", one object per frame, worst first: rank (1 is
 // the worst), frame, time and "scores", every scored metric's score at that
 // frame, in the registry's order (null where it has none).
@@ -211,10 +237,11 @@ struct SegmentsReportVideo {
     const ComparisonResult* result = nullptr;
 };
 
-// Every video's segments by `rules`, as one JSON report: the rules (as
+// Every video's segments by `rules`, as one JSON report, led by
+// document_head's keys (segments-report-1): the rules (as
 // segments_json gives them, without ranges), then "videos", each with its
-// name, path, reference, segment_count, weak_frames (the segments' frames
-// added up) and segments (segments_json's); a video without scores for a
+// name, path, reference, segments_summary_json's keys and segments
+// (segments_json's); a video without scores for a
 // condition's metric has it in "left_out" (scored_rules'), before segments.
 nlohmann::ordered_json segments_report_json(const std::vector<SegmentsReportVideo>& videos,
                                             const SegmentRules& rules);

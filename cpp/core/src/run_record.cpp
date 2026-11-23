@@ -6,6 +6,7 @@
 #include "vml/analysis_request.h"
 #include "vml/compared_range.h"
 #include "vml/metrics.h"
+#include "vml/model_select.h"
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
 #include "vml/result_json.h"
@@ -168,8 +169,16 @@ Json scaling_json(const VideoSettings& settings, const ComparisonResult* result)
     return scaling;
 }
 
+// A model: as chosen, as run (a model= value: a file's install path, or a
+// version libvmaf has built in), and its "id", the same on every install: a
+// bundled model's or libvmaf's own version ("vmaf_v0.6.1",
+// "hdr_vmaf_v1.1.8_3d0h"), or null for a model file of the user's.
 Json model_json(const std::string& choice, const std::string& resolved) {
-    return Json{{"choice", choice}, {"model", resolved}};
+    const std::string shown = model_shown(resolved);
+    const std::string_view version = "version=";
+    return Json{{"choice", choice},
+                {"model", resolved},
+                {"id", shown.starts_with(version) ? Json(shown.substr(version.size())) : Json(nullptr)}};
 }
 
 Json settings_json(const VideoSettings& settings, const ComparisonResult* result, const std::string& cvvdp_display) {

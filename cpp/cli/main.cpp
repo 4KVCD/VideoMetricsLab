@@ -11,7 +11,7 @@
 // 0 when every video got every metric asked for that applies to it (or was
 // read, for bitrate; the files gave BD-rates, for bdrate), 1 when one failed
 // or a file could not be written, 2 for a wrong command (or one this version
-// cannot do yet), 3 when a quality gate is not met (none yet), 4 when an input
+// cannot do yet), 3 when a quality gate is not met, 4 when an input
 // could not be read, 130 when cancelled with Ctrl+C.
 #include <csignal>
 #include <exception>
@@ -25,6 +25,7 @@
 #include "common.h"
 #include "compare.h"
 #include "devices.h"
+#include "saved.h"
 #include "vml/gpu_choice.h"
 #include "vml/hardware_decoding.h"
 #include "vml/settings.h"
@@ -102,8 +103,12 @@ int main(int argc, char** argv) {
                 return cli::bitrate(arguments.bitrate, chosen);
             case cli::Command::bdrate:
                 return cli::bdrate(arguments.bdrate);
+            case cli::Command::saved:
+                return cli::saved(arguments.saved);
+            case cli::Command::report:
+                return cli::report(arguments.saved);
             case cli::Command::devices:
-                return cli::devices(chosen.settings);
+                return cli::devices(chosen.settings, arguments.devices.json_path);
             case cli::Command::none:
                 platform::write_text(platform::Stream::output, cli::top_help());
                 return cli::exit_usage;

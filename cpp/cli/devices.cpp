@@ -6,6 +6,8 @@
 #include <utility>
 
 #include "arguments.h"
+#include "common.h"
+#include "compare.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/gpu_checks.h"
 #include "vml/gpu_choice.h"
@@ -14,6 +16,8 @@
 #include "vml/metrics.h"
 #include "vml/platform/console.h"
 #include "vml/platform/system.h"
+#include "vml/python_json.h"
+#include "vml/results_summary.h"
 #include "vml/settings.h"
 
 namespace vml::cli {
@@ -65,7 +69,61 @@ std::vector<std::string> device_lines(const DeviceFindings& found) {
     return lines;
 }
 
-int devices(const Settings& settings) {
+nlohmann::ordered_json devices_json(const DeviceFindings& found, const std::vector<std::string>& gpus) {
+    using Json = nlohmann::ordered_json;
+    const auto where = [](const char* on, const std::optional<std::string>& gpu, const std::string& detail) {
+        return Json{{"on", on == nullptr ? Json(nullptr) : Json(on)},
+                    {"gpu", gpu ? Json(*gpu) : Json(nullptr)},
+                    {"detail", detail}};
+    };
+    Json json = document_head(devices_format);
+    json["gpus"] = gpus;
+    json["gpu_chosen"] = found.chosen_gpu ? Json(*found.chosen_gpu) : Json(nullptr);
+    json["ffmpeg"] = Json{{"usable", found.tools.ok()},
+                          {"version", found.tools.ffmpeg.version ? Json(format_version(found.tools.ffmpeg.version))
+                                                                 : Json(nullptr)},
+                          {"path", found.tools.ffmpeg.path.empty() ? Json(nullptr) : Json(found.tools.ffmpeg.path)},
+                          {"problems", found.tools.problems()}};
+    Json metrics = Json::object();
+    const std::string vmaf_detail = found.vmaf.backend.empty()     ? found.vmaf.text
+                                    : found.vmaf.backend == "cuda" ? std::string("libvmaf CUDA")
+                                                                   : "Vulkan, GPU " +
+                                                                         std::to_string(found.vmaf.device.value_or(0));
+    const char* vmaf_on = found.vmaf.backend.empty() ? "cpu" : "gpu";
+    const std::optional<std::string> vmaf_gpu =
+        found.vmaf.backend.empty() ? std::nullopt : found.chosen_gpu;  // (the GPU chosen, where one is)
+    metrics["vmaf"] = where(vmaf_on, vmaf_gpu, vmaf_detail);
+    metrics["vmaf_neg"] = metrics["vmaf"];
+    metrics["vmaf_v1"] = where(found.v1.available ? "gpu" : "cpu", std::nullopt, found.v1.text);
+    const std::string cpu_detail = found.cpu_metrics_in_app ? "libvmaf-fast " + found.libvmaf_fast_version + " in the app"
+                                                            : std::string("FFmpeg");
+    for (const char* key : {"psnr", "ssim", "xpsnr"}) {
+        metrics[key] = where("cpu", std::nullopt, cpu_detail);
+    }
+    if (found.vship) {
+        const std::string detail = vship_build_name(*found.vship) + ", " + vship_build_api(found.vship->build);
+        for (const char* key : {"ssimulacra2", "butteraugli", "cvvdp"}) {
+            metrics[key] = where("gpu", found.vship->name, detail);
+        }
+    } else {
+        for (const char* key : {"ssimulacra2", "butteraugli"}) {
+            metrics[key] = where("cpu", std::nullopt, "no GPU for Vship: " + found.no_vship);
+        }
+        metrics["cvvdp"] = where(nullptr, std::nullopt, "not available: " + found.no_vship);
+    }
+    json["metrics"] = std::move(metrics);
+    if (found.other_vship) {
+        const auto& [device, reason] = *found.other_vship;
+        json["other_vship"] = Json{
+            {"vship", vship_build_value(found.other_build)},
+            {"gpu", device ? Json(device->name) : Json(nullptr)},
+            {"detail", device ? vship_build_name(*device) + ", " + vship_build_api(device->build)
+                              : "not available: " + reason}};
+    }
+    return json;
+}
+
+int devices(const Settings& settings, const std::optional<std::string>& json_path) {
     // Ctrl+C ends the command at once with exit code 130, as the Python
     // app's KeyboardInterrupt ends it; a check under way ends with it.
     platform::on_interrupt([] { platform::end_process_now(exit_cancelled); });
@@ -100,12 +158,27 @@ int devices(const Settings& settings) {
     found.v1 = v1_check.get();
     found.cpu_metrics_in_app = cpu_metrics_in_app();
     found.libvmaf_fast_version = libvmaf_fast_version();
+    const int code = found.tools.ok() ? exit_ok : exit_usage;
+    if (json_path) {
+        std::vector<std::string> gpus;
+        for (const platform::GpuAdapter& adapter : platform::gpu_adapters()) {
+            gpus.push_back(adapter.name);
+        }
+        const nlohmann::ordered_json document = devices_json(found, gpus);
+        if (*json_path == "-") {
+            return print_results(python_json_dumps(document) + "\n") ? code : exit_failed;
+        }
+        if (const std::optional<std::string> failure = write_json_file(python_path(*json_path), document)) {
+            print_error("The JSON file could not be written: " + *failure);
+            return exit_failed;
+        }
+    }
     std::string text = version_line() + "\n";
     for (const std::string& line : device_lines(found)) {
         text += line + "\n";
     }
     platform::write_text(platform::Stream::output, text);
-    return found.tools.ok() ? exit_ok : exit_usage;
+    return code;
 }
 
 }  // namespace vml::cli
