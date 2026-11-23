@@ -13,6 +13,7 @@
 #include "compare.h"
 #include "report.h"
 #include "test_video.h"
+#include "stills.h"
 #include "weak_report.h"
 #include "vml/metric_cache.h"
 #include "vml/metrics.h"
@@ -146,6 +147,12 @@ bool report_groups(SavedArguments arguments, std::vector<Group>& groups, const s
         if (!rules.conditions.empty() && output.segments_dir) {
             written =
                 write_segment_files(videos, rules, python_path(*output.segments_dir), message, failed) && written;
+        }
+        if (output.stills) {
+            written = write_stills(videos, output.stills_from.value_or("worst"),
+                                   static_cast<std::size_t>(output.stills_count.value_or(5)), rules,
+                                   python_path(*output.stills), message, failed) &&
+                      written;
         }
         Json document = results_document(group.source, videos, summaries, false);
         document["read_from"] = read_from;

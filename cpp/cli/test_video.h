@@ -19,6 +19,26 @@
 
 namespace vml::cli {
 
+// A frame to make stills of: where, and why (the metrics whose worst dips
+// it is the worst frame of, or the weak segment it is the worst frame of).
+struct StillFrame {
+    int frame = 0;
+    double time = 0.0;
+    std::string from;                  // "worst" or "segment"
+    std::vector<std::string> metrics;  // the metrics that chose it, in the app's order
+    std::optional<double> score;       // the first of them's score there
+    std::optional<int> segment;        // for "segment": its index in weak_segments' list
+};
+
+// A frame's stills --stills wrote (stills.h): the reference's, the test
+// video's, and the two side by side.
+struct VideoStill {
+    StillFrame frame;
+    std::filesystem::path reference;
+    std::filesystem::path test;
+    std::filesystem::path side_by_side;
+};
+
 struct TestVideo {
     std::filesystem::path path;
     std::optional<VideoInfo> info;
@@ -57,6 +77,7 @@ struct TestVideo {
     std::optional<std::filesystem::path> frames_json_file;  // where --frames-json wrote them
     std::optional<std::filesystem::path> run_file;  // where --run-dir wrote its result
     std::vector<std::filesystem::path> segment_files;  // where --segments-dir wrote its segments
+    std::vector<VideoStill> stills;  // what --stills wrote
     // What its files are named after (--name's template, filled in), when not
     // its file's name.
     std::string file_name;

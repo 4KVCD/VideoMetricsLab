@@ -4,6 +4,7 @@
 #include <set>
 
 #include "common.h"
+#include "stills.h"
 #include "vml/build_info.h"
 #include "vml/difference.h"
 #include "vml/export_csv.h"
@@ -401,6 +402,9 @@ Json results_document(const VideoInfo& source, const std::vector<TestVideo>& vid
                 files.push_back(platform::path_text(file));
             }
             entry["segment_files"] = files;
+        }
+        if (!video.stills.empty()) {
+            entry["stills"] = stills_json(video.stills);
         }
         if (!video.failures.empty()) {
             Json failed = Json::object();

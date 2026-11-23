@@ -5,6 +5,8 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -20,6 +22,7 @@
 #include "loop.h"
 #include "report.h"
 #include "saved.h"
+#include "stills.h"
 #include "weak_report.h"
 #include "vml/bd_rate_report.h"
 #include "vml/export_csv.h"
@@ -267,6 +270,80 @@ TEST(Schemas, SavedSegmentsOfScoresAreTakenAsCompareTakesThem) {
     ASSERT_EQ(notes.size(), 2U);
     EXPECT_NE(notes[0].find("ssimulacra2<70 is left out"), std::string::npos) << notes[0];
     EXPECT_NE(notes[1].find("the profile has no condition on the metrics here"), std::string::npos) << notes[1];
+}
+
+// --stills picks each metric's worst dips (a frame two metrics chose once),
+// or each weak segment's worst frame, the weakest segments first; the
+// results' JSON lists them, as its schema says.
+TEST(Schemas, StillsArePickedAndListed) {
+    TestVideo video = scored_video();
+    const ComparisonResult& result = *video.result;
+    const std::vector<StillFrame> worst = still_frames(result, "worst", 1, SegmentRules{});
+    ASSERT_EQ(worst.size(), 2U);  // in frame order: CVVDP's worst second, at frame 0
+    EXPECT_EQ(worst[0].frame, 0);
+    EXPECT_EQ(worst[0].metrics, std::vector<std::string>{"cvvdp"});
+    EXPECT_EQ(worst[1].frame, 2);  // VMAF's 70 and PSNR's 38, both frame 2: one still
+    EXPECT_EQ(worst[1].metrics, (std::vector<std::string>{"vmaf", "psnr"}));
+    EXPECT_EQ(worst[1].from, "worst");
+
+    const SegmentRules rules{{WeakCondition{"vmaf", '<', 85.0}, WeakCondition{"psnr", '<', 39.0}}};
+    const std::vector<StillFrame> segments = still_frames(result, "segments", 5, rules);
+    ASSERT_EQ(segments.size(), 1U);  // frames 1-2, worst by VMAF, the first condition
+    EXPECT_EQ(segments[0].frame, 2);
+    EXPECT_EQ(segments[0].metrics, std::vector<std::string>{"vmaf"});
+    EXPECT_EQ(segments[0].segment, 0);
+    EXPECT_DOUBLE_EQ(*segments[0].score, 70.0);
+    EXPECT_TRUE(still_frames(result, "segments", 5, SegmentRules{{WeakCondition{"vmaf", '<', 50.0}}}).empty());
+
+    video.stills = {VideoStill{worst[1], "s/a.frame000002.reference.png", "s/a.frame000002.test.png",
+                               "s/a.frame000002.side-by-side.png"}};
+    std::vector<TestVideo> videos{video};
+    const nlohmann::ordered_json results = results_document(VideoInfo{}, videos, summarize(videos), false);
+    EXPECT_EQ(results["videos"][0]["stills"][0]["metrics"], nlohmann::ordered_json::array({"vmaf", "psnr"}));
+    EXPECT_EQ(schema_errors("results", results), std::vector<std::string>{});
+}
+
+// The stills of weak segments: each segment's worst frame is the worst of
+// its own frames, by a scan of every frame here, for many segments whose
+// edges fall anywhere (their first or last frame the worst, a gap merged
+// into one, a NaN frame); a scan that started or stopped a frame wrong,
+// or looked outside the segment, would pick another.
+TEST(Schemas, SegmentStillsAreEachSegmentsWorstFrame) {
+    ComparisonResult result;
+    result.fps = 25.0;
+    std::vector<int> frames;
+    std::vector<double> times;
+    std::vector<float> values;
+    std::uint32_t state = 12345;  // a fixed sequence (a linear congruential generator)
+    for (int frame = 0; frame < 3000; ++frame) {
+        state = state * 1664525u + 1013904223u;
+        frames.push_back(frame);
+        times.push_back(frame / 25.0);
+        values.push_back(frame % 97 == 5 ? std::numeric_limits<float>::quiet_NaN()
+                                         : static_cast<float>(40 + (state >> 8) % 60));
+    }
+    result.compared_frame_count = 3000;
+    result.metric_results.add(FrameMetricResult{"vmaf", frames, times, values, {}});
+    SegmentRules rules{{WeakCondition{"vmaf", '<', 55.0}}};
+    rules.merge_frames = 2;
+    const std::vector<WeakSegment> segments = weak_segments(result, rules);
+    ASSERT_GT(segments.size(), 100U);
+    const std::vector<StillFrame> stills = still_frames(result, "segments", segments.size(), rules);
+    ASSERT_EQ(stills.size(), segments.size());
+    for (const StillFrame& still : stills) {
+        const WeakSegment& segment = segments.at(static_cast<std::size_t>(*still.segment));
+        float lowest = std::numeric_limits<float>::infinity();
+        int at = -1;
+        for (int frame = segment.first_frame; frame <= segment.last_frame; ++frame) {
+            const float value = values[static_cast<std::size_t>(frame)];
+            if (!std::isnan(value) && value < lowest) {
+                lowest = value;
+                at = frame;
+            }
+        }
+        EXPECT_EQ(still.frame, at) << "segment " << segment.first_frame << "-" << segment.last_frame;
+        EXPECT_DOUBLE_EQ(*still.score, lowest);
+    }
 }
 
 // target's answers: each sequence's, answered or not (with why), by the

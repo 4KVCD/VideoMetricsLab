@@ -27,6 +27,7 @@
 #include "file_names.h"
 #include "notify.h"
 #include "report.h"
+#include "stills.h"
 #include "watch.h"
 #include "weak_report.h"
 #include "vml/app_log.h"
@@ -2180,6 +2181,12 @@ nlohmann::ordered_json comparison_results(const CompareArguments& arguments, Com
                 progress.message(video.name() + ": quality gate FAILED: " + failing);
             }
         }
+    }
+    if (arguments.stills) {
+        written = write_stills(videos, arguments.stills_from.value_or("worst"),
+                               static_cast<std::size_t>(arguments.stills_count.value_or(5)), rules,
+                               python_path(*arguments.stills), message, failed) &&
+                  written;
     }
     // After the CSV files: it says where each one went.
     nlohmann::ordered_json document =
