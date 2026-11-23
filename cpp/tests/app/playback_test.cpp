@@ -380,4 +380,98 @@ TEST_F(PlaybackTest, FramesBiggerThanThePipeComeWhole) {
     EXPECT_TRUE(worker.ended());
 }
 
+// A way of decoding that failed for a file without giving a frame is not
+// tried again for it: every start of playback (a seek, a loop played again)
+// tried CUDA's interop first again, where it can't work, and waited for its
+// failure before the frames came. Its error is still said.
+TEST_F(PlaybackTest, AWayThatFailedForAFileIsNotTriedAgain) {
+    FrameComparison comparison = series(1).front();
+    comparison.source_info.path = folder_ / "failed-way.mkv";
+    std::ofstream(comparison.source_info.path).put('\0');
+    const std::filesystem::path log = folder_ / "ways";
+    std::filesystem::create_directories(log);
+    const test::ScopedVariable tool_log("VML_TEST_TOOL_LOG", platform::path_text(log));
+    const test::ScopedVariable bytes("VML_TEST_FRAME_BYTES", std::to_string(16 * 12 * 4));
+    const test::ScopedVariable fps("VML_TEST_FPS", "24");
+    const test::ScopedVariable playback("VML_TEST_PLAYBACK", "interop=0:1:0:no interop here;transfer=1:0:0:");
+    const auto play = [&] {
+        StreamDecodeWorker worker(VML_TEST_CHILD, comparison, FrameSide::source, 0, {},
+                                  HardwareDecoding{std::string("cuda"), std::string("cuda")}, std::nullopt);
+        QString detail;
+        std::mutex mutex;
+        QObject::connect(
+            &worker, &PlaybackDecoder::ready, &worker,
+            [&](const QString& said) {
+                const std::lock_guard lock(mutex);
+                detail = said;
+            },
+            Qt::DirectConnection);
+        worker.start();
+        EXPECT_TRUE(worker.wait(QDeadlineTimer(30'000)));  // one frame: the queue never fills
+        const std::lock_guard lock(mutex);
+        return detail;
+    };
+    const auto ways_started = [&log](const std::string& way) {
+        int count = 0;
+        for (const auto& entry : std::filesystem::directory_iterator(log)) {
+            std::ifstream file(entry.path());
+            const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+            count += text.starts_with(way + " ") ? 1 : 0;
+        }
+        return count;
+    };
+    const QString first = play();
+    EXPECT_TRUE(first.contains("retry: no interop here")) << first.toStdString();
+    EXPECT_EQ(ways_started("interop"), 1);
+    EXPECT_EQ(ways_started("transfer"), 1);
+    const QString again = play();  // a seek, the loop again: interop not tried
+    EXPECT_EQ(ways_started("interop"), 1);
+    EXPECT_EQ(ways_started("transfer"), 2);
+    EXPECT_TRUE(again.contains("retry: no interop here")) << again.toStdString();  // still said
+}
+
+// An attempt that ends with no frames, no error and exit code 0 (a start at
+// the stream's end, say) is no failure of the way: it is tried again next time
+// (#221's review: it was skipped for the file until the app restarted).
+TEST_F(PlaybackTest, AWayThatEndedWithoutAnErrorIsTriedAgain) {
+    FrameComparison comparison = series(1).front();
+    comparison.source_info.path = folder_ / "ended-way.mkv";
+    std::ofstream(comparison.source_info.path).put('\0');
+    const std::filesystem::path log = folder_ / "ended-ways";
+    std::filesystem::create_directories(log);
+    const test::ScopedVariable tool_log("VML_TEST_TOOL_LOG", platform::path_text(log));
+    const test::ScopedVariable bytes("VML_TEST_FRAME_BYTES", std::to_string(16 * 12 * 4));
+    const test::ScopedVariable fps("VML_TEST_FPS", "24");
+    const test::ScopedVariable playback("VML_TEST_PLAYBACK", "interop=0:0:0:;transfer=1:0:0:");
+    const auto play = [&] {
+        StreamDecodeWorker worker(VML_TEST_CHILD, comparison, FrameSide::source, 0, {},
+                                  HardwareDecoding{std::string("cuda"), std::string("cuda")}, std::nullopt);
+        QString detail;
+        std::mutex mutex;
+        QObject::connect(
+            &worker, &PlaybackDecoder::ready, &worker,
+            [&](const QString& said) {
+                const std::lock_guard lock(mutex);
+                detail = said;
+            },
+            Qt::DirectConnection);
+        worker.start();
+        EXPECT_TRUE(worker.wait(QDeadlineTimer(30'000)));  // one frame: the queue never fills
+        const std::lock_guard lock(mutex);
+        return detail;
+    };
+    const auto ways_started = [&log](const std::string& way) {
+        int count = 0;
+        for (const auto& entry : std::filesystem::directory_iterator(log)) {
+            std::ifstream file(entry.path());
+            const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+            count += text.starts_with(way + " ") ? 1 : 0;
+        }
+        return count;
+    };
+    play();
+    play();  // a seek, say: interop tried again, as its end was no failure
+    EXPECT_EQ(ways_started("interop"), 2);
+}
+
 }  // namespace vml::app
