@@ -95,6 +95,43 @@ TEST(VmafVulkan, APartOfTwoGpusNamesNamesNeither) {
     EXPECT_FALSE(device.has_value()) << device->name;
 }
 
+// NVIDIA's decoder and libvmaf's CUDA code use the NVIDIA GPU chosen, by
+// CUDA's number for it, where there are two: they took CUDA's first GPU
+// whatever was chosen. With one NVIDIA GPU, or none chosen, or another
+// maker's GPU chosen, CUDA's first, as before, without asking CUDA; an
+// NVIDIA GPU CUDA does not list (CUDA_VISIBLE_DEVICES) is no CUDA GPU at all.
+TEST(VmafVulkan, NvidiasDecoderAndCudaUseTheNvidiaGpuChosen) {
+    const std::vector<platform::GpuAdapter> two{{0, 0x10DE, "NVIDIA GeForce RTX 5090"},
+                                                {1, 0x1002, "AMD Radeon(TM) Graphics"},
+                                                {2, 0x10DE, "NVIDIA GeForce RTX 3070"}};
+    int asked = 0;
+    const auto cuda = [&asked] {
+        ++asked;
+        return std::vector<std::string>{"NVIDIA GeForce RTX 5090", "NVIDIA GeForce RTX 3070"};
+    };
+    EXPECT_EQ(chosen_cuda_device_among("NVIDIA GeForce RTX 3070", two, cuda), 1);
+    EXPECT_EQ(chosen_cuda_device_among("NVIDIA GeForce RTX 5090", two, cuda), 0);
+    EXPECT_EQ(asked, 2);
+    EXPECT_EQ(chosen_cuda_device_among(std::nullopt, two, cuda), 0);
+    EXPECT_EQ(chosen_cuda_device_among("AMD Radeon(TM) Graphics", two, cuda), 0);
+    const std::vector<platform::GpuAdapter> one{{0, 0x1002, "AMD Radeon(TM) Graphics"},
+                                                {1, 0x10DE, "NVIDIA GeForce RTX 3070"}};
+    EXPECT_EQ(chosen_cuda_device_among("NVIDIA GeForce RTX 3070", one, cuda), 0);
+    EXPECT_EQ(asked, 2);  // CUDA not started for these
+    // Two of one name: the place among them, in CUDA's order
+    const std::vector<platform::GpuAdapter> same{{0, 0x10DE, "NVIDIA GeForce RTX 3070"},
+                                                 {1, 0x10DE, "NVIDIA GeForce RTX 3070"}};
+    const auto both = [] { return std::vector<std::string>{"NVIDIA GeForce RTX 3070", "NVIDIA GeForce RTX 3070"}; };
+    EXPECT_EQ(chosen_cuda_device_among("NVIDIA GeForce RTX 3070 #2", same, both), 1);
+    EXPECT_EQ(chosen_cuda_device_among("NVIDIA GeForce RTX 3070 #1", same, both), 0);
+    // Hidden from CUDA: none, not CUDA's first
+    const auto hidden = [] { return std::vector<std::string>{"NVIDIA GeForce RTX 5090"}; };
+    EXPECT_EQ(chosen_cuda_device_among("NVIDIA GeForce RTX 3070", two, hidden), std::nullopt);
+    // No system list (Linux): CUDA's own, else its first
+    EXPECT_EQ(chosen_cuda_device_among("rtx 3070", {}, cuda), 1);
+    EXPECT_EQ(chosen_cuda_device_among("radeon", {}, cuda), 0);
+}
+
 // Of two GPUs of one name (two RTX 3070s), the second can be chosen: the
 // choice saved is the name and its place among them, which every API matches
 // in its own list. A name alone is the first of that name, as it was.

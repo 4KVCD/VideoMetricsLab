@@ -11,10 +11,13 @@
 #pragma once
 
 #include <cstddef>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "vml/platform/system.h"
 
 namespace vml {
 
@@ -54,5 +57,21 @@ std::optional<std::size_t> chosen_among(const std::vector<std::string>& names, s
 // DirectX lists, or more than one (each API then finds none: the CPU), and
 // where the system lists none (a Mac).
 void resolve_chosen_gpu();
+
+// CUDA's number for the GPU `chosen` names (gpu_choice_texts' text), for
+// NVIDIA's decoder and libvmaf's CUDA code, which otherwise take CUDA's
+// first GPU. 0 where nothing is chosen; where the GPU chosen is not one of
+// the NVIDIA GPUs of `adapters` (DirectX's list: NVIDIA's decoder is then
+// only tried after the chosen GPU's maker's, as before, and CUDA VMAF is not
+// used, gpu_vmaf.cpp); and where it is the only NVIDIA GPU there. Else the
+// one of `cuda_names()` (CUDA's GPUs in its order, asked only then, as it
+// starts CUDA) that `chosen` names (chosen_among: "... #2" is the second of
+// that name in CUDA's order), or nothing where none is (CUDA_VISIBLE_DEVICES
+// hides it): nothing of NVIDIA's then runs on another GPU instead. Where the
+// system lists no GPUs (Linux, macOS), the one of `cuda_names()` it names,
+// else 0.
+std::optional<int> chosen_cuda_device_among(const std::optional<std::string>& chosen,
+                                            const std::vector<platform::GpuAdapter>& adapters,
+                                            const std::function<std::vector<std::string>()>& cuda_names);
 
 }  // namespace vml

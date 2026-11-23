@@ -22,6 +22,7 @@
 #include "vml/gpu_choice.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
+#include "vml/vmaf_cuda.h"
 
 #ifdef __APPLE__
 #include <VideoToolbox/VideoToolbox.h>
@@ -608,6 +609,12 @@ void use_d3d11va_adapter(std::optional<unsigned> adapter) { d3d11va_device = ada
 std::optional<unsigned> d3d11va_adapter_used() { return d3d11va_device; }
 
 std::vector<std::string> hwaccel_device_args(const std::string& hwaccel) {
+    if (hwaccel == "cuda") {
+        // The GPU chosen, as NVIDIA's own decoder takes (chosen_cuda_device).
+        const std::optional<int> device = chosen_cuda_device();
+        return device && *device > 0 ? std::vector<std::string>{"-hwaccel_device", std::to_string(*device)}
+                                     : std::vector<std::string>{};
+    }
     if (hwaccel != "d3d11va" || !d3d11va_device) {
         return {};
     }

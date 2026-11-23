@@ -6,8 +6,9 @@
 // (vmaf_vulkan.h) is their port and gives the same scores. A port of the
 // CUDA parts of vmaf_app/core/vmaf_gpu.py.
 //
-// libvmaf works in the primary CUDA context of CUDA's first GPU, the
-// fastest, on which NVIDIA's decoder (gpu_frames.h) runs too, so that the
+// libvmaf works in the primary CUDA context of the GPU chosen
+// (chosen_cuda_device: CUDA's first, the fastest, unless another NVIDIA GPU
+// is chosen), on which NVIDIA's decoder (gpu_frames.h) runs too, so that the
 // decoder's pictures are copied into libvmaf's on the GPU.
 #pragma once
 
@@ -15,6 +16,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <utility>
@@ -28,6 +30,12 @@ namespace vml {
 // What a score calculated this way records as having calculated it (its
 // provenance): "libvmaf-fast v1 (CUDA)".
 std::string cuda_library_build();
+
+// CUDA's number for the GPU NVIDIA's decoder and libvmaf's CUDA code use:
+// chosen_cuda_device_among (gpu_choice.h) for the GPU chosen in this process,
+// worked out once for each choice. Nothing where the GPU chosen is an NVIDIA
+// GPU that CUDA does not list: then neither runs.
+std::optional<int> chosen_cuda_device();
 
 class CudaUpload;  // vmaf_cuda.cpp: the copies of frames from system memory to the GPU
 
@@ -88,6 +96,9 @@ private:
     unsigned step_ = 1;
     unsigned count_ = 0;
     VmafContext* context_ = nullptr;
+    int device_ = 0;                  // CUDA's number for the GPU (chosen_cuda_device)
+    void* device_context_ = nullptr;  // its primary context, held for libvmaf where it is not CUDA's first GPU
+    int device_handle_ = 0;           // its CUdevice, to release that context
     std::vector<std::pair<std::string, VmafModel*>> models_;
     std::unique_ptr<CudaUpload> upload_;
     std::size_t frame_bytes_ = 0;

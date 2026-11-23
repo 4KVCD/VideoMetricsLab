@@ -42,6 +42,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "vml/size_changes.h"
+#include "vml/vmaf_cuda.h"
 #include "scale_filter.h"
 
 namespace vml {
@@ -1448,6 +1449,9 @@ std::pair<bool, std::string> decoder_supports(int device, const DecodePlan& plan
     } catch (const GpuDecodeUnavailableError& error) {
         return {false, error.what()};
     }
+    if (backend == nvidia_decoder && !chosen_cuda_device()) {
+        return {false, "the GPU chosen is not one CUDA lists"};
+    }
     std::array<char, 512> error{};
     const int ok = library->supports(decoder_device(backend, device), find_codec(plan.codec)->number, plan.bit_depth,
                                      plan.width, plan.height, error.data(), static_cast<int>(error.size()));
@@ -1458,6 +1462,9 @@ int decoder_device(std::string_view backend, int device) {
     if (backend == amd_decoder || backend == media_foundation_decoder) {
         const std::optional<unsigned> adapter = d3d11va_adapter_used();
         return adapter ? static_cast<int>(*adapter) : -1;
+    }
+    if (backend == nvidia_decoder) {
+        return chosen_cuda_device().value_or(-1);  // the GPU chosen, as for libvmaf's CUDA code
     }
     return device;
 }
@@ -2229,6 +2236,9 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
     state.library = &load_decoder(backend);
     // Windows' decoder below is tried for the AMD backend: both take the same adapter.
     device = decoder_device(backend, device);
+    if (backend == nvidia_decoder && device < 0) {
+        throw GpuDecodeUnavailableError("the GPU chosen is not one CUDA lists");
+    }
     state.lends_planes = can_lend_planes(plan, backend);
     state.frame_bytes = plan.frame_bytes();
     state.untimed = plan.untimed;
