@@ -974,7 +974,8 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
         append(video(index).facts->metrics, video(index).not_applicable);
     };
     // The counts files state, always (they cost nothing); whole files read only when asked
-    events.count_frames = container_frame_counter(environment.ffprobe, cancel, read_whole_files);
+    events.count_frames =
+        counting_each_file_once(container_frame_counter(environment.ffprobe, cancel, read_whole_files));
     events.job_failed = [&](std::size_t index, const std::string& message, const std::string& /*stderr_tail*/) {
         video(index).error = message;
         video(index).error_code = codes::run_failed;
@@ -2693,10 +2694,13 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
     // frames in (frame_pairing.h): counted here, and saved with its scores.
     const bool read_whole_files =
         arguments.frame_counts ? *arguments.frame_counts == "check" : settings.check_frame_counts;
+    // Each file once: every saved test video's pairing asks for the reference's.
+    const FrameCounter count_saved_frames =
+        counting_each_file_once(container_frame_counter(tools.ffprobe.path, cancel, read_whole_files));
     const auto count_saved = [&](TestVideo& video) {
         std::optional<FramesShort>& frames_short = video.result->frames_short;
         frames_short = count_frames_short(*frames_short, video.result->source_info, video.result->distorted_info,
-                                          container_frame_counter(tools.ffprobe.path, cancel, read_whole_files));
+                                          count_saved_frames);
         if (video.save_scores && scores.save && frames_short->counted()) {
             try {
                 store_result(cache_folder, video.result->source, video.path, video.request.recipe, *video.result,

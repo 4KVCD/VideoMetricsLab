@@ -5,6 +5,8 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <map>
+#include <mutex>
 #include <numeric>
 #include <string>
 #include <vector>
@@ -92,6 +94,30 @@ TEST(FramePairing, VideosOfDifferentLengthsAreInStepWhenTheOneWithFewerFramesLac
     EXPECT_EQ(frames_short_note(lacks_more).find("same length"), std::string::npos);
     // A verdict saved before the lengths were kept: judged as of one length.
     EXPECT_FALSE((FramesShort{2388, 2396, 2390, 2388}).in_step());
+}
+
+// A run's test videos each ask for the reference's count beside their own:
+// with "read entire files", a whole film read once per test video. Counted
+// once per file, the answer kept for each.
+TEST(FramePairing, ARunCountsEachFileOnce) {
+    std::mutex mutex;
+    std::map<std::string, int> asked;
+    const FrameCounter count = counting_each_file_once([&](const VideoInfo& video) -> std::optional<long long> {
+        const std::lock_guard lock(mutex);
+        ++asked[video.path.string()];
+        return 240;
+    });
+    const ComparisonResult result = scored(200);
+    const std::optional<FramesShort> short_of = frames_short_of_lengths(result, true);
+    ASSERT_TRUE(short_of);
+    VideoInfo reference = result.source_info;
+    reference.path = "reference.mkv";
+    for (const char* name : {"a.mkv", "b.mkv", "c.mkv"}) {
+        VideoInfo test = result.distorted_info;
+        test.path = name;
+        EXPECT_TRUE(count_frames_short(*short_of, reference, test, count).counted());
+    }
+    EXPECT_EQ(asked, (std::map<std::string, int>{{"a.mkv", 1}, {"b.mkv", 1}, {"c.mkv", 1}, {"reference.mkv", 1}}));
 }
 
 }  // namespace

@@ -5,7 +5,11 @@
 #include <cmath>
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
 #include <future>
+#include <map>
+#include <memory>
+#include <mutex>
 #include <utility>
 
 #include "vml/app_log.h"
@@ -271,6 +275,35 @@ FrameCounter container_frame_counter(std::string ffprobe, CancelToken cancel, bo
                            error.what());
             return std::nullopt;
         }
+    };
+}
+
+FrameCounter counting_each_file_once(FrameCounter count) {
+    struct Counts {
+        std::mutex mutex;
+        std::map<std::filesystem::path, std::shared_future<std::optional<long long>>> by_file;
+    };
+    return [count = std::move(count), counts = std::make_shared<Counts>()](const VideoInfo& video) {
+        std::promise<std::optional<long long>> promise;
+        std::shared_future<std::optional<long long>> answer;
+        bool first = false;
+        {
+            const std::lock_guard lock(counts->mutex);
+            const auto [at, added] = counts->by_file.try_emplace(video.path);
+            if (added) {
+                at->second = promise.get_future().share();
+                first = true;
+            }
+            answer = at->second;
+        }
+        if (first) {
+            try {
+                promise.set_value(count(video));
+            } catch (...) {
+                promise.set_exception(std::current_exception());  // Cancelled: for every one asking
+            }
+        }
+        return answer.get();
     };
 }
 
