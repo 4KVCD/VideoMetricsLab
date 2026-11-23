@@ -435,6 +435,54 @@ TEST(WorstFramesTab, KeepsTheChosenVideoWhileItIsRecalculated) {
     EXPECT_EQ(tab.worst_table()->item(0, 2)->text(), "55.00");
 }
 
+TEST(WorstFramesTab, KeepsTheChosenVideoWhenItIsScoredAgain) {
+    // A video scored again comes back as a new line (a new identity, its
+    // file the same): it stays chosen, and the metrics it now has are in
+    // the bar. So does a run arriving in pieces, which keeps its identity.
+    Settings settings;
+    Bench bench(settings);
+    WorstFramesTab& tab = bench.tab;
+    const WeakFramesVideo a{"run:1", "a", vmaf_result("a.mkv", {95, 40, 95})};
+    tab.set_videos({a, {"run:2", "b", vmaf_result("b.mkv", {95, 50, 95})}});
+    tab.videos_table()->setCurrentCell(1, 0);
+    ASSERT_EQ(tab.chosen_video()->identity, "run:2");
+
+    // Scored again with SSIMULACRA2 too: a new line of the same file.
+    auto again = std::make_shared<ComparisonResult>(*vmaf_result("b.mkv", {95, 55, 95}));
+    FrameMetricResult ssimulacra2{"ssimulacra2", {0, 1, 2}, {0.0, 1.0 / 30, 2.0 / 30}, {80, 30, 80},
+                                  current_ffmpeg_provenance("ssimulacra2", "9.0.1")};
+    again->metric_results.add(ssimulacra2);
+    tab.set_videos({a, {"run:3", "b", again}});
+    ASSERT_NE(tab.chosen_video(), nullptr);
+    EXPECT_EQ(tab.chosen_video()->identity, "run:3");
+    EXPECT_EQ(tab.videos_table()->currentRow(), 1);
+    EXPECT_EQ(tab.metric_bar()->count(), 2);
+    EXPECT_EQ(tab.worst_table()->item(0, 2)->text(), "55.00");
+
+    // The same line with a metric dropped: the bar loses it.
+    tab.metric_bar()->setCurrentIndex(1);  // SSIMULACRA2
+    ASSERT_EQ(std::string(tab.metric()->key), "ssimulacra2");
+    tab.set_videos({a, {"run:3", "b", vmaf_result("b.mkv", {95, 55, 95})}});
+    EXPECT_EQ(tab.metric_bar()->count(), 1);
+    ASSERT_NE(tab.metric(), nullptr);
+    EXPECT_EQ(std::string(tab.metric()->key), "vmaf");
+    EXPECT_EQ(tab.worst_table()->item(0, 2)->text(), "55.00");
+
+    // A line of the same file and reference beside it (a CVVDP display row
+    // of its) is not taken for it: not while its line is away being scored
+    // again, and not once it is back (#221's review: the sibling was).
+    const WeakFramesVideo sibling{"run:5", "b (display)", vmaf_result("b.mkv", {95, 70, 95})};
+    tab.set_videos({a, {"run:3", "b", vmaf_result("b.mkv", {95, 55, 95})}, sibling});
+    tab.videos_table()->setCurrentCell(1, 0);
+    ASSERT_EQ(tab.chosen_video()->identity, "run:3");
+    tab.set_videos({a, sibling});  // being scored again
+    ASSERT_NE(tab.chosen_video(), nullptr);
+    EXPECT_NE(tab.chosen_video()->identity, "run:5");
+    tab.set_videos({a, {"run:6", "b", vmaf_result("b.mkv", {95, 65, 95})}, sibling});
+    ASSERT_NE(tab.chosen_video(), nullptr);
+    EXPECT_EQ(tab.chosen_video()->identity, "run:6");
+}
+
 TEST(WorstFramesTab, NamesTheVideosAsMetricGraphsDoes) {
     // The videos list takes Metric Graphs' shown names (the Video names
     // setting), the whole name in the tooltip; without one, the whole name.

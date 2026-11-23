@@ -10,6 +10,7 @@
 // metric's score, why it is weak), else the row selected in either list.
 #pragma once
 
+#include <filesystem>
 #include <QColor>
 #include <QString>
 #include <QWidget>
@@ -196,9 +197,14 @@ private:
     Dialogs dialogs_;
     std::vector<WeakFramesVideo> videos_;
     std::string chosen_identity_;  // the video shown
+    std::filesystem::path chosen_file_;       // its test video
+    std::filesystem::path chosen_reference_;  // and its reference
     // The video the user chose: shown again once it is back among the
-    // videos (its line is taken away while it is calculated again).
+    // videos (its line is taken away while it is calculated again, and comes
+    // back as a new line of the same file).
     std::string wanted_identity_;
+    std::filesystem::path wanted_file_;
+    std::filesystem::path wanted_reference_;
     std::vector<std::string> keys_;  // the chosen video's metrics with scores, in the app's order
     const MetricDefinition* metric_ = nullptr;
     std::optional<std::pair<int, int>> range_;

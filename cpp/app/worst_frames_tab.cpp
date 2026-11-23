@@ -20,6 +20,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <set>
 #include <cmath>
 #include <fstream>
 #include <iterator>
@@ -88,6 +89,17 @@ QStringList aligned(const std::vector<std::pair<QString, QString>>& rows) {
     return lines;
 }
 
+// The metrics `result` has scores of that the tab lists, in the app's order.
+std::vector<std::string> metric_keys(const ComparisonResult& result) {
+    std::vector<std::string> keys;
+    for (const MetricDefinition& definition : metrics()) {
+        if (score_samples(result.metric_results, std::string(definition.key))) {
+            keys.emplace_back(definition.key);
+        }
+    }
+    return keys;
+}
+
 // The conditions on none of the metrics `keys`.
 std::vector<WeakCondition> conditions_not_on(const std::vector<WeakCondition>& conditions,
                                              const std::vector<std::string>& keys) {
@@ -152,6 +164,8 @@ WorstFramesTab::WorstFramesTab(Dialogs dialogs, QWidget* parent) : QWidget(paren
     connect(videos_table_, &QTableWidget::currentCellChanged, this, [this](int row, int, int, int) {
         if (!building_ && row >= 0 && static_cast<std::size_t>(row) < videos_.size()) {
             wanted_identity_ = videos_[static_cast<std::size_t>(row)].identity;
+            wanted_file_ = videos_[static_cast<std::size_t>(row)].result->distorted;
+            wanted_reference_ = videos_[static_cast<std::size_t>(row)].result->source;
             choose_video(row);
         }
     });
@@ -524,9 +538,33 @@ void WorstFramesTab::set_videos(std::vector<WeakFramesVideo> videos) {
                    return score_samples(video.result->metric_results, std::string(m.key)).has_value();
                });
     });
+    std::set<std::string> listed;  // the lines listed before
+    for (const WeakFramesVideo& video : videos_) {
+        listed.insert(video.identity);
+    }
     videos_ = std::move(videos);
-    const auto wanted = std::find_if(videos_.begin(), videos_.end(),
-                                     [this](const WeakFramesVideo& video) { return video.identity == wanted_identity_; });
+    // A video scored again is a new line, a new identity, of the same file:
+    // found by its test video and reference where its identity is gone, if
+    // one line alone, new since, has them. Its CVVDP display rows share both,
+    // as does the file scored against the same reference twice: lines listed
+    // before are not it, and with two new ones which it is is not known, so
+    // none is taken for it (#221's review: a sibling was).
+    const auto find = [this, &listed](const std::string& identity, const std::filesystem::path& file,
+                                      const std::filesystem::path& reference) {
+        const auto by_identity = std::find_if(videos_.begin(), videos_.end(),
+                                              [&](const WeakFramesVideo& video) { return video.identity == identity; });
+        if (by_identity != videos_.end() || file.empty()) {
+            return by_identity;
+        }
+        const auto alike = [&](const WeakFramesVideo& video) {
+            return video.result->distorted == file && video.result->source == reference &&
+                   !listed.contains(video.identity);
+        };
+        const auto first = std::find_if(videos_.begin(), videos_.end(), alike);
+        return first != videos_.end() && std::count_if(videos_.begin(), videos_.end(), alike) == 1 ? first
+                                                                                                    : videos_.end();
+    };
+    const auto wanted = find(wanted_identity_, wanted_file_, wanted_reference_);
     const int index = videos_.empty() ? -1 : wanted == videos_.end() ? 0 : static_cast<int>(wanted - videos_.begin());
     split_->setVisible(!videos_.empty());
     empty_note_->setVisible(videos_.empty());
@@ -543,12 +581,19 @@ void WorstFramesTab::set_videos(std::vector<WeakFramesVideo> videos) {
     }
     fit_videos_height();
     if (index >= 0) {
-        const bool same = videos_[static_cast<std::size_t>(index)].identity == chosen_identity_ && editor_ != nullptr;
+        const WeakFramesVideo& video = videos_[static_cast<std::size_t>(index)];
+        const bool same =
+            editor_ != nullptr && find(chosen_identity_, chosen_file_, chosen_reference_) - videos_.begin() == index;
         {
             const QSignalBlocker blocker(videos_table_);
             videos_table_->setCurrentCell(index, 0);
         }
-        if (same) {
+        if (same && video.identity != wanted_identity_ && wanted_file_ == video.result->distorted &&
+            wanted_reference_ == video.result->source) {
+            wanted_identity_ = video.identity;  // the chosen video, scored again
+        }
+        if (same && metric_keys(*video.result) == keys_) {
+            chosen_identity_ = video.identity;
             refresh();  // its scores may be new: the rules shown stay
         } else {
             choose_video(index);
@@ -631,15 +676,14 @@ void WorstFramesTab::choose_video(int index) {
     }
     const WeakFramesVideo& video = videos_[static_cast<std::size_t>(index)];
     chosen_identity_ = video.identity;
+    chosen_file_ = video.result->distorted;
+    chosen_reference_ = video.result->source;
     if (wanted_identity_.empty()) {
         wanted_identity_ = video.identity;
+        wanted_file_ = video.result->distorted;
+        wanted_reference_ = video.result->source;
     }
-    keys_.clear();
-    for (const MetricDefinition& definition : metrics()) {
-        if (score_samples(video.result->metric_results, std::string(definition.key))) {
-            keys_.emplace_back(definition.key);
-        }
-    }
+    keys_ = metric_keys(*video.result);
     // Room for a frame's lines (its time, its rank, why it is weak, a blank,
     // a score per metric), so that Details does not grow as the pointer
     // moves from one frame to another.
