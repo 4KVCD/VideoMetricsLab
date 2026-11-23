@@ -55,7 +55,8 @@ struct BundleStyle {
 
 // The videos' names for their files, in their order: each its label; where
 // several share one, each with its folder's name after it in brackets; where
-// those are shared too, numbered after that ("name (folder) 2").
+// those are shared too, numbered after that ("name (folder) 2"). Names are
+// shared as file names are: once file_safe, as the system compares them.
 std::vector<QString> bundle_names(const std::vector<BundleVideo>& videos);
 
 // `text` fit for a file name: the characters Windows does not allow in one
