@@ -105,6 +105,31 @@ std::vector<BundleFile> metric_graph_files(const std::vector<BundleVideo>& video
     return files;
 }
 
+SavedBitrates saved_bitrates(std::vector<BundleVideo>& videos, const std::vector<std::filesystem::path>& folders,
+                             const std::filesystem::path& reference, const OwnFile& own,
+                             const LoadSavedBitrate& load) {
+    SavedBitrates saved;
+    if (videos.empty() || folders.size() != videos.size()) {
+        return saved;
+    }
+    if (!own(folders.front(), true, reference)) {
+        saved[reference] = load(folders.front(), true, reference);
+    }
+    for (std::size_t i = 0; i < videos.size(); ++i) {
+        BundleVideo& video = videos[i];
+        if (video.result->resample_target || own(folders[i], false, video.path)) {
+            continue;  // a resolution test has no file of its own; the file there is this one's
+        }
+        // Its path and its folder's name, after a character no file name
+        // has: no file is read by it, and none is drawn in its place.
+        video.bitrate_key = video.path;
+        video.bitrate_key += "|";
+        video.bitrate_key += folders[i].filename();
+        saved[video.bitrate_key] = load(folders[i], false, video.path);
+    }
+    return saved;
+}
+
 std::vector<VideoInfo> bitrate_files(const std::filesystem::path& reference, const std::vector<BundleVideo>& videos,
                                      const SavedBitrates& saved) {
     std::vector<VideoInfo> files;
@@ -120,7 +145,7 @@ std::vector<VideoInfo> bitrate_files(const std::filesystem::path& reference, con
     add(videos.front().result->source_info, reference);
     for (const BundleVideo& video : videos) {
         if (!video.result->resample_target) {
-            add(video.result->distorted_info, video.path);
+            add(video.result->distorted_info, video.bitrate_path());
         }
     }
     return files;
@@ -144,7 +169,7 @@ std::vector<BundleFile> bitrate_graph_files(const BitratePanel& read, const std:
         missing.push_back(name_of(reference));
     }
     for (const BundleVideo& video : videos) {
-        if (!is_read(video.path)) {
+        if (!is_read(video.bitrate_path())) {
             missing.push_back(name_of(video.path));
         }
     }
@@ -162,17 +187,17 @@ std::vector<BundleFile> bitrate_graph_files(const BitratePanel& read, const std:
     if (videos.size() > 1) {
         std::vector<std::filesystem::path> all{reference};
         for (const BundleVideo& video : videos) {
-            all.push_back(video.path);
+            all.push_back(video.bitrate_path());
         }
         if (const std::optional<std::string> png = drawn(all)) {
             files.emplace_back(png_name(all_videos(), bitrate), *png);
         }
     }
     for (std::size_t i = 0; i < videos.size(); ++i) {
-        if (!is_read(videos[i].path)) {
+        if (!is_read(videos[i].bitrate_path())) {
             continue;  // the reference alone says nothing of this video
         }
-        if (const std::optional<std::string> png = drawn({reference, videos[i].path})) {
+        if (const std::optional<std::string> png = drawn({reference, videos[i].bitrate_path()})) {
             files.emplace_back(png_name(names[i], bitrate), *png);
         }
     }

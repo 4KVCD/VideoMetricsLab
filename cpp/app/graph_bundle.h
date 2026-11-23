@@ -12,6 +12,7 @@
 #include <QString>
 
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -28,11 +29,16 @@ namespace vml::app {
 class BitratePanel;
 class VideoColors;
 
-// A scored test video: its result, its name in the window and its file.
+// A scored test video: its result, its name in the window and its file;
+// and what its bitrate is known by in an export where that is not its file
+// (saved_bitrates).
 struct BundleVideo {
     std::shared_ptr<const ComparisonResult> result;
     QString label;
     std::filesystem::path path;
+    std::filesystem::path bitrate_key{};
+
+    const std::filesystem::path& bitrate_path() const { return bitrate_key.empty() ? path : bitrate_key; }
 };
 
 // A file for the archive: its name there and its bytes.
@@ -44,6 +50,24 @@ using BundleFile = std::pair<std::string, std::string>;
 // encode under the same name). None where none was saved: nothing is drawn
 // for the file then. The tab, which knows a file by its path, is not asked.
 using SavedBitrates = std::map<std::filesystem::path, std::optional<SavedBitrate>>;
+
+// Where a saved comparison's file is not the one its scores were saved for
+// (gone, or another file there now: a new encode under the same name), the
+// bitrate its graphs draw for it: as it was saved with them. `videos` are
+// the comparisons saved in `folders` (one each), of the reference
+// `reference` (the first's). `own` tells whether the file at a path is the
+// one the comparison in a folder was saved for (its reference, or its test
+// video); `load` reads what was saved of it. Each test video so drawn is
+// given a bitrate_key of its own: another of the videos may be of the file
+// now at its path, or of another one saved under it, each with its own
+// bitrate (issue #134).
+using OwnFile = std::function<bool(const std::filesystem::path& folder, bool reference,
+                                   const std::filesystem::path& file)>;
+using LoadSavedBitrate = std::function<std::optional<SavedBitrate>(
+    const std::filesystem::path& folder, bool reference, const std::filesystem::path& file)>;
+SavedBitrates saved_bitrates(std::vector<BundleVideo>& videos, const std::vector<std::filesystem::path>& folders,
+                             const std::filesystem::path& reference, const OwnFile& own,
+                             const LoadSavedBitrate& load);
 
 // How the graphs are drawn: the session's video colours, the chart colours
 // (Settings' Exported graphs) and the chart's size.
@@ -73,7 +97,7 @@ std::vector<BundleFile> metric_graph_files(const std::vector<BundleVideo>& video
 // test's). Each is its result's file as probed, at the export's `reference`
 // and the video's `path`: where the file is now, not where it was when its
 // saved scores were made (a file moved, renamed or copied since). Those of
-// `saved` are not read: their saved bitrate is drawn.
+// `saved` (by bitrate_path) are not read: their saved bitrate is drawn.
 std::vector<VideoInfo> bitrate_files(const std::filesystem::path& reference, const std::vector<BundleVideo>& videos,
                                      const SavedBitrates& saved = {});
 

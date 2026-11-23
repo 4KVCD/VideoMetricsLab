@@ -654,8 +654,10 @@ private:
     void export_saved_contents(const std::vector<LoadedSavedResult>& results);
     // The bitrate the Saved results tab's exports draw for the selected
     // comparisons' files that are not those their scores were saved for
-    // (gone, or another file there now): as it was saved with them.
-    SavedBitrates saved_bitrates(const std::vector<LoadedSavedResult>& results) const;
+    // (gone, or another file there now): as it was saved with them
+    // (graph_bundle.h's saved_bitrates; `videos` are the results', in order).
+    SavedBitrates saved_bitrates(std::vector<BundleVideo>& videos,
+                                 const std::vector<LoadedSavedResult>& results) const;
     // Settings > Storage > After each run, for a video just scored: what
     // Exports include, next to it or in the export folder.
     void export_automatically(const RowData& row_data);
