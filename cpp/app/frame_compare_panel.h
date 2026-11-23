@@ -294,7 +294,7 @@ public:
     QLabel* color_status_label = nullptr;
     QComboBox* source_resolution_combo = nullptr;
     QPushButton* advanced_info_button = nullptr;
-    QLabel* showing_label = nullptr;
+    ElidedLabel* showing_label = nullptr;
     FrameView* viewer = nullptr;
     PlayPauseButton* play_button = nullptr;
     QCheckBox* audio_checkbox = nullptr;
@@ -404,7 +404,8 @@ private:
     void sync_seek_widgets();
     void update_enabled_state();
     void update_labels();
-    // shown_names_ from the entries, and the video list's names so.
+    // shown_names_ from the entries: the title's names where the whole ones
+    // do not fit (the video list keeps the whole names).
     void name_videos();
     void update_frame_line();
     void update_color_status();
@@ -443,7 +444,8 @@ private:
     std::function<std::string()> ffmpeg_;
     int decoded_videos_;
     std::vector<FrameComparisonEntry> entries_;
-    // Each entry's label as shown (video_names.h), in entries_' order.
+    // Each entry's label shortened (video_names.h), in entries_' order: the
+    // title over the video where the whole label does not fit.
     std::vector<QString> shown_names_;
     VideoNameRule name_rule_;
     std::size_t current_index_ = 0;

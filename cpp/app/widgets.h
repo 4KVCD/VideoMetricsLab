@@ -146,9 +146,10 @@ private:
 };
 
 // One line of text cut to the width it is given, ending in "…", with the
-// whole text in the tooltip when it is cut. A plain QLabel asks for its
-// text's full width, so one long line would set the window's minimum width;
-// this one asks for no width at all.
+// whole text in the tooltip when it is cut (or a shorter text is shown in
+// its place). A plain QLabel asks for its text's full width, so one long
+// line would set the window's minimum width; this one asks for no width at
+// all.
 class ElidedLabel : public QLabel {
     Q_OBJECT
 
@@ -157,6 +158,9 @@ public:
 
     // Sets the text, and a tooltip to show with it.
     void set_text(const QString& text, const QString& tooltip = QString());
+    // Sets the text, and a shorter one shown whole where it does not fit
+    // and the shorter one does; cut where neither fits.
+    void set_text_or_shorter(const QString& text, const QString& shorter);
     // The whole text, before cutting.
     QString full_text() const { return full_; }
     // Clears the text and the tooltip.
@@ -175,6 +179,7 @@ private:
     void fit();
 
     QString full_;
+    QString shorter_;  // none: only full_
     QString tooltip_;
     Qt::TextElideMode mode_ = Qt::ElideRight;
 };

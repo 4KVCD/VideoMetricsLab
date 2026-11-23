@@ -165,7 +165,9 @@ encode's CRF, its encoder) would otherwise be cut where they differ:
   characters, with "…" between.
 - **Whole names** shows them as they are.
 
-Tooltips, exports and file names always keep the whole name.
+Video Compare's **Test video** list always shows whole names, and the title
+over the video shows the whole name where it fits, the shortened one only
+where it doesn't. Tooltips, exports and file names always keep the whole name.
 
 **Settings > Appearance** chooses how the window looks; nothing else changes
 with it. **Interface** is a card each, with a picture of it, VML Modern first:
