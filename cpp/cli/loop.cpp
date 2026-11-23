@@ -422,7 +422,7 @@ Json diff_json(const ComparisonResult& old_result, const std::string& old_item, 
     return document;
 }
 
-int diff(const SavedArguments& arguments) {
+int diff(const SavedArguments& arguments, const Settings& settings) {
     CompareArguments output = arguments.output;
     const std::string& old_item = arguments.items.at(0);
     const std::string& new_item = arguments.items.at(1);
@@ -430,7 +430,8 @@ int diff(const SavedArguments& arguments) {
     std::string unread;
     for (int at = 0; at < 2; ++at) {
         try {
-            runs[at] = read_comparison(arguments.items.at(at));
+            // The settings' folder, or --cache-dir's, as saved and report take it.
+            runs[at] = read_comparison(arguments.items.at(at), saved_scores_use(arguments.profile, settings).folder);
         } catch (const std::exception& error) {
             unread += (unread.empty() ? "" : "\n") + arguments.items.at(at) + ": " + error.what();
         }

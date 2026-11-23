@@ -12,6 +12,7 @@
 
 #include "arguments.h"
 #include "vml/bd_rate_report.h"
+#include "vml/settings.h"
 #include "vml/results.h"
 #include "vml/weak_frames.h"
 
@@ -69,6 +70,6 @@ nlohmann::ordered_json diff_json(const ComparisonResult& old_result, const std::
 
 // Runs the diff command; returns the exit code: 0; 1 when the JSON file
 // could not be written; 2 for a wrong command; 4 when a run cannot be read.
-int diff(const SavedArguments& arguments);
+int diff(const SavedArguments& arguments, const Settings& settings);
 
 }  // namespace vml::cli

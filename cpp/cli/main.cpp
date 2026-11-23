@@ -64,7 +64,11 @@ int main(int argc, char** argv) {
         const cli::ProfileArguments* profile = arguments.command == cli::Command::compare  ? &arguments.compare.profile
                                                : arguments.command == cli::Command::bitrate ? &arguments.bitrate.profile
                                                : arguments.command == cli::Command::devices ? &arguments.devices.profile
-                                                                                            : nullptr;
+                                               : arguments.command == cli::Command::saved ||
+                                                       arguments.command == cli::Command::report ||
+                                                       arguments.command == cli::Command::diff
+                                                   ? &arguments.saved.profile
+                                                   : nullptr;
         cli::ChosenSettings chosen;
         if (profile != nullptr) {
             try {
@@ -109,13 +113,13 @@ int main(int argc, char** argv) {
             case cli::Command::bdrate:
                 return cli::bdrate(arguments.bdrate);
             case cli::Command::saved:
-                return cli::saved(arguments.saved);
+                return cli::saved(arguments.saved, chosen.settings);
             case cli::Command::report:
-                return cli::report(arguments.saved);
+                return cli::report(arguments.saved, chosen.settings);
             case cli::Command::target:
                 return cli::target(arguments.target);
             case cli::Command::diff:
-                return cli::diff(arguments.saved);
+                return cli::diff(arguments.saved, chosen.settings);
             case cli::Command::devices:
                 return cli::devices(chosen.settings, arguments.devices.json_path);
             case cli::Command::none:

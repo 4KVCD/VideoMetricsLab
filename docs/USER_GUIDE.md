@@ -806,6 +806,8 @@ be gone:
 .\VideoMetricsLab-cli.exe report runs\*.metrics.json --segments saved
 ```
 
+`saved` and `report` take the settings as compare does: the app's, `--settings FILE`'s or, with `--no-settings`, the defaults. They give the saved results' folder and the weak segment profiles. `saved --cache-dir FOLDER` reads and deletes the saved results in FOLDER, as `compare --cache-dir FOLDER` saved them.
+
 `saved show` and `report` take compare's outputs: `--json`, `--csv`,
 `--frames-json`, `--run-dir`, `--worst`, `--segments` (with `saved`,
 `profile:NAME` and `preset:KEY`) and its options, `--segments-dir`,
@@ -1011,7 +1013,9 @@ is of `--sequence` (`error_code` `rates_unreadable`, `no_metric_scores` or
 `no_sequence`).
 
 `diff OLD NEW` takes two runs, each a run file or a saved comparison's ID
-(at least 6 of its hex digits, as `saved list` gives them). It shows each
+(at least 6 of its hex digits, as `saved list` gives them), looked for in
+the settings' saved results folder (`--settings` and `--no-settings` choose
+the settings, `--cache-dir FOLDER` another folder, as `saved` takes them). It shows each
 metric both runs have, old, new and the change, for the score and the worst
 1%; its JSON (format `diff-1`) has every statistic, and the metrics only
 one run has. With `--segments` (and its options, as compare takes them), it

@@ -453,7 +453,7 @@ TEST(Schemas, DiffTakesSavedSegmentsAsSavedShowDoes) {
     arguments.output.segments_saved = true;
     arguments.output.segments_preset = "no-such-preset";
     arguments.output.quiet = true;
-    EXPECT_THROW(diff(arguments), UsageError);
+    EXPECT_THROW(diff(arguments, Settings{}), UsageError);
     std::filesystem::remove_all(folder);
 }
 
