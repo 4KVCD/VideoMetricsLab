@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/4KVCD/VideoMetricsLab/blob/release/v2.7/docs/schemas/worst-frames-report.schema.json",
+  "title": "VideoMetricsLab worst frames of every metric of a video (worst-frames-report-1)",
+  "description": "Every scored metric's worst dips of one video over the whole video, <video> - worst frames.json: the exports of what Settings > Storage > Exports include ticks (Worst frames).",
+  "type": "object",
+  "required": [
+    "app",
+    "version",
+    "commit",
+    "format",
+    "dips",
+    "metrics"
+  ],
+  "properties": {
+    "app": {
+      "const": "VideoMetricsLab"
+    },
+    "version": {
+      "type": "string"
+    },
+    "commit": {
+      "type": "string"
+    },
+    "format": {
+      "const": "worst-frames-report-1"
+    },
+    "dips": {
+      "type": "integer"
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "metric",
+          "worst_frames"
+        ],
+        "properties": {
+          "metric": {
+            "type": "string"
+          },
+          "worst_frames": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "rank",
+                "frame",
+                "time",
+                "scores"
+              ],
+              "properties": {
+                "rank": {
+                  "type": "integer"
+                },
+                "frame": {
+                  "type": "integer"
+                },
+                "time": {
+                  "type": "number"
+                },
+                "scores": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "enum": [
+                          "inf",
+                          "-inf"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

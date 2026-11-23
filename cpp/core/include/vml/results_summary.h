@@ -33,6 +33,7 @@ inline constexpr const char* segments_format = "segments-1";                // a
 inline constexpr const char* segments_report_format = "segments-report-1";  // every video's
 inline constexpr const char* frames_format = "frames-1";                    // a video's per-frame scores
 inline constexpr const char* worst_frames_format = "worst-frames-1";        // a metric's worst frames
+inline constexpr const char* worst_frames_report_format = "worst-frames-report-1";  // every metric's, of a video
 
 // The head of every such file: "app", "version", "commit" and "format".
 nlohmann::ordered_json document_head(const nlohmann::ordered_json& format);

@@ -190,6 +190,9 @@ TEST(Schemas, HoldEveryDocument) {
     const nlohmann::ordered_json worst = worst_frames_json(scores, "vmaf", dips, 10, {});
     EXPECT_EQ(worst["format"], "worst-frames-1");
     EXPECT_EQ(schema_errors("worst-frames", worst), std::vector<std::string>{});
+    const nlohmann::ordered_json every = worst_frames_report_json(scores, 10);
+    EXPECT_EQ(every["format"], "worst-frames-report-1");
+    EXPECT_EQ(schema_errors("worst-frames-report", every), std::vector<std::string>{});
 
     const nlohmann::ordered_json frames = nlohmann::ordered_json::parse(per_frame_json(result));
     EXPECT_EQ(frames["rows"][0][4], "inf");  // PSNR of the identical frame: JSON, not Python's Infinity

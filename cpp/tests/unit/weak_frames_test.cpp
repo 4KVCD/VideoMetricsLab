@@ -265,7 +265,14 @@ TEST(WeakFrames, WorstFramesExportEveryMetricsScore) {
               "metric,rank,frame,time,vmaf,butteraugli\n"
               "vmaf,1,15,1.5,40.0,4.5\n"
               "butteraugli,1,15,1.5,40.0,4.5\n");
-    EXPECT_EQ(worst_frames_report_json(results, 1).dump(),
+    // Led by the head too (worst-frames-report-1), the rest as follows.
+    nlohmann::ordered_json report = worst_frames_report_json(results, 1);
+    EXPECT_EQ(report.begin().key(), "app");
+    EXPECT_EQ(report["format"], "worst-frames-report-1");
+    for (const char* head : {"app", "version", "commit", "format"}) {
+        report.erase(head);
+    }
+    EXPECT_EQ(report.dump(),
               R"({"dips":1,"metrics":[{"metric":"vmaf","worst_frames":[)"
               R"({"rank":1,"frame":15,"time":1.5,"scores":{"vmaf":40.0,"butteraugli":4.5}}]},)"
               R"({"metric":"butteraugli","worst_frames":[)"

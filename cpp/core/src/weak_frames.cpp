@@ -578,7 +578,10 @@ Json report_json(const MetricResultSet& results, const EveryMetricsWorst& every,
         Json one = worst_frames_json(results, key, worst, dips, {});
         list.push_back(Json{{"metric", key}, {"worst_frames", std::move(one["worst_frames"])}});
     }
-    return Json{{"dips", dips}, {"metrics", std::move(list)}};
+    Json report = document_head(worst_frames_report_format);
+    report["dips"] = dips;
+    report["metrics"] = std::move(list);
+    return report;
 }
 
 std::string report_csv(const MetricResultSet& results, const EveryMetricsWorst& every) {
