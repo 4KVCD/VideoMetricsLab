@@ -202,6 +202,10 @@ struct GpuAdapter {
     unsigned index = 0;
     unsigned vendor_id = 0;
     std::string name;
+    // Windows' locally unique identifier of the adapter (its LUID's 8 bytes
+    // as they are in memory), which CUDA also reports for its GPUs; 0 where
+    // it is not known.
+    std::uint64_t luid = 0;
 };
 // The hardware GPUs DirectX lists, in its order, as gpu_vendor_ids lists them
 // (only VML_GPU_VENDOR's maker's when it is set), but for Windows' Basic

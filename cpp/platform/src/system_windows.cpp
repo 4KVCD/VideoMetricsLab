@@ -562,11 +562,15 @@ std::vector<GpuAdapter> gpu_adapters() {
         }
         IDXGIAdapter1* adapter = nullptr;
         DXGI_ADAPTER_DESC1 description{};
+        std::uint64_t luid = 0;
         if (SUCCEEDED(factory->EnumAdapters1(index, &adapter))) {
-            adapter->GetDesc1(&description);
+            if (SUCCEEDED(adapter->GetDesc1(&description))) {
+                static_assert(sizeof(description.AdapterLuid) == sizeof(luid));
+                std::memcpy(&luid, &description.AdapterLuid, sizeof(luid));
+            }
             adapter->Release();
         }
-        adapters.push_back({index, vendor, narrow(description.Description)});
+        adapters.push_back({index, vendor, narrow(description.Description), luid});
     }
     factory->Release();
     return adapters;

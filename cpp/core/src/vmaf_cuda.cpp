@@ -69,7 +69,8 @@ struct CudaDriver {
           stream_create(library.function<decltype(stream_create)>("cuStreamCreate")),
           stream_destroy(library.function<decltype(stream_destroy)>("cuStreamDestroy_v2")),
           copy_2d_async(library.function<decltype(copy_2d_async)>("cuMemcpy2DAsync_v2")),
-          stream_synchronize(library.function<decltype(stream_synchronize)>("cuStreamSynchronize")) {}
+          stream_synchronize(library.function<decltype(stream_synchronize)>("cuStreamSynchronize")),
+          device_luid(reinterpret_cast<decltype(device_luid)>(library.find("cuDeviceGetLuid"))) {}
 
     platform::DynamicLibrary library;
     CudaResult (*init)(unsigned flags);
@@ -86,6 +87,8 @@ struct CudaDriver {
     CudaResult (*stream_destroy)(CudaStream stream);
     CudaResult (*copy_2d_async)(const CudaCopy2D* copy, CudaStream stream);
     CudaResult (*stream_synchronize)(CudaStream stream);
+    // Windows' drivers only: nullptr elsewhere.
+    CudaResult (*device_luid)(char* luid, unsigned* node_mask, CudaDevice device);
 };
 
 // The driver, loaded the first time it is asked for. Throws LibvmafError
@@ -263,29 +266,37 @@ std::string cuda_library_build() { return "libvmaf-fast " + libvmaf_fast_version
 
 namespace {
 
-// The names of CUDA's GPUs, in its order (CUDA_VISIBLE_DEVICES's, else the
-// fastest first); none where CUDA cannot start.
-std::vector<std::string> cuda_device_names() {
-    std::vector<std::string> names;
+// CUDA's GPUs, in its order (CUDA_VISIBLE_DEVICES's, else the fastest
+// first), with their LUIDs where the driver says them (Windows'); none where
+// CUDA cannot start.
+std::vector<CudaGpu> cuda_gpus() {
+    std::vector<CudaGpu> gpus;
     try {
         const CudaDriver& cu = cuda_driver();
         int count = 0;
         if (cu.init(0) != 0 || cu.device_count(&count) != 0) {
-            return names;
+            return gpus;
         }
         for (int index = 0; index < count; ++index) {
             CudaDevice device = 0;
             std::array<char, 256> name{};
-            if (cu.device_get(&device, index) != 0 ||
-                cu.device_name(name.data(), static_cast<int>(name.size()), device) != 0) {
-                name[0] = '\0';  // a place kept, so that the others keep their numbers
+            CudaGpu gpu;
+            if (cu.device_get(&device, index) == 0) {
+                if (cu.device_name(name.data(), static_cast<int>(name.size()), device) == 0) {
+                    gpu.name.assign(name.data(), strnlen(name.data(), name.size()));
+                }
+                std::array<char, 8> luid{};
+                unsigned node_mask = 0;
+                if (cu.device_luid != nullptr && cu.device_luid(luid.data(), &node_mask, device) == 0) {
+                    std::memcpy(&gpu.luid, luid.data(), sizeof(gpu.luid));
+                }
             }
-            names.emplace_back(name.data(), strnlen(name.data(), name.size()));
+            gpus.push_back(std::move(gpu));  // a place kept, so that the others keep their numbers
         }
     } catch (const LibvmafError&) {
         // No NVIDIA driver: no CUDA GPUs.
     }
-    return names;
+    return gpus;
 }
 
 }  // namespace
@@ -301,7 +312,7 @@ std::optional<int> chosen_cuda_device() {
     if (const auto found = known.find(*chosen); found != known.end()) {
         return found->second;
     }
-    const std::optional<int> device = chosen_cuda_device_among(chosen, platform::gpu_adapters(), cuda_device_names);
+    const std::optional<int> device = chosen_cuda_device_among(chosen, platform::gpu_adapters(), cuda_gpus);
     known.emplace(*chosen, device);
     return device;
 }

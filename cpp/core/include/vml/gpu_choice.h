@@ -11,6 +11,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
@@ -64,14 +65,22 @@ void resolve_chosen_gpu();
 // the NVIDIA GPUs of `adapters` (DirectX's list: NVIDIA's decoder is then
 // only tried after the chosen GPU's maker's, as before, and CUDA VMAF is not
 // used, gpu_vmaf.cpp); and where it is the only NVIDIA GPU there. Else the
-// one of `cuda_names()` (CUDA's GPUs in its order, asked only then, as it
-// starts CUDA) that `chosen` names (chosen_among: "... #2" is the second of
-// that name in CUDA's order), or nothing where none is (CUDA_VISIBLE_DEVICES
+// one of `cuda_gpus()` (CUDA's GPUs in its order, asked only then, as it
+// starts CUDA) with the chosen adapter's LUID: the very card DirectX lists,
+// two cards of one name included, whose order CUDA (fastest first) and
+// DirectX (the main display's first) need not share. Where the LUIDs are
+// not known, the one `chosen` names (chosen_among: "... #2" is the second
+// of that name in CUDA's order). Nothing where none is (CUDA_VISIBLE_DEVICES
 // hides it): nothing of NVIDIA's then runs on another GPU instead. Where the
-// system lists no GPUs (Linux, macOS), the one of `cuda_names()` it names,
-// else 0.
+// system lists no GPUs (macOS), the one of `cuda_gpus()` it names, else 0.
+// One of CUDA's GPUs: its name, and its LUID as GpuAdapter's (0 where CUDA
+// does not say it: other systems).
+struct CudaGpu {
+    std::string name;
+    std::uint64_t luid = 0;
+};
 std::optional<int> chosen_cuda_device_among(const std::optional<std::string>& chosen,
                                             const std::vector<platform::GpuAdapter>& adapters,
-                                            const std::function<std::vector<std::string>()>& cuda_names);
+                                            const std::function<std::vector<CudaGpu>()>& cuda_gpus);
 
 }  // namespace vml
