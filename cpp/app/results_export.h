@@ -78,6 +78,15 @@ QString export_contents(const std::vector<std::string>& items);
 enum class ExportScope { this_video, all_videos, selected_videos };
 QString export_action_text(ExportScope scope, const std::vector<std::string>& items);
 
+// Whether a row's run is one to export (MainWindow::scored_video): each of
+// the metrics `requested` (ticked) has its score from the run (`kept`) or
+// failed on that run (`failed`), and at least one has its score. A metric
+// ticked since the run, never calculated, holds it back; one that failed
+// does not, or the scores beside it could never be exported, nor by
+// Settings' after-run export.
+bool settled_for_export(const std::vector<std::string>& requested, const std::vector<std::string>& kept,
+                        const std::vector<std::string>& failed);
+
 // An export's files written into `folder` (one the user chose, or Settings'
 // after-run export's), replacing none there: where any of their names is
 // taken, by another video's export of the same file name say, they are all

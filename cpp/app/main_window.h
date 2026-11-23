@@ -623,7 +623,8 @@ private:
     // Whether rows are selected in the Videos table.
     bool rows_selected() const;
     // The menu's shared export of its rows (export_menu_rows) as they are
-    // now, those with every ticked metric scored: this video's, the selected
+    // now, those with every ticked metric scored (or failed on the run,
+    // scored_video): this video's, the selected
     // ones', or all the videos' (export_all_videos) with none selected.
     void export_rows();
     // The menu's export of one kind, of its rows as they are now.
@@ -746,7 +747,10 @@ private:
     void render_job_progress(int index);
     std::optional<int> row_index_of(const RowData* row_data) const;
     void on_result_updated(int index, const ComparisonResult& result);
-    std::optional<int> on_job_finished(int index, const ComparisonResult& result, bool final = true);
+    // `failures`: the metrics that failed beside the result's (a video
+    // partly failed), known to the row before it is exported.
+    std::optional<int> on_job_finished(int index, const ComparisonResult& result, bool final = true,
+                                       const MetricFailures& failures = {});
     // The run's record, completed as the run ends (run_record_).
     void complete_run_record();
     // This machine, with the FFmpeg the window found.

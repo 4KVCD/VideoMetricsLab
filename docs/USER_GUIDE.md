@@ -1194,7 +1194,8 @@ files of all of them together (the results, the weak segments report, the
 The right-click menus of the Videos table, of Metric Graphs' statistics and
 of the Saved Results tab offer an export of what is ticked, named after it:
 **Export this video's results, graphs and weak segments...** for the video
-clicked (once its metrics are all scored), and **Export all videos'
+clicked (once its metrics are all scored, or failed: a metric that failed
+leaves the others' scores to export), and **Export all videos'
 results, graphs and weak segments...** for every test video scored against
 the reference. **Export the selected videos'...** takes the selected
 rows: on Saved Results, and in the Videos table where you right-click one

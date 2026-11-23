@@ -1097,7 +1097,8 @@ void MainWindow::on_result_updated(int index, const ComparisonResult& result) {
     on_job_finished(index, result, false);
 }
 
-std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult& result, bool final) {
+std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult& result, bool final,
+                                               const MetricFailures& failures) {
     // Saves and shows a finished video's result, or with `final` false its
     // result so far (on_result_updated). Returns the row it was shown on, or
     // nothing when it was not: the row was removed, or the reference or the
@@ -1159,6 +1160,11 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
     row_data.completed_run = run;
     if (final) {
         row_data.analysis_status.reset();  // a result so far leaves the video in progress
+        // Known before Settings' after-run export below, which exports a
+        // video whose metrics failed in part (scored_video).
+        for (const auto& [key, why] : failures) {
+            row_data.metric_failures[key] = QString::fromStdString(why);
+        }
     }
     if (row_data.options.resample_test) {
         set_resample_row_info(*row, *row_data.options.resample_test);  // the sizes, with the crop the run used
@@ -1286,13 +1292,9 @@ void MainWindow::on_job_partially_failed(int index, const ComparisonResult& resu
     // scores are shown like any result, and the metrics that failed say so,
     // and why, in their own cells.
     ++run_partial_count_;
-    const std::optional<int> row = on_job_finished(index, result);
+    const std::optional<int> row = on_job_finished(index, result, true, failures);
     if (!row) {
         return;
-    }
-    RowData& row_data = *rows_[static_cast<std::size_t>(*row)];
-    for (const auto& [key, why] : failures) {
-        row_data.metric_failures[key] = QString::fromStdString(why);
     }
     set_row_status(*row, RowState::partly_failed,
                    with_fallbacks(index, stderr_tail.isEmpty() ? message : message + "\n\n" + stderr_tail));
