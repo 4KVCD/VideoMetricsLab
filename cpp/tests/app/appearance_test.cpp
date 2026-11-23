@@ -25,7 +25,9 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QMouseEvent>
 #include <QSet>
+#include <QSlider>
 #include <QTabWidget>
 #include <QWidget>
 
@@ -275,6 +277,26 @@ TEST_F(Appearance, EveryRoleInTheWindowIsOneModernStyles) {
 
 TEST_F(Appearance, ModernLight) {
     check_modern(false);
+}
+
+// Issue #203: a left click on a slider jumps to the click in Modern, as in
+// Classic. Fusion, which Modern's style is drawn over, paged toward it by
+// the page step instead (10 frames a click on Video Compare's timeline).
+TEST_F(Appearance, ALeftClickOnASliderJumpsThereInModern) {
+    ASSERT_EQ(theme::current_interface(), theme::Interface::modern);  // run after ModernLight
+    QSlider slider(Qt::Horizontal);
+    slider.setRange(0, 1000);
+    slider.resize(400, 24);
+    slider.show();
+    QApplication::processEvents();
+    const QPointF at(300, 12);  // three quarters along
+    QMouseEvent press(QEvent::MouseButtonPress, at, slider.mapToGlobal(at), Qt::LeftButton, Qt::LeftButton,
+                      Qt::NoModifier);
+    QApplication::sendEvent(&slider, &press);
+    QMouseEvent release(QEvent::MouseButtonRelease, at, slider.mapToGlobal(at), Qt::LeftButton, Qt::NoButton,
+                        Qt::NoModifier);
+    QApplication::sendEvent(&slider, &release);
+    EXPECT_NEAR(slider.value(), 750, 30);  // not 10, one page step
 }
 
 TEST_F(Appearance, ModernDark) {
