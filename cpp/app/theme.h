@@ -25,6 +25,7 @@
 class QBoxLayout;
 class QFrame;
 class QGroupBox;
+class QMargins;
 class QTableWidgetItem;
 class QWidget;
 
@@ -171,6 +172,12 @@ void classic_only(QWidget* widget);
 // A group box Classic frames, titled `title`, and Modern leaves unboxed and
 // untitled (role "unboxed"): the cards inside it are Modern's boxes.
 void classic_box(QGroupBox* box, const QString& title);
+
+// `widget`'s layout has `modern` margins in VML Modern and, in Classic, the
+// ones it has now (its style's), set again whenever the interface changes:
+// a layout given Modern's margins only when built keeps Classic's after a
+// switch to Modern while the app runs.
+void modern_margins(QWidget* widget, const QMargins& modern);
 // A widget for a role (a "card", a "toolbar", a "footer", or "padding": room
 // alone) that groups controls in Modern: its layout's margins are Modern's
 // room inside the role, none in Classic, where the role is not drawn, so the

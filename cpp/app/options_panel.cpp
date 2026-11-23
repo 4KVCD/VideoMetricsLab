@@ -3,6 +3,7 @@
 #include <QAbstractSpinBox>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QMargins>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -213,12 +214,12 @@ OptionsPanel::OptionsPanel(const std::vector<GpuVendor>& gpu_vendors, QWidget* p
     // common but the column (theme::classic_box, theme::container).
     auto* metric_box = new QGroupBox;
     theme::classic_box(metric_box, app::tr("Metric-specific settings"));
+    metric_box->setObjectName("metricSettings");
     auto* metric_column = new QVBoxLayout(metric_box);
-    if (theme::current_interface() == theme::Interface::modern) {
-        // The cards' tops level with the side boxes' (Modern's box draws
-        // nothing of its own around them).
-        metric_column->setContentsMargins(0, 0, 0, 0);
-    }
+    // In Modern none, so that the cards' tops are level with the side boxes'
+    // (Modern's box draws nothing of its own around them); again after a
+    // switch to Modern while the app runs.
+    theme::modern_margins(metric_box, QMargins());
     const auto add_card = [&metric_column, &forms](const QString& title) {
         QBoxLayout* card_layout = nullptr;
         metric_column->addWidget(theme::container("card", false, &card_layout));
