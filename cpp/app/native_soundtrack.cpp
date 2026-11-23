@@ -36,6 +36,24 @@ namespace vml::app {
 
 namespace {
 
+// Why the soundtrack can't play: without it, a Video Compare that plays
+// silently left nothing in the log to say why (issue #204). Said once for a
+// reference and reason in a row: each restart of playback (another test
+// video, say) makes another player, which fails alike. Advanced info and the status line say it too
+// (NativePool::description, FrameComparePanel).
+void log_failure(const std::filesystem::path& reference, const QString& why) {
+    static std::mutex mutex;
+    static std::pair<std::filesystem::path, QString> last;
+    {
+        const std::lock_guard lock(mutex);
+        if (last.first == reference && last.second == why) {
+            return;
+        }
+        last = {reference, why};
+    }
+    app_log::write(app_log::Level::info, "vml.native_playback", "Video Compare plays no sound: " + why.toStdString());
+}
+
 // How much decoded sound is kept ahead of the device, and how much a seek
 // waits for before the soundtrack counts as ready to play.
 constexpr double queued_ms = 300;
@@ -297,6 +315,9 @@ std::optional<QString> FfmpegSoundtrack::failed() const {
 void FfmpegSoundtrack::set_failed(const QString& why) {
     {
         const std::lock_guard lock(mutex_);
+        if (!failed_) {
+            log_failure(path_, why);
+        }
         failed_ = why;
         want_playing_ = false;
         clock_ms_.reset();
@@ -485,6 +506,9 @@ void FfmpegSoundtrack::run() {
 // clock rather than a clock that stopped.
 void FfmpegSoundtrack::Player::fail(const QString& why) {
     const std::lock_guard lock(soundtrack_.mutex_);
+    if (!soundtrack_.failed_) {
+        log_failure(soundtrack_.path_, why);
+    }
     soundtrack_.failed_ = why;
     soundtrack_.ready_ = false;
     soundtrack_.clock_ms_.reset();
@@ -504,14 +528,14 @@ bool FfmpegSoundtrack::Player::open_file() {
     }
     if (result < 0) {
         if (!soundtrack_.stopping()) {
-            fail(QStringLiteral("Could not open the soundtrack: %1").arg(error_text(result)));
+            fail(QStringLiteral("the reference's audio could not be read: %1").arg(error_text(result)));
         }
         return false;
     }
     const AVCodec* decoder = nullptr;
     reader_.stream = av_find_best_stream(reader_.format, AVMEDIA_TYPE_AUDIO, -1, -1, &decoder, 0);
     if (reader_.stream < 0 || decoder == nullptr) {
-        fail(QStringLiteral("The source has no soundtrack the app plays"));
+        fail(QStringLiteral("the reference has no audio track the app plays"));
         return false;
     }
     for (unsigned index = 0; index < reader_.format->nb_streams; ++index) {
@@ -534,7 +558,7 @@ bool FfmpegSoundtrack::Player::open_file() {
     reader_.codec->pkt_timebase = stream->time_base;
     result = avcodec_open2(reader_.codec, decoder, nullptr);
     if (result < 0) {
-        fail(QStringLiteral("Could not decode the soundtrack: %1").arg(error_text(result)));
+        fail(QStringLiteral("the reference's audio could not be read: %1").arg(error_text(result)));
         return false;
     }
     return true;
@@ -549,7 +573,7 @@ bool FfmpegSoundtrack::Player::open_device() {
         FAILED(devices_->GetDefaultAudioEndpoint(eRender, eConsole, &device_)) ||
         FAILED(device_->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, &client_)) ||
         FAILED(client_->GetMixFormat(&mix))) {
-        fail(QStringLiteral("No sound device"));
+        fail(QStringLiteral("no sound device"));
         return false;
     }
     channels_ = mix->nChannels;
@@ -569,7 +593,7 @@ bool FfmpegSoundtrack::Player::open_device() {
         FAILED(client_->GetBufferSize(&buffer_frames_)) || FAILED(client_->GetService(IID_PPV_ARGS(&render_))) ||
         FAILED(client_->GetService(IID_PPV_ARGS(&clock_))) || FAILED(clock_->GetFrequency(&frequency_)) ||
         frequency_ == 0) {
-        fail(QStringLiteral("The sound device cannot play"));
+        fail(QStringLiteral("the sound device can't play"));
         return false;
     }
     const AVSampleFormat sample_format = floats ? AV_SAMPLE_FMT_FLT : AV_SAMPLE_FMT_S16;
@@ -625,7 +649,7 @@ bool FfmpegSoundtrack::Player::open_device() {
     // A queue that could not be made in the device's channels, or would not
     // be told its speakers, is made again in stereo.
     if (!make_queue() && !make_queue()) {
-        fail(QStringLiteral("No sound device"));
+        fail(QStringLiteral("no sound device"));
         return false;
     }
     app_log::write(app_log::Level::info, "vml.native_playback",
@@ -634,7 +658,7 @@ bool FfmpegSoundtrack::Player::open_device() {
     buffer_frames_ = static_cast<std::size_t>(std::llround(queue_buffer_ms * rate_ / 1000));
     for (AudioQueueBufferRef& buffer : buffers_) {
         if (AudioQueueAllocateBuffer(sound_queue_, static_cast<UInt32>(buffer_frames_ * frame_bytes_), &buffer) != noErr) {
-            fail(QStringLiteral("The sound device cannot play"));
+            fail(QStringLiteral("the sound device can't play"));
             return false;
         }
     }
@@ -657,7 +681,7 @@ bool FfmpegSoundtrack::Player::open_device() {
     av_channel_layout_uninit(&in_layout);
     av_channel_layout_uninit(&out_layout);
     if (result < 0 || swr_init(reader_.resampler) < 0) {
-        fail(QStringLiteral("The soundtrack cannot be converted for the sound device"));
+        fail(QStringLiteral("the sound device can't play"));
         return false;
     }
     return true;
@@ -781,7 +805,7 @@ void FfmpegSoundtrack::Player::play() {
             // The queue's buffers filled first, so that it starts with sound.
             if (!feed_device(enabled) || AudioQueueStart(sound_queue_, nullptr) != noErr) {
 #endif
-                fail(QStringLiteral("The sound device cannot play"));
+                fail(QStringLiteral("the sound device can't play"));
                 return;
             }
             started_ = true;
@@ -877,7 +901,7 @@ bool FfmpegSoundtrack::Player::decode_some() {
             avcodec_send_packet(reader_.codec, nullptr);
         } else if (result < 0) {
             if (!soundtrack_.stopping()) {
-                fail(QStringLiteral("Could not read the soundtrack: %1").arg(error_text(result)));
+                fail(QStringLiteral("the reference's audio could not be read: %1").arg(error_text(result)));
             }
             return false;
         } else {
@@ -972,7 +996,7 @@ bool FfmpegSoundtrack::Player::feed_device(bool enabled) {
             starved_frames_ = now.mSampleTime - given_frames_;
         }
         if (AudioQueueEnqueueBuffer(sound_queue_, buffer, 0, nullptr) != noErr) {
-            fail(QStringLiteral("The sound device went"));
+            fail(QStringLiteral("the sound device can't play"));
             return false;
         }
         given_frames_ += static_cast<double>(given);
@@ -987,7 +1011,7 @@ bool FfmpegSoundtrack::Player::feed_device(bool enabled) {
 #else
     UINT32 padding = 0;
     if (FAILED(client_->GetCurrentPadding(&padding))) {
-        fail(QStringLiteral("The sound device went"));
+        fail(QStringLiteral("the sound device can't play"));
         return false;
     }
     const UINT32 room = buffer_frames_ - padding;
@@ -997,7 +1021,7 @@ bool FfmpegSoundtrack::Player::feed_device(bool enabled) {
     }
     BYTE* data = nullptr;
     if (FAILED(render_->GetBuffer(given, &data))) {
-        fail(QStringLiteral("The sound device went"));
+        fail(QStringLiteral("the sound device can't play"));
         return false;
     }
     const std::size_t from_queue = std::min<std::size_t>(given, queued_frames());

@@ -67,6 +67,11 @@ protected:
 #ifdef VML_NATIVE_PLAYBACK
     static bool plays_natively(const VideoCompareView& view) { return view.native_active(); }
 #endif
+    // The status line's playback part for the view's status `message`.
+    static QString playback_status(FrameComparePanel& panel, const QString& message) {
+        panel.on_video_status_changed(message);
+        return panel.concise_playback_status();
+    }
     static std::size_t frames_kept(const FrameComparePanel& panel) { return panel.cache_.size(); }
     static const QImage* current_image(const FrameComparePanel& panel) { return panel.current_image(); }
     static QWidget* shown_page(const FrameComparePanel& panel) { return panel.content_stack_->currentWidget(); }
@@ -344,6 +349,32 @@ TEST_F(FramePanelTest, TheLoopIsSetInSecondsOrFrames) {
     EXPECT_EQ(loop_start(48, panel->loop_after_spin->value(), 24.0), 47);  // still the one frame
     panel->loop_after_spin->setValue(0.125);
     EXPECT_EQ(panel->loop_after_frames_spin->value(), 3);
+}
+
+// Issue #204: without a soundtrack, the status line says so, and why, while
+// Audio is ticked (it said so only in Advanced info, and the log not at all);
+// a missing soundtrack is not an error of the pictures', which would show
+// the whole status.
+TEST_F(FramePanelTest, NoSoundIsSaidWithWhyWhileAudioIsTicked) {
+    const auto panel = make_panel();
+    panel->set_runs({scored("encode")});
+    const QString dot = QString::fromUtf8(" \xC2\xB7 ");
+    const QString silent = "Paused" + dot + "audio unavailable" + dot +
+                           "the reference's audio could not be read: Invalid data found when processing input" + dot +
+                           "Direct3D 11";
+    panel->audio_checkbox->setChecked(true);
+    EXPECT_EQ(playback_status(*panel, silent).toStdString(),
+              "Paused" + dot.toStdString() +
+                  "No sound: the reference's audio could not be read: Invalid data found when processing input");
+    // Advanced info has every part, the reason among them.
+    EXPECT_TRUE(panel->advanced_info_button->toolTip().contains("the reference&#x27;s audio could not be read") ||
+                panel->advanced_info_button->toolTip().contains("the reference's audio could not be read"))
+        << panel->advanced_info_button->toolTip().toStdString();
+    panel->audio_checkbox->setChecked(false);
+    EXPECT_EQ(playback_status(*panel, silent).toStdString(), "Paused");
+    panel->audio_checkbox->setChecked(true);
+    EXPECT_EQ(playback_status(*panel, "Playing" + dot + "source soundtrack" + dot + "Direct3D 11").toStdString(),
+              "Playing");
 }
 
 // Holding S shows the source, letting go the test video again.
