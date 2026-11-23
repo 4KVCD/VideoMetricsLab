@@ -13,16 +13,17 @@
 #include <nlohmann/json.hpp>
 
 #include "arguments.h"
+#include "common.h"
 #include "vml/bitrate.h"
 #include "vml/difference.h"
 #include "vml/video.h"
 
 namespace vml::cli {
 
-// Runs the bitrate command; returns the exit code: 0 when every video was
-// read, 1 when one was not (or a file could not be written), 2 for a wrong
-// command, 130 for Ctrl+C.
-int bitrate(const BitrateArguments& arguments);
+// Runs the bitrate command with `chosen` settings; returns the exit code: 0
+// when every video was read, 1 when a file could not be written, 2 for a
+// wrong command, 4 when a video was not read, 130 for Ctrl+C.
+int bitrate(const BitrateArguments& arguments, const ChosenSettings& chosen);
 
 // A video of the command: what ffprobe says of it and its packets, or why it
 // could not be read.

@@ -187,6 +187,17 @@ nlohmann::ordered_json worst_frames_json(const MetricResultSet& results, const s
 // metric's score (empty where it has none).
 std::string worst_frames_csv(const MetricResultSet& results, const std::vector<WorstFrame>& worst);
 
+// Every metric `results` has scores of, its worst frames of `dips` dips
+// (worst_frames, over the whole video), as one document: "dips", then
+// "metrics", one object a metric in the registry's order: "metric" and
+// "worst_frames" (worst_frames_json's). For the archive Settings' Exports
+// include makes (Worst frames).
+nlohmann::ordered_json worst_frames_report_json(const MetricResultSet& results, std::size_t dips);
+
+// The same as CSV: worst_frames_csv's rows, each led by its metric
+// ("metric,rank,frame,time,<every scored metric>"), a metric after another.
+std::string worst_frames_report_csv(const MetricResultSet& results, std::size_t dips);
+
 // What an export of worst frames of `key` is named after, before ".json" or
 // ".csv": "<key>.worst" ("vmaf.worst").
 std::string worst_frames_file_suffix(const std::string& key);

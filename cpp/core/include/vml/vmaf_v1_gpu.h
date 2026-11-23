@@ -19,6 +19,7 @@
 // decoder's pictures are even read where it left them, as textures.
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -120,6 +121,26 @@ public:
     // given, or for a source picture (`reference`) after the next frame too,
     // because the next frame's motion feature reads it.
     void release_later(GpuFrameStream& stream, int slot, bool reference);
+
+    // Whether convert_on_gpu may be asked for, or why not (in `why`): not
+    // where libvmaf's CPU extractors read the converted pictures (CAMBI or
+    // SpEED off the GPU), nor with an engine without the conversion.
+    bool can_convert_on_gpu(std::string& why) const;
+
+    // For HDR VMAF, before the first pair: has the engine convert each pair
+    // given from here on with `plans` (libvmaf's vmaf_picture_convert_gpu_plan,
+    // the source's then the test video's) before scoring it, so that the
+    // pairs given are the videos' own 4:2:0 pictures, 16-bit samples. False,
+    // with why in `why`, where the engine refuses the plans; the scorer must
+    // then not be used.
+    bool convert_on_gpu(const std::array<std::span<const std::uint32_t>, 2>& plans, std::string& why);
+
+    // With convert_on_gpu: one picture of side `side` (0 the source) converted
+    // by the GPU into the three planes at `out`, to be checked against
+    // libvmaf's conversion.
+    void test_convert(int side, const std::array<const std::uint16_t*, 3>& planes,
+                      const std::array<std::ptrdiff_t, 3>& strides, const std::array<std::uint16_t*, 3>& out,
+                      const std::array<std::ptrdiff_t, 3>& out_strides);
 
     // The features of the frames scored. Call it once every frame has been
     // given.

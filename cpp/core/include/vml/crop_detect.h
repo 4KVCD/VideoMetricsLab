@@ -32,8 +32,10 @@ public:
 };
 
 // Keeps the answers between sessions in `store` (a folder can move, so it is
-// asked for each time); nothing keeps them only in this process.
-void set_crop_store(std::function<std::filesystem::path()> store);
+// asked for each time); nothing keeps them only in this process. With
+// `writes` false, the store's answers are read but nothing is written to it
+// (the command line's --no-save).
+void set_crop_store(std::function<std::filesystem::path()> store, bool writes = true);
 
 // The store's file, kept with the saved scores.
 inline constexpr std::string_view black_bars_file = "black_bars.json";

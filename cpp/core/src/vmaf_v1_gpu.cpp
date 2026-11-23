@@ -462,6 +462,8 @@ struct V1Scorer::State {
     // Whether the engine reads the decoders' pictures where they are
     // (vv_pictures).
     bool pictures = false;
+    // Whether the engine converts each pair before scoring it (convert_on_gpu).
+    bool converting = false;
     // The decoders' slots given back through release_later that the engine
     // may still read: the last frame that reads each, its stream and slot.
     struct Held {
@@ -805,7 +807,7 @@ void V1Scorer::add_planes(const FramePlanes& reference, const FramePlanes& disto
     State& s = *state_;
     const bool score = s.count % s.step == 0;
     int code = 0;
-    if (s.on_gpu.contains(v1_speed)) {  // the GPU needs the chroma planes too
+    if (s.on_gpu.contains(v1_speed) || s.converting) {  // the GPU needs the chroma planes too
         std::array<const std::uint8_t*, 6> planes{};
         std::array<std::ptrdiff_t, 6> strides{};
         for (std::size_t plane = 0; plane < 3; ++plane) {
@@ -927,6 +929,43 @@ bool V1Scorer::pictures() const { return state_->pictures; }
 void V1Scorer::release_later(GpuFrameStream& stream, int slot, bool reference) {
     State& s = *state_;
     s.held.push_back({static_cast<long long>(s.count) - 1 + (reference ? 1 : 0), &stream, slot});
+}
+
+bool V1Scorer::can_convert_on_gpu(std::string& why) const {
+    const State& s = *state_;
+    if (s.cpu_features()) {
+        why = "libvmaf's CPU code calculates CAMBI or SpEED here, from the converted pictures";
+        return false;
+    }
+    if (s.engine.v1_convert == nullptr || s.engine.test_convert == nullptr) {
+        why = "the bundled Vulkan engine has no picture conversion";
+        return false;
+    }
+    return true;
+}
+
+bool V1Scorer::convert_on_gpu(const std::array<std::span<const std::uint32_t>, 2>& plans, std::string& why) {
+    State& s = *state_;
+    if (!can_convert_on_gpu(why)) {
+        return false;
+    }
+    const std::array<const std::uint32_t*, 2> words{plans[0].data(), plans[1].data()};
+    const std::array<std::size_t, 2> counts{plans[0].size(), plans[1].size()};
+    if (s.engine.v1_convert(s.gpu, words.data(), counts.data()) != 0) {
+        const char* said = s.engine.error();
+        why = std::string("the Vulkan engine refused the conversion: ") + (said != nullptr ? said : "");
+        return false;
+    }
+    s.converting = true;
+    return true;
+}
+
+void V1Scorer::test_convert(int side, const std::array<const std::uint16_t*, 3>& planes,
+                            const std::array<std::ptrdiff_t, 3>& strides, const std::array<std::uint16_t*, 3>& out,
+                            const std::array<std::ptrdiff_t, 3>& out_strides) {
+    State& s = *state_;
+    s.check(s.engine.test_convert(s.gpu, side, planes.data(), strides.data(), out.data(), out_strides.data()),
+            "Converting a picture on the GPU");
 }
 
 V1Features V1Scorer::features() {

@@ -268,6 +268,8 @@ public:
     void clear_worst_list();
     // The loop's seconds before and after its frame (the saved settings).
     void set_loop_seconds(double before, double after);
+    // Loop ticked or not, as last left (the saved settings).
+    void set_loop_on(bool on);
     // Where Export frame as PNG writes: Settings' Export folder.
     std::function<QString()> export_folder;
     // Shows the next (1) or previous (-1) test video.
@@ -326,6 +328,8 @@ signals:
     void color_mode_changed(const QString& mode);
     // The loop's seconds changed, to save.
     void loop_seconds_changed(double before, double after);
+    // Loop ticked or unticked, to save.
+    void loop_changed(bool on);
     // Export frame as PNG wrote `files`, or could not.
     void still_saved(const QStringList& files);
     void still_failed(const QString& error);

@@ -12,6 +12,7 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QMenu>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
@@ -210,7 +211,7 @@ QGroupBox* BdRatePanel::build_side(Side& side, const QString& title) {
     return side.box;
 }
 
-// Group by, the warnings, Export CSV and Copy as markdown.
+// Group by, the warnings, Copy as markdown and Export.
 void BdRatePanel::add_options_row(QVBoxLayout* root) {
     // A toolbar of its own in VML Modern; in Classic the row as it was.
     QBoxLayout* row = nullptr;
@@ -225,12 +226,17 @@ void BdRatePanel::add_options_row(QVBoxLayout* root) {
     connect(warnings_button, &QPushButton::clicked, this, [this] { on_show_warnings(); });
     row->addWidget(warnings_button);
     row->addStretch(1);
-    export_button = new QPushButton(app::tr("Export CSV\xE2\x80\xA6"));
-    connect(export_button, &QPushButton::clicked, this, [this] { on_export(); });
+    // Copy as markdown is the clipboard's, not an export; Export, at the
+    // right end, the table as shown (docs/ARCHITECTURE.md, "Exports"), as a
+    // right-click on the table has it.
     copy_button = new QPushButton(app::tr("Copy as markdown"));
     connect(copy_button, &QPushButton::clicked, this, [this] { on_copy(); });
-    row->addWidget(export_button);
+    export_button = new QPushButton(app::tr("Export"));
+    auto* exports = new QMenu(export_button);
+    connect(exports->addAction(app::tr("Table as CSV...")), &QAction::triggered, this, [this] { on_export(); });
+    export_button->setMenu(exports);
     row->addWidget(copy_button);
+    row->addWidget(export_button);
     root->addWidget(bar);
     refresh_group_choices();
 }
@@ -248,6 +254,15 @@ void BdRatePanel::add_results(QVBoxLayout* root) {
     theme::set_role(heading_label, "title");
     layout->addWidget(heading_label);
     results = new QTableWidget(0, 1 + static_cast<int>(metrics().size()));
+    // A right-click: the Export menu's item.
+    results->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(results, &QWidget::customContextMenuRequested, this, [this](const QPoint& at) {
+        if (report_) {
+            QMenu menu;
+            connect(menu.addAction(app::tr("Table as CSV...")), &QAction::triggered, this, [this] { on_export(); });
+            menu.exec(results->viewport()->mapToGlobal(at));
+        }
+    });
     QStringList labels{QString()};
     for (const MetricDefinition& metric : metrics()) {
         labels.append(qt_text(metric.short_label));
@@ -705,8 +720,12 @@ void BdRatePanel::on_export() {
     if (!report_) {
         return;
     }
-    const QString path =
-        dialogs.save_file(app::tr("Export BD-rates"), QStringLiteral("bd_rate.csv"), app::tr("CSV file (*.csv)"));
+    // Named after the two encoders compared, as the heading names them.
+    const QString path = dialogs.save_file(
+        app::tr("Export BD-rates"),
+        suggested_file_name(side_name(test) + QStringLiteral(" vs ") + side_name(anchor) + QStringLiteral(" - BD-rate"),
+                            ".csv"),
+        app::tr("CSV file (*.csv)"));
     if (path.isEmpty()) {
         return;
     }

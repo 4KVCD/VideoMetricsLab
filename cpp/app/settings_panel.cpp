@@ -353,6 +353,11 @@ QWidget* SettingsPanel::build_export_choices() {
           app::tr("Each video's graph of every metric, and its bitrate with the reference's, as PNG images "
                   "(<video> - <metric>.png); with several videos, all of them together too. They're saved once "
                   "the bitrate has been read, which the Bitrate Viewer does after each run.")}},
+        {"worst_frames",
+         {app::tr("Worst frames"),
+          app::tr("Each video's worst frames of every metric, as many dips as the Worst Frames tab lists (10, 25 "
+                  "or 50), each with every metric's score, in the formats ticked (<video> - worst "
+                  "frames.json).")}},
         {"weak_segments",
          {app::tr("Weak segments"),
           app::tr("Weak segments by the profile in use (Settings > Weak segments; on the Saved Results tab, the "
@@ -374,12 +379,12 @@ QWidget* SettingsPanel::build_export_choices() {
     const std::map<std::string, std::pair<QString, QString>> formats{
         {"json",
          {QStringLiteral("JSON"),
-          app::tr("Results, per-frame scores and weak segments as JSON files. With neither JSON nor CSV "
-                  "ticked, only graphs are exported.")}},
+          app::tr("Results, per-frame scores, worst frames and weak segments as JSON files. With neither JSON "
+                  "nor CSV ticked, only graphs are exported.")}},
         {"csv",
          {QStringLiteral("CSV"),
-          app::tr("Results, per-frame scores and weak segments as CSV files, for spreadsheets. With neither JSON "
-                  "nor CSV ticked, only graphs are exported.")}},
+          app::tr("Results, per-frame scores, worst frames and weak segments as CSV files, for spreadsheets. "
+                  "With neither JSON nor CSV ticked, only graphs are exported.")}},
     };
     for (const std::string& key : export_format_keys()) {
         const auto& [name, tip] = formats.at(key);
@@ -398,7 +403,8 @@ QWidget* SettingsPanel::build_export_choices() {
     export_form->setCurrentIndex(settings_.export_zip ? 0 : 1);
     export_form->setToolTip(Qt::convertFromPlainText(
         app::tr("A .zip file: a video's in <video> - VideoMetricsLab.zip, all the videos' in one .zip named after "
-                "the reference. Loose files: each file on its own, side by side, in the folder chosen."),
+                "the reference. Loose files: each file on its own, in the folder chosen. With several videos, each "
+                "video's files are in a folder of its own, and the files of all of them together beside those."),
         Qt::WhiteSpaceNormal));
     export_form->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     export_form->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
@@ -425,8 +431,8 @@ QWidget* SettingsPanel::build_after_run_export() {
     after_run_place->setCurrentIndex(settings_.after_run_place == "folder" ? 1 : 0);
     after_run_place->setEnabled(settings_.after_run_export);
     after_run_place->setToolTip(Qt::convertFromPlainText(
-        app::tr("In the export folder: next to the video while no export folder is set. Existing files of the "
-                "same names are replaced."),
+        app::tr("In the export folder: next to the video while no export folder is set. No file is replaced: "
+                "where a name is taken, the new files are numbered."),
         Qt::WhiteSpaceNormal));
     after_run_place->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     after_run_place->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);

@@ -151,7 +151,7 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
         QMenu menu;
         const QAction* contents = panel.fill_menu(menu);
         ASSERT_NE(contents, nullptr);
-        EXPECT_EQ(contents->text(), "Export this video's results, graphs and weak segments...");
+        EXPECT_EQ(contents->text(), "Export this video's results, graphs, worst frames and weak segments...");
         EXPECT_TRUE(contents->isEnabled());
     }
 
@@ -169,15 +169,19 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
                 texts << action->text();
             }
         }
-        EXPECT_EQ(texts, (QStringList{"Open in Metric Graphs",
-                                      "Export this video's results, graphs and weak segments..."}));
+        // Open, then the Export menu's items (docs/ARCHITECTURE.md, "Exports").
+        EXPECT_EQ(texts.size(), 10);
+        EXPECT_EQ(texts.mid(0, 2), (QStringList{"Open in Metric Graphs",
+                                                "Export this video's results, graphs, worst frames and weak segments..."}));
+        EXPECT_EQ(texts.last(), "Weak segments by");
         menu.actions().first()->trigger();
         EXPECT_EQ(opened.count(), 2);
         ASSERT_EQ(opened.at(1).at(0).value<std::vector<LoadedSavedResult>>().size(), 1U);
     }
 
-    // The Export button's menu: the right-click menu's export, then each
-    // kind on its own; under Weak segments, the rules, the one picked ticked.
+    // The Export button's menu: the archive, then each kind on its own as
+    // the Videos tab's menu has them, the run file last; under Weak segments
+    // by, the rules, the one picked ticked.
     QMenu& menu = *panel.export_menu();
     panel.fill_export_menu(menu);
     QStringList texts;
@@ -186,16 +190,27 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
             texts << action->text();
         }
     }
-    EXPECT_EQ(texts, (QStringList{"Export this video's results, graphs and weak segments...", "Results",
-                                  "Per-frame scores", "Graphs as ZIP...", "Weak segments"}));
+    EXPECT_EQ(texts, (QStringList{"Export this video's results, graphs, worst frames and weak segments...",
+                                  "Results as JSON...", "Results as CSV...", "Per-frame scores as JSON...",
+                                  "Per-frame scores as CSV...", "Graphs as ZIP...", "Weak segments as JSON or CSV...",
+                                  "Run file (.metrics.json)...", "Weak segments by"}));
     QSignalSpy exports(&panel, &SavedResultsPanel::export_requested);
     menu.actions().first()->trigger();
     ASSERT_EQ(exports.count(), 1);
     EXPECT_EQ(exports.at(0).at(0).value<SavedResultsPanel::Export>(), SavedResultsPanel::Export::contents);
-    QMenu* frames = menu.actions().at(3)->menu();
-    ASSERT_NE(frames, nullptr);
-    frames->actions().first()->trigger();  // As JSON...
+    const auto item = [&menu](const QString& text) -> QAction* {
+        for (QAction* action : menu.actions()) {
+            if (action->text() == text) {
+                return action;
+            }
+        }
+        return nullptr;
+    };
+    ASSERT_NE(item("Per-frame scores as JSON..."), nullptr);
+    item("Per-frame scores as JSON...")->trigger();
     EXPECT_EQ(exports.at(1).at(0).value<SavedResultsPanel::Export>(), SavedResultsPanel::Export::frames_json);
+    item("Run file (.metrics.json)...")->trigger();  // as the Videos tab's
+    EXPECT_EQ(exports.at(2).at(0).value<SavedResultsPanel::Export>(), SavedResultsPanel::Export::run_file);
     QMenu* segments = menu.actions().last()->menu();
     ASSERT_NE(segments, nullptr);
     QStringList ticked;
@@ -216,7 +231,7 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
     EXPECT_EQ(condition_texts(panel.segment_rules().conditions),
               condition_texts(segment_preset("animation")->rules.conditions));
     panel.fill_export_menu(menu);  // made again as it opens: the same entries, no menu left behind
-    EXPECT_EQ(menu.findChildren<QMenu*>(Qt::FindDirectChildrenOnly).size(), 3);
+    EXPECT_EQ(menu.findChildren<QMenu*>(Qt::FindDirectChildrenOnly).size(), 1);
 
     // Delete: locked during a run of its pair, or of files the run finds in
     // its folder (moved, renamed or copied since), as the run reads and saves

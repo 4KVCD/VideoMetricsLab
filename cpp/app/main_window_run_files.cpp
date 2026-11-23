@@ -339,16 +339,16 @@ bool MainWindow::offer_to_switch_source(const ComparisonResult& result) {
     return true;
 }
 
-void MainWindow::save_run_files(const std::vector<std::shared_ptr<CompletedRun>>& runs) {
+void MainWindow::save_run_files(const std::vector<std::pair<const ComparisonResult*, QString>>& runs) {
     if (runs.empty()) {
         return;
     }
     const QString suffix = QString::fromUtf8(result_suffix.data(), static_cast<int>(result_suffix.size()));
     if (runs.size() == 1) {
-        const QString chosen = dialogs_.save_file(app::tr("Export run file"), runs.front()->label + suffix,
-                                                  run_file_filter());
+        const QString chosen =
+            dialogs_.save_file(app::tr("Export run file"), runs.front().second + suffix, run_file_filter());
         if (!chosen.isEmpty()) {
-            submit_save(runs.front()->result, path_of(chosen), runs.front()->label);
+            submit_save(*runs.front().first, path_of(chosen), runs.front().second);
         }
         return;
     }
@@ -358,10 +358,9 @@ void MainWindow::save_run_files(const std::vector<std::shared_ptr<CompletedRun>>
         return;
     }
     std::set<std::filesystem::path> reserved;
-    for (const std::shared_ptr<CompletedRun>& run : runs) {
-        submit_save(run->result,
-                    unique_output_path(path_of(folder), run->label.toStdString(), suffix.toStdString(), reserved),
-                    run->label);
+    for (const auto& [result, label] : runs) {
+        submit_save(*result, unique_output_path(path_of(folder), label.toStdString(), suffix.toStdString(), reserved),
+                    label);
     }
 }
 

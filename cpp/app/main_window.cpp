@@ -639,6 +639,12 @@ void MainWindow::build_ui() {
     frame_compare_panel_->set_video_name_rule(video_name_rule(settings_));
     frame_compare_panel_->set_loop_seconds(settings_.compare_loop_before_ms / 1000.0,
                                            settings_.compare_loop_after_ms / 1000.0);
+    // Loop as it was left, as Highlight best/worst results is.
+    frame_compare_panel_->set_loop_on(settings_.compare_loop);
+    connect(frame_compare_panel_, &FrameComparePanel::loop_changed, this, [this](bool on) {
+        settings_.compare_loop = on;
+        save_settings();
+    });
     connect(frame_compare_panel_, &FrameComparePanel::loop_seconds_changed, this, [this](double before, double after) {
         settings_.compare_loop_before_ms = static_cast<int>(std::lround(before * 1000));
         settings_.compare_loop_after_ms = static_cast<int>(std::lround(after * 1000));

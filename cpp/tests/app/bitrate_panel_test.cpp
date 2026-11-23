@@ -10,6 +10,7 @@
 #include <QLabel>
 #include <QLayout>
 #include <QLineEdit>
+#include <QMenu>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QSpinBox>
@@ -121,9 +122,11 @@ TEST_F(BitratePanelTest, AFileReadFillsItsRowAndEachGraph) {
     EXPECT_TRUE(panel->analyze_button->isEnabled());
     EXPECT_EQ(panel->analyze_button->text().toStdString(), "Calculate bitrate");
     EXPECT_FALSE(panel->export_button->isEnabled());
-    // Export graph as PNG is in the footer under the graph, beside Go to
-    // frame, as on Metric Graphs.
-    EXPECT_EQ(panel->export_button->text().toStdString(), "Export graph as PNG");
+    // Export is in the footer under the graph, at its right end, as on
+    // Metric Graphs (docs/ARCHITECTURE.md, "Exports"): Graph as PNG...
+    EXPECT_EQ(panel->export_button->text().toStdString(), "Export");
+    ASSERT_NE(panel->export_button->menu(), nullptr);
+    EXPECT_EQ(panel->export_button->menu()->actions().front()->text().toStdString(), "Graph as PNG...");
     // (In a toolbar of its own: its place is taken in the panel's terms.)
     panel->resize(1200, 800);
     panel->layout()->activate();
@@ -132,7 +135,7 @@ TEST_F(BitratePanelTest, AFileReadFillsItsRowAndEachGraph) {
         return QRect(widget->mapTo(panel.get(), QPoint(0, 0)), widget->size());
     };
     EXPECT_GT(in_panel(panel->export_button).top(), in_panel(panel->chart).bottom());
-    EXPECT_LT(in_panel(panel->export_button).right(), in_panel(panel->frame_controls).left());
+    EXPECT_GT(in_panel(panel->export_button).left(), in_panel(panel->frame_controls).right());
     EXPECT_EQ(panel->export_button->parentWidget()->property("vmlRole").toString().toStdString(), "toolbar");
 
     analyzed(*panel, path, two_seconds(path));
@@ -159,7 +162,7 @@ TEST_F(BitratePanelTest, AFileReadFillsItsRowAndEachGraph) {
         suggested = name;
         return QString::fromStdString(platform::path_text(png));
     };
-    panel->export_button->click();
+    panel->export_button->menu()->actions().front()->trigger();
     EXPECT_FALSE(QImage(QString::fromStdString(platform::path_text(png))).isNull());
     EXPECT_EQ(suggested.toStdString(), "encode_bitrate.png");  // named after the one video shown
 

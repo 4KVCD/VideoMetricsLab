@@ -27,12 +27,26 @@ seconds, sizes are in bytes and bitrates are in bits per second.
 | `videos` | One entry for each test video (below). |
 | `difference` | Command line with `--difference` only: the first video minus the second. |
 | `log_file` | Command line with `--log-file` only: the log's file, its fields filled in. |
+| `profile` | Command line only: the settings and saved scores the run used (below). |
 | `error`, `error_code` | Command line only, when nothing was compared: why, and its [code](#codes). The reference could not be read (`reference_unreadable`): `reference` has only its `path` and `videos` is empty; or the `--batch` list could not be read (`batch_unreadable`): no `reference`, an empty `batch`, and no `run` or `machine`. |
 
 With `--batch`, the command line's `--json` is `{"batch": [...]}`: this document
 for each reference in turn, or `{"reference": path, "error": why, "error_code":
 code}` for a reference that could not be read (`reference_unreadable`) or
 whose rows find only it (`no_test_video`).
+
+### `profile`
+
+| Key | Meaning |
+| --- | --- |
+| `settings` | Where the settings came from: `profile` (the app's, as the window last saved them), `file` (`--settings`) or `defaults` (`--no-settings`). |
+| `settings_file` | The file read: the profile's `settings.json` or `--settings`' file. `null` for the defaults, or a profile that has no settings file yet (the defaults then). |
+| `app_data_folder` | The folder of the app's own files: `.videometricslab` in the home folder, or the one `VML_HOME` names. |
+| `options_from_settings` | The options left out of the command that the settings filled in, as they are written (`--metrics`, `--vship`, `--gpu`...), whether or not this run used them. `--segments` and `--notify` are listed where they take the settings' profile or services. |
+| `saved_scores` | `folder` (the saved scores' folder; `null` with `--no-cache`), `read` (whether saved scores were used: not with `--recalculate`, `--no-cache`, or Settings' **Reuse a saved result** off) and `save` (whether new ones were saved: not with `--no-save` or `--no-cache`). |
+
+The `bitrate` command's JSON has a `profile` too, its `saved_scores` the
+saved bitrate's.
 
 ### `run`
 
@@ -266,3 +280,10 @@ shown there.
 
 The CSV has a row per dip, in the same order: `rank`, `frame`, `time`, then
 a column per scored metric (blank where it has no score).
+
+In an export of what Settings > Storage > Exports include ticks (**Worst
+frames**), each video's `<video> - worst frames.json` holds every scored
+metric's worst frames, as many dips as the Worst Frames tab lists, over the
+whole video: `dips`, then `metrics`, one object a metric (in the app's order
+of metrics) with its `metric` and `worst_frames` as above. Its CSV is the
+rows above, each led by a `metric` column, one metric after another.

@@ -40,8 +40,11 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
 **HDR VMAF** scores PQ (HDR10) videos with Netflix's HDR VMAF models (1080p,
 phone, 4K, and high-frame-rate variants), chosen in **HDR VMAF model**. It is
 off by default: tick its column to score it. Both videos are converted to the
-model's ICtCp form on the CPU; its features are then calculated on the GPU when
-VMAF runs on the GPU (else on the CPU), with the same scores. It uses the same
+model's ICtCp form and its features calculated on the GPU when VMAF runs on the
+GPU (else on the CPU), with the same scores. The GPU's conversion is checked
+against the CPU's on the first frame; where the GPU cannot convert the
+pictures exactly as the CPU does (8-bit videos, a Mac), they are converted on
+the CPU and only the features go to the GPU. It uses the same
 decode of each video as VMAF on the GPU and PSNR, SSIM and XPSNR in the app
 (where they cannot share a decode, it decodes the videos once more). A video that is not PQ is refused, with
 the reason in its log; its other metrics are still scored. It is not
@@ -49,14 +52,18 @@ calculated in resolution tests.
 4. Choose **Calculate metrics**. Optional two-job parallelism can help on large
    CPUs, but increases resource use and is not always faster.
 5. Inspect per-frame curves in **Metric Graphs**. Click a metric's mean column
-   to show its detailed statistics. **Export graph as PNG** saves the graph
-   shown; right-click the statistics to export the videos' results, per-frame
-   scores and more (see [Exporting from the right-click
-   menus](#exporting-from-the-right-click-menus)).
+   to show its detailed statistics. **Export**, at the right end of the
+   bar under the graph, saves all the videos' results, per-frame scores and
+   more (see [Exporting from the right-click
+   menus](#exporting-from-the-right-click-menus)), and what the page shows:
+   **Graph as PNG...**, **Statistics as CSV...** or **as JSON...** (the
+   table as shown, the frame range's when one is highlighted). Right-click
+   the statistics for the same, with a row's video's export too, or the
+   graph for **Graph as PNG...**.
    With two videos shown, **Difference** draws the first minus the second,
    frame by frame, in a band under the graph with its own scale. With it on,
-   the statistics' right-click menu offers **Export the difference as
-   CSV...**: every metric's difference, as `<first>_minus_<second>.csv` (the
+   **Export** and the right-click menus offer **Difference as CSV...**:
+   every metric's difference, as `<first>_minus_<second>.csv` (the
    videos' labels), in the per-frame scores' columns: a cell is blank where
    either video lacks the frame or the metric.
    To look at one part of the videos (a scene you re-encoded, say), enter its
@@ -500,9 +507,10 @@ With two videos shown, **Difference** draws the first minus the second in a
 band under the graph with its own scale: frame by frame in the frame view, and
 at each moment in the second and GOP views (where two encodes' GOPs differ,
 each moment's GOP bitrate is subtracted).
-Under the graph, **Export graph as PNG**, **Go to frame** and **Go to time**,
-and the range from frame or from time, work as on Metric Graphs: the table
-then gives the range's figures. A time is the first video shown's, from its
+Under the graph, **Go to frame** and **Go to time**, and the range from
+frame or from time, work as on Metric Graphs: the table then gives the
+range's figures. **Export**, at the bar's right end, or a right-click on the
+graph, saves it: **Graph as PNG...**. A time is the first video shown's, from its
 start when **Adjust stream start time to zero** is ticked.
 The command line's `bitrate` command (below) reads the same numbers.
 Each file's reading is saved with the saved results and is not read again:
@@ -524,8 +532,9 @@ median for each value of a column of the anchor's CSV files, such as
 `class`. Click a sequence to draw its rate curves for the metric chosen:
 bitrate on a log scale, a dot per encode, and the scores both curves cover
 shaded, the range the BD-rate averages over. **Copy as markdown** copies the
-table as the command line prints it; **Export CSV…** saves every number in
-full. The numbers are the command line's `bdrate`.
+table as the command line prints it; **Export > Table as CSV...**, or a
+right-click on the table, saves every number in full, named after the two
+encoders. The numbers are the command line's `bdrate`.
 
 ## Command line
 
@@ -643,6 +652,11 @@ $run.videos[0].metrics.vmaf.score
 | `--notify` | Send a notification as the run ends, as **Settings > Notifications** in the app say: to the services on there, with its message, for the outcomes and run lengths it is on for (see [Notifications](#notifications)). Whether it was sent, or why not, is said on the progress lines (a problem with `-q` too); the exit code is the run's either way. On macOS and Linux it needs `curl`, which sends it. |
 | `-q`, `--quiet` | No progress, only the results. |
 | `-v`, `--verbose` | The app's log as well. |
+| `--settings FILE` | Read the settings from FILE (a `settings.json`, such as a copy of the app's, kept with a script) in place of the app's. Every option left out takes its value from it, as it would from the app's. It is never written; a FILE that is not there or is not JSON is an input not read (exit code 4). |
+| `--no-settings` | Take every setting at its default, as a new install has them, whatever the app's settings say: the same command gives the same run on any PC. |
+| `--cache-dir FOLDER` | Read and save the saved scores (and the black bars found) in FOLDER, in place of the folder Settings > Storage names. |
+| `--no-save` | Read the saved scores, but save nothing to them: no scores, black bars or records of remuxes or moved files. For a trial whose scores should not be kept. |
+| `--no-cache` | Neither read nor save the saved scores: every metric is calculated, and nothing is kept. Not with `--no-save` or `--cache-dir`. |
 
 `compare --help` lists the same with examples. The last column of each
 video's table says where a score was calculated: a metric asked for on the
@@ -654,6 +668,22 @@ notes). A Vship pass whose FFmpeg fails to give it the videos' frames is
 first made once more with the app's own Vship, with no note: only a second failure
 falls back. The app lists the fallbacks under **GPU fallbacks** in the
 tooltip of the video's name.
+
+Options left out take the app's settings, as the window last saved them,
+so a script that runs where someone also uses the app can get other
+metrics, another GPU or another Vship from one day to the next. To hold a
+run to settings of its own, give `--settings FILE` (a copy of
+`settings.json` kept with the script) or `--no-settings` (the defaults);
+`devices` takes them too. The JSON's `profile` says where the run's
+settings came from and which options left out they filled in (see [The
+results file](RESULTS_JSON.md)). These change the settings only: the saved
+scores, the GPU checks and the logs stay in the app's folder,
+`.videometricslab` in your home folder, unless `--cache-dir` or
+`--no-cache` says otherwise. To move all of it, set the environment
+variable `VML_HOME` to a folder: the app's own files (settings, saved
+results, logs, GPU checks) are kept there in place of `.videometricslab`, a
+profile of its own. The window takes `VML_HOME` too, so a window started
+with it set shows that profile's settings and saved results.
 
 Progress is written to the error stream and results to the output stream, so
 `--json -` can be piped. Piped or redirected, both are UTF-8 whatever the
@@ -744,6 +774,8 @@ YUV file has no bitrate to read.
 | `--difference` | With exactly two videos: the first's bitrate minus the second's as well, as the tab's **Difference** pairs them, from each stream's start. The table ends with the averages' difference (in Mb/s and %) and the mean, lowest and highest of the seconds both have (paired by number), the JSON gets a `difference` section, and with `--csv` it is written as `<first>_minus_<second>_bitrate_frames.csv` (each of the first's frames' size in bytes minus the second's frame of that number), `_bitrate_seconds.csv` and `_bitrate_gops.csv` (kb/s over time); a cell is empty where only one video has the frame or the time. |
 | `--json FILE` | Also write the results as JSON; `--json -` prints the JSON instead of the table. |
 | `-q`, `--quiet` | No progress, only the results. |
+| `--settings FILE`, `--no-settings` | The settings (FFmpeg's folder, the saved results' folder), as `compare` takes them. |
+| `--cache-dir FOLDER`, `--no-save`, `--no-cache` | Where the saved bitrate is, and whether it is read and saved, as `compare`'s saved scores. |
 
 The exit code is 0 when every video was read, 1 when a file could not be
 written, 2 for a wrong command (a raw stream that stores no frame rate,
@@ -859,14 +891,15 @@ videos again:
 - **Open in Metric Graphs** (or double-click, or the first entry of the
   right-click menu) adds them as lines of their own, named "*video*
   (saved)".
-- **Export** opens a menu. Its first entry, **Export this video's...** (one
-  selected) or **Export the selected videos'...** (several), exports what
-  the other tabs' menus export (see [Exporting from the right-click
-  menus](#exporting-from-the-right-click-menus)); right-click them for the
-  same entry, under Open in Metric Graphs. Below it, each kind on its own:
-  - **Results**, **As JSON...** or **As CSV...**, as Export results saves
-    them;
-  - **Per-frame scores**, **As JSON...** or **As CSV...**: a file per
+- **Export**, at the right end beside Delete, opens a menu; right-click
+  the selected comparisons for the same, under Open in Metric Graphs. Its
+  first entry, **Export this video's...** (one selected) or **Export the
+  selected videos'...** (several), exports what the other tabs' menus
+  export (see [Exporting from the right-click
+  menus](#exporting-from-the-right-click-menus)). Below it, each kind on its
+  own, as the Videos tab's Export offers them:
+  - **Results as JSON...** or **as CSV...**, as Export results saves them;
+  - **Per-frame scores as JSON...** or **as CSV...**: a file per
     comparison to a folder (the JSON is the CSV's table: see [Per-frame
     scores as JSON](RESULTS_JSON.md#per-frame-scores-as-json));
   - **Graphs as ZIP...**: the graphs the Videos tab's Graphs as ZIP saves, for
@@ -874,11 +907,13 @@ videos again:
     disk, or replaced since by another file of the same name (a new
     encode), come from its saved bitrate, where the Bitrate Viewer or the
     command line read it before;
-  - **Weak segments**: **Export weak segments...** saves the weak segments
-    report by the rules ticked below it: the profile in use, any profile or
-    a preset. The first entry's weak segments use the same rules. Weak
+  - **Weak segments as JSON or CSV...**: the weak segments report, by the
+    rules ticked under **Weak segments by**: the profile in use, any profile
+    or a preset. The first entry's weak segments use the same rules. Weak
     segments are not saved with the scores; they are found from them as they
-    are exported.
+    are exported;
+  - **Run file (.metrics.json)...**: each comparison as a run file, which
+    **Import run file...** reads back, as the Videos tab's.
 - **Delete...** removes their saved scores, after asking: the videos are
   scored again the next time they are compared. While metrics are
   calculated, it is locked for the comparisons the run is calculating (its
@@ -924,13 +959,15 @@ selected:
 - its first entry is the right-click menu's export (**Export this video's...**,
   **Export the selected videos'...** or **Export all videos'...**), of what
   Settings' Exports include ticks;
-- **Results** and **Per-frame scores**, **As JSON...** or **As CSV...**, as
-  Saved Results' Export offers them;
+- **Results as JSON...** / **as CSV...** and **Per-frame scores as
+  JSON...** / **as CSV...**, as Saved Results' Export offers them;
 - **Graphs as ZIP...** (below);
-- **Export weak segments...**, by the profile in use;
+- **Weak segments as JSON or CSV...**, by the profile in use;
 - **Run file (.metrics.json)...**: each video's whole run, which **Import
   run file...** reads back, on this PC or another. One is saved where
   you say; several into a folder, each named after its video.
+
+The table's right-click menu has the same entries under its own export.
 
 Metric Graphs has its own tab: the Videos tab no longer has a button to open
 it. A video removed from the graph with its ✕ stays away when you come back
@@ -941,7 +978,7 @@ tab.
 
 **Export > Graphs as ZIP...** in the Videos box saves the graphs of the
 test videos scored against the reference (the selected ones, or all) as one
-`.zip` file of PNG images, drawn as Metric Graphs' and the Bitrate Viewer's **Export graph as PNG** draw
+`.zip` file of PNG images, drawn as Metric Graphs' and the Bitrate Viewer's **Graph as PNG...** draw
 them:
 
 - each test video's graph of every metric it has: `<video> - <metric>.png`;
@@ -976,24 +1013,33 @@ by the right-click menus or after each run. Tick:
   reference's (`<video> - <metric>.png`), with several videos all of them
   together too, as **Graphs as ZIP...** draws them, once the bitrate is
   read;
+- **Worst frames**: each video's worst frames of every metric, as many
+  dips as the Worst Frames tab lists (10, 25 or 50), each with every
+  metric's score there (`<video> - worst frames.json`, `.csv`; see
+  [RESULTS_JSON.md](RESULTS_JSON.md#worst-frames-as-json-and-csv));
 - **Weak segments**: by the profile in use: a video's
   (`<video>.<metrics>.segments.json`, `.csv`), or every video's in one
   report. Nothing while the profile has no condition.
 
-**In** chooses the formats results, per-frame scores and weak segments are
-written in:
+**In** chooses the formats results, per-frame scores, worst frames and weak
+segments are written in:
 **JSON**, **CSV** or both. With neither, only graphs are exported.
 
 **As** saves them as **A .zip file** (`<video> - VideoMetricsLab.zip`, or
-named after the reference for every video), or as **Loose files** side by
-side in a folder you choose.
+named after the reference for every video), or as **Loose files** in a
+folder you choose. With several videos, each video's own files (its graphs,
+per-frame scores and worst frames) are in a folder of its name, and the
+files of all of them together (the results, the weak segments report, the
+"All test videos" graphs) beside those folders.
 
 The right-click menus of the Videos table, of Metric Graphs' statistics and
 of the Saved Results tab offer an export of what is ticked, named after it:
 **Export this video's results, graphs and weak segments...** for the video
 clicked (once its metrics are all scored), and **Export all videos'
 results, graphs and weak segments...** for every test video scored against
-the reference (**Export the selected videos'...** on Saved Results). Untick
+the reference. **Export the selected videos'...** takes the selected
+rows: on Saved Results, and in the Videos table where you right-click one
+of several rows selected. Untick
 what you never want, CSV say, and it's left out of every export. A line of a run file imported with **Import run file...** has no
 export of its own (it has no row in the Videos table), but is in all the
 videos' results.
@@ -1001,7 +1047,8 @@ videos' results.
 **Settings > Storage > After each run > Export each video** exports each
 video as Exports include say once its run ends: **Save to** puts it next to
 the test video, or in the export folder (next to the video while none is
-set). Files of the same names are replaced. Settings from before these
+set). No file is replaced: where a name is taken, the new files are
+numbered. Settings from before these
 choices carry over: results and graphs in a .zip, and weak segments as loose
 files where they were exported alone.
 

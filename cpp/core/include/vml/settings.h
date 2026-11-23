@@ -15,16 +15,16 @@ namespace vml {
 
 // What an export can include (Settings::export_items), in the order Settings
 // shows them: results, per-frame scores ("frames"), graphs (every metric's,
-// and the bitrate with the reference's) and weak segments. A new kind of
-// export is added here.
+// and the bitrate with the reference's), worst frames (every metric's) and
+// weak segments. A new kind of export is added here.
 const std::vector<std::string>& export_item_keys();
 // The formats the files of an export are written in (Settings::export_formats),
 // in Settings' order: "json" and "csv". Graphs are images whatever is ticked.
 const std::vector<std::string>& export_format_keys();
 
 struct Settings;
-// What an export saves files of: Settings::export_items, less results and
-// weak segments while no format is ticked.
+// What an export saves files of: Settings::export_items, less all but the
+// graphs while no format is ticked.
 std::vector<std::string> exported_items(const Settings& settings);
 
 // Above this many logical cores, a new install scores two videos at once.
@@ -32,6 +32,16 @@ constexpr unsigned parallel_by_default_above_cores = 12;
 
 // The parallel-jobs setting a PC with `cores` logical cores starts with.
 int default_parallel_jobs(unsigned cores);
+
+// The environment variable that names the folder of the app's own files in
+// place of the user's home/.videometricslab: a profile of its own, for the
+// window and the command line alike.
+inline constexpr const char* app_data_variable = "VML_HOME";
+
+// The folder of the app's own files: settings.json, the saved scores
+// (results_cache), the logs and the GPU checks. VML_HOME's folder where it
+// is set (not empty), made absolute; else .videometricslab in the user's home.
+std::filesystem::path app_data_folder();
 
 struct Settings {
     // The folder holding ffmpeg and ffprobe; empty means "search the PATH".
@@ -44,7 +54,7 @@ struct Settings {
     // right-click menus' and the one after each run alike: export_items' keys,
     // in any order; and whether as a .zip file or loose files.
     // Per-frame scores are left out until asked for: a long video's are big.
-    std::vector<std::string> export_items = {"results", "graphs", "weak_segments"};
+    std::vector<std::string> export_items = {"results", "graphs", "worst_frames", "weak_segments"};
     // The formats results and weak segments are written in, each ticked one:
     // export_format_keys' keys.
     std::vector<std::string> export_formats = {"json", "csv"};
@@ -170,7 +180,9 @@ struct Settings {
     bool highlight_best_worst = false;
     std::string frame_preview_color_mode = "display_aware";
     int compare_decoded_videos = 3;
-    // Video Compare's loop: how long it plays before and after its frame (ms).
+    // Video Compare's loop: whether it is on (Loop ticked), and how long it
+    // plays before and after its frame (ms).
+    bool compare_loop = false;
     int compare_loop_before_ms = 1000;
     int compare_loop_after_ms = 1000;
     // Exported graphs' colours (Metric Graphs' and the Bitrate tab's Export
@@ -266,7 +278,13 @@ struct Settings {
     static Settings load();
     // load() from a given file, for tests.
     static Settings load_from(const std::filesystem::path& file);
-    // Where settings.json is: the user's home/.videometricslab.
+    // load_from() for a file the user named (the command line's --settings),
+    // which must be there and be JSON: throws std::runtime_error saying why
+    // not, where load_from() would take the defaults. Writes nothing.
+    static Settings load_checked(const std::filesystem::path& file);
+    // Every setting at its default, as a new profile has them.
+    static Settings defaults();
+    // Where settings.json is: in app_data_folder().
     static std::filesystem::path file();
 
     // Saves the settings as the Python app does (json.dumps(asdict(self),

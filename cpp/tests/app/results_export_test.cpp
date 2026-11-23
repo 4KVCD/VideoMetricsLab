@@ -183,9 +183,9 @@ TEST(ResultsExport, FilesAreWrittenInTheFormatsTicked) {
     using Names = std::vector<std::string>;
     const std::string suffix = segments_file_suffix(rules);
     settings.export_formats = {"json"};
-    EXPECT_EQ(names(one, false), (Names{"a - results.json", "a." + suffix + ".json"}));
+    EXPECT_EQ(names(one, false), (Names{"a - results.json", "a - worst frames.json", "a." + suffix + ".json"}));
     settings.export_formats = {"csv"};
-    EXPECT_EQ(names(one, false), (Names{"a - results.csv", "a." + suffix + ".csv"}));
+    EXPECT_EQ(names(one, false), (Names{"a - results.csv", "a - worst frames.csv", "a." + suffix + ".csv"}));
     settings.export_formats = {"json", "csv"};
     settings.export_items = {"weak_segments"};
     EXPECT_EQ(names({one[0], {result, QStringLiteral("b"), "b.mkv"}}, true),
@@ -204,6 +204,10 @@ TEST(ResultsExport, FilesAreWrittenInTheFormatsTicked) {
     EXPECT_EQ(made_names, (Names{"x.json", "a - frames.json", "a - frames.csv", "b - frames.json", "b - frames.csv"}));
     EXPECT_EQ(made[1].second, per_frame_json(*result));
     EXPECT_EQ(made[2].second, per_frame_csv(*result));
+    // Worst frames: a file for each video, every metric's.
+    settings.export_items = {"worst_frames"};
+    EXPECT_EQ(names({one[0], {result, QStringLiteral("b"), "b.mkv"}}, true),
+              (Names{"a - worst frames.json", "a - worst frames.csv", "b - worst frames.json", "b - worst frames.csv"}));
     settings.export_items = export_item_keys();
     settings.export_formats.clear();
     EXPECT_EQ(names(one, false), Names{});
@@ -232,6 +236,41 @@ TEST(ResultsExport, AnExportIntoAFolderReplacesNoneOfAnothersFiles) {
     EXPECT_EQ(read(folder / "movie - results.json"), "x265");
     EXPECT_EQ(read(folder / "movie - results_2.json"), "svt");
     EXPECT_FALSE(std::filesystem::exists(folder / "movie - frames.csv"));
+}
+
+// Several videos' export: each video's own files in a folder of its name,
+// the files of all of them together beside those; a video named as another
+// with more after it keeps its own, and one named as the reference (whose
+// name the results and the weak segments report take) leaves them be.
+// Written loose, the folders are made, and a second export into the same
+// place is numbered within them.
+TEST(ResultsExport, SeveralVideosFilesGoInAFolderEach) {
+    const std::vector<BundleFile> files{{"a - VMAF.png", "1"},
+                                        {"a - b - VMAF.png", "2"},
+                                        {"All test videos - VMAF.png", "3"},
+                                        {"a - results.json", "4"},
+                                        {"a - frames.csv", "5"},
+                                        {"a - weak segments.vmaf.segments.csv", "6"}};
+    const std::vector<BundleFile> foldered =
+        in_video_folders(files, {QStringLiteral("a"), QStringLiteral("a - b")}, shared_stems(QStringLiteral("a")));
+    std::vector<std::string> names;
+    for (const BundleFile& file : foldered) {
+        names.push_back(file.first);
+    }
+    EXPECT_EQ(names, (std::vector<std::string>{"a/a - VMAF.png", "a - b/a - b - VMAF.png", "All test videos - VMAF.png",
+                                               "a - results.json", "a/a - frames.csv",
+                                               "a - weak segments.vmaf.segments.csv"}));
+    EXPECT_EQ(in_video_folders(files, {}, {}), files);  // one video: as they are
+
+    QTemporaryDir temporary;
+    ASSERT_TRUE(temporary.isValid());
+    const std::filesystem::path folder = platform::path_from_text(temporary.path().toStdString());
+    const std::vector<std::filesystem::path> first = write_loose_export(folder, foldered);
+    EXPECT_EQ(first.front(), folder / "a" / "a - VMAF.png");
+    EXPECT_TRUE(std::filesystem::exists(folder / "a - b" / "a - b - VMAF.png"));
+    const std::vector<std::filesystem::path> second = write_loose_export(folder, foldered);
+    EXPECT_EQ(second.front(), folder / "a" / "a - VMAF_2.png");
+    EXPECT_EQ(second[2], folder / "All test videos - VMAF_2.png");
 }
 
 // Issue #132: a profile where every condition must hold, one on a metric the

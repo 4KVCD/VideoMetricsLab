@@ -55,6 +55,7 @@ add_executable(vml_tests
     unit/film_grain_scoring_test.cpp
     unit/native_playback_test.cpp
     unit/soundtrack_clock_test.cpp
+    unit/source_limits_test.cpp
     unit/video_playback_test.cpp
     unit/vmaf_hdr_test.cpp
     unit/vmaf_vulkan_test.cpp
@@ -65,6 +66,7 @@ add_executable(vml_tests
 target_link_libraries(vml_tests PRIVATE vml_cli vml_core vml_compile_options vml_miniz nlohmann_json gtest)  # its own main (unit/main.cpp)
 target_include_directories(vml_tests PRIVATE ../../native)  # the decoders' headers the app shares (av2/display_order.h, av2/splot_api.h)
 target_compile_definitions(vml_tests PRIVATE
+    VML_SOURCE_DIR="${PROJECT_SOURCE_DIR}"  # the sources, for source_limits_test.cpp
     VML_REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/reference"
     VML_TEST_CHILD="$<TARGET_FILE:vml_test_child>"
     VML_TEST_LIBRARY="$<TARGET_FILE:vml_test_library>"

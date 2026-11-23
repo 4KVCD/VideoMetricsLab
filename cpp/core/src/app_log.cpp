@@ -19,6 +19,7 @@
 #include "vml/platform/console.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
+#include "vml/settings.h"
 
 namespace vml::app_log {
 
@@ -233,7 +234,7 @@ std::string compiler() {
 
 }  // namespace
 
-std::filesystem::path log_dir() { return platform::home_directory() / ".videometricslab" / "logs"; }
+std::filesystem::path log_dir() { return app_data_folder() / "logs"; }
 
 std::optional<std::filesystem::path> start_logging(const std::optional<std::filesystem::path>& directory) {
     return start_logging_to(directory.value_or(log_dir()) / log_file_name);
