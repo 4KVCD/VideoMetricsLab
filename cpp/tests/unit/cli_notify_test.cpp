@@ -161,5 +161,19 @@ TEST(CliNotify, CurlReadsNoCurlrc) {
     EXPECT_EQ(platform::curl_command(7), (std::vector<std::string>{"curl", "-q", "-K", "/dev/fd/7"}));
 }
 
+// A request bigger than a pipe holds (a webhook's statistics of many
+// videos) reaches curl rather than waiting for ever to be written: here for
+// a port nobody listens on, so that curl reads all of it, then fails at once.
+TEST(CliNotify, ALargeRequestIsSentAndAnswered) {
+#ifdef _WIN32
+    GTEST_SKIP() << "WinHTTP sends it (http_windows.cpp)";
+#else
+    const platform::HttpResponse response = platform::http_post(
+        {"http://127.0.0.1:9/", "application/json", std::string(1024 * 1024, 'a'), {}, true}, std::chrono::seconds(5));
+    EXPECT_EQ(response.status, 0);
+    EXPECT_FALSE(response.error.empty());
+#endif
+}
+
 }  // namespace
 }  // namespace vml::cli
