@@ -427,6 +427,9 @@ void FrameComparePanel::add_video_row(QBoxLayout* root) {
     previous_video_button->setToolTip(app::tr("Previous test video (Left arrow)"));
     connect(previous_video_button, &QPushButton::clicked, this, [this] { cycle_distorted(-1); });
     video_combo = new QComboBox;
+    // The whole names (issue #200), cut to the room the row gives it: as wide
+    // as the longest, it would set the window's minimum width.
+    video_combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     video_combo->setMinimumContentsLength(30);
     connect(video_combo, &QComboBox::currentIndexChanged, this, [this](int index) { on_video_selected(index); });
     next_video_button = new QPushButton(QString::fromUtf8("\xE2\x86\x92"));  // →
@@ -513,12 +516,17 @@ void FrameComparePanel::add_colour_row(QBoxLayout* root) {
 
 // What is shown, and the frames (or the playback) under it.
 void FrameComparePanel::add_view(QVBoxLayout* root) {
-    showing_label = new QLabel(app::tr("No videos loaded"));
+    // The whole name where it fits, else the shortened one (Settings >
+    // Window > Video names), cut in the middle where neither does. Issue
+    // #200.
+    showing_label = new ElidedLabel;
+    showing_label->set_elide_mode(Qt::ElideMiddle);
     QFont font = showing_label->font();
     font.setBold(true);
     font.setPointSize(font.pointSize() + 1);
     showing_label->setFont(font);
     showing_label->setAlignment(Qt::AlignCenter);
+    showing_label->set_text(app::tr("No videos loaded"));
     root->addWidget(showing_label);
 
     viewer = new FrameView(zoom_);
@@ -1322,15 +1330,12 @@ void FrameComparePanel::name_videos() {
         labels.push_back(entry.label);
     }
     shown_names_ = shown_video_names(labels, name_rule_);
-    for (int index = 0; index < std::min(video_combo->count(), static_cast<int>(shown_names_.size())); ++index) {
-        video_combo->setItemText(index, shown_names_[static_cast<std::size_t>(index)]);
-    }
 }
 
 void FrameComparePanel::update_labels() {
     const FrameComparisonEntry* entry = current_entry();
     if (entry == nullptr) {
-        showing_label->setText(app::tr("No videos to compare"));
+        showing_label->set_text(app::tr("No videos to compare"));
         detail_label->set_text(app::tr("No frame selected."));
         color_status_label->setText(app::tr("No video selected."));
         return;
@@ -1341,17 +1346,19 @@ void FrameComparePanel::update_labels() {
                         : app::tr("{side} {number} of {count}",
                                   {{"side", app::tr("TEST")}, {"number", current_index_ + 1}, {"count", entries_.size()}});
     const QString name = showing_source_ ? qt_text(platform::path_text(comparison.source_info.path.filename()))
-                         : current_index_ < shown_names_.size() ? shown_names_[current_index_]
-                                                                : entry->label;
+                                         : entry->label;
+    const QString shorter =
+        !showing_source_ && current_index_ < shown_names_.size() ? shown_names_[current_index_] : name;
     // A still FFmpeg makes from the file leaves out H.274's grain where the
     // scores have it (only VVdeC adds it as it should); one from VVdeC's
     // pictures (still_from_the_app) has it, as Video Compare's player does.
     const VideoInfo& shown = frame_video_info(comparison, showing_source_ ? FrameSide::source : FrameSide::distorted);
     const bool grain_not_shown =
         !is_video_mode() && only_the_app_adds(effective_film_grain(shown)) && !still_from_the_app(shown);
-    showing_label->setText(side + QString::fromUtf8(" \xE2\x80\x94 ") + name +
-                           (grain_not_shown ? QString::fromUtf8(" \xC2\xB7 ") + app::tr("film grain not shown in stills")
-                                            : QString()));
+    const QString note =
+        grain_not_shown ? QString::fromUtf8(" \xC2\xB7 ") + app::tr("film grain not shown in stills") : QString();
+    const QString dash = QString::fromUtf8(" \xE2\x80\x94 ");
+    showing_label->set_text_or_shorter(side + dash + name + note, side + dash + shorter + note);
     update_worst_row();  // shown for the list's pair only
     update_frame_line();
     update_color_status();

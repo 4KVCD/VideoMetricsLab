@@ -11,6 +11,7 @@
 #include <QDeadlineTimer>
 #include <QDoubleSpinBox>
 #include <QFont>
+#include <QFontMetrics>
 #include <QGuiApplication>
 #include <QIcon>
 #include <QImage>
@@ -233,6 +234,42 @@ TEST_F(FramePanelTest, ThePairsAreListedOnTheirCommonFramesAndStepTogether) {
     EXPECT_EQ(panel->frame_spin->maximum(), 119);
     EXPECT_TRUE(panel->detail_label->full_text().contains("No metric results loaded"));
     EXPECT_FALSE(panel->detail_label->full_text().contains("VMAF"));
+}
+
+// Issue #200: the Test video drop-down lists the whole names, and the title
+// over the video shows the whole name where it fits; where it does not, the
+// shortened one (Settings > Window > Video names), cut in the middle where
+// that does not fit either. Neither sets the window's minimum width.
+TEST_F(FramePanelTest, WholeNamesWhereTheyFit) {
+    const auto panel = make_panel();
+    const std::string shared = "Example Show - S01E03 - A Long Episode Title - 2160p HDR x265 10-bit smart slower ";
+    panel->set_runs({scored(shared + "v1"), scored(shared + "v2")});
+    EXPECT_EQ(panel->video_combo->itemText(0).toStdString(), shared + "v1");
+    EXPECT_EQ(panel->video_combo->itemText(1).toStdString(), shared + "v2");
+    const int short_names = [] {
+        FrameComparePanel named([] { return std::string("ffmpeg"); }, PreviewColorMode::display_aware, 3);
+        named.set_runs({scored("a"), scored("b")});
+        return named.minimumSizeHint().width();
+    }();
+    EXPECT_EQ(panel->minimumSizeHint().width(), short_names);
+
+    panel->resize(1800, 900);
+    panel->show();
+    panel->layout()->activate();
+    QCoreApplication::processEvents();
+    const QString whole = QString::fromUtf8("TEST 1 of 2 \xE2\x80\x94 ") + QString::fromStdString(shared + "v1");
+    EXPECT_EQ(panel->showing_label->text(), whole);
+    EXPECT_TRUE(panel->showing_label->toolTip().isEmpty());
+
+    const QFontMetrics metrics = panel->showing_label->fontMetrics();
+    const QString shortened = QString::fromUtf8("TEST 1 of 2 \xE2\x80\x94 \xE2\x80\xA6slower v1");
+    panel->showing_label->resize(metrics.horizontalAdvance(shortened) + 40, panel->showing_label->height());
+    EXPECT_EQ(panel->showing_label->text(), shortened);
+    EXPECT_EQ(panel->showing_label->toolTip(), whole);  // the whole name, on hover
+    panel->showing_label->resize(metrics.horizontalAdvance(shortened) / 2, panel->showing_label->height());
+    EXPECT_TRUE(panel->showing_label->text().contains(QChar(0x2026)));
+    EXPECT_TRUE(panel->showing_label->text().startsWith("TEST")) << panel->showing_label->text().toStdString();
+    EXPECT_TRUE(panel->showing_label->text().endsWith("v1")) << panel->showing_label->text().toStdString();
 }
 
 // The row under the playback controls (the worst frames when shown, the

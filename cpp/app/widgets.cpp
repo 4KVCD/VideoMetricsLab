@@ -339,12 +339,21 @@ ElidedLabel::ElidedLabel(QWidget* parent) : QLabel(parent) {
 
 void ElidedLabel::set_text(const QString& text, const QString& tooltip) {
     full_ = text;
+    shorter_.clear();
     tooltip_ = tooltip;
+    fit();
+}
+
+void ElidedLabel::set_text_or_shorter(const QString& text, const QString& shorter) {
+    full_ = text;
+    shorter_ = shorter == text ? QString() : shorter;
+    tooltip_.clear();
     fit();
 }
 
 void ElidedLabel::clear_text() {
     full_.clear();
+    shorter_.clear();
     tooltip_.clear();
     QLabel::clear();
     setToolTip(QString());
@@ -371,8 +380,11 @@ void ElidedLabel::fit() {
     const int width = contentsRect().width();
     // Not cut until shown and laid out: before that the width is a
     // placeholder, not the room the line will have.
-    const QString shown =
-        !isVisible() || width <= 0 ? full_ : fontMetrics().elidedText(full_, mode_, width);
+    // The whole text where it fits, else the shorter one, cut if need be.
+    QString shown = full_;
+    if (isVisible() && width > 0 && fontMetrics().horizontalAdvance(full_) > width) {
+        shown = fontMetrics().elidedText(shorter_.isEmpty() ? full_ : shorter_, mode_, width);
+    }
     QLabel::setText(shown);
     const bool cut = shown != full_;
     setToolTip(cut ? full_ + (tooltip_.isEmpty() ? QString() : "\n\n" + tooltip_) : tooltip_);
