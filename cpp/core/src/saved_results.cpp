@@ -39,11 +39,15 @@ std::vector<std::string> SavedComparison::keys() const {
     return found;
 }
 
-std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path& base) {
+std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path& base,
+                                                    const std::function<bool()>& stopped) {
     std::vector<SavedComparison> list;
     std::error_code error;
     std::filesystem::directory_iterator folder(base / "v2", error);
     for (; !error && folder != std::filesystem::directory_iterator(); folder.increment(error)) {
+        if (stopped && stopped()) {
+            break;
+        }
         std::error_code ignored;
         if (!folder->is_directory(ignored)) {
             continue;

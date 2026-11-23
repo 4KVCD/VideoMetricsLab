@@ -829,6 +829,30 @@ TEST(MetricCache, SavedComparisonsAreListedReadAndDeleted) {
     EXPECT_EQ(list[0].label, "t");
 }
 
+// #205: the Saved Results tab lists the saved comparisons each time it is
+// shown; a listing nobody waited for any more (a newer one, or the window
+// closing, which waited for it) still read every folder, minutes on a slow
+// share. Asked to stop, it ends at the next folder.
+TEST(MetricCache, AListingOfSavedComparisonsStopsWhenAsked) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    const AnalysisRequest request = request_from(stored);
+    const std::filesystem::path cache = folder / "cache";
+    touch(folder / "s.mp4", "s");
+    for (const char* name : {"a.mp4", "b.mp4", "c.mp4"}) {
+        touch(folder / name, name);
+        ComparisonResult result = test::result_from(stored.at("result"));
+        result.source = folder / "s.mp4";
+        result.distorted = folder / name;
+        store_result(cache, result.source, result.distorted, request.recipe, result, name, request.metrics);
+    }
+    EXPECT_EQ(list_saved_comparisons(cache).size(), 3U);
+    int asked = 0;
+    const std::vector<SavedComparison> stopped = list_saved_comparisons(cache, [&asked] { return ++asked > 1; });
+    EXPECT_EQ(stopped.size(), 1U);
+    EXPECT_EQ(asked, 2);
+}
+
 // A file is known by its content where its path changed: the sampled hash
 // reads the size and samples of the file (the same bytes anywhere give the
 // same hash; a changed byte in a sample, another), and the pictures a video

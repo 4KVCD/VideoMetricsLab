@@ -47,8 +47,12 @@ struct SavedComparison {
 };
 
 // Every comparison saved under `base` (its v2 folder), newest first; a
-// folder without a context.json this app can read is left out.
-std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path& base);
+// folder without a context.json this app can read is left out. `stopped`,
+// where given, is asked before each folder: once it says so, the listing
+// ends with what it has (a listing nobody waits for any more, on a slow
+// share, stops rather than reading every folder).
+std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path& base,
+                                                    const std::function<bool()>& stopped = {});
 
 // The comparison's result and label with one score per metric: the file
 // `chosen` gives for it, else its newest. A file that cannot be read, or

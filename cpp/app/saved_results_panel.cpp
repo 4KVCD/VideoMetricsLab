@@ -297,6 +297,9 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
 }
 
 SavedResultsPanel::~SavedResultsPanel() {
+    if (listing_stopped_) {
+        *listing_stopped_ = true;
+    }
     reading_->waitForFinished();
     stop_details_read();
     details_reading_->waitForFinished();
@@ -308,7 +311,14 @@ std::filesystem::path SavedResultsPanel::base() const {
 
 void SavedResultsPanel::refresh() {
     folder_label_->setText(app::tr("Reading {directory}...", {{"directory", text_of(base())}}));
-    reading_->setFuture(QtConcurrent::run([folder = base()] { return list_saved_comparisons(folder); }));
+    // A listing still running is stopped: this one takes its place.
+    if (listing_stopped_) {
+        *listing_stopped_ = true;
+    }
+    listing_stopped_ = std::make_shared<std::atomic<bool>>(false);
+    reading_->setFuture(QtConcurrent::run([folder = base(), stopped = listing_stopped_] {
+        return list_saved_comparisons(folder, [&stopped] { return stopped->load(); });
+    }));
 }
 
 void SavedResultsPanel::show_list(std::vector<SavedComparison> list) {

@@ -196,6 +196,9 @@ private:
     // The score picked for a metric of a comparison (its folder): else its newest.
     std::map<std::filesystem::path, std::map<std::string, std::filesystem::path>> picked_;
     QFutureWatcher<std::vector<SavedComparison>>* reading_ = nullptr;
+    // Set to stop the listing running: a newer one has started, or the tab
+    // is going (it can take minutes on a slow share).
+    std::shared_ptr<std::atomic<bool>> listing_stopped_;
     bool run_active_ = false;
     // The run's pairs and folders, each as locked_by_run compares them
     // (run_key), and whether its folders are known yet.
