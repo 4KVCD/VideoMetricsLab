@@ -224,6 +224,25 @@ TEST(WorstFramesTab, DetailsTellsTheFrameUnderThePointerElseTheRowSelected) {
     EXPECT_TRUE(tab.details()->text().contains("Worst frame 1 of 2"));
     tab.segments_table()->selectRow(1);  // 40 to 40
     EXPECT_TRUE(tab.details()->text().startsWith("Segment 40 to 40")) << tab.details()->text().toStdString();
+
+    // Another number of dips lists them again, the row selected gone: Details
+    // no longer tells it.
+    tab.segments_table()->clearSelection();
+    tab.worst_table()->selectRow(0);
+    ASSERT_TRUE(tab.details()->text().startsWith("Frame 10 "));
+    QComboBox* dips = nullptr;
+    for (QComboBox* combo : tab.findChildren<QComboBox*>()) {
+        if (combo->count() > 0 && combo->itemData(0).toInt() == worst_frame_counts.front()) {
+            dips = combo;
+        }
+    }
+    ASSERT_NE(dips, nullptr);
+    dips->setCurrentIndex(1);
+    EXPECT_TRUE(tab.details()->text().isEmpty()) << tab.details()->text().toStdString();
+    tab.set_worst_count(worst_frame_counts.front());
+    tab.worst_table()->selectRow(0);
+    tab.set_worst_count(worst_frame_counts.back());
+    EXPECT_TRUE(tab.details()->text().isEmpty()) << tab.details()->text().toStdString();
 }
 
 TEST(WorstFramesTab, StartsFromAProfileAndSavesOnlyWhenAsked) {
