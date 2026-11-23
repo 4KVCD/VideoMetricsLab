@@ -243,6 +243,13 @@ std::string stream_fingerprint_of(const std::string& digest, const VideoInfo& in
     // muxed into a container that states other tags) is read with another
     // YUV->RGB matrix, which SSIMULACRA2, Butteraugli and CVVDP score.
     add_colour(hash, info);
+    // The picture as read: its parameter sets are not hashed (only the coded
+    // pictures are), and a remux that changes their crop (h264_metadata's
+    // crop_right) or its pixel aspect ratio is decoded to another size, or
+    // compared with another shape: another video, scored otherwise.
+    add_text(hash, std::to_string(info.width) + "x" + std::to_string(info.height));
+    const bool square = info.sar.empty() || info.sar == "1:1" || info.sar == "0:1" || info.sar == "N/A";
+    add_text(hash, square ? std::string("1:1") : info.sar);
     return hash.hexdigest();
 }
 

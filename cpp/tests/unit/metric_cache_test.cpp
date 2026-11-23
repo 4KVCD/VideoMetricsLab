@@ -1423,6 +1423,28 @@ TEST(MetricCache, AStreamReadWithOtherColourIsAnotherStream) {
     EXPECT_EQ(stream_fingerprint_of(digest, bt709, 0), stream_fingerprint_of(digest, bt709, 0));
 }
 
+// A remux that changes only the parameter sets' crop (h264_metadata's
+// crop_right) or the pixel aspect ratio has the same coded pictures, but is
+// decoded to another size or shape: another stream. A ratio not stated is
+// square.
+TEST(MetricCache, AStreamReadAtAnotherSizeOrShapeIsAnotherStream) {
+    VideoInfo full;
+    full.codec_name = "h264";
+    full.pix_fmt = "yuv420p";
+    full.width = 1920;
+    full.height = 1080;
+    VideoInfo cropped = full;
+    cropped.width = 1904;
+    VideoInfo anamorphic = full;
+    anamorphic.sar = "4:3";
+    VideoInfo unstated = full;
+    unstated.sar = "0:1";
+    const std::string digest(64, 'a');
+    EXPECT_NE(stream_fingerprint_of(digest, cropped, 0), stream_fingerprint_of(digest, full, 0));
+    EXPECT_NE(stream_fingerprint_of(digest, anamorphic, 0), stream_fingerprint_of(digest, full, 0));
+    EXPECT_EQ(stream_fingerprint_of(digest, unstated, 0), stream_fingerprint_of(digest, full, 0));
+}
+
 // A file's bitrate is saved by its content and read back as it was, under
 // the path the file has now; frame types the command line did not read are
 // told apart from types read and unknown. Settings counts and clears it with

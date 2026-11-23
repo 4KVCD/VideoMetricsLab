@@ -68,8 +68,9 @@ std::optional<std::string> stream_fingerprint(const std::filesystem::path& file,
 // What stream_fingerprint hashes, in which form: a stream recorded with
 // another (a saved comparison's identity.json) is read again, and never
 // matched. 2: the packets an edit list leaves out are left out; 3: with the
-// colour the stream is read with.
-constexpr int stream_fingerprint_format = 3;
+// colour the stream is read with; 4: with the picture's size and pixel
+// aspect ratio as read.
+constexpr int stream_fingerprint_format = 4;
 
 // The stream fingerprint of a stream whose pictures hash to `digest` (the
 // command's SHA-256), `info` its video's (codec and colour as read).
