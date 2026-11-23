@@ -523,6 +523,21 @@ TEST_F(FramePanelTest, TheLoopRowSaysWhatItLoops) {
     EXPECT_EQ(panel->save_still_button->parentWidget(), panel->next_frame_button->parentWidget());
 }
 
+// A way of decoding that failed before the one playing ("retry: " and
+// FFmpeg's error, said in Advanced info) is not an error of the playback:
+// taken for one, the whole status, FFmpeg's error text and all, filled the
+// status line while the video played. An error still shows whole.
+TEST_F(FramePanelTest, ARetriedWayIsNotShownAsAnError) {
+    const auto panel = make_panel();
+    panel->set_runs({scored("encode")});
+    const QString dot = QString::fromUtf8(" \xC2\xB7 ");
+    const QString played = "Playing" + dot + "hardware decode + GPU tone mapping/RGB (host transfer)" + dot +
+                           "retry: [CUDA @ 0x1] cuExternalMemoryGetMappedMipmappedArray failed -> invalid argument";
+    EXPECT_EQ(playback_status(*panel, played).toStdString(), "Playing");
+    const QString failed = "Video 1 could not play: no such file";
+    EXPECT_EQ(playback_status(*panel, failed).toStdString(), failed.toStdString());
+}
+
 // Holding S shows the source, letting go the test video again.
 TEST_F(FramePanelTest, HoldingSShowsTheSource) {
     const auto panel = make_panel();

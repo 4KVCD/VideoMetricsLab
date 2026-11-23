@@ -1168,7 +1168,10 @@ QString FrameComparePanel::concise_playback_status() const {
     // No soundtrack: "audio unavailable", then why (NativePool::
     // description). Not an error of the pictures', so left out of the check
     // below; said as "No sound: why" while Audio is ticked (issue #204: it
-    // was said nowhere but Advanced info).
+    // was said nowhere but Advanced info). Nor is a way of decoding that
+    // failed before the one now playing ("retry: " and its error, said in
+    // Advanced info): taken for one, the whole status, FFmpeg's error text
+    // and all, filled the line while the video played.
     QString no_sound;
     QStringList others;
     const QStringList all = message.split(separator);
@@ -1177,6 +1180,9 @@ QString FrameComparePanel::concise_playback_status() const {
             if (i + 1 < all.size()) {
                 no_sound = all[++i];
             }
+            continue;
+        }
+        if (all[i].startsWith(QStringLiteral("retry: "))) {
             continue;
         }
         others.append(all[i]);
