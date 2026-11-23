@@ -413,7 +413,10 @@ std::string without_secret_url(std::string text, const std::string& url, const s
         return text;  // no path: nothing more to hide
     }
     text = replaced(std::move(text), url.substr(path), name);
-    return replaced(std::move(text), url.substr(path, url.find('?', path) - path), name);
+    // The path without its query, where it is more than "/": every "/" in
+    // an error ("Cannot POST /") would be the service's name.
+    const std::string bare = url.substr(path, url.find('?', path) - path);
+    return bare.size() > 1 ? replaced(std::move(text), bare, name) : text;
 }
 
 std::string without_secrets(std::string text, const NotificationRequest& request) {

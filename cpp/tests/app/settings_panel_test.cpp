@@ -125,6 +125,20 @@ TEST(SettingsPanel, NotificationsStoreKeysAsChosenAndPreviewTheMessage) {
     FileWrites writes;
     const Dialogs dialogs = standard_dialogs(nullptr);
     SettingsPanel panel(settings, writes, [] { return ToolsStatus{}; }, dialogs);
+    // Every key field stores its setting of secret_settings, the one list
+    // of them (#221's review: the panel kept a list of its own).
+    const QList<QLineEdit*> keys = panel.findChildren<QLineEdit*>();
+    int key_fields = 0;
+    for (QLineEdit* edit : keys) {
+        if (edit->echoMode() == QLineEdit::Password) {
+            edit->setText(QStringLiteral("key-%1").arg(++key_fields));
+            emit edit->editingFinished();
+        }
+    }
+    EXPECT_EQ(static_cast<std::size_t>(key_fields), secret_settings().size());
+    for (const auto& [name, member] : secret_settings()) {
+        EXPECT_TRUE(secret_of(settings.*member).value_or("").starts_with("key-")) << name;
+    }
     panel.pushover_user->setText("user-key");
     emit panel.pushover_user->editingFinished();
     EXPECT_EQ(secret_of(settings.pushover_user), "user-key");
