@@ -576,9 +576,18 @@ void FrameComparePanel::add_seek_rows(QBoxLayout* root) {
     seek->addWidget(new QLabel(app::tr("Timestamp:")));
     seek->addWidget(timestamp_edit);
     seek->addWidget(next_frame_button);
+    // This frame's stills: with the frame controls, not in the loop's row
+    // (issue #201: there it read as a loop setting).
+    save_still_button = new QPushButton(app::tr("Export frame as PNG"));
+    save_still_button->setToolTip(app::tr("Saves this frame of the reference and of the test video as PNG files in "
+                                          "Settings' Export folder, cropped and scaled as they are compared, HDR "
+                                          "mapped to SDR. They are decoded as Video Compare's still frames are."));
+    connect(save_still_button, &QPushButton::clicked, this, [this] { save_still(); });
+    seek->addWidget(theme::separator(12));
+    seek->addWidget(save_still_button);
     root->addLayout(seek);
 
-    timeline = new QSlider(Qt::Horizontal);
+    timeline = new BandSlider(Qt::Horizontal);
     timeline->setRange(0, 0);
     connect(timeline, &QSlider::valueChanged, this, [this](int value) { set_frame(value); });
     root->addWidget(timeline);
@@ -707,6 +716,8 @@ void FrameComparePanel::set_runs(std::vector<FrameComparisonEntry> entries) {
     }
     const long long maximum = shortest - 1;
     frame_ = std::min(frame_, maximum);
+    // The loop's centre too: the row would name a frame past the end.
+    loop_centre_ = std::min(loop_centre_, maximum);
     set_ranges(maximum);
     sync_seek_widgets();  // the frame may have come down to the shorter video's end
     update_enabled_state();
@@ -750,6 +761,7 @@ void FrameComparePanel::set_frame(long long frame) {
         // A frame the user went to: the loop is around it now.
         loop_centre_ = frame_;
         loop_jump_pending_ = false;
+        refresh_loop_text();
     }
     sync_seek_widgets();
     update_labels();
@@ -788,6 +800,7 @@ FrameComparePanel::OpenAt FrameComparePanel::open_at(const std::string& identity
     frame_ = frame;
     loop_centre_ = frame;
     loop_jump_pending_ = false;
+    refresh_loop_text();
     sync_seek_widgets();
     if (on_screen_) {
         show_chosen_video();
@@ -1332,10 +1345,8 @@ void FrameComparePanel::update_enabled_state() {
     const bool playable = is_video_mode();
     play_button->setEnabled(available && playable);
     audio_checkbox->setEnabled(available && playable);
-    for (QWidget* widget : std::initializer_list<QWidget*>{loop_checkbox, loop_before_spin, loop_after_spin}) {
-        widget->setEnabled(available && playable);
-    }
-    refresh_loop_frames();  // at the frame rate of the pair now shown
+    loop_checkbox->setEnabled(available && playable);
+    refresh_loop_frames();  // at the frame rate of the pair now shown; the rest of the loop's row
     save_still_button->setEnabled(available && still_worker_ == nullptr);
     source_resolution_combo->setEnabled(playable);
     color_mode_combo->setEnabled(available);

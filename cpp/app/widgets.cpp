@@ -23,6 +23,7 @@
 #include <QPainterPath>
 #include <QPixmap>
 #include <QPen>
+#include <QStyleOptionSlider>
 #include <QResizeEvent>
 #include <QShowEvent>
 #include <QSizePolicy>
@@ -332,6 +333,69 @@ void FillColumnTable::recalculate_fill_column() {
 }
 
 // ------------------------------------------------------------------ ElidedLabel
+
+BandSlider::BandSlider(Qt::Orientation orientation, QWidget* parent) : QSlider(orientation, parent) {}
+
+void BandSlider::set_band(std::optional<std::pair<int, int>> band) {
+    if (band == band_) {
+        return;
+    }
+    band_ = band;
+    update();
+}
+
+QRect BandSlider::band_rect() const {
+    if (!band_ || maximum() <= minimum() || orientation() != Qt::Horizontal) {
+        return {};
+    }
+    QStyleOptionSlider option;
+    initStyleOption(&option);
+    const QRect groove = style()->subControlRect(QStyle::CC_Slider, &option, QStyle::SC_SliderGroove, this);
+    const QRect handle = style()->subControlRect(QStyle::CC_Slider, &option, QStyle::SC_SliderHandle, this);
+    // The handle's centre at a value, as the style places it.
+    const int span = groove.width() - handle.width();
+    const auto centre = [&](int value) {
+        return groove.left() + handle.width() / 2 +
+               QStyle::sliderPositionFromValue(minimum(), maximum(), std::clamp(value, minimum(), maximum()), span,
+                                               option.upsideDown);
+    };
+    int left = centre(std::min(band_->first, band_->second));
+    int right = centre(std::max(band_->first, band_->second));
+    if (right - left < min_band_px) {
+        const int middle = (left + right) / 2;
+        left = middle - min_band_px / 2;
+        right = left + min_band_px;
+    }
+    const int height = std::max(handle.height(), groove.height());
+    return {left, rect().center().y() - height / 2, right - left, height};
+}
+
+void BandSlider::paintEvent(QPaintEvent* event) {
+    if (!band_) {
+        QSlider::paintEvent(event);
+        return;
+    }
+    // The groove, the band over it, then the handle over both.
+    QPainter painter(this);
+    QStyleOptionSlider option;
+    initStyleOption(&option);
+    option.subControls = QStyle::SC_SliderGroove;
+    style()->drawComplexControl(QStyle::CC_Slider, &option, &painter, this);
+    const QColor accent = palette().color(QPalette::Accent);
+    QColor fill = accent;
+    fill.setAlphaF(isEnabled() ? 0.28F : 0.12F);
+    QColor edge = accent;
+    edge.setAlphaF(isEnabled() ? 0.6F : 0.25F);
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(QPen(edge, 1.0));
+    painter.setBrush(fill);
+    painter.drawRoundedRect(QRectF(band_rect()).adjusted(0.5, 0.5, -0.5, -0.5), 3, 3);
+    painter.restore();
+    initStyleOption(&option);
+    option.subControls = QStyle::SC_SliderHandle;
+    style()->drawComplexControl(QStyle::CC_Slider, &option, &painter, this);
+}
 
 ElidedLabel::ElidedLabel(QWidget* parent) : QLabel(parent) {
     setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
