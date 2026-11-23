@@ -62,7 +62,9 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--segments-report FILE] [--require RULES]
                                    [--fail-on-segments] [--run-dir FOLDER]
                                    [--log-file FILE] [--name TEMPLATE]
-                                   [--notify] [-q] [-v]
+                                   [--notify] [-q] [-v] [--progress {text,jsonl}]
+                                   [--timeout SECONDS] [--video-timeout SECONDS]
+                                   [--cancel-on-stdin-eof]
                                    [--settings FILE | --no-settings]
                                    [--cache-dir FOLDER] [--no-save | --no-cache]
                                    [REFERENCE] [TEST ...]
@@ -431,6 +433,23 @@ R"(  --no-gpu-decode       decode the videos on the CPU
                         the progress lines; the exit code is the run's
   -q, --quiet           no progress, only the results
   -v, --verbose         the app's log as well
+  --progress {text,jsonl}
+                        text: progress lines for a person; jsonl: a JSON
+                        object a line on stderr for a program to read (events
+                        run_started, video_started, progress, note, message,
+                        problem, video_done, run_done), with -q too
+                        (default: text)
+  --timeout SECONDS     cancel the run after SECONDS (whole seconds or
+                        H:MM:SS) from the command's start, as Ctrl+C does:
+                        what finished is given, and the exit code is 124
+  --video-timeout SECONDS
+                        stop a video whose run takes more than SECONDS from
+                        its start; the others go on. It fails with the code
+                        timed_out, and the exit code is 124
+  --cancel-on-stdin-eof
+                        cancel the run, as Ctrl+C does, when standard input
+                        ends: for a program that starts this one and cannot
+                        send Ctrl+C, closing its end of the pipe
   --settings FILE       read the settings from FILE (a settings.json, such as
                         a copy of the app's) in place of the app's; options
                         left out take its settings, and it is never written
@@ -1446,6 +1465,11 @@ Parser compare_parser(CompareArguments& parsed) {
         flag({"--notify"}, parsed.notify),
         flag({"-q", "--quiet"}, parsed.quiet),
         flag({"-v", "--verbose"}, parsed.verbose),
+        option({"--progress"}, [&parsed](const std::string& value) { parsed.progress = choice(value, {"text", "jsonl"}); }),
+        option({"--timeout"}, [&parsed](const std::string& value) { parsed.timeout = duration_seconds(value); }),
+        option({"--video-timeout"},
+               [&parsed](const std::string& value) { parsed.video_timeout = duration_seconds(value); }),
+        flag({"--cancel-on-stdin-eof"}, parsed.cancel_on_stdin_eof),
     };
     parser.exclusive = {{"--duration", "--range"},
                         {"--duration", "--frames"},

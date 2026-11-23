@@ -28,6 +28,7 @@
 #include "report.h"
 #include "test_videos.h"
 #include "vml/metric_cache.h"
+#include "watch.h"
 #include "vml/model_select.h"
 #include "vml/platform/system.h"
 #include "vml/run_file.h"
@@ -1020,9 +1021,6 @@ TEST(CommandLine, SettingsAndSavedScoresCanBeChosen) {
     std::filesystem::remove_all(temporary);
 }
 
-// The automation contract: every error, failure, note and why in the JSON has
-// a code beside it, a run that compared nothing still writes a document, and
-// an input not read is exit code 4, not a wrong command's 2.
 // A quality gate: --require's bars on a metric's score or another statistic
 // (CVVDP's of its seconds), and --fail-on-segments. A bar missed, or a
 // metric not scored, fails the gate; one that does not apply to the video
@@ -1082,6 +1080,50 @@ TEST(CommandLine, QualityGatesCheckEachVideo) {
     EXPECT_TRUE(gate_passed({unscored[0]}));
 }
 
+// --timeout and --video-timeout, on a clock of the test's own: the run is due
+// once, from the command's start; each video from its own start, until it
+// ends; and each video runs on a cancel token of its own, so stopping one
+// leaves the others running (a regression: one token copied into each place
+// stopped every video).
+TEST(CommandLine, TimeoutsStopTheRunOrOneVideo) {
+    const CompareArguments parsed = parse_arguments({"compare", "r.mkv", "a.mkv", "--timeout", "1:00",
+                                                     "--video-timeout", "10", "--progress", "jsonl",
+                                                     "--cancel-on-stdin-eof"})
+                                        .compare;
+    EXPECT_EQ(parsed.timeout, 60);
+    EXPECT_EQ(parsed.video_timeout, 10);
+    EXPECT_EQ(parsed.progress, "jsonl");
+    EXPECT_TRUE(parsed.cancel_on_stdin_eof);
+    EXPECT_THROW(parse_arguments({"compare", "r.mkv", "a.mkv", "--timeout", "0"}), UsageError);
+    EXPECT_THROW(parse_arguments({"compare", "r.mkv", "a.mkv", "--progress", "json"}), UsageError);
+
+    Deadlines deadlines(100.0, 60.0, 10.0);
+    deadlines.started(0, 105.0);
+    deadlines.started(1, 110.0);
+    EXPECT_TRUE(deadlines.due(114.9).jobs.empty());
+    EXPECT_EQ(deadlines.due(115.0).jobs, std::vector<std::size_t>{0});
+    EXPECT_TRUE(deadlines.due(116.0).jobs.empty());  // said once
+    deadlines.ended(1);
+    EXPECT_TRUE(deadlines.due(130.0).jobs.empty());  // ended before its time
+    EXPECT_FALSE(deadlines.due(159.9).run);
+    EXPECT_TRUE(deadlines.due(160.0).run);
+    EXPECT_FALSE(deadlines.due(161.0).run);
+    Deadlines none(0.0, std::nullopt, std::nullopt);
+    none.started(0, 0.0);
+    const Deadlines::Due never = none.due(1e9);
+    EXPECT_FALSE(never.run);
+    EXPECT_TRUE(never.jobs.empty());
+
+    std::vector<CancelToken> tokens = separate_tokens(3);
+    tokens[1].cancel();
+    EXPECT_FALSE(tokens[0].cancelled());
+    EXPECT_TRUE(tokens[1].cancelled());
+    EXPECT_FALSE(tokens[2].cancelled());
+}
+
+// The automation contract: every error, failure, note and why in the JSON has
+// a code beside it, a run that compared nothing still writes a document, and
+// an input not read is exit code 4, not a wrong command's 2.
 TEST(CommandLine, ErrorsNotesAndWhysComeWithCodes) {
     std::vector<TestVideo> videos(2);
     videos[0].path = "Y:/v/missing.mkv";
