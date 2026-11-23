@@ -285,6 +285,20 @@ public:
     }
     using QProxyStyle::polish;
 
+    // A left click on a slider jumps there, as in Classic (Windows 11's
+    // style); Fusion's pages toward it (by the page step, 10 frames on
+    // Video Compare's timeline) and jumps only on a middle click. Issue #203.
+    int styleHint(StyleHint hint, const QStyleOption* option, const QWidget* widget,
+                  QStyleHintReturn* returned) const override {
+        if (hint == SH_Slider_AbsoluteSetButtons) {
+            return Qt::LeftButton;
+        }
+        if (hint == SH_Slider_PageSetButtons) {
+            return Qt::NoButton;
+        }
+        return QProxyStyle::styleHint(hint, option, widget, returned);
+    }
+
     void drawPrimitive(PrimitiveElement element, const QStyleOption* option, QPainter* painter,
                        const QWidget* widget) const override {
         const bool check = element == PE_IndicatorCheckBox || element == PE_IndicatorItemViewItemCheck;
