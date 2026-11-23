@@ -6,6 +6,7 @@
 #include <QComboBox>
 #include <QFile>
 #include <QLineEdit>
+#include <QMenu>
 #include <QPushButton>
 #include <QTableWidget>
 #include <QTemporaryDir>
@@ -125,7 +126,9 @@ TEST(BdRatePanel, ShowsTheBdRatesOfTwoEncoders) {
     EXPECT_EQ(copied.toStdString(), bd_rate_table(*panel.report(), "fast", "slower"));
     const QString exported = folder.filePath("bd.csv");
     panel.dialogs.save_file = [&exported](const QString&, const QString&, const QString&) { return exported; };
-    panel.export_button->click();
+    ASSERT_NE(panel.export_button->menu(), nullptr);
+    EXPECT_EQ(panel.export_button->menu()->actions().front()->text().toStdString(), "Table as CSV...");
+    panel.export_button->menu()->actions().front()->trigger();
     QFile file(exported);
     ASSERT_TRUE(file.open(QIODevice::ReadOnly));
     EXPECT_EQ(file.readAll().toStdString(), bd_rate_csv(*panel.report()));

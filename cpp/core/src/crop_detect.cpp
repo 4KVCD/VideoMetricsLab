@@ -171,9 +171,10 @@ void read_findings(const nlohmann::json& text, CropAnswer& answer) {
 // again).
 class Answers {
 public:
-    void set_store(std::function<std::filesystem::path()> store) {
+    void set_store(std::function<std::filesystem::path()> store, bool writes) {
         const std::lock_guard lock(mutex_);
         store_ = std::move(store);
+        writes_ = writes;
         store_read_.reset();
     }
 
@@ -313,7 +314,7 @@ private:
     // Writes every answer to the store, replacing it whole. At worst, two
     // processes writing at once lose one's newest answer, detected again.
     void write_store() {
-        const std::optional<std::filesystem::path> path = store_path();
+        const std::optional<std::filesystem::path> path = writes_ ? store_path() : std::nullopt;
         if (!path) {
             return;
         }
@@ -353,6 +354,7 @@ private:
     std::list<std::pair<AnswerKey, CropAnswer>> boxes_;
     std::set<AnswerKey> in_flight_;
     std::function<std::filesystem::path()> store_;
+    bool writes_ = true;  // false: the store is read, never written
     std::optional<std::filesystem::path> store_read_;
 };
 
@@ -1527,7 +1529,9 @@ std::optional<std::size_t> place_by_content(const std::string& ffmpeg, const Vid
 
 bool samples_through_the_app(const VideoInfo& info) { return windows_from_the_app(info); }
 
-void set_crop_store(std::function<std::filesystem::path()> store) { answers().set_store(std::move(store)); }
+void set_crop_store(std::function<std::filesystem::path()> store, bool writes) {
+    answers().set_store(std::move(store), writes);
+}
 
 void forget_crop_answers() { answers().forget(); }
 

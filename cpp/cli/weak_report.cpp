@@ -10,6 +10,7 @@
 #include "common.h"
 #include "vml/export_csv.h"
 #include "vml/metrics.h"
+#include "vml/number_format.h"
 #include "vml/platform/system.h"
 #include "vml/segment_presets.h"
 #include "vml/python_text.h"
@@ -91,7 +92,8 @@ std::string segments_source(const CompareArguments& arguments) {
 }
 
 std::vector<std::string> take_saved_segments(CompareArguments& arguments, const Settings& settings,
-                                             const std::vector<std::string>& asked) {
+                                             const std::vector<std::string>& asked,
+                                             std::optional<WeakCondition>* fallback) {
     const std::string option = "--segments " + segments_source(arguments);
     std::optional<SegmentProfile> profile;
     if (arguments.segments_preset) {
@@ -143,7 +145,21 @@ std::vector<std::string> take_saved_segments(CompareArguments& arguments, const 
             arguments.segments.push_back(condition);
         }
     }
-    if (saved.conditions.empty() && given.empty()) {
+    if (arguments.segments.empty() && given.empty() && !arguments.segments_preset && !asked.empty()) {
+        // A profile with no condition on the metrics compared: one on the
+        // metric shown, as the Worst Frames tab starts (default_weak_condition):
+        // the one Metric Graphs shows where it is compared, else the first.
+        const std::string& shown =
+            std::find(asked.begin(), asked.end(), settings.graph_metric) != asked.end() ? settings.graph_metric
+                                                                                         : asked.front();
+        if (const MetricDefinition* metric = find_metric(shown)) {
+            arguments.segments.push_back(default_weak_condition(*metric));
+            if (fallback != nullptr) {
+                *fallback = arguments.segments.back();
+            }
+        }
+    }
+    if (saved.conditions.empty() && given.empty() && arguments.segments.empty()) {
         throw std::invalid_argument(option + ": the profile has no conditions; set them in the app's Settings > "
                                     "Weak segments, or give them here (such as \"vmaf<90\")");
     }
@@ -199,18 +215,54 @@ std::string segments_text(const std::vector<TestVideo>& videos, const SegmentRul
             continue;
         }
         const std::vector<WeakSegment> segments = weak_segments(*video.result, rules);
+        const Json summary = segments_summary_json(*video.result, rules, segments);
         lines.push_back("");
-        lines.push_back(video.name() + ": " + with_thousands(static_cast<long long>(segments.size())) +
-                        (segments.size() == 1 ? " segment" : " segments") + " where " + conditions);
+        std::string head = video.name() + ": " + with_thousands(static_cast<long long>(segments.size())) +
+                           (segments.size() == 1 ? " segment" : " segments") + " where " + conditions;
+        if (!segments.empty()) {
+            const long long frames = summary.at("weak_frames").get<long long>();
+            head += ": " + with_thousands(frames) + (frames == 1 ? " frame, " : " frames, ") +
+                    format_fixed(summary.at("weak_seconds").get<double>(), 3) + " s";
+            if (summary.at("weak_percent").is_number()) {
+                head += ", " + format_fixed(summary.at("weak_percent").get<double>(), 1) + "% of the frames compared";
+            }
+        }
+        lines.push_back(head);
+        // Each condition's frames, and how many are in the segments, as the
+        // Worst Frames tab says them under its conditions.
+        bool left_out = false;
+        for (const Json& count : summary.at("condition_counts")) {
+            const long long holds = count.at("holds").get<long long>();
+            const long long in = count.at("in_segments").get<long long>();
+            const std::string frames = with_thousands(holds) + (holds == 1 ? " frame" : " frames");
+            lines.push_back("  " + count.at("condition").get<std::string>() + ": " +
+                            (holds == 0     ? std::string("no frame")
+                             : in == 0      ? frames + ", in no segment"
+                             : in == holds  ? frames + (holds == 1 ? ", in a segment" : ", all in segments")
+                                            : frames + ", " + with_thousands(in) + " of them in segments"));
+            left_out = left_out || in < holds;
+        }
+        if (left_out && rules.min_frames > 1) {
+            lines.push_back("  Runs shorter than " + std::to_string(rules.min_frames) + " frames are left out.");
+        }
+        if (left_out && rules.all && rules.conditions.size() > 1) {
+            lines.push_back("  A frame is weak only where every condition holds on it.");
+        }
         if (segments.empty()) {
             continue;
         }
+        // With more than one condition, any of which makes a frame weak:
+        // which of them made each segment weak (the tab's Weak by column).
+        const bool weak_by = rules.conditions.size() > 1 && !rules.all;
         std::vector<std::vector<std::string>> rows;
         std::vector<std::string> header{"First", "Last", "Frames", "Start", "End"};
         for (const SegmentMetric& metric : segments.front().metrics) {
             const std::string label(metric_definition(metric.key).short_label);
             header.push_back(label + " min");
             header.push_back(label + " mean");
+        }
+        if (weak_by) {
+            header.emplace_back("Weak by");
         }
         rows.push_back(std::move(header));
         for (std::size_t i = 0; i < segments.size() && i < shown; ++i) {
@@ -225,9 +277,18 @@ std::string segments_text(const std::vector<TestVideo>& videos, const SegmentRul
                     definition.direction == MetricDirection::lower_is_better ? metric.max : metric.min));
                 row.push_back(definition.format_value(metric.mean));
             }
+            if (weak_by) {
+                std::string held;
+                for (std::size_t c = 0; c < rules.conditions.size() && c < segment.condition_frames.size(); ++c) {
+                    if (segment.condition_frames[c] > 0) {
+                        held += (held.empty() ? "" : ", ") + rules.conditions[c].text();
+                    }
+                }
+                row.push_back(held);
+            }
             rows.push_back(std::move(row));
         }
-        add_table(lines, rows, false);
+        add_table(lines, rows, weak_by);
         if (segments.size() > shown) {
             lines.push_back("  ... and " + with_thousands(static_cast<long long>(segments.size() - shown)) +
                             " more (all in --segments-dir's files and the --json)");
@@ -240,7 +301,8 @@ void add_segments_json(Json& document, const std::vector<TestVideo>& videos, con
     Json& entries = document.at("videos");
     for (std::size_t v = 0; v < videos.size() && v < entries.size(); ++v) {
         if (videos[v].result) {
-            entries[v]["weak_segments"] = segments_json(weak_segments(*videos[v].result, rules), rules);
+            entries[v]["weak_segments"] =
+                video_segments_json(*videos[v].result, weak_segments(*videos[v].result, rules), rules);
         }
     }
 }
@@ -272,7 +334,7 @@ bool write_segment_files(std::vector<TestVideo>& videos, const SegmentRules& rul
             unique_output_paths(folder, video.file_stem(), {suffix + ".json", suffix + ".csv"}, reserved);
         try {
             if (const std::optional<std::string> wrong =
-                    write_json_file(paths[0], segments_json(segments, used, left_out))) {
+                    write_json_file(paths[0], segments_file_json(*video.result, segments, used, left_out))) {
                 throw std::runtime_error(*wrong);
             }
             write_text(paths[1], text_file(segments_csv(segments, used)));

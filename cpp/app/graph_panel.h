@@ -382,21 +382,38 @@ private:
     std::pair<std::vector<QString>, std::vector<std::tuple<QString, QColor, std::vector<QString>>>> export_table();
     void on_add_saved_run();
     void on_export_png();
-    // Export the difference as CSV, from the statistics' menu while the
-    // band shows one.
+    // Difference as CSV..., while the band shows one.
     void on_export_difference();
+    // Statistics as CSV... / as JSON...: the statistics table as shown (the
+    // page's metric, the lines drawn, the frame range), each cell's text.
+    void export_statistics(bool json);
+    // The name the page's exports suggest: the one test video shown, or the
+    // reference when the lines are of several.
+    QString export_stem() const;
     // The page in view's difference pair (MetricPage::difference_pair).
     std::optional<std::pair<int, int>> shown_difference_pair() const;
     void show_stats_menu(const QPoint& position);
-    // The statistics' right-click menu's items, for the table's `row` (a
-    // line's video, or none): show_stats_menu's, and the tests'.
+    // The tab's export items (docs/ARCHITECTURE.md, "Exports"): the
+    // archive of the table's `row`'s video (a line's, or none) and of all
+    // the videos, then the quick grabs of what the page shows. The
+    // statistics' right-click menu has them all but the graph; the graph's,
+    // the graph and the difference; the Export menu, all but a row's video.
     struct StatsMenu {
         std::string identity;  // the row's line's, if any
         QAction* this_video = nullptr;
         QAction* all_videos = nullptr;
+        QAction* graph = nullptr;
+        QAction* statistics_csv = nullptr;
+        QAction* statistics_json = nullptr;
         QAction* difference = nullptr;  // while the band shows a difference
     };
-    void fill_stats_menu(QMenu& menu, int row, StatsMenu& items) const;
+    void fill_stats_menu(QMenu& menu, int row, StatsMenu& items, bool graph = false) const;
+    // The quick grabs alone: the graph (`graph`), the statistics
+    // (`statistics`), and the difference while the band shows one.
+    void add_quick_grabs(QMenu& menu, StatsMenu& items, bool graph, bool statistics) const;
+    // Each of `items` doing what it says.
+    void connect_menu(const StatsMenu& items);
+    void show_graph_menu(ChartWidget& chart, const QPoint& position);
     void on_file_write_failed(const QString& description, const QString& error);
     void on_file_writes_idle();
 

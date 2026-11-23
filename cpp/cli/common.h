@@ -3,11 +3,13 @@
 #pragma once
 
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <cstddef>
 #include <filesystem>
 #include <map>
 #include <mutex>
+#include <set>
 #include <optional>
 #include <string>
 #include <thread>
@@ -15,12 +17,51 @@
 
 #include <nlohmann/json.hpp>
 
+#include "arguments.h"
 #include "vml/platform/console.h"
 #include "vml/python_text.h"
 #include "vml/run_line.h"
+#include "vml/settings.h"
 #include "vml/video.h"
 
 namespace vml::cli {
+
+// The settings a command runs with, and where they came from: the profile's
+// settings.json (app_data_folder()), the file --settings names, or every
+// setting at its default (--no-settings).
+struct ChosenSettings {
+    Settings settings;
+    std::string from = "profile";  // "profile", "file" or "defaults"
+    std::optional<std::filesystem::path> file;  // the file read; none for the defaults or a profile with none
+};
+
+// The --settings file could not be read (exit_input): the message says why.
+class SettingsUnreadable : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
+// The settings `profile` asks for. Throws SettingsUnreadable for a --settings
+// file that is not there or not JSON. Only the profile's own are read as the
+// window reads them (Settings::load, which makes its folder).
+ChosenSettings choose_settings(const ProfileArguments& profile);
+
+// The saved scores' folder (or the saved bitrate's) and what the command may
+// do with it: --cache-dir, else the settings' folder, else the default; read
+// unless --no-cache (and, for scores, --recalculate or the settings' "use
+// saved results" off), saved unless --no-save or --no-cache.
+struct SavedScoresUse {
+    std::filesystem::path folder;
+    bool read = true;
+    bool save = true;
+};
+SavedScoresUse saved_scores_use(const ProfileArguments& profile, const Settings& settings);
+
+// The JSON's "profile" section: where the settings came from, the app's own
+// folder, the options left out that the settings filled in
+// (`from_settings`), and the saved scores' folder and use.
+nlohmann::ordered_json profile_json(const ChosenSettings& chosen, const SavedScoresUse& saved,
+                                    const std::vector<std::string>& from_settings);
 
 // A file's name, without its folder, as the reports show it.
 std::string name_of(const std::filesystem::path& path);
@@ -81,18 +122,61 @@ class Progress {
     using Clock = std::chrono::steady_clock;
 
 public:
-    explicit Progress(bool quiet) : quiet_(quiet), redraw_(platform::is_terminal(platform::Stream::error)) {}
+    // With `jsonl` (--progress jsonl), everything is written as events, a
+    // JSON object a line (event()), -q or not: for a program to read.
+    explicit Progress(bool quiet, bool jsonl = false)
+        : quiet_(quiet && !jsonl),
+          redraw_(!jsonl && platform::is_terminal(platform::Stream::error)),
+          jsonl_(jsonl),
+          began_(Clock::now()) {}
     ~Progress() { stop_ticking(); }
+
+    bool jsonl() const { return jsonl_; }
+
+    // --progress jsonl: writes `event` as a line, with "seconds" from the
+    // start of the command added after its "event".
+    void event(nlohmann::ordered_json event) {
+        const std::lock_guard lock(mutex_);
+        write_event(std::move(event));
+    }
+
+    // --progress jsonl: names job `index` in its events from now on
+    // (`who`'s keys are added to them: its video's path...).
+    void name_job(std::size_t index, nlohmann::ordered_json who) {
+        const std::lock_guard lock(mutex_);
+        jobs_[index] = std::move(who);
+    }
+
+    // --progress jsonl: `event`, of job `index`, at most once a second for
+    // that job: its newest figures. An event of a job that ended is not sent.
+    void job_event(std::size_t index, nlohmann::ordered_json event) {
+        const std::lock_guard lock(mutex_);
+        const Clock::time_point now = Clock::now();
+        const auto last = last_event_.find(index);
+        if (ended_.contains(index) || (last != last_event_.end() && now - last->second < redraw_every_)) {
+            return;
+        }
+        last_event_[index] = now;
+        write_event(with_job(index, std::move(event)));
+    }
 
     // Writes a line that stays.
     void message(const std::string& text) {
         const std::lock_guard lock(mutex_);
+        if (jsonl_) {
+            write_event({{"event", "message"}, {"text", text}});
+            return;
+        }
         write(text);
     }
 
     // Writes a line that stays, with -q too: a failure the user must see.
     void problem(const std::string& text) {
         const std::lock_guard lock(mutex_);
+        if (jsonl_) {
+            write_event({{"event", "problem"}, {"text", text}});
+            return;
+        }
         if (quiet_ || !redraw_) {
             platform::write_text(platform::Stream::error, text + "\n");
             return;
@@ -112,7 +196,7 @@ public:
     // Shows `text`, the line of the video of job `index`; `shape` is what it
     // says apart from its figures (line_shape).
     void job(std::size_t index, const std::string& text, const LineShape& shape) {
-        if (quiet_) {
+        if (quiet_ || jsonl_) {  // (jsonl: job_event)
             return;
         }
         const std::lock_guard lock(mutex_);
@@ -140,8 +224,21 @@ public:
     // has ended: its line is not drawn again. Elsewhere than on a terminal,
     // not when it is the video's last line written (a short video's only
     // progress line can be its final count).
-    void finished(std::size_t index, const std::string& text) {
+    // With --progress jsonl, a "video_done" event with `status` ("done",
+    // "partial", "failed", "cancelled", "timed_out") where given, and `text`.
+    void finished(std::size_t index, const std::string& text, const char* status = nullptr) {
         const std::lock_guard lock(mutex_);
+        if (jsonl_) {
+            nlohmann::ordered_json event{{"event", "video_done"}};
+            if (status != nullptr) {
+                event["status"] = status;
+            }
+            event["text"] = text;
+            last_event_.erase(index);
+            ended_.insert(index);
+            write_event(with_job(index, std::move(event)));
+            return;
+        }
         lines_.erase(index);
         if (shown_index_ == index) {
             platform::write_text(platform::Stream::error, wipe());
@@ -238,6 +335,38 @@ private:
         platform::write_text(platform::Stream::error, wipe() + text + "\n" + shown_);
     }
 
+    // --progress jsonl: `event` with the seconds since the command started
+    // after its "event", written as a line.
+    void write_event(nlohmann::ordered_json event) {
+        nlohmann::ordered_json timed;
+        for (auto item = event.begin(); item != event.end(); ++item) {
+            timed[item.key()] = item.value();
+            if (item.key() == "event") {
+                timed["seconds"] = std::round(std::chrono::duration<double>(Clock::now() - began_).count() * 1000) /
+                                   1000;
+            }
+        }
+        platform::write_text(platform::Stream::error,
+                             timed.dump(-1, ' ', false, nlohmann::ordered_json::error_handler_t::replace) + "\n");
+    }
+
+    // `event` with "job" and job `index`'s keys (name_job) after its "event".
+    nlohmann::ordered_json with_job(std::size_t index, nlohmann::ordered_json event) const {
+        nlohmann::ordered_json named;
+        std::size_t at = 0;
+        const auto who = jobs_.find(index);
+        for (auto item = event.begin(); item != event.end(); ++item, ++at) {
+            if (at == 1) {
+                named["job"] = index;
+                if (who != jobs_.end()) {
+                    named.update(who->second);
+                }
+            }
+            named[item.key()] = item.value();
+        }
+        return named;
+    }
+
     // What wipes the line being redrawn, leaving the cursor at its start.
     std::string wipe() const { return "\r" + std::string(python_length(shown_), ' ') + "\r"; }
 
@@ -245,6 +374,13 @@ private:
     static constexpr std::chrono::seconds write_every_{10};
     const bool quiet_;
     const bool redraw_;
+    const bool jsonl_;
+    const Clock::time_point began_;
+    // --progress jsonl: each job's keys (name_job), when each last had an
+    // event (job_event), and those that ended.
+    std::map<std::size_t, nlohmann::ordered_json> jobs_;
+    std::map<std::size_t, Clock::time_point> last_event_;
+    std::set<std::size_t> ended_;
     std::mutex mutex_;
     // On a terminal: each running video's line, the one being redrawn, and
     // the thread that draws new figures once a second.

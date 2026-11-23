@@ -39,7 +39,7 @@ inline constexpr int metric_cache_format_version = 2;
 inline constexpr int black_bars_rule_version = 3;
 
 // The folder the scores are saved in unless Settings name another:
-// .videometricslab/results_cache in the user's home.
+// results_cache in app_data_folder() (settings.h).
 std::filesystem::path default_cache_dir();
 
 // How the saved scores recognise a reference whose path changed: given a

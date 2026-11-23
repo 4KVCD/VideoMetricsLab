@@ -6,6 +6,7 @@
 #include <chrono>
 #include <ctime>
 #include <condition_variable>
+#include <cstdio>
 #include <fstream>
 #include <functional>
 #include <future>
@@ -26,6 +27,7 @@
 #include "file_names.h"
 #include "notify.h"
 #include "report.h"
+#include "watch.h"
 #include "weak_report.h"
 #include "vml/app_log.h"
 #include "vml/append.h"
@@ -680,17 +682,182 @@ std::optional<std::string> gpu_not_yet(const std::vector<MetricTask>& tasks) {
 
 // ------------------------------------------------------------------- the run
 
+// --timeout and --video-timeout, as the run goes: a thread that checks the
+// deadlines (watch.h) ten times a second, and cancels the run, or the video
+// whose run is due, when one is. With --video-timeout each job runs on a
+// cancel token of its own (token), cancelled with its video's deadline or
+// with the run. Nothing runs without either option.
+class RunWatch {
+    using Clock = std::chrono::steady_clock;
+
+public:
+    RunWatch(const CompareArguments& arguments, CancelToken cancel, std::shared_ptr<Progress> progress,
+             std::shared_ptr<std::atomic<bool>> running)
+        : timeout_(arguments.timeout),
+          video_timeout_(arguments.video_timeout),
+          cancel_(std::move(cancel)),
+          progress_(std::move(progress)),
+          running_(std::move(running)),
+          began_(Clock::now()),
+          deadlines_(0.0, timeout_ ? std::optional<double>(static_cast<double>(*timeout_)) : std::nullopt,
+                     video_timeout_ ? std::optional<double>(static_cast<double>(*video_timeout_)) : std::nullopt) {
+        if (timeout_ || video_timeout_) {
+            thread_ = std::thread([this] { watch(); });
+        }
+    }
+    ~RunWatch() {
+        {
+            const std::lock_guard lock(mutex_);
+            stopping_ = true;
+        }
+        woken_.notify_all();
+        if (thread_.joinable()) {
+            thread_.join();
+        }
+    }
+    RunWatch(const RunWatch&) = delete;
+    RunWatch& operator=(const RunWatch&) = delete;
+
+    // Before the run: a token for each of its `count` jobs, with --video-timeout.
+    void jobs(std::size_t count) {
+        const std::lock_guard lock(mutex_);
+        if (video_timeout_) {
+            tokens_ = separate_tokens(count);
+            timed_out_jobs_.assign(count, false);
+        }
+    }
+
+    // What job `index` runs on: its own token, else the run's.
+    const CancelToken& token(std::size_t index, const CancelToken& run) const {
+        const std::lock_guard lock(mutex_);
+        return index < tokens_.size() ? tokens_[index] : run;
+    }
+
+    void started(std::size_t index, const std::string& label) {
+        const std::lock_guard lock(mutex_);
+        labels_[index] = label;
+        deadlines_.started(index, seconds());
+    }
+    void ended(std::size_t index) {
+        const std::lock_guard lock(mutex_);
+        deadlines_.ended(index);
+    }
+
+    // Whether --timeout cancelled the run; whether --video-timeout stopped job `index`.
+    bool timed_out() const { return timed_out_; }
+    bool timed_out(std::size_t index) const {
+        const std::lock_guard lock(mutex_);
+        return index < timed_out_jobs_.size() && timed_out_jobs_[index];
+    }
+    bool any_job_timed_out() const {
+        const std::lock_guard lock(mutex_);
+        return std::find(timed_out_jobs_.begin(), timed_out_jobs_.end(), true) != timed_out_jobs_.end();
+    }
+    std::optional<long long> video_timeout() const { return video_timeout_; }
+
+private:
+    double seconds() const { return std::chrono::duration<double>(Clock::now() - began_).count(); }
+
+    void watch() {
+        std::unique_lock lock(mutex_);
+        bool run_cancel_passed_on = false;
+        while (!woken_.wait_for(lock, std::chrono::milliseconds(100), [this] { return stopping_; })) {
+            const Deadlines::Due due = deadlines_.due(seconds());
+            if (due.run) {
+                timed_out_ = true;
+                if (!*running_) {
+                    // Before or after the run, as Ctrl+C then: the command ends at once.
+                    progress_->problem("Timed out after --timeout's " + std::to_string(*timeout_) + " s");
+                    platform::end_process_now(exit_timeout);
+                }
+                progress_->message("Timed out after --timeout's " + std::to_string(*timeout_) + " s: cancelling...");
+                app_log::write(app_log::Level::info, "vml.job_runner", "Run: cancel requested (--timeout)");
+                cancel_.cancel();
+                stop_gpu_probes();
+            }
+            for (const std::size_t index : due.jobs) {
+                timed_out_jobs_[index] = true;
+                progress_->finished(index,
+                                    labels_[index] + ": timed out after --video-timeout's " +
+                                        std::to_string(*video_timeout_) + " s, stopped",
+                                    "timed_out");
+                tokens_[index].cancel();
+            }
+            if (!run_cancel_passed_on && cancel_.cancelled()) {
+                run_cancel_passed_on = true;  // Ctrl+C or --timeout: every job's token too
+                for (CancelToken& token : tokens_) {
+                    token.cancel();
+                }
+            }
+        }
+    }
+
+    const std::optional<long long> timeout_;
+    const std::optional<long long> video_timeout_;
+    CancelToken cancel_;
+    const std::shared_ptr<Progress> progress_;
+    const std::shared_ptr<std::atomic<bool>> running_;
+    const Clock::time_point began_;
+    mutable std::mutex mutex_;
+    std::condition_variable woken_;
+    bool stopping_ = false;
+    Deadlines deadlines_;
+    std::vector<CancelToken> tokens_;
+    std::vector<bool> timed_out_jobs_;
+    std::map<std::size_t, std::string> labels_;
+    std::atomic<bool> timed_out_ = false;
+    std::thread thread_;  // last: it starts once the rest is made
+};
+
+// Each video that --video-timeout stopped, as the results say it: what it
+// had not finished failed with the code timed_out, where the run would say
+// only that it was cancelled.
+void say_timed_out_videos(const std::vector<TestVideo*>& targets, const RunWatch& watch) {
+    if (!watch.video_timeout()) {
+        return;
+    }
+    const std::string why =
+        "its run took more than --video-timeout's " + std::to_string(*watch.video_timeout()) + " s, and was stopped";
+    for (std::size_t index = 0; index < targets.size(); ++index) {
+        if (!watch.timed_out(index)) {
+            continue;
+        }
+        TestVideo& video = *targets[index];
+        if (!video.result) {
+            video.error = why;
+            video.error_code = codes::timed_out;
+        }
+        std::vector<std::pair<std::string, std::string>> failures;
+        for (const std::string& key : video.metrics) {
+            if (!video.result || !video.result->has_metric(key)) {
+                failures.emplace_back(key, why);
+                video.failure_codes[key] = codes::timed_out;
+            }
+        }
+        video.failures = std::move(failures);
+        if (video.facts) {
+            for (auto& [key, outcome] : video.facts->metrics) {
+                if (outcome.status == metric_failed || outcome.status == metric_cancelled) {
+                    outcome = MetricOutcome{metric_failed, why, codes::timed_out};
+                }
+            }
+        }
+    }
+}
+
 // Runs the jobs (job_runner.h), keeping each video's result, or why it or
 // some of its metrics failed, in its TestVideo (`targets` holds each job's),
-// saving it in the saved scores under `cache_folder` unless the video's
-// save_scores is false, and showing the run's progress (Progress). A video
+// saving it in the saved scores under `cache_folder` (none: nothing is saved,
+// --no-save) unless the video's save_scores is false, and showing the run's
+// progress (Progress). A video
 // whose run scored fewer frame pairs than its length holds has both videos'
 // frames counted (frame_pairing.h): where they state them, and with
 // `read_whole_files` by reading those that do not. A port of the Python
 // app's command line's cli.run.
 void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targets, const std::vector<VmafJob>& jobs,
-         int parallel, bool gpu_metrics_together, bool read_whole_files, const std::filesystem::path& cache_folder,
-         Progress& progress, const CancelToken& cancel) {
+         int parallel, bool gpu_metrics_together, bool read_whole_files,
+         const std::optional<std::filesystem::path>& cache_folder, Progress& progress, const CancelToken& cancel,
+         RunWatch& watch) {
     // The line being redrawn is drawn with new figures once a second while
     // the run lasts, and ends with the run, however the run ends.
     progress.start();
@@ -706,12 +873,12 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
     const auto keep = [&](std::size_t index, const ComparisonResult& result) {
         TestVideo& target = video(index);
         target.result = result;
-        if (!target.save_scores) {
+        if (!target.save_scores || !cache_folder) {
             return;
         }
         try {
             const std::lock_guard lock(saving);
-            store_result(cache_folder, result.source, target.path, target.request.recipe, result,
+            store_result(*cache_folder, result.source, target.path, target.request.recipe, result,
                          platform::path_text(target.path.stem()), target.request.metrics);
         } catch (const std::exception& error) {
             progress.message(target.label() + ": the scores could not be saved (" + error.what() + ")");
@@ -734,14 +901,46 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
         }
         const std::lock_guard lock(noting);
         if (video(index).note(codes::gpu_fallback, note)) {
-            progress.message(video(index).label() + ": " + note);
+            if (progress.jsonl()) {
+                progress.event({{"event", "note"},
+                                {"code", codes::gpu_fallback},
+                                {"text", note},
+                                {"videos", {platform::path_text(video(index).path)}}});
+            } else {
+                progress.message(video(index).label() + ": " + note);
+            }
         }
     };
     RunEvents events;
-    events.job_started = [&](std::size_t index) { progress.message(video(index).label() + ": started"); };
+    watch.jobs(jobs.size());
+    events.job_started = [&](std::size_t index) {
+        watch.started(index, video(index).label());
+        if (progress.jsonl()) {
+            nlohmann::ordered_json who{{"path", platform::path_text(video(index).path)}};
+            if (video(index).for_display_only) {
+                who["cvvdp_display"] = video(index).display;
+            }
+            progress.name_job(index, who);
+            progress.event({{"event", "video_started"}, {"job", index}, {"path", who["path"]}});
+            return;
+        }
+        progress.message(video(index).label() + ": started");
+    };
     events.task_progress = [&](std::size_t index, const std::vector<TaskSnapshot>& tasks) {
         for (const TaskSnapshot& task : tasks) {
             note_fallback(index, task.step);
+        }
+        if (progress.jsonl()) {
+            nlohmann::ordered_json listed = nlohmann::ordered_json::array();
+            for (const TaskSnapshot& task : tasks) {
+                listed.push_back({{"metrics", task.metric_keys},
+                                  {"state", task.state},
+                                  {"done", task.current},
+                                  {"total", task.total},
+                                  {"fps", task.fps}});
+            }
+            progress.job_event(index, {{"event", "progress"}, {"tasks", std::move(listed)}});
+            return;
         }
         std::string line;
         for (const std::string& part : metric_line(tasks, false).parts) {
@@ -762,7 +961,12 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
         const std::vector<std::string>& asked = video(index).metrics;
         const bool whole = std::all_of(asked.begin(), asked.end(),
                                        [&result](const std::string& key) { return result.has_metric(key); });
-        progress.finished(index, video(index).label() + (whole || !cancel.cancelled() ? ": done" : ": cancelled"));
+        watch.ended(index);
+        if (watch.timed_out(index)) {
+            return;  // said as it was stopped
+        }
+        const bool done = whole || !cancel.cancelled();
+        progress.finished(index, video(index).label() + (done ? ": done" : ": cancelled"), done ? "done" : "cancelled");
     };
     events.job_facts = [&](std::size_t index, const RunFacts& facts) {
         video(index).facts = facts;
@@ -773,42 +977,55 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
     events.job_failed = [&](std::size_t index, const std::string& message, const std::string& /*stderr_tail*/) {
         video(index).error = message;
         video(index).error_code = codes::run_failed;
-        progress.finished(index, video(index).label() + ": FAILED: " + message);
+        watch.ended(index);
+        if (!watch.timed_out(index)) {
+            progress.finished(index, video(index).label() + ": FAILED: " + message, "failed");
+        }
     };
     events.job_partially_failed = [&](std::size_t index, const ComparisonResult& result, const std::string& message,
                                       const std::string& /*stderr_tail*/, const MetricFailures& failures) {
         keep(index, result);
         TestVideo& target = video(index);
         append(target.failures, failures.empty() ? MetricFailures{{"", message}} : failures);
-        progress.finished(index, target.label() + ": some metrics FAILED: " + message);
+        watch.ended(index);
+        if (!watch.timed_out(index)) {
+            progress.finished(index, target.label() + ": some metrics FAILED: " + message, "partial");
+        }
     };
     run_jobs(
         jobs, parallel, events,
-        [&environment](const VmafJob& job, const VmafOptions& options, const ProgressCallback& on_progress,
-                       const StatusCallback& on_status, const CancelToken& token) {
-            return run_vmaf(environment, job.source_info, job.distorted_info, options, on_progress, on_status, token,
+        // Each job on its own token with --video-timeout (RunWatch): the
+        // runner is given the job of `jobs` itself, so its place is its index.
+        [&environment, &jobs, &watch](const VmafJob& job, const VmafOptions& options,
+                                      const ProgressCallback& on_progress, const StatusCallback& on_status,
+                                      const CancelToken& token) {
+            const CancelToken& own = watch.token(static_cast<std::size_t>(&job - jobs.data()), token);
+            return run_vmaf(environment, job.source_info, job.distorted_info, options, on_progress, on_status, own,
                             job.result_distorted_path);
         },
-        [&environment](const VmafJob& job, const std::vector<std::string>& keys, bool together,
-                       int concurrent_cpu_tasks, const PerceptualHooks& hooks, const CancelToken& token) {
+        [&environment, &jobs, &watch](const VmafJob& job, const std::vector<std::string>& keys, bool together,
+                                      int concurrent_cpu_tasks, const PerceptualHooks& hooks,
+                                      const CancelToken& token) {
             const PerceptualRequest request{environment,        job.source_info,         job.distorted_info,
                                             job.options,        job.perceptual_backends, job.cvvdp,
                                             concurrent_cpu_tasks};
-            return run_perceptual_task(request, keys, together, hooks, token);
+            return run_perceptual_task(request, keys, together, hooks,
+                                       watch.token(static_cast<std::size_t>(&job - jobs.data()), token));
         },
         gpu_metrics_together, environment.cores, cancel);
 }
 
 
 // Adds the job that calculates what `video` asks for, less what is saved
-// under `cache_folder` (when `use_saved`); with everything saved, takes the
+// under `cache_folder` (when `use_saved`; a saved comparison's files are
+// recorded there when `save`); with everything saved, takes the
 // saved result and adds none (the Python app's cli._queue). `options` are
 // the run's, with VMAF's model resolved; `share_decode` is plan_tasks's.
 // Returns what this version cannot do yet of the job's VMAF on the GPU
 // (gpu_not_yet), or nothing.
 std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, VmafOptions options,
                                  const PerceptualBackends& backends, const CvvdpSettings& cvvdp, bool use_saved,
-                                 const std::filesystem::path& cache_folder, std::vector<VmafJob>& jobs,
+                                 bool save, const std::filesystem::path& cache_folder, std::vector<VmafJob>& jobs,
                                  bool share_decode = false) {
     // The request the window makes for a row: what the saved scores are
     // looked up and saved under, so that the two apps find each other's.
@@ -839,8 +1056,10 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
             saved->source_info.take_bit_rate(source);
             saved->distorted_info.take_bit_rate(*video.info);
             // Saved by an older version: its files recorded now, so that it
-            // is found when they move.
-            record_saved_files(cache_folder, source.path, video.path, video.request.recipe);
+            // is found when they move (not with --no-save).
+            if (save) {
+                record_saved_files(cache_folder, source.path, video.path, video.request.recipe);
+            }
         }
     }
     // The saved scores the run keeps, by the window's rule.
@@ -1065,29 +1284,57 @@ namespace {
 // first: the checks and probes before the run can take a while (60 s for
 // ffprobe on a slow share). The handler outlives the command, so it shares
 // what it uses.
-void cancel_on_interrupt(CancelToken cancel, const std::shared_ptr<Progress>& progress,
-                         const std::shared_ptr<std::atomic<bool>>& running) {
+// Returns the same, for other ends of the run (--cancel-on-stdin-eof),
+// taking what to say ("Cancelling..." for Ctrl+C).
+std::function<void(const std::string&)> cancel_on_interrupt(CancelToken cancel,
+                                                            const std::shared_ptr<Progress>& progress,
+                                                            const std::shared_ptr<std::atomic<bool>>& running) {
     auto asked = std::make_shared<std::atomic<bool>>(false);
-    platform::on_interrupt([cancel, progress, running, asked]() mutable {
+    const std::function<void(const std::string&)> interrupt = [cancel, progress, running,
+                                                               asked](const std::string& saying) mutable {
         if (!*running || asked->exchange(true)) {
             platform::end_process_now(exit_cancelled);
         }
-        progress->message("Cancelling...");
+        progress->message(saying);
         app_log::write(app_log::Level::info, "vml.job_runner", "Run: cancel requested");
         cancel.cancel();
         stop_gpu_probes();
-    });
+    };
+    platform::on_interrupt([interrupt] { interrupt("Cancelling..."); });
+    return interrupt;
+}
+
+// --cancel-on-stdin-eof: standard input read to its end on a thread of its
+// own, which then cancels the run as Ctrl+C does (`interrupt`). Whatever is
+// written to it is read and dropped.
+void cancel_at_end_of_input(const std::function<void(const std::string&)>& interrupt) {
+    std::thread([interrupt] {
+        char buffer[4096];
+        while (std::fread(buffer, 1, sizeof buffer, stdin) > 0) {
+        }
+        interrupt("Standard input ended: cancelling...");
+    }).detach();
 }
 
 // Sets up where the black bars found are stored, as `settings` say. Returns
 // the saved scores' folder.
-std::filesystem::path apply_settings(const Settings& settings) {
-    const std::filesystem::path cache_folder = settings.cache_dir_path().value_or(default_cache_dir());
-    set_crop_store([cache_folder] {
-        std::filesystem::create_directories(cache_folder);
-        return cache_folder / black_bars_file;
-    });
-    return cache_folder;
+// The black bars found, kept with the saved scores as they are used:
+// read and written, read only (--no-save), or neither (--no-cache).
+void use_crop_store(const SavedScoresUse& saved) {
+    if (!saved.read) {
+        set_crop_store({});
+        return;
+    }
+    const std::filesystem::path folder = saved.folder;
+    const bool save = saved.save;
+    set_crop_store(
+        [folder, save] {
+            if (save) {
+                std::filesystem::create_directories(folder);
+            }
+            return folder / black_bars_file;
+        },
+        save);
 }
 
 // Whether looking for `video`'s film grain failed (scan_stream_start).
@@ -1104,7 +1351,7 @@ class ComparisonPlanner {
 public:
     ComparisonPlanner(const CompareArguments& arguments, const Settings& settings, const VideoInfo& source,
                       const std::vector<CvvdpDisplayChoice>& displays, std::vector<std::string> asked,
-                      std::filesystem::path cache_folder)
+                      const SavedScoresUse& saved)
         : arguments_(arguments),
           settings_(settings),
           source_(source),
@@ -1113,8 +1360,9 @@ public:
           backends_(perceptual_backends(arguments)),
           // The saved scores know a video by its file, not by the colours it
           // was read with, so --colour scores are neither read nor saved.
-          use_saved_(!arguments.recalculate && settings.use_cache && !arguments.colour),
-          cache_folder_(std::move(cache_folder)) {
+          use_saved_(saved.read && !arguments.colour),
+          save_(saved.save),
+          cache_folder_(saved.folder) {
         note_argument_use(source);
     }
 
@@ -1159,6 +1407,7 @@ private:
     const std::vector<std::string> asked_;
     const PerceptualBackends backends_;
     const bool use_saved_;
+    const bool save_;  // scores and records saved (not with --no-save or --no-cache)
     const std::filesystem::path cache_folder_;
     // Each job's video: its index, and for CVVDP on a further display, which.
     std::vector<std::pair<std::size_t, std::optional<std::size_t>>> job_videos_;
@@ -1429,8 +1678,8 @@ std::optional<std::string> ComparisonPlanner::queue_jobs(TestVideo& video, const
     }
     const std::size_t queued = jobs.size();
     if (std::optional<std::string> missing = queue(video, video.source, std::move(options), backends_,
-                                                   display.second, reads_saved(video), cache_folder_, jobs,
-                                                   share_decode)) {
+                                                   display.second, reads_saved(video), save_, cache_folder_,
+                                                   jobs, share_decode)) {
         return missing;
     }
     if (jobs.size() > queued) {
@@ -1456,7 +1705,7 @@ void ComparisonPlanner::queue_other_displays(TestVideo& video) {
         other.save_scores = video.save_scores;
         other.options = row_options(arguments_, settings_, other.metrics);
         const std::size_t before = jobs.size();
-        queue(other, other.source, other.options, backends_, displays_[display].second, reads_saved(other),
+        queue(other, other.source, other.options, backends_, displays_[display].second, reads_saved(other), save_,
               cache_folder_, jobs);
         if (jobs.size() > before) {
             job_videos_.emplace_back(videos.size() - 1, video.other_displays.size() - 1);
@@ -1466,14 +1715,52 @@ void ComparisonPlanner::queue_other_displays(TestVideo& video) {
 
 // What the planning found for each video: why it is not compared, its
 // notes, or that every score is saved.
+// Videos as a note names them: up to three by name, then how many more
+// ("a.mkv, b.mkv, c.mkv and 7 more").
+std::string videos_named(const std::vector<const TestVideo*>& videos) {
+    constexpr std::size_t named = 3;
+    std::string text;
+    for (std::size_t v = 0; v < videos.size() && v < named; ++v) {
+        text += (v == 0 ? "" : v + 1 == videos.size() ? " and " : ", ") + videos[v]->name();
+    }
+    if (videos.size() > named) {
+        text += " and " + std::to_string(videos.size() - named) + " more";
+    }
+    return text;
+}
+
 void report_plans(const std::vector<TestVideo>& videos, Progress& progress) {
+    // Each note once, with the videos it is of, in the order first said: the
+    // same note of ten videos (their colour tags, say) is one line.
+    std::vector<std::pair<std::string, std::string>> notes;  // text and code
+    std::map<std::string, std::vector<const TestVideo*>> of;
+    for (const TestVideo& video : videos) {
+        for (std::size_t n = 0; n < video.notes.size(); ++n) {
+            std::vector<const TestVideo*>& listed = of[video.notes[n]];
+            if (listed.empty()) {
+                notes.emplace_back(video.notes[n], n < video.note_codes.size() ? video.note_codes[n] : "");
+            }
+            listed.push_back(&video);
+        }
+    }
     for (const TestVideo& video : videos) {
         if (!video.error.empty()) {
             progress.message(video.name() + ": not compared: " + video.error);
         }
-        for (const std::string& note : video.notes) {
-            progress.message(video.name() + ": " + note);
+    }
+    for (const auto& [text, code] : notes) {
+        const std::vector<const TestVideo*>& listed = of[text];
+        if (progress.jsonl()) {
+            nlohmann::ordered_json paths = nlohmann::ordered_json::array();
+            for (const TestVideo* video : listed) {
+                paths.push_back(platform::path_text(video->path));
+            }
+            progress.event({{"event", "note"}, {"code", code}, {"text", text}, {"videos", std::move(paths)}});
+        } else {
+            progress.message(videos_named(listed) + ": " + text);
         }
+    }
+    for (const TestVideo& video : videos) {
         if (video.from_cache) {
             progress.message(video.name() + ": every score is saved; nothing to calculate");
         }
@@ -1862,6 +2149,9 @@ nlohmann::ordered_json comparison_results(const CompareArguments& arguments, Com
     if (arguments.run_dir) {
         written = write_run_files(videos, python_path(*arguments.run_dir), message, failed) && written;
     }
+    if (arguments.frames_json) {
+        written = write_csvs(videos, python_path(*arguments.frames_json), message, failed, true) && written;
+    }
     if (arguments.csv) {
         const std::filesystem::path folder = python_path(*arguments.csv);
         written = write_csvs(videos, folder, message, failed) && written;
@@ -1872,6 +2162,24 @@ nlohmann::ordered_json comparison_results(const CompareArguments& arguments, Com
     const SegmentRules rules = segment_rules(arguments);
     if (!rules.conditions.empty() && arguments.segments_dir) {
         written = write_segment_files(videos, rules, python_path(*arguments.segments_dir), message, failed) && written;
+    }
+    // The quality gate (--require, --fail-on-segments): each video's checks,
+    // which its JSON and the text after the tables give.
+    if (!arguments.require.empty() || arguments.fail_on_segments) {
+        const bool on_segments = arguments.fail_on_segments && !rules.conditions.empty();
+        for (std::size_t v = 0; v < videos.size(); ++v) {
+            TestVideo& video = videos[v];
+            video.checks = gate_checks(video, summaries[v], arguments.require, on_segments ? &rules : nullptr);
+            if (!gate_passed(video.checks)) {
+                std::string failing;
+                for (const GateCheck& check : video.checks) {
+                    if (check.passed && !*check.passed) {
+                        failing += (failing.empty() ? "" : ", ") + check.rule;
+                    }
+                }
+                progress.message(video.name() + ": quality gate FAILED: " + failing);
+            }
+        }
     }
     // After the CSV files: it says where each one went.
     nlohmann::ordered_json document =
@@ -1890,6 +2198,9 @@ nlohmann::ordered_json comparison_results(const CompareArguments& arguments, Com
     if (!rules.conditions.empty()) {
         tables += "\n" + segments_text(videos, rules, shown_segments);
     }
+    if (const std::string gates = gate_text(videos); !gates.empty()) {
+        tables += "\n" + gates;
+    }
     return document;
 }
 
@@ -1899,7 +2210,9 @@ nlohmann::ordered_json comparison_results(const CompareArguments& arguments, Com
 // With --batch, each reference's in turn, and the JSON a list of them. False
 // when a file could not be written.
 bool write_results(const CompareArguments& arguments, const Comparisons& comparisons, bool cancelled,
-                   const RunRecord& record, const NameFields& fields, Progress& progress) {
+                   const std::optional<bool>& timed_out, const RunRecord& record,
+                   const nlohmann::ordered_json& profile, const NameFields& fields,
+                   Progress& progress) {
     bool written = true;
     std::string tables;
     nlohmann::ordered_json batch = nlohmann::ordered_json::array();
@@ -1912,10 +2225,15 @@ bool write_results(const CompareArguments& arguments, const Comparisons& compari
                 {{"reference", reference}, {"error", comparison->error}, {"error_code", comparison->error_code}});
             if (!arguments.batch) {
                 document = error_document(reference, comparison->error, comparison->error_code, &record);
+                document["profile"] = profile;
             }
             continue;
         }
         document = comparison_results(arguments, *comparison, cancelled, record, fields, tables, written, progress);
+        document["profile"] = profile;
+        if (timed_out) {
+            document["timed_out"] = *timed_out;  // --timeout or --video-timeout given
+        }
         batch.push_back(document);
     }
     if (arguments.batch) {
@@ -2062,7 +2380,7 @@ bool start_log_file(const std::filesystem::path& file, const std::vector<std::st
 std::optional<int> plan_comparison(Comparison& comparison, std::size_t index, VideoReads& reads,
                                    const CompareArguments& arguments, const Settings& settings,
                                    const ToolsStatus& tools, const std::vector<CvvdpDisplayChoice>& displays,
-                                   const std::vector<std::string>& asked, const std::filesystem::path& cache_folder,
+                                   const std::vector<std::string>& asked, const SavedScoresUse& saved,
                                    Progress& progress) {
     try {
         VideoRead read = reads.reference(index);
@@ -2078,7 +2396,7 @@ std::optional<int> plan_comparison(Comparison& comparison, std::size_t index, Vi
         return std::nullopt;
     }
     ComparisonPlanner& planner =
-        comparison.planner.emplace(arguments, settings, comparison.source, displays, asked, cache_folder);
+        comparison.planner.emplace(arguments, settings, comparison.source, displays, asked, saved);
     for (std::size_t test = 0; test < comparison.tests.size(); ++test) {
         const auto read = [&reads, index, test] { return reads.test(index, test); };
         if (const std::optional<std::string> missing = planner.plan(comparison.tests[test], read, tools.ffmpeg.path)) {
@@ -2105,17 +2423,48 @@ std::optional<int> plan_comparison(Comparison& comparison, std::size_t index, Vi
     return std::nullopt;
 }
 
-// --json: the error document (error_document) of a run that read nothing,
-// its --batch list not read; not where the path has a field that needs the
-// videos, which name_paths refuses. Written as the results would be: to
-// standard output for "-".
-void write_error_json(const CompareArguments& given, const NameFields& fields, const std::string& error,
-                      const std::string& code) {
+}  // namespace
+
+std::vector<std::string> options_from_settings(const CompareArguments& arguments, bool gpu_from_settings) {
+    std::vector<std::string> taken;
+    const auto left_out = [&taken](bool given, const char* option) {
+        if (!given) {
+            taken.emplace_back(option);
+        }
+    };
+    left_out(arguments.metrics.has_value(), "--metrics");
+    left_out(arguments.vmaf_on || arguments.cpu, "--vmaf-on");
+    left_out(arguments.vship.has_value(), "--vship");
+    left_out(arguments.vship_pass.has_value(), "--vship-pass");
+    left_out(arguments.film_grain.has_value(), "--film-grain");
+    left_out(!arguments.cvvdp_displays.empty(), "--cvvdp-display");
+    left_out(arguments.gpu_decode || arguments.no_gpu_decode, "--gpu-decode");
+    left_out(arguments.vvc_decoder || arguments.no_gpu_decode, "--vvc-decoder");
+    left_out(!gpu_from_settings, "--gpu");
+    left_out(arguments.parallel.has_value(), "--parallel");
+    left_out(arguments.frame_counts.has_value(), "--frame-counts");
+    left_out(arguments.test_remuxes.has_value(), "--test-remuxes");
+    left_out(arguments.profile.cache_dir || arguments.profile.no_cache, "--cache-dir");
+    if (arguments.segments_saved && !arguments.segments_profile && !arguments.segments_preset) {
+        taken.emplace_back("--segments");  // "saved": the profile in use
+    }
+    if (arguments.notify) {
+        taken.emplace_back("--notify");  // its services and message
+    }
+    return taken;
+}
+
+void write_error_json(const CompareArguments& given, const std::string& error, const std::string& code) {
     CompareArguments arguments = given;
+    const NameFields fields = run_fields(platform::local_time(std::time(nullptr)));
     if (!arguments.json_path || name_paths(arguments, {}, fields)) {
         return;
     }
-    const nlohmann::ordered_json document = error_document(std::nullopt, error, code);
+    const std::optional<std::string> reference =
+        arguments.batch || !arguments.reference
+            ? std::nullopt
+            : std::optional(platform::path_text(absolute_path(python_path(*arguments.reference))));
+    const nlohmann::ordered_json document = error_document(reference, error, code);
     if (*arguments.json_path == "-") {
         print_results(python_json_dumps(document) + "\n");
     } else if (const std::optional<std::string> failure =
@@ -2124,18 +2473,20 @@ void write_error_json(const CompareArguments& given, const NameFields& fields, c
     }
 }
 
-}  // namespace
-
-int compare(const CompareArguments& given) {
+int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gpu_from_settings) {
     // The command's start, for the results' record and the files' names
     const std::chrono::system_clock::time_point start = std::chrono::system_clock::now();
     const std::string started_utc = utc_text(start);
     const NameFields fields = run_fields(platform::local_time(std::chrono::system_clock::to_time_t(start)));
     const Clock::time_point began = Clock::now();
     CancelToken cancel;
-    const auto progress = std::make_shared<Progress>(given.quiet);
+    const auto progress = std::make_shared<Progress>(given.quiet, given.progress == "jsonl");
     const auto running = std::make_shared<std::atomic<bool>>(false);
-    cancel_on_interrupt(cancel, progress, running);
+    const std::function<void(const std::string&)> interrupt = cancel_on_interrupt(cancel, progress, running);
+    if (given.cancel_on_stdin_eof) {
+        cancel_at_end_of_input(interrupt);
+    }
+    RunWatch watch(given, cancel, progress, running);  // --timeout, --video-timeout
     // The test videos, found first (it reads only the file system), so that
     // a wrong command is said before any work.
     std::vector<BatchGroup> groups;  // --batch's rows, which the comparisons point to
@@ -2145,7 +2496,7 @@ int compare(const CompareArguments& given) {
     } catch (const std::runtime_error& error) {
         const std::string why = "--batch: " + std::string(error.what());
         print_error(why);
-        write_error_json(given, fields, why, codes::batch_unreadable);
+        write_error_json(given, why, codes::batch_unreadable);
         return exit_input;
     }
     CompareArguments arguments = given;  // with the fields in its paths replaced
@@ -2172,8 +2523,16 @@ int compare(const CompareArguments& given) {
                     "black bars are detected.");
         return exit_usage;
     }
-    const Settings settings = Settings::load();
-    const std::filesystem::path cache_folder = apply_settings(settings);
+    const Settings& settings = chosen.settings;
+    const SavedScoresUse saved = saved_scores_use(arguments.profile, settings);
+    // Saved scores read unless asked to calculate again (--recalculate, or
+    // the settings' "Reuse a saved result when a video is added again" off);
+    // the black bars found are still read: they are not scores.
+    const bool read_scores = saved.read && !arguments.recalculate && settings.use_cache;
+    use_crop_store(saved);
+    SavedScoresUse scores = saved;  // the scores': read as read_scores says
+    scores.read = read_scores;
+    const std::filesystem::path& cache_folder = saved.folder;
     const ToolsStatus tools = check_tools(settings);
     if (!tools.ok()) {
         print_error(ffmpeg_problem(tools));
@@ -2201,9 +2560,10 @@ int compare(const CompareArguments& given) {
         return exit_usage;
     }
     std::vector<std::string> saved_left_out;  // --segments saved's conditions on metrics not compared
+    std::optional<WeakCondition> saved_fallback;  // the one taken for a profile with none on them
     if (arguments.segments_saved) {
         try {
-            saved_left_out = take_saved_segments(arguments, settings, asked);
+            saved_left_out = take_saved_segments(arguments, settings, asked, &saved_fallback);
         } catch (const std::invalid_argument& error) {
             print_error(error.what());
             return exit_usage;
@@ -2212,6 +2572,12 @@ int compare(const CompareArguments& given) {
     if (const std::optional<std::string> refused = segments_refusal(arguments.segments, asked)) {
         print_error(*refused);
         return exit_usage;
+    }
+    for (const GateRule& rule : arguments.require) {
+        if (std::find(asked.begin(), asked.end(), rule.metric) == asked.end()) {
+            print_error("--require: " + rule.metric + " is not one of the metrics compared (-m)");
+            return exit_usage;
+        }
     }
     if (arguments.vship && !vship_build_bundled(vship_build_from(*arguments.vship))) {
         print_error("--vship " + *arguments.vship + ": " +
@@ -2250,7 +2616,7 @@ int compare(const CompareArguments& given) {
         });
         for (std::size_t index = 0; index < comparisons.size(); ++index) {
             if (const std::optional<int> wrong = plan_comparison(*comparisons[index], index, reads, arguments,
-                                                                 settings, tools, displays, asked, cache_folder,
+                                                                 settings, tools, displays, asked, scores,
                                                                  *progress)) {
                 return *wrong;
             }
@@ -2262,6 +2628,11 @@ int compare(const CompareArguments& given) {
     for (const std::string& condition : saved_left_out) {
         progress->message("note: --segments " + segments_source(arguments) + ": " + condition +
                           " is left out: its metric is not compared (-m)");
+    }
+    if (saved_fallback) {
+        progress->message("note: --segments " + segments_source(arguments) +
+                          ": the profile has no condition on the metrics compared, so " + saved_fallback->text() +
+                          " is taken, as the Worst Frames tab starts (a condition given after it takes its place)");
     }
     // Every comparison's jobs in one run: one start of the GPU's work for all.
     std::vector<VmafJob> jobs;
@@ -2275,6 +2646,9 @@ int compare(const CompareArguments& given) {
         }
     }
 
+    if (progress->jsonl()) {
+        progress->event({{"event", "run_started"}, {"jobs", jobs.size()}});
+    }
     bool cancelled = false;
     if (!jobs.empty()) {
         const Clock::time_point started = Clock::now();
@@ -2295,9 +2669,10 @@ int compare(const CompareArguments& given) {
             run(run_environment(tools, jobs), targets, jobs, arguments.parallel.value_or(settings.parallel_jobs),
                 arguments.vship_pass ? *arguments.vship_pass == "one" : settings.gpu_metrics_together,
                 arguments.frame_counts ? *arguments.frame_counts == "check" : settings.check_frame_counts,
-                cache_folder, *progress, cancel);
+                scores.save ? std::optional(cache_folder) : std::nullopt, *progress, cancel, watch);
         }
         cancelled = cancel.cancelled();
+        say_timed_out_videos(targets, watch);
         *running = false;
         const double seconds = std::chrono::duration<double>(Clock::now() - started).count();
         progress->message(std::string(cancelled ? "Cancelled" : "Finished") + " after " + format_hms(seconds));
@@ -2315,7 +2690,7 @@ int compare(const CompareArguments& given) {
         std::optional<FramesShort>& frames_short = video.result->frames_short;
         frames_short = count_frames_short(*frames_short, video.result->source_info, video.result->distorted_info,
                                           container_frame_counter(tools.ffprobe.path, cancel, read_whole_files));
-        if (video.save_scores && frames_short->counted()) {
+        if (video.save_scores && scores.save && frames_short->counted()) {
             try {
                 store_result(cache_folder, video.result->source, video.path, video.request.recipe, *video.result,
                              platform::path_text(video.path.stem()), video.request.metrics);
@@ -2363,18 +2738,40 @@ int compare(const CompareArguments& given) {
                      0.0,
                      1,
                      this_machine(tools.ffmpeg.path, format_version(tools.ffmpeg.version))};
-    const bool written = write_results(arguments, comparisons, cancelled, record, fields, *progress);
+    const bool timed_out = watch.timed_out() || watch.any_job_timed_out();
+    const bool written = write_results(arguments, comparisons, cancelled,
+                                       arguments.timeout || arguments.video_timeout ? std::optional(timed_out)
+                                                                                    : std::nullopt,
+                                       record,
+                                       profile_json(chosen, scores, options_from_settings(arguments, gpu_from_settings)),
+                                       fields, *progress);
+    // A video below a --require bar, or with a weak segment (--fail-on-segments): its checks are made as the
+    // results are written.
+    bool gate_failed = false;
+    for (const std::unique_ptr<Comparison>& comparison : comparisons) {
+        if (comparison->planner) {
+            for (const TestVideo& video : comparison->planner->videos) {
+                gate_failed = gate_failed || !gate_passed(video.checks);
+            }
+        }
+    }
     if (arguments.notify) {
         notify_of_run(settings, comparisons, cancelled, every_ok, record.wall_seconds.value_or(0.0), *progress);
     }
-    if (test_remuxes && !cancelled) {
+    if (test_remuxes && scores.save && !cancelled) {
         record_test_streams(comparisons, cache_folder, *progress, cancel);  // after the results: nothing waits
     }
-    const int exit_code = cancelled              ? exit_cancelled
-                          : input_unread         ? exit_input
-                          : every_ok && written  ? exit_ok
-                                                 : exit_failed;
+    const int exit_code = cancelled               ? (watch.timed_out() ? exit_timeout : exit_cancelled)
+                          : timed_out             ? exit_timeout
+                          : input_unread          ? exit_input
+                          : !every_ok || !written ? exit_failed
+                          : gate_failed           ? exit_gate_failed
+                                                  : exit_ok;
     app_log::Logger("vml.cli").info("Command line finished: exit code " + std::to_string(exit_code));
+    if (progress->jsonl()) {
+        progress->event(
+            {{"event", "run_done"}, {"exit_code", exit_code}, {"cancelled", cancelled}, {"timed_out", timed_out}});
+    }
     return exit_code;
 }
 

@@ -554,7 +554,7 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
         "PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a "
         "thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation "
         "fails, they are calculated on the CPU instead. HDR VMAF follows this choice too: "
-        "its features on the GPU, its pictures converted on the CPU."));
+        "its features on the GPU, its pictures converted on the GPU where it can (else on the CPU)."));
 #endif
     connect(vmaf_backend_combo, &QComboBox::currentIndexChanged, this, [this] { emit field_edited("vmaf_on_gpu"); });
     form->addRow(app::tr("VMAF compute:"), vmaf_backend_combo);

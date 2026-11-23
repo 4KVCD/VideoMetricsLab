@@ -44,6 +44,7 @@ add_executable(vml_tests
     unit/results_summary_test.cpp
     unit/run_file_test.cpp
     unit/run_line_test.cpp
+    unit/schemas_test.cpp
     unit/settings_test.cpp
     unit/sha256_test.cpp
     unit/stats_test.cpp
@@ -55,6 +56,7 @@ add_executable(vml_tests
     unit/film_grain_scoring_test.cpp
     unit/native_playback_test.cpp
     unit/soundtrack_clock_test.cpp
+    unit/source_limits_test.cpp
     unit/video_playback_test.cpp
     unit/vmaf_hdr_test.cpp
     unit/vmaf_vulkan_test.cpp
@@ -65,7 +67,9 @@ add_executable(vml_tests
 target_link_libraries(vml_tests PRIVATE vml_cli vml_core vml_compile_options vml_miniz nlohmann_json gtest)  # its own main (unit/main.cpp)
 target_include_directories(vml_tests PRIVATE ../../native)  # the decoders' headers the app shares (av2/display_order.h, av2/splot_api.h)
 target_compile_definitions(vml_tests PRIVATE
+    VML_SOURCE_DIR="${PROJECT_SOURCE_DIR}"  # the sources, for source_limits_test.cpp
     VML_REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/reference"
+    VML_SCHEMA_DIR="${PROJECT_SOURCE_DIR}/../docs/schemas"  # the JSON Schemas (schemas_test.cpp)
     VML_TEST_CHILD="$<TARGET_FILE:vml_test_child>"
     VML_TEST_LIBRARY="$<TARGET_FILE:vml_test_library>"
     VML_FAKE_VSHIP="$<TARGET_FILE:vml_fake_vship>"
@@ -132,6 +136,7 @@ if(TARGET vml_app)
         app/frame_compare_test.cpp
         app/graph_panel_test.cpp
         app/worst_frames_tab_test.cpp
+        app/title_bar_test.cpp
         app/i18n_test.cpp
         app/main.cpp
         app/options_panel_test.cpp

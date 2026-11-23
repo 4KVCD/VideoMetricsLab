@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "gates.h"
 #include "vml/video.h"
 #include "vml/weak_frames.h"
 
@@ -16,19 +17,35 @@ namespace vml::cli {
 
 inline constexpr const char* program = "VideoMetricsLab-cli";
 // The exit codes, as the user guide's command line section lists them. When
-// more than one applies: cancelled, then an input not read, then a failure.
+// more than one applies: cancelled, then timed out, then an input not read,
+// then a failure, then a quality gate.
 inline constexpr int exit_ok = 0;
 inline constexpr int exit_failed = 1;  // a video or a metric failed, or a file could not be written
 inline constexpr int exit_usage = 2;   // a wrong command: nothing was read or run
-// Every score asked for is there, but a quality gate (to come) is not met.
+// Every score asked for is there, but a quality gate (--require,
+// --fail-on-segments: gates.h) is not met.
 inline constexpr int exit_gate_failed = 3;
 // An input could not be read: the reference, a test video, a pattern that
 // finds no file, the --batch list, bdrate's files; the others are still done.
 inline constexpr int exit_input = 4;
+// --timeout or --video-timeout stopped the run, or a video's (timeout's own code).
+inline constexpr int exit_timeout = 124;
 inline constexpr int exit_cancelled = 130;
+
+// Which settings a command takes and where its saved scores are: options of
+// compare, bitrate and devices (the cache ones not of devices).
+struct ProfileArguments {
+    // --settings: the settings file read in place of the profile's, never written.
+    std::optional<std::string> settings_file;
+    bool no_settings = false;  // --no-settings: every setting at its default (Settings::defaults)
+    std::optional<std::string> cache_dir;  // --cache-dir: the saved scores' folder in place of the settings'
+    bool no_save = false;   // --no-save: saved scores read, nothing saved
+    bool no_cache = false;  // --no-cache: saved scores neither read nor saved
+};
 
 // The compare command's arguments.
 struct CompareArguments {
+    ProfileArguments profile;
     std::vector<std::string> command_line;  // every word given, for the results' record
     std::optional<std::string> reference;  // none with --batch
     std::vector<std::string> tests;  // files, or patterns such as encodes\*.mkv; none with --batch
@@ -77,6 +94,8 @@ struct CompareArguments {
     bool recalculate = false;
     bool difference = false;  // the first test video minus the second, too
     std::optional<std::string> csv;
+    // --frames-json: the folder for each video's per-frame scores as JSON (<video>.frames.json).
+    std::optional<std::string> frames_json;
     std::optional<std::string> json_path;  // "-" prints the JSON instead of the tables
     std::optional<int> worst;  // --worst N: each metric's N worst dips, after the tables
     // --segments: where scores fall past these (weak_frames.h), with the
@@ -100,6 +119,10 @@ struct CompareArguments {
     std::optional<std::string> segments_dir;  // the folder for each video's segment files
     // --segments-report: one file of every test video's segments (JSON, or CSV for a .csv name).
     std::optional<std::string> segments_report;
+    // --require: the bars each test video's scores must reach (gates.h), from every --require given.
+    std::vector<GateRule> require;
+    // --fail-on-segments: a test video with a weak segment (by --segments) fails the quality gate.
+    bool fail_on_segments = false;
     // --run-dir: the folder for each video's saved run (<name>.metrics.json), as Save analysis results writes it.
     std::optional<std::string> run_dir;
     // --log-file: the file the app's log is written to as well, as the window's log (file_names.h's fields in it).
@@ -110,10 +133,19 @@ struct CompareArguments {
     bool notify = false;
     bool quiet = false;
     bool verbose = false;
+    // --progress: "text" (lines for a person) or "jsonl" (Progress::event: a JSON object a line, for a program).
+    std::string progress = "text";
+    // --timeout: whole seconds the command may take, from its start; past them it is cancelled (exit_timeout).
+    std::optional<long long> timeout;
+    // --video-timeout: whole seconds each video's run may take, from its start; past them it alone is stopped.
+    std::optional<long long> video_timeout;
+    // --cancel-on-stdin-eof: the end of standard input cancels the run, as Ctrl+C does.
+    bool cancel_on_stdin_eof = false;
 };
 
 // The bitrate command's arguments.
 struct BitrateArguments {
+    ProfileArguments profile;
     std::vector<std::string> videos;  // files, or patterns such as encodes\*.mkv
     std::optional<double> fps;        // a raw stream's frame rate, in place of what it stores
     std::optional<std::string> csv;   // the folder for each video's CSV files
@@ -133,13 +165,33 @@ struct BdrateArguments {
     bool quiet = false;
 };
 
-enum class Command { none, compare, devices, bitrate, bdrate };
+// The devices command's arguments.
+struct DevicesArguments {
+    std::optional<std::string> json_path;  // "-" prints the JSON instead of the lines
+    ProfileArguments profile;  // its settings only
+};
+
+// The saved command's arguments (list, show or delete the saved results),
+// and the report command's (run files): what to do, its items (IDs, test
+// videos' paths, or run files), and for show and report what to write, in
+// compare's own fields (--json, --csv, --frames-json, --run-dir, --segments
+// and its options, --worst, -q), which compare's reports read.
+struct SavedArguments {
+    std::string action;  // "list", "show" or "delete"; "report" for the report command
+    std::vector<std::string> items;
+    std::optional<std::string> filter;  // list --filter: part of a test video's or reference's name
+    CompareArguments output;
+};
+
+enum class Command { none, compare, devices, bitrate, bdrate, saved, report };
 
 struct Arguments {
     Command command = Command::none;
     // Help or the version was asked for: print this and exit 0.
     std::optional<std::string> print_and_exit;
     CompareArguments compare;
+    DevicesArguments devices;
+    SavedArguments saved;  // the saved command's, or the report command's
     BitrateArguments bitrate;
     BdrateArguments bdrate;
 };

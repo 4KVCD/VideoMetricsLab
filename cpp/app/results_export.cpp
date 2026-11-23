@@ -152,6 +152,9 @@ QString export_contents(const std::vector<std::string>& items) {
     if (has("graphs")) {
         kinds << app::tr("graphs");
     }
+    if (has("worst_frames")) {
+        kinds << app::tr("worst frames");
+    }
     if (has("weak_segments")) {
         kinds << app::tr("weak segments");
     }
@@ -189,9 +192,38 @@ std::vector<std::filesystem::path> write_loose_export(const std::filesystem::pat
     std::set<std::filesystem::path> reserved;
     const std::vector<std::filesystem::path> paths = unique_output_names(folder, names, reserved);
     for (std::size_t i = 0; i < files.size(); ++i) {
+        std::filesystem::create_directories(paths[i].parent_path());
         write_file_whole(paths[i], [&bytes = files[i].second](std::ostream& out) { out << bytes; });
     }
     return paths;
+}
+
+std::vector<std::string> shared_stems(const QString& name) {
+    return {file_safe(name + QStringLiteral(" - results")).toStdString(),
+            file_safe(name + QStringLiteral(" - weak segments")).toStdString()};
+}
+
+std::vector<BundleFile> in_video_folders(std::vector<BundleFile> files, const std::vector<QString>& names,
+                                         const std::vector<std::string>& shared) {
+    std::vector<std::string> prefixes;
+    for (const QString& name : names) {
+        prefixes.push_back(file_safe(name).toStdString());
+    }
+    std::sort(prefixes.begin(), prefixes.end(),
+              [](const std::string& a, const std::string& b) { return a.size() > b.size(); });
+    for (BundleFile& file : files) {
+        if (std::any_of(shared.begin(), shared.end(),
+                        [&file](const std::string& stem) { return file.first.starts_with(stem + "."); })) {
+            continue;
+        }
+        for (const std::string& prefix : prefixes) {
+            if (file.first.starts_with(prefix + " - ")) {
+                file.first = prefix + "/" + file.first;
+                break;
+            }
+        }
+    }
+    return files;
 }
 
 std::string text_lines(const std::string& text) {
@@ -254,6 +286,21 @@ std::vector<BundleFile> export_files(const Settings& settings, const std::vector
                 {videos[i].result, file_safe(names[i] + QStringLiteral(" - frames")).toStdString(), json, csv});
         }
     }
+    if (wanted("worst_frames") && (json || csv)) {
+        // Each video's, every metric's dips, as many as Worst Frames lists.
+        const std::vector<QString> names = bundle_names(videos);
+        const auto dips = static_cast<std::size_t>(std::max(settings.graph_worst_frames, 1));
+        for (std::size_t i = 0; i < videos.size(); ++i) {
+            const std::string stem = file_safe(names[i] + QStringLiteral(" - worst frames")).toStdString();
+            const MetricResultSet& results = videos[i].result->metric_results;
+            if (json) {
+                files.push_back({stem + ".json", python_json_dumps(worst_frames_report_json(results, dips)) + "\n"});
+            }
+            if (csv) {
+                files.push_back({stem + ".csv", text_lines(worst_frames_report_csv(results, dips))});
+            }
+        }
+    }
     if (!wanted("weak_segments") || videos.empty()) {
         return files;
     }
@@ -288,7 +335,9 @@ std::vector<BundleFile> export_files(const Settings& settings, const std::vector
                                 "." + qt_text(segments_file_suffix(used.conditions.empty() ? rules : used)))
                 .toStdString();
         if (json) {
-            files.push_back({stem + ".json", python_json_dumps(segments_json(segments, used, left_out)) + "\n"});
+            files.push_back(
+                {stem + ".json",
+                 python_json_dumps(segments_file_json(*video.result, segments, used, left_out)) + "\n"});
         }
         if (csv) {
             files.push_back({stem + ".csv", text_lines(segments_csv(segments, used))});

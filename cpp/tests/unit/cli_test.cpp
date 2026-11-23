@@ -27,6 +27,8 @@
 #include "reference.h"
 #include "report.h"
 #include "test_videos.h"
+#include "vml/metric_cache.h"
+#include "watch.h"
 #include "vml/model_select.h"
 #include "vml/platform/system.h"
 #include "vml/run_file.h"
@@ -201,20 +203,21 @@ TEST(CommandLine, SegmentsSavedTakesTheWindowsRulesAndReportsEveryVideo) {
     EXPECT_TRUE(arguments.segments_all);
     EXPECT_EQ(arguments.segment_min_frames, 2);
     EXPECT_EQ(arguments.segment_merge_frames, 1);  // given here
-    const auto refusal = [&settings](const std::vector<std::string>& asked) {
+    // A profile with no condition on the metrics compared takes one on the
+    // metric shown, as the Worst Frames tab starts: Metric Graphs' metric
+    // where it is compared, else the first (default_weak_condition).
+    const auto fallback = [&settings](const std::vector<std::string>& asked) {
         CompareArguments saved = parse_arguments({"compare", "ref.mkv", "a.mkv", "--segments", "saved"}).compare;
-        try {
-            take_saved_segments(saved, settings, asked);
-        } catch (const std::invalid_argument& error) {
-            return std::string(error.what());
-        }
-        return std::string("taken");
+        std::optional<WeakCondition> taken;
+        take_saved_segments(saved, settings, asked, &taken);
+        EXPECT_EQ(saved.segments.size(), 1U);
+        return taken ? taken->text() : std::string("none");
     };
-    EXPECT_EQ(refusal({"psnr"}),
-              "--segments saved: none of the profile's conditions (vmaf<80, ssimulacra2<60) is on a metric compared "
-              "(-m)");
+    settings.graph_metric = "vmaf";
+    EXPECT_EQ(fallback({"psnr"}), default_weak_condition(metric_definition("psnr")).text());
     settings.weak_segment_conditions.clear();
-    EXPECT_TRUE(refusal({"vmaf"}).starts_with("--segments saved: the profile has no conditions"));
+    EXPECT_EQ(fallback({"psnr", "vmaf"}), "vmaf<85");  // the metric shown, compared
+    EXPECT_EQ(fallback({"psnr", "ssim"}), default_weak_condition(metric_definition("psnr")).text());
 
     // profile:NAME: that profile's (any case), not the one in use; a name no
     // profile has is refused with the app's profiles.
@@ -955,6 +958,167 @@ TEST(CommandLine, GpuNamesAGpuThePcHas) {
               "--gpu radeon: more than one GPU here has that in its name: AMD Radeon RX 7900 XTX, AMD Radeon(TM) "
               "Graphics. Give more of the name.");
     EXPECT_EQ(gpu_refusal(std::string("radeon(tm)"), radeons), std::nullopt);
+}
+
+// A run can be held apart from the app's profile: VML_HOME names the folder
+// of the app's own files, --settings reads another settings file (one not
+// there is an input not read, not the defaults), --no-settings takes the
+// defaults, and --cache-dir, --no-save and --no-cache say where the saved
+// scores are and whether they are read and saved. The JSON says which.
+TEST(CommandLine, SettingsAndSavedScoresCanBeChosen) {
+    const std::filesystem::path temporary =
+        std::filesystem::temp_directory_path() / ("vml_profile_test_" + std::to_string(std::random_device{}()));
+    std::filesystem::create_directories(temporary);
+    const std::filesystem::path home = app_data_folder();
+    platform::set_environment_variable("VML_HOME", platform::path_text(temporary / "home"));
+    EXPECT_EQ(Settings::file(), temporary / "home" / "settings.json");
+    EXPECT_EQ(default_cache_dir(), temporary / "home" / "results_cache");
+    platform::set_environment_variable("VML_HOME", "");
+    EXPECT_EQ(app_data_folder(), home);
+
+    Settings mine = Settings::defaults();
+    mine.parallel_jobs = 2;
+    mine.default_compute_cvvdp = false;
+    mine.cache_dir = platform::path_text(temporary / "theirs");
+    ASSERT_FALSE(mine.save_to(temporary / "mine.json"));
+    const Arguments parsed = parse_arguments(
+        {"compare", "r.mkv", "a.mkv", "--settings", platform::path_text(temporary / "mine.json"), "--no-save"});
+    const ChosenSettings chosen = choose_settings(parsed.compare.profile);
+    EXPECT_EQ(chosen.from, "file");
+    EXPECT_EQ(chosen.settings.parallel_jobs, 2);
+    EXPECT_FALSE(chosen.settings.default_compute_cvvdp);
+    const SavedScoresUse saved = saved_scores_use(parsed.compare.profile, chosen.settings);
+    EXPECT_EQ(saved.folder, temporary / "theirs");
+    EXPECT_TRUE(saved.read);
+    EXPECT_FALSE(saved.save);
+    const nlohmann::ordered_json json = profile_json(chosen, saved, options_from_settings(parsed.compare, false));
+    EXPECT_EQ(json["settings"], "file");
+    EXPECT_EQ(json["settings_file"], platform::path_text(temporary / "mine.json"));
+    EXPECT_EQ(json["saved_scores"]["save"], false);
+    const auto& taken = json["options_from_settings"];
+    EXPECT_NE(std::find(taken.begin(), taken.end(), "--metrics"), taken.end());
+    EXPECT_NE(std::find(taken.begin(), taken.end(), "--cache-dir"), taken.end());
+    EXPECT_EQ(std::find(taken.begin(), taken.end(), "--gpu"), taken.end());  // not the settings' GPU
+
+    const Arguments defaults = parse_arguments({"compare", "r.mkv", "a.mkv", "--no-settings", "--no-cache"});
+    const ChosenSettings none = choose_settings(defaults.compare.profile);
+    EXPECT_EQ(none.from, "defaults");
+    EXPECT_TRUE(none.settings.default_compute_cvvdp);
+    EXPECT_FALSE(none.file);
+    const SavedScoresUse unused = saved_scores_use(defaults.compare.profile, none.settings);
+    EXPECT_FALSE(unused.read || unused.save);
+    EXPECT_TRUE(profile_json(none, unused, {})["saved_scores"]["folder"].is_null());
+    EXPECT_THROW(parse_arguments({"compare", "r.mkv", "a.mkv", "--no-cache", "--cache-dir", "x"}), UsageError);
+    EXPECT_THROW(parse_arguments({"compare", "r.mkv", "a.mkv", "--settings", "s.json", "--no-settings"}), UsageError);
+
+    ProfileArguments missing;
+    missing.settings_file = platform::path_text(temporary / "missing.json");
+    EXPECT_THROW(choose_settings(missing), SettingsUnreadable);
+    write_bytes_file(temporary / "broken.json", "{\"parallel_jobs\": ");
+    missing.settings_file = platform::path_text(temporary / "broken.json");
+    EXPECT_THROW(choose_settings(missing), SettingsUnreadable);
+    EXPECT_FALSE(std::filesystem::exists(temporary / "broken.json.unreadable"));  // the file named is not touched
+    std::filesystem::remove_all(temporary);
+}
+
+// A quality gate: --require's bars on a metric's score or another statistic
+// (CVVDP's of its seconds), and --fail-on-segments. A bar missed, or a
+// metric not scored, fails the gate; one that does not apply to the video
+// (HDR VMAF of SDR) is left out of it.
+TEST(CommandLine, QualityGatesCheckEachVideo) {
+    const Arguments parsed = parse_arguments({"compare", "r.mkv", "a.mkv", "--require", "vmaf>=85, vmaf.min>65",
+                                              "--require", "cvvdp.min>=8", "--segments", "vmaf<75",
+                                              "--fail-on-segments"});
+    const std::vector<GateRule>& rules = parsed.compare.require;
+    ASSERT_EQ(rules.size(), 3u);
+    EXPECT_EQ(rules[0].text(), "vmaf>=85");
+    EXPECT_EQ(rules[1].text(), "vmaf.min>65");
+    EXPECT_EQ(rules[2].statistic, "min");
+    EXPECT_TRUE(parsed.compare.fail_on_segments);
+    for (const char* wrong : {"vmaf=90", "vmaf.mean>=90", "foo>1", "vmaf>=x", ""}) {
+        EXPECT_THROW(parse_arguments({"compare", "r.mkv", "a.mkv", "--require", wrong}), UsageError) << wrong;
+    }
+    EXPECT_THROW(parse_arguments({"compare", "r.mkv", "a.mkv", "--fail-on-segments"}), UsageError);
+
+    std::vector<TestVideo> videos(2);
+    TestVideo& scored = videos[0];
+    scored.path = "a.mkv";
+    scored.metrics = {"vmaf", "cvvdp"};
+    scored.result.emplace().compared_frame_count = 3;
+    scored.result->metric_results.add(FrameMetricResult{"vmaf", {0, 1, 2}, {0.0, 0.5, 1.0}, {90, 80, 70}, {}});
+    scored.result->metric_results.add(SequenceMetricResult{"cvvdp", 8.5, {}, {0, 2}, {0.0, 1.0}, {8.0f, 9.0f}});
+    TestVideo& failed = videos[1];
+    failed.path = "b.mkv";
+    failed.metrics = {"vmaf"};
+    failed.failures = {{"vmaf", "Vulkan ran out of memory."}};
+    failed.not_applicable = {{"vmaf_hdr", {metric_not_applicable, "HDR VMAF scores PQ (HDR10) video only", ""}}};
+    const std::vector<Summaries> summaries = summarize(videos);
+    const SegmentRules segments = segment_rules(parsed.compare);
+
+    const std::vector<GateCheck> checks = gate_checks(scored, summaries[0], rules, &segments);
+    ASSERT_EQ(checks.size(), 4u);
+    EXPECT_EQ(checks[0].value, 80.0);
+    EXPECT_EQ(checks[0].passed, false);  // a mean of 80
+    EXPECT_EQ(checks[1].passed, true);   // its worst frame, 70
+    EXPECT_EQ(checks[2].value, 8.0);     // CVVDP's worst second
+    EXPECT_EQ(checks[2].passed, true);
+    EXPECT_EQ(checks[3].rule, "no weak segments");
+    EXPECT_EQ(checks[3].value, 1.0);
+    EXPECT_EQ(checks[3].passed, false);
+    EXPECT_FALSE(gate_passed(checks));
+    const nlohmann::ordered_json gate = gate_json(checks);
+    EXPECT_EQ(gate["passed"], false);
+    EXPECT_EQ(gate["checks"][1]["statistic"], "min");
+    EXPECT_FALSE(gate["checks"][3].contains("metric"));
+
+    const std::vector<GateCheck> unscored =
+        gate_checks(failed, summaries[1], read_gate_rules("vmaf_hdr>=50,vmaf>=85"), nullptr);
+    EXPECT_FALSE(unscored[0].passed);  // not applicable: left out of the gate
+    EXPECT_EQ(unscored[1].passed, false);
+    EXPECT_EQ(unscored[1].why, "Vulkan ran out of memory.");
+    EXPECT_FALSE(gate_passed(unscored));
+    EXPECT_TRUE(gate_passed({unscored[0]}));
+}
+
+// --timeout and --video-timeout, on a clock of the test's own: the run is due
+// once, from the command's start; each video from its own start, until it
+// ends; and each video runs on a cancel token of its own, so stopping one
+// leaves the others running (a regression: one token copied into each place
+// stopped every video).
+TEST(CommandLine, TimeoutsStopTheRunOrOneVideo) {
+    const CompareArguments parsed = parse_arguments({"compare", "r.mkv", "a.mkv", "--timeout", "1:00",
+                                                     "--video-timeout", "10", "--progress", "jsonl",
+                                                     "--cancel-on-stdin-eof"})
+                                        .compare;
+    EXPECT_EQ(parsed.timeout, 60);
+    EXPECT_EQ(parsed.video_timeout, 10);
+    EXPECT_EQ(parsed.progress, "jsonl");
+    EXPECT_TRUE(parsed.cancel_on_stdin_eof);
+    EXPECT_THROW(parse_arguments({"compare", "r.mkv", "a.mkv", "--timeout", "0"}), UsageError);
+    EXPECT_THROW(parse_arguments({"compare", "r.mkv", "a.mkv", "--progress", "json"}), UsageError);
+
+    Deadlines deadlines(100.0, 60.0, 10.0);
+    deadlines.started(0, 105.0);
+    deadlines.started(1, 110.0);
+    EXPECT_TRUE(deadlines.due(114.9).jobs.empty());
+    EXPECT_EQ(deadlines.due(115.0).jobs, std::vector<std::size_t>{0});
+    EXPECT_TRUE(deadlines.due(116.0).jobs.empty());  // said once
+    deadlines.ended(1);
+    EXPECT_TRUE(deadlines.due(130.0).jobs.empty());  // ended before its time
+    EXPECT_FALSE(deadlines.due(159.9).run);
+    EXPECT_TRUE(deadlines.due(160.0).run);
+    EXPECT_FALSE(deadlines.due(161.0).run);
+    Deadlines none(0.0, std::nullopt, std::nullopt);
+    none.started(0, 0.0);
+    const Deadlines::Due never = none.due(1e9);
+    EXPECT_FALSE(never.run);
+    EXPECT_TRUE(never.jobs.empty());
+
+    std::vector<CancelToken> tokens = separate_tokens(3);
+    tokens[1].cancel();
+    EXPECT_FALSE(tokens[0].cancelled());
+    EXPECT_TRUE(tokens[1].cancelled());
+    EXPECT_FALSE(tokens[2].cancelled());
 }
 
 // The automation contract: every error, failure, note and why in the JSON has

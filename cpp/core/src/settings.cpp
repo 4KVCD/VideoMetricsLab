@@ -6,6 +6,7 @@
 #include <fstream>
 #include <random>
 #include <sstream>
+#include <stdexcept>
 #include <unordered_map>
 #include <variant>
 
@@ -84,6 +85,7 @@ const std::unordered_map<std::string, Field>& fields() {
         {"remembered_reference", &Settings::remembered_reference},
         {"remembered_tests", &Settings::remembered_tests},
         {"highlight_best_worst", &Settings::highlight_best_worst},
+        {"compare_loop", &Settings::compare_loop},
         {"frame_preview_color_mode", &Settings::frame_preview_color_mode},
         {"compare_decoded_videos", &Settings::compare_decoded_videos},
         {"compare_loop_before_ms", &Settings::compare_loop_before_ms},
@@ -180,7 +182,7 @@ void log_unfit(const std::string& name, const Json& value, const std::string& ki
 }  // namespace
 
 const std::vector<std::string>& export_item_keys() {
-    static const std::vector<std::string> items{"results", "frames", "graphs", "weak_segments"};
+    static const std::vector<std::string> items{"results", "frames", "graphs", "worst_frames", "weak_segments"};
     return items;
 }
 
@@ -297,7 +299,42 @@ std::string where_unreadable(const std::string& text, const Json::exception& err
 
 int default_parallel_jobs(unsigned cores) { return cores > parallel_by_default_above_cores ? 2 : 1; }
 
-std::filesystem::path Settings::file() { return platform::home_directory() / ".videometricslab" / "settings.json"; }
+std::filesystem::path app_data_folder() {
+    const std::optional<std::string> chosen = platform::environment_variable(app_data_variable);
+    if (chosen && !chosen->empty()) {
+        std::error_code ignored;
+        const std::filesystem::path folder = platform::path_from_text(*chosen);
+        const std::filesystem::path whole = std::filesystem::absolute(folder, ignored);
+        return whole.empty() ? folder : whole;
+    }
+    return platform::home_directory() / ".videometricslab";
+}
+
+std::filesystem::path Settings::file() { return app_data_folder() / "settings.json"; }
+
+Settings Settings::defaults() {
+    Settings settings;
+    settings.parallel_jobs = default_parallel_jobs(platform::logical_cores());
+    return settings;
+}
+
+Settings Settings::load_checked(const std::filesystem::path& path) {
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream) {
+        throw std::runtime_error(platform::path_text(path) + ": it could not be read (no such file, or no access)");
+    }
+    std::stringstream contents;
+    contents << stream.rdbuf();
+    const std::string text = python_json_readable(contents.str());
+    try {
+        if (!Json::parse(text).is_object()) {
+            throw std::runtime_error(platform::path_text(path) + ": it is not a settings file (no JSON object)");
+        }
+    } catch (const Json::exception& error) {
+        throw std::runtime_error(platform::path_text(path) + ": " + where_unreadable(text, error));
+    }
+    return load_from(path);
+}
 
 Settings Settings::load() {
     const std::filesystem::path path = file();
@@ -308,8 +345,7 @@ Settings Settings::load() {
 }
 
 Settings Settings::load_from(const std::filesystem::path& path) {
-    Settings settings;
-    settings.parallel_jobs = default_parallel_jobs(platform::logical_cores());
+    Settings settings = defaults();
     std::ifstream stream(path, std::ios::binary);
     if (!stream) {
         return settings;
@@ -477,6 +513,7 @@ std::string Settings::text() const {
     data["highlight_best_worst"] = highlight_best_worst;
     data["frame_preview_color_mode"] = frame_preview_color_mode;
     data["compare_decoded_videos"] = compare_decoded_videos;
+    data["compare_loop"] = compare_loop;
     data["compare_loop_before_ms"] = compare_loop_before_ms;
     data["compare_loop_after_ms"] = compare_loop_after_ms;
     data["export_graph_theme"] = export_graph_theme;

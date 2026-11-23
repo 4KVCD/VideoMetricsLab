@@ -2084,6 +2084,11 @@ std::variant<GpuPlan, std::string> hdr_plan(const RunFrames& run, const VmafOpti
         }
         plan.models.emplace_back("vmaf_hdr", std::string(*file));
         plan.hdr_model_file = std::string(*file);
+        // Which model scores HDR VMAF: Auto's pick for the size compared, or the one chosen.
+        logger.info("HDR VMAF model: " + model_shown(options.model_hdr) +
+                    (options.model_choice_hdr == auto_model_choice
+                         ? " (Auto's choice for " + std::to_string(run.width) + "x" + std::to_string(run.height) + ")"
+                         : " (chosen in the options)"));
         const HdrModelTarget model = hdr_model_target(platform::path_from_text(*file));
         hdr_targets(static_cast<unsigned>(run.width), static_cast<unsigned>(run.height),
                     static_cast<unsigned>(run.width), static_cast<unsigned>(run.height), model);
@@ -2094,14 +2099,15 @@ std::variant<GpuPlan, std::string> hdr_plan(const RunFrames& run, const VmafOpti
     return plan;
 }
 
-// The log line of HDR VMAF's libvmaf and threads, as a run starts it (HdrScorer logs where its features go).
+// The log line of HDR VMAF's libvmaf and threads, as a run starts it (HdrScorer logs where its features and its
+// pictures' conversion go).
 void log_hdr_vmaf(const GpuPlan& plan) {
     const std::string converters =
         std::to_string(hdr_conversion_threads(std::thread::hardware_concurrency(), plan.hdr_gpu.has_value()));
     if (plan.hdr_gpu) {
         logger.info("HDR VMAF in the app: its features on the GPU where the engine takes them, its pictures "
-                    "converted on " + converters + " CPU threads; " + cpu_library_build() + ", " +
-                    std::to_string(plan.hdr_threads) + " threads");
+                    "converted on the GPU where it can, else on " + converters + " CPU threads; " +
+                    cpu_library_build() + ", " + std::to_string(plan.hdr_threads) + " threads");
     } else {
         logger.info("HDR VMAF in the app: " + cpu_library_build() + ", " + std::to_string(plan.hdr_threads) +
                     " threads, its pictures converted on " + converters);

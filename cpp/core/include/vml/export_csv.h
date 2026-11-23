@@ -22,11 +22,12 @@ void export_csv(const ComparisonResult& result, const std::filesystem::path& pat
 // export_csv's file as text.
 std::string per_frame_csv(const ComparisonResult& result);
 
-// The same table as JSON, for scripts that read JSON: "reference" and
-// "test" (the videos' paths), "fps", "columns" (the CSV's header) and
-// "rows", each one of the CSV's rows as a list, a blank cell null. Numbers
-// as Python's json writes them (an endless PSNR Infinity), each row on a
-// line of its own. export_per_frame_json writes it to `path`, throwing as
+// The same table as JSON, for scripts that read JSON: document_head's keys
+// (frames-1), "reference" and "test" (the videos' paths), "fps", "columns"
+// (the CSV's header) and "rows", each one of the CSV's rows as a list, a
+// blank cell null. Numbers as Python's json writes them, but an endless one
+// (identical frames' PSNR) as "inf", as the results write it: JSON has no
+// infinity, and Python's Infinity is not JSON. Each row on a line of its own. export_per_frame_json writes it to `path`, throwing as
 // export_csv does.
 std::string per_frame_json(const ComparisonResult& result);
 void export_per_frame_json(const ComparisonResult& result, const std::filesystem::path& path);

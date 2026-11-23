@@ -39,7 +39,7 @@ inline constexpr std::size_t share_limit = 60'000;
 // INFO are not written, as in the Python app.
 enum class Level { debug = 10, info = 20, warning = 30, error = 40, critical = 50 };
 
-// The folder the log files are in: <user data>/logs.
+// The folder the log files are in: logs in app_data_folder() (settings.h).
 std::filesystem::path log_dir();
 
 // Starts writing the log (in `directory`, by default log_dir()), and names

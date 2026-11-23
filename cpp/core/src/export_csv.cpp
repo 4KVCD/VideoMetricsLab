@@ -20,6 +20,7 @@
 #include "vml/python_json.h"
 #include "vml/temp_files.h"
 #include "vml/python_text.h"
+#include "vml/results_summary.h"
 
 namespace vml {
 
@@ -184,20 +185,22 @@ void export_csv(const ComparisonResult& result, const std::filesystem::path& pat
 
 namespace {
 
-// export_csv's table as JSON: the videos the scores are of, the CSV's
-// header as "columns", and each of its rows a list in "rows", one a line, a
-// blank cell null. Numbers as Python writes them (an endless PSNR
-// Infinity), the time rounded as the CSV writes it.
+// export_csv's table as JSON (per_frame_json): its head, the videos the
+// scores are of, the CSV's header as "columns", and each of its rows a list
+// in "rows", one a line, a blank cell null. Numbers as Python writes them
+// but an endless one, "inf" (json_number), the time rounded as the CSV
+// writes it.
 std::string json_text(const CsvTable& table, const ComparisonResult& result) {
     using Json = nlohmann::ordered_json;
     Json columns = Json::array({"frame", "time_s"});
     for (const std::string& name : table.names) {
         columns.push_back(name);
     }
-    const Json head{{"reference", platform::path_text(result.source)},
-                    {"test", platform::path_text(result.distorted)},
-                    {"fps", result.fps},
-                    {"columns", columns}};
+    Json head = document_head(frames_format);
+    head.update(Json{{"reference", platform::path_text(result.source)},
+                     {"test", platform::path_text(result.distorted)},
+                     {"fps", result.fps},
+                     {"columns", columns}});
     std::string text = python_json_dumps(head);
     text.resize(text.size() - 2);  // the closing "\n}"
     text += ",\n  \"rows\": [";
@@ -207,7 +210,7 @@ std::string json_text(const CsvTable& table, const ComparisonResult& result) {
         text += ", " + python_json_dumps(std::round(table.times[row] * 1e6) / 1e6);
         for (const std::string& name : table.names) {
             const double value = table.values.at(name)[row];
-            text += ", " + (std::isnan(value) ? std::string("null") : python_json_dumps(value));
+            text += ", " + (std::isnan(value) ? std::string("null") : python_json_dumps(json_number(value)));
         }
         text += "]";
     }
@@ -378,9 +381,13 @@ std::vector<std::filesystem::path> unique_output_names(const std::filesystem::pa
         [&](const std::string& number) {
             std::vector<std::filesystem::path> paths;
             for (const std::string& name : names) {
+                // In its folder within `folder`, where it names one
+                // ("<video>/<file>"): the number goes on the file.
                 const std::filesystem::path file = platform::path_from_text(name);
-                paths.push_back(folder / (file.stem().native() + platform::path_from_text(number).native() +
-                                          file.extension().native()));
+                std::filesystem::path path = folder / file;
+                path.replace_filename(file.stem().native() + platform::path_from_text(number).native() +
+                                      file.extension().native());
+                paths.push_back(std::move(path));
             }
             return paths;
         },

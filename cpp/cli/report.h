@@ -64,10 +64,15 @@ nlohmann::ordered_json error_document(const std::optional<std::string>& referenc
 // Each result's per-frame scores as the window's per-frame CSV export writes them, in
 // `folder`; `message` says what was written and `failed` what could not be
 // or was written under another name (shown with -q too). False if one could
-// not be. Each video's csv_file says where it went.
+// not be. Each video's csv_file says where it went. With `json`
+// (--frames-json), the same as the window's per-frame JSON export writes it
+// (per_frame_json), as <video>.frames.json, each in its frames_json_file.
 bool write_csvs(std::vector<TestVideo>& videos, const std::filesystem::path& folder,
                 const std::function<void(const std::string&)>& message,
-                const std::function<void(const std::string&)>& failed);
+                const std::function<void(const std::string&)>& failed, bool json = false);
+
+// --frames-json's files' ending.
+inline constexpr const char* frames_json_suffix = ".frames.json";
 // --run-dir: each result as a saved run (run_file.h), the file Save analysis
 // results writes, in `folder` as <video>.metrics.json (a further display's
 // as <video>_<display>.metrics.json), labelled with that name; reported as

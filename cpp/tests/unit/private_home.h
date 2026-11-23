@@ -24,6 +24,9 @@ public:
         std::filesystem::create_directories(folder_);
         platform::set_environment_variable("USERPROFILE", platform::path_text(folder_));
         platform::set_environment_variable("HOME", platform::path_text(folder_));
+        // A profile of its own named in the environment (app_data_folder)
+        // would take the place of the home's: none, empty being unset.
+        platform::set_environment_variable("VML_HOME", "");
     }
     ~PrivateHome() {
         std::error_code ignored;  // a file a child still holds stays behind in TEMP

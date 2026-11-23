@@ -24,6 +24,7 @@
 
 #include "bitrate_panel.h"
 #include "file_writes.h"
+#include "title_bar.h"
 #include "graph_panel.h"
 #include "i18n.h"
 #include "main_window.h"
@@ -587,6 +588,9 @@ bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<R
 void MainWindow::set_run_ui_active(bool active) {
     // Freezes every input that can change the meaning of a live job.
     run_active_ = active;
+    if (!active) {
+        show_run_in_title({});  // the progress button goes with the run
+    }
     // Saved Results' Delete, locked for the run's pairs' comparisons: the
     // run reads and saves their scores. The reference with each test video
     // run, and with the file it decodes where that is another.
@@ -825,12 +829,48 @@ void MainWindow::update_run_status() {
     const QString summary = run_summary(running, total);
     if (run_hold_ == RunHold::paused) {
         show_status(app::tr("Paused   ·   ") + summary + elapsed_text);
+        show_run_in_title(app::tr("Paused   ·   ") + summary + elapsed_text);
         return;
     }
     if (running == 0 && !(run_active_ && total > 0)) {
         return;
     }
     show_status(summary + elapsed_text);
+    show_run_in_title(summary + elapsed_text);
+}
+
+void MainWindow::show_run_in_title(const QString& status) {
+    if (title_buttons_ == nullptr) {
+        return;
+    }
+    const int total = static_cast<int>(job_rows_.size());
+    if (!run_active_ || total == 0) {
+        title_buttons_->set_progress(std::nullopt);
+        return;
+    }
+    // How far the queue has got: each video counts alike, a video in
+    // progress by its tasks' frames counted (a task done counts whole). Only
+    // a rough measure, shown as a thin bar, as the status line explains.
+    double counted = static_cast<double>(finished_jobs_.size());
+    for (const auto& [index, tasks] : job_task_progress_) {
+        if (finished_jobs_.contains(index) || tasks.empty()) {
+            continue;
+        }
+        double sum = 0.0;
+        for (const TaskSnapshot& task : tasks) {
+            sum += task.state == "done" ? 1.0
+                   : task.total > 0     ? std::clamp(static_cast<double>(task.current) / static_cast<double>(task.total), 0.0, 1.0)
+                                        : 0.0;
+        }
+        counted += sum / static_cast<double>(tasks.size());
+    }
+    const double fraction = std::clamp(counted / total, 0.0, 1.0);
+    QString text = app::tr("{done} of {total}", {{"done", static_cast<int>(finished_jobs_.size())}, {"total", total}}) +
+                   QStringLiteral(" · ") + app::tr("{percent} %", {{"percent", static_cast<int>(fraction * 100)}});
+    if (run_hold_ == RunHold::paused) {
+        text = app::tr("Paused") + QStringLiteral(" · ") + text;
+    }
+    title_buttons_->set_progress(TitleButtons::Progress{text, fraction, status});
 }
 
 std::optional<double> MainWindow::run_elapsed() const {

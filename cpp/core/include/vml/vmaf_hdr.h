@@ -6,12 +6,16 @@
 //
 // libvmaf would convert them itself, but one picture after another on the
 // thread that hands them over, which took 87 % of a 4K run (11.5 fps on a
-// Core Ultra 9 285K). HdrScorer converts them on threads of its own, both
-// videos' and several frames' at once, exactly as libvmaf would. The
-// converted pictures' features are then calculated on the GPU by VMAF v1's
-// Vulkan engine (HDR VMAF has VMAF v1's four features, with other options),
-// which gives libvmaf's values; or, without it, by libvmaf, which takes
-// pictures already in the model's colours and size as they are.
+// Core Ultra 9 285K). The converted pictures' features are calculated on
+// the GPU by VMAF v1's Vulkan engine (HDR VMAF has VMAF v1's four features,
+// with other options), which gives libvmaf's values; or, without it, by
+// libvmaf, which takes pictures already in the model's colours and size as
+// they are. Where the engine calculates all four, it converts the pictures
+// too, from a plan of libvmaf's (vmaf_picture_convert_gpu_plan: zimg's very
+// steps, filters and tables), giving libvmaf's samples bit for bit, which
+// is checked on the first frame. Otherwise HdrScorer converts them on
+// threads of its own, both videos' and several frames' at once, exactly as
+// libvmaf would.
 #pragma once
 
 #include <libvmaf/picture.h>
@@ -97,11 +101,14 @@ bool picture_matches(const VmafPicture& picture, const VmafPictureConvertTarget&
 // the CPU does, two thirds, at least 1 and at most 16.
 int hdr_conversion_threads(unsigned cores, bool features_on_gpu);
 
-// Scores HDR VMAF of frame pairs given in order (PairScorer): both pictures
-// copied into libvmaf pictures tagged with the pair's colours, converted on
-// hdr_conversion_threads threads, one frame on each, each thread with its
-// own conversion of each video, then given to the features' scorer (the
-// GPU's, else libvmaf) in their order.
+// Scores HDR VMAF of frame pairs given in order (PairScorer): on the GPU,
+// both pictures converted and scored by the Vulkan engine where it can (the
+// first pair's conversion held to libvmaf's, and a picture with every luma
+// code, with the CPU's conversion from there on at any difference);
+// otherwise both pictures copied into libvmaf pictures tagged with the
+// pair's colours, converted on hdr_conversion_threads threads, one frame on
+// each, each thread with its own conversion of each video, then given to the
+// features' scorer (the GPU's, else libvmaf) in their order.
 class HdrScorer : public PairScorer {
 public:
     // Frames of `width` x `height` at `bit_depth`, 4:2:0, coded in
@@ -109,7 +116,7 @@ public:
     // scored. The features on the GPU numbered `gpu` (Vulkan's number, -1
     // for the best one) where VMAF v1's engine can calculate them, else
     // (and without `gpu`) by libvmaf on `threads` threads (at least 1); the
-    // log says which and why. Throws LibvmafError, and std::invalid_argument
+    // log says which, where the pictures are converted, and why. Throws LibvmafError, and std::invalid_argument
     // for a size the model refuses (hdr_targets).
     HdrScorer(int width, int height, int bit_depth, const std::filesystem::path& model_file,
               const HdrColours& colours, int n_subsample, int threads, std::optional<int> gpu = std::nullopt);

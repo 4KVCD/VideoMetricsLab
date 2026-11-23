@@ -51,6 +51,7 @@
 #include "stream_records.h"
 #include "theme.h"
 #include "video_names.h"
+#include "title_bar.h"
 #include "vml/app_log.h"
 #include "vml/append.h"
 #include "vml/ffmpeg_tools.h"
@@ -317,6 +318,10 @@ void MainWindow::apply_theme_colours() {
     }
     theme_applied_ = applied;
     theme::refresh();
+    make_title_buttons();  // VML Modern chosen in Settings: its buttons too
+    if (title_buttons_ != nullptr) {
+        title_buttons_->set_theme(QString::fromStdString(settings_.theme));
+    }
     // Only the cells with a colour of their own, each to its counterpart.
     for (int row = 0; row < distorted_table_->rowCount(); ++row) {
         for (int column = 0; column < distorted_table_->columnCount(); ++column) {
@@ -526,6 +531,16 @@ void MainWindow::save_settings() {
 // ------------------------------------------------------------- construction
 
 void MainWindow::build_ui() {
+#ifdef _WIN32
+    // VML Modern's own title bar, in the theme's colours, as the window's
+    // menu widget: along its top, the full width, above the central widget's
+    // margins. Asked for before the window is first shown (TitleBar::prepare).
+    if (TitleBar::wanted()) {
+        title_bar_ = new TitleBar(this);
+        title_bar_->prepare();
+        setMenuWidget(title_bar_);
+    }
+#endif
     auto* central = new QWidget;
     setCentralWidget(central);
     auto* root = new QVBoxLayout(central);
@@ -639,6 +654,12 @@ void MainWindow::build_ui() {
     frame_compare_panel_->set_video_name_rule(video_name_rule(settings_));
     frame_compare_panel_->set_loop_seconds(settings_.compare_loop_before_ms / 1000.0,
                                            settings_.compare_loop_after_ms / 1000.0);
+    // Loop as it was left, as Highlight best/worst results is.
+    frame_compare_panel_->set_loop_on(settings_.compare_loop);
+    connect(frame_compare_panel_, &FrameComparePanel::loop_changed, this, [this](bool on) {
+        settings_.compare_loop = on;
+        save_settings();
+    });
     connect(frame_compare_panel_, &FrameComparePanel::loop_seconds_changed, this, [this](double before, double after) {
         settings_.compare_loop_before_ms = static_cast<int>(std::lround(before * 1000));
         settings_.compare_loop_after_ms = static_cast<int>(std::lround(after * 1000));
@@ -748,6 +769,56 @@ void MainWindow::build_ui() {
     tabs_->addTab(new ScrollingPage(saved_results_panel_), app::tr("Saved Results"));
     tabs_->addTab(new ScrollingPage(settings_panel_), app::tr("Settings"));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
+    make_title_buttons();
+}
+
+void MainWindow::make_title_buttons() {
+    if (title_buttons_ != nullptr || theme::current_interface() != theme::Interface::modern) {
+        return;
+    }
+#ifdef _WIN32
+    if (title_bar_ != nullptr) {
+        title_buttons_ = title_bar_->buttons();
+    }
+#endif
+    if (title_buttons_ == nullptr) {
+        // No bar of the app's own (another system, high contrast, or Modern
+        // chosen since the start): at the tab bar's right end.
+        title_buttons_ = new TitleButtons;
+        tabs_->setCornerWidget(title_buttons_, Qt::TopRightCorner);
+        title_buttons_->show();
+    }
+    title_buttons_->set_theme(QString::fromStdString(settings_.theme));
+    connect(title_buttons_, &TitleButtons::progress_clicked, this, [this] { tabs_->setCurrentIndex(0); });
+    connect(title_buttons_, &TitleButtons::theme_chosen, this, [this](const QString& value) {
+        settings_panel_->choose_theme(value);
+        title_buttons_->set_theme(QString::fromStdString(settings_.theme));
+    });
+    connect(title_buttons_, &TitleButtons::theme_menu_opening, this,
+            [this] { title_buttons_->set_theme(QString::fromStdString(settings_.theme)); });
+    connect(title_buttons_, &TitleButtons::update_clicked, this, [this] {
+        if (pending_update_) {
+            show_update(*pending_update_);
+        }
+    });
+}
+
+bool MainWindow::nativeEvent(const QByteArray& type, void* message, qintptr* result) {
+#ifdef _WIN32
+    if (title_bar_ != nullptr && title_bar_->native_event(message, result)) {
+        return true;
+    }
+#endif
+    return QMainWindow::nativeEvent(type, message, result);
+}
+
+void MainWindow::showEvent(QShowEvent* event) {
+#ifdef _WIN32
+    if (title_bar_ != nullptr) {
+        title_bar_->attach();  // the native window is made now
+    }
+#endif
+    QMainWindow::showEvent(event);
 }
 
 QWidget* MainWindow::build_files_panel() {
@@ -769,10 +840,16 @@ QWidget* MainWindow::build_files_panel() {
     tests_layout->setContentsMargins(0, 0, 0, 0);
     QBoxLayout* table_area = nullptr;
     tests_layout->addWidget(theme::container("padding", false, &table_area), 1);
-    // One block, heading row and table, with no spacing between them.
+    // One block, heading row and table, with no spacing between them in
+    // Classic, where the metric picker sits on the table's corner. VML
+    // Modern's taller button would touch the table's header there: a gap.
     auto* table_block = new QVBoxLayout;
     table_block->setSpacing(0);
     table_block->addLayout(build_table_heading());
+    auto* heading_gap = new QWidget;
+    heading_gap->setFixedHeight(8);
+    theme::modern_only(heading_gap);
+    table_block->addWidget(heading_gap);
     build_test_table();
     table_block->addWidget(distorted_table_, 1);
     table_area->addLayout(table_block, 1);
@@ -1156,6 +1233,21 @@ void MainWindow::offer_update(const Release& release) {
     if (release.version == settings_.skipped_update_version) {
         return;
     }
+    if (title_buttons_ != nullptr) {
+        // VML Modern: a badge in the title bar, not a dialog taking the focus
+        // at the start; a click on it shows the dialog.
+        pending_update_ = release;
+        title_buttons_->set_update(QString::fromStdString(release.version));
+        return;
+    }
+    show_update(release);
+}
+
+void MainWindow::show_update(const Release& release) {
+    if (update_box_ != nullptr) {
+        update_box_->raise();
+        return;
+    }
     auto* box = new QMessageBox(this);
     box->setAttribute(Qt::WA_DeleteOnClose);
     box->setIcon(QMessageBox::Information);
@@ -1183,6 +1275,10 @@ void MainWindow::offer_update(const Release& release) {
         } else if (box->clickedButton() == skip) {
             settings_.skipped_update_version = release.version;
             save_settings();
+            pending_update_.reset();
+            if (title_buttons_ != nullptr) {
+                title_buttons_->set_update({});
+            }
         }
     });
     update_box_ = box;

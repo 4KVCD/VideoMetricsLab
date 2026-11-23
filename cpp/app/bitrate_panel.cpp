@@ -9,6 +9,7 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QMenu>
 #include <QMimeData>
 #include <QPixmap>
 #include <QProgressBar>
@@ -388,17 +389,13 @@ void BitratePanel::add_chart(QBoxLayout* root) {
     root->addWidget(hover_label);
 }
 
-// The footer, as Metric Graphs' is: Export graph as PNG, then Go to frame
-// and the frame range, and what the table's figures are of.
+// The footer, as Metric Graphs' is: Go to frame and the frame range, what
+// the table's figures are of, and Export at the right end.
 void BitratePanel::add_frame_controls(QVBoxLayout* root) {
     // A toolbar of its own in VML Modern, in groups a line apart, as Metric
     // Graphs' is; in Classic the row as it was.
     QBoxLayout* row = nullptr;
     QWidget* bar = theme::container("toolbar", true, &row);
-    export_button = new QPushButton(app::tr("Export graph as PNG"));
-    connect(export_button, &QPushButton::clicked, this, [this] { on_export_png(); });
-    row->addWidget(export_button);
-    row->addWidget(theme::separator(16));
     frame_controls = new FrameControls;
     // Go to time and the range in times, as on Metric Graphs: the time of
     // the first line's frames, as the readout's time is (on_frame_requested).
@@ -412,6 +409,21 @@ void BitratePanel::add_frame_controls(QVBoxLayout* root) {
     range_label = new QLabel;
     row->addWidget(range_label);
     row->addStretch(1);
+    // Export (docs/ARCHITECTURE.md, "Exports"): the graph as shown; the same
+    // on a right-click on the graph. Usable once a graph is drawn.
+    export_button = new QPushButton(app::tr("Export"));
+    auto* exports = new QMenu(export_button);
+    connect(exports->addAction(app::tr("Graph as PNG...")), &QAction::triggered, this, [this] { on_export_png(); });
+    export_button->setMenu(exports);
+    row->addWidget(export_button);
+    chart->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(chart, &QWidget::customContextMenuRequested, this, [this](const QPoint& at) {
+        if (chart->has_data()) {
+            QMenu menu;
+            connect(menu.addAction(app::tr("Graph as PNG...")), &QAction::triggered, this, [this] { on_export_png(); });
+            menu.exec(chart->mapToGlobal(at));
+        }
+    });
     root->addWidget(bar);
 }
 

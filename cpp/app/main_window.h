@@ -89,6 +89,8 @@ class OptionsPanel;
 class QuietTabWidget;
 class RunWorker;
 class SettingsPanel;
+class TitleBar;
+class TitleButtons;
 class VideoColors;
 
 // The test-video table's columns, by their stable physical index (the
@@ -276,6 +278,9 @@ protected:
     void changeEvent(QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
+    // The app's title bar's messages (TitleBar::native_event), on Windows.
+    bool nativeEvent(const QByteArray& type, void* message, qintptr* result) override;
+    void showEvent(QShowEvent* event) override;
 
 private:
     // ------------------------------------------------------------ the window
@@ -330,6 +335,15 @@ private:
     void on_update_answer(const std::string& body, const QString& error);
     // Offers a newer release, unless the user chose to skip it.
     void offer_update(const Release& release);
+    // The update offered: the dialog, from the title bar's badge or, without
+    // one, at once.
+    void show_update(const Release& release);
+    // VML Modern's title buttons (title_bar.h), made once Modern is in use:
+    // in the app's title bar where the window has one, else at the tab bar's
+    // right end.
+    void make_title_buttons();
+    // The run's progress on the title buttons' progress button.
+    void show_run_in_title(const QString& status);
 
     // ------------------------------------------------------ FFmpeg's presence
     bool check_ffmpeg(bool prompt);
@@ -532,9 +546,9 @@ private:
     void take_read_details_of_file(const Probed& probed);
     bool offer_to_switch_source(const ComparisonResult& result);
     bool offer_to_take_reference_film_grain(const ComparisonResult& result);
-    // Saves `runs` as run files (.metrics.json): one where the user says,
-    // several into a folder, each named after its run.
-    void save_run_files(const std::vector<std::shared_ptr<CompletedRun>>& runs);
+    // Saves `runs` (a result and its name) as run files (.metrics.json):
+    // one where the user says, several into a folder, each named after it.
+    void save_run_files(const std::vector<std::pair<const ComparisonResult*, QString>>& runs);
     void submit_save(const ComparisonResult& result, const std::filesystem::path& path, const QString& label);
     std::vector<ExportedRun> exported_runs() const;
 
@@ -561,6 +575,11 @@ private:
         SavedBitrates saved_bitrate{};
         // Per-frame scores, made with the files (made_files).
         std::vector<FrameFiles> frames{};
+        // With several videos, the folders their own files go in, and the
+        // stems of the files of all of them (in_video_folders); none: as
+        // they are.
+        std::vector<QString> folders{};
+        std::vector<std::string> shared{};
     };
     // The scored test videos of the reference the Videos tab compares with,
     // in its order; a row's, when it is one of them.
@@ -909,6 +928,9 @@ private:
     BdRatePanel* bd_rate_panel_ = nullptr;
     // The newer release offered, while its message is open.
     QPointer<QMessageBox> update_box_;
+    TitleBar* title_bar_ = nullptr;          // Windows, VML Modern: the window's own title bar
+    TitleButtons* title_buttons_ = nullptr;  // VML Modern: the progress, theme and update buttons
+    std::optional<Release> pending_update_;  // offered on the badge, shown when it is clicked
     // The GPU checks a run is waiting for (wait_for_gpu_checks), while it is,
     // and what the status line said before it waited for something.
     QFutureWatcher<void>* gpu_check_watcher_ = nullptr;

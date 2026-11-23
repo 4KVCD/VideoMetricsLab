@@ -118,6 +118,16 @@ struct VulkanEngine {
     // source's planes (part 0) or the test video's (part 1), each for its
     // decoder to import (nullptr in an engine without it).
     int (*export_part)(VulkanContext* context, int slot, int part, void** handle, std::uint64_t* bytes);
+    // HDR VMAF's picture conversion on the GPU, each nullptr in an engine
+    // without it: a VMAF v1 context (16-bit, the model's size) given a plan
+    // for each video (libvmaf's vmaf_picture_convert_gpu_plan, `plans[0]` the
+    // source's) then takes the videos' own 4:2:0 pictures in submit_v1 and
+    // converts them before scoring them; test_convert converts one picture of
+    // side `side` (0 the source) into the three planes `out`, to check the
+    // GPU's samples against libvmaf's.
+    int (*v1_convert)(VulkanContext* context, const std::uint32_t* const* plans, const std::size_t* words);
+    int (*test_convert)(VulkanContext* context, int side, const std::uint16_t* const* planes,
+                        const std::ptrdiff_t* strides, std::uint16_t* const* out, const std::ptrdiff_t* out_strides);
 };
 
 // How many frames the engine works on at once, as the Python app asks for

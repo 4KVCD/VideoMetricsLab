@@ -128,7 +128,9 @@ VulkanEngine::VulkanEngine(const std::filesystem::path& path)
       pictures(optional_function<decltype(pictures)>(library, "vv_pictures")),
       pictures_mode(optional_function<decltype(pictures_mode)>(library, "vv_pictures_mode")),
       shared_host_plane(optional_function<decltype(shared_host_plane)>(library, "vv_shared_host_plane")),
-      export_part(optional_function<decltype(export_part)>(library, "vv_export_part")) {}
+      export_part(optional_function<decltype(export_part)>(library, "vv_export_part")),
+      v1_convert(optional_function<decltype(v1_convert)>(library, "vv_v1_convert")),
+      test_convert(optional_function<decltype(test_convert)>(library, "vv_test_convert")) {}
 
 void check_vulkan(const VulkanEngine& engine, int error, const std::string& what) {
     if (error < 0) {

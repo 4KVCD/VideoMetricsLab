@@ -283,17 +283,7 @@ QWidget* SettingsPanel::build_appearance_page() {
     modes_row->setContentsMargins(3, 3, 3, 3);
     modes_row->setSpacing(2);
     theme_buttons = new QButtonGroup(this);
-    const std::pair<QString, QString> choices[] = {
-#ifdef __APPLE__
-        {app::tr("Same as macOS"), ""},
-#else
-        {app::tr("Same as Windows"), ""},
-#endif
-        {app::tr("Light"), "light"},
-        {app::tr("Dark"), "dark"},
-        {app::tr("Mocha"), "mocha"},
-    };
-    for (const auto& [name, value] : choices) {
+    for (const auto& [name, value] : theme::theme_choices()) {
         auto* mode = new QPushButton(name);
         mode->setCheckable(true);
         mode->setProperty("value", value);
@@ -307,7 +297,27 @@ QWidget* SettingsPanel::build_appearance_page() {
     if (theme_buttons->checkedButton() == nullptr) {
         theme_buttons->buttons().front()->setChecked(true);  // an unknown setting: the system's
     }
-    connect(theme_buttons, &QButtonGroup::buttonClicked, this, [this] { on_edited(); });
+    // The accent's first choice names what no accent gives: the system's,
+    // or, in a theme with an accent of its own (Mocha's amber), the theme's.
+    const auto name_system_accent = [this, system_accent] {
+        const QAbstractButton* theme = theme_buttons->checkedButton();
+        if (theme != nullptr && theme->property("value").toString() == "mocha") {
+            system_accent->setText(app::tr("Theme default"));
+            system_accent->setToolTip(app::tr("The theme's own accent: Mocha's amber."));
+        } else {
+#ifdef __APPLE__
+            system_accent->setText(app::tr("Same as macOS"));
+#else
+            system_accent->setText(app::tr("Same as Windows"));
+#endif
+            system_accent->setToolTip(QString());
+        }
+    };
+    name_system_accent();
+    connect(theme_buttons, &QButtonGroup::buttonClicked, this, [this, name_system_accent] {
+        name_system_accent();
+        on_edited();
+    });
     auto* modes_line = new QHBoxLayout;
     modes_line->addWidget(modes);
     modes_line->addStretch(1);
@@ -330,6 +340,16 @@ QWidget* SettingsPanel::build_appearance_page() {
         on_edited();
     });
     return page;
+}
+
+void SettingsPanel::choose_theme(const QString& value) {
+    for (QAbstractButton* button : theme_buttons->buttons()) {
+        if (button->property("value").toString() == value) {
+            button->setChecked(true);
+            on_edited();
+            return;
+        }
+    }
 }
 
 void SettingsPanel::set_accent(const QString& hex) {

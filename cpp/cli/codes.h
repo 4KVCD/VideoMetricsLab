@@ -16,9 +16,11 @@ inline constexpr const char* unreadable = "unreadable";        // FFmpeg could n
 inline constexpr const char* no_metric = "no_metric";          // none of the metrics asked for can be calculated for it
 inline constexpr const char* not_comparable = "not_comparable";  // the pair cannot be compared (lengths differ...)
 inline constexpr const char* run_failed = "run_failed";        // its run failed as a whole
+inline constexpr const char* timed_out = "timed_out";          // --video-timeout stopped it (also a metric's)
 inline constexpr const char* reference_unreadable = "reference_unreadable";
 inline constexpr const char* no_test_video = "no_test_video";  // a --batch reference's rows find only it
 inline constexpr const char* batch_unreadable = "batch_unreadable";  // the --batch list could not be read
+inline constexpr const char* settings_unreadable = "settings_unreadable";  // the --settings file could not be read
 inline constexpr const char* no_packets = "no_packets";        // bitrate: a raw YUV file has no encoded packets
 // bdrate's files: one that cannot be read, or no metric or sequence they share.
 inline constexpr const char* rates_unreadable = "rates_unreadable";

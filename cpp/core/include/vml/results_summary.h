@@ -24,6 +24,19 @@ namespace vml {
 // times. docs/RESULTS_JSON.md describes every key.
 inline constexpr int results_format = 2;
 
+// The other files the app writes for a program to read, each named by its
+// "format": "<kind>-<version>", the version raised only when a key changes
+// its meaning (keys are added without). The results' format, 2, a number,
+// came before this convention and stays as it is. docs/RESULTS_JSON.md, "The
+// format of each file", lists them, and docs/schemas has a JSON Schema each.
+inline constexpr const char* segments_format = "segments-1";                // a video's weak segments
+inline constexpr const char* segments_report_format = "segments-report-1";  // every video's
+inline constexpr const char* frames_format = "frames-1";                    // a video's per-frame scores
+inline constexpr const char* worst_frames_format = "worst-frames-1";        // a metric's worst frames
+
+// The head of every such file: "app", "version", "commit" and "format".
+nlohmann::ordered_json document_head(const nlohmann::ordered_json& format);
+
 // A number as the JSON has it: "inf" or "-inf" (JSON has no infinity), and
 // null for none or NaN.
 nlohmann::ordered_json json_number(const std::optional<double>& value);
