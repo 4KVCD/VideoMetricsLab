@@ -689,13 +689,18 @@ void VideoCompareView::set_playing(bool playing) {
     }
     clock_frame_ = !playing && presented_ >= 0 ? presented_ : target_frame();
     wanted_playing_ = is_playing_ = playing;
-    log_playback(playing ? (buffering_ ? "playing, waiting for the first pair" : "playing") : "paused");
+    log_playback(playing ? (buffering_ && presented_ < 0 ? "playing, waiting for the first pair" : "playing") : "paused");
     // Said at once: said only as a frame is shown, it would go on saying
     // "Playing" when paused (by minimizing the window, say).
     pool_status();
     audio_due_ = false;
     audio_resume_at_ = 0.0;
-    clock_started_ = playing && !buffering_ ? std::optional(clock()) : std::nullopt;
+    // The clock starts from the pair on screen, if there is one, buffering or
+    // not: paused while playback was behind (buffering_ left set), it waited
+    // for a pair to come, and none came, as only pairs due by the clock are
+    // taken: Play did nothing until a seek (issue #220). With none on screen
+    // yet (a start, a seek), the first pair to come starts it (show_pair).
+    clock_started_ = playing && (!buffering_ || presented_ >= 0) ? std::optional(clock()) : std::nullopt;
     if (!playing) {
         stop_audio();
     } else if (!buffering_) {
