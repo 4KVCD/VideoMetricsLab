@@ -786,10 +786,13 @@ void WorstFramesTab::start_from_profile() {
     editor_->set_remembered(saved_.conditions);
     editor_->set_rules(saved_);
     if (editor_->condition_count() == 0 && metric_ != nullptr) {
-        // None in the profile on this video's metrics: one on the metric shown.
-        SegmentRules start = saved_;
-        start.conditions = {default_weak_condition(*metric_)};
-        editor_->set_rules(start);
+        // None in the profile on this video's metrics: one on the metric shown
+        // (starting_metric, as exports and the command line choose it).
+        if (const MetricDefinition* metric = starting_metric(keys_, metric_->key)) {
+            SegmentRules start = saved_;
+            start.conditions = {default_weak_condition(*metric)};
+            editor_->set_rules(start);
+        }
     }
 }
 

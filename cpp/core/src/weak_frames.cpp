@@ -241,6 +241,20 @@ std::vector<std::string> condition_texts(const std::vector<WeakCondition>& condi
     return texts;
 }
 
+const MetricDefinition* starting_metric(const std::vector<std::string>& keys, std::string_view preferred) {
+    if (std::find(keys.begin(), keys.end(), preferred) != keys.end()) {
+        if (const MetricDefinition* metric = find_metric(preferred)) {
+            return metric;
+        }
+    }
+    for (const std::string& key : keys) {
+        if (const MetricDefinition* metric = find_metric(key)) {
+            return metric;
+        }
+    }
+    return nullptr;
+}
+
 WeakCondition default_weak_condition(const MetricDefinition& metric) {
     const std::string key(metric.key);
     for (const Threshold& band : metric.thresholds) {

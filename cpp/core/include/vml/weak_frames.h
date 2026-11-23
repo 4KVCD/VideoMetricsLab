@@ -81,6 +81,13 @@ std::optional<WeakCondition> parse_weak_condition(std::string_view text);
 // no bands, Butteraugli above 2 and CVVDP below 9 JOD.
 WeakCondition default_weak_condition(const MetricDefinition& metric);
 
+// The metric a starting condition (default_weak_condition) is on, where no
+// condition is on a video's metrics: `preferred` (the one Metric Graphs, or
+// Worst Frames' bar, shows) where `keys` (the metrics scored) has it, else
+// the first of `keys`; nothing where none is a known metric. The one choice
+// of the Worst Frames tab, exports and the command line's --segments saved.
+const MetricDefinition* starting_metric(const std::vector<std::string>& keys, std::string_view preferred);
+
 // Every member after `conditions` has a default, so SegmentRules{{...}}
 // leaves none uninitialized (GCC's and Clang's -Wextra warn otherwise).
 struct SegmentRules {

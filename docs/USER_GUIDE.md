@@ -1271,7 +1271,9 @@ when every condition must hold; the JSON lists it under `left_out`.
   `<video>.<metrics>.segments.json` and `.csv` once its run ends, with the
   rest that Exports include (see [Exporting from the right-click
   menus](#exporting-from-the-right-click-menus)). Nothing is saved while no
-  condition is set.
+  condition is set. A profile with no condition on the video's metrics
+  takes one on the metric shown, as the Worst Frames tab starts, and its
+  own are listed as left out.
 
 Every weak segments JSON tells, as the Worst Frames tab shows them:
 

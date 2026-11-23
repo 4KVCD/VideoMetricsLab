@@ -149,10 +149,7 @@ std::vector<std::string> take_saved_segments(CompareArguments& arguments, const 
         // A profile with no condition on the metrics compared: one on the
         // metric shown, as the Worst Frames tab starts (default_weak_condition):
         // the one Metric Graphs shows where it is compared, else the first.
-        const std::string& shown =
-            std::find(asked.begin(), asked.end(), settings.graph_metric) != asked.end() ? settings.graph_metric
-                                                                                         : asked.front();
-        if (const MetricDefinition* metric = find_metric(shown)) {
+        if (const MetricDefinition* metric = starting_metric(asked, settings.graph_metric)) {
             arguments.segments.push_back(default_weak_condition(*metric));
             if (fallback != nullptr) {
                 *fallback = arguments.segments.back();
