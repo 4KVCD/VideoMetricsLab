@@ -1,5 +1,6 @@
 // What runs left in the temporary folder (temp_files.h).
 #include "vml/temp_files.h"
+#include "temp_files_parts.h"
 
 #include <gtest/gtest.h>
 
@@ -7,6 +8,8 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -58,6 +61,71 @@ TEST(TempFiles, WhatRunsEndedOutrightLeftIsRemovedAndNothingElse) {
     std::sort(left.begin(), left.end());
     EXPECT_EQ(left, (std::vector<std::string>{"other-program-" + gone + "-x", "vmaf_run_recent99",
                                               "vml-isolated-" + running + "-g7h8"}));
+}
+
+// #205: a save replaced its files by renaming a whole copy over them, which
+// Windows refuses while anything has the file open for reading (std::ifstream
+// does not share deletion): a lookup or the Saved Results tab reading
+// context.json while a run saved into its folder lost the whole save
+// ("[WinError 5] Access is denied"). The rename is tried again once the
+// reader is done.
+TEST(TempFiles, AFileBeingReadIsReplacedOnceItIsClosed) {
+    const test::Folder folder;
+    const std::filesystem::path path = folder / "context.json";
+    write_file_whole(path, [](std::ostream& out) { out << "old"; });
+    const auto text = [&path] {
+        std::ifstream file(path, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(file), {});
+    };
+    const auto leftovers = [&path] {
+        int count = 0;
+        for (const auto& entry : std::filesystem::directory_iterator(path.parent_path())) {
+            count += entry.path().extension() == ".tmp" ? 1 : 0;
+        }
+        return count;
+    };
+    std::vector<int> waits;
+    auto reading = std::make_unique<std::ifstream>(path, std::ios::binary);
+    const auto reader_done = [&](int attempt) {
+        waits.push_back(attempt);
+        reading.reset();
+    };
+    EXPECT_NO_THROW(write_file_whole(path, [](std::ostream& out) { out << "new"; }, reader_done));
+    EXPECT_EQ(text(), "new");
+#ifdef _WIN32
+    EXPECT_EQ(waits, std::vector<int>{0});
+#endif
+
+    // Still open after every try: the save fails, saying why, and leaves the
+    // file as it was and no temporary file.
+    waits.clear();
+    std::ifstream held(path, std::ios::binary);
+    const auto count_waits = [&waits](int attempt) { waits.push_back(attempt); };
+#ifdef _WIN32
+    EXPECT_THROW(write_file_whole(path, [](std::ostream& out) { out << "newer"; }, count_waits), std::runtime_error);
+    EXPECT_EQ(waits.size(), 11U);
+    held.close();
+    EXPECT_EQ(text(), "new");
+#else
+    EXPECT_NO_THROW(write_file_whole(path, [](std::ostream& out) { out << "newer"; }, count_waits));
+#endif
+    EXPECT_EQ(leftovers(), 0);
+
+    // Read-only, it is refused for good: no waiting (#221's review: about 3
+    // seconds were waited for nothing). Its file stays as it was.
+    held.close();
+    waits.clear();
+    const std::filesystem::path locked = folder / "read-only.json";
+    write_file_whole(locked, [](std::ostream& out) { out << "kept"; });
+    std::filesystem::permissions(locked, std::filesystem::perms::owner_write | std::filesystem::perms::group_write |
+                                             std::filesystem::perms::others_write,
+                                 std::filesystem::perm_options::remove);
+#ifdef _WIN32
+    EXPECT_THROW(write_file_whole(locked, [](std::ostream& out) { out << "lost"; }, count_waits), std::runtime_error);
+    EXPECT_TRUE(waits.empty());
+#endif
+    std::filesystem::permissions(locked, std::filesystem::perms::owner_write, std::filesystem::perm_options::add);
+    EXPECT_EQ(leftovers(), 0);
 }
 
 }  // namespace
