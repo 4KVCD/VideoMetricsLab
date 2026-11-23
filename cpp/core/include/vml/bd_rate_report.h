@@ -24,6 +24,11 @@ struct RateTable {
         std::map<std::string, std::optional<double>> scores;  // by metric key; none for an empty cell
         std::map<std::string, std::string> text;              // the other columns' cells, by column name
         std::string reference;  // the reference's path, for a scored video; a CSV file's rows have none
+        // The test video's file name where its bitrate is the whole file's,
+        // soundtrack included (VideoInfo::bit_rate_whole_file; a results
+        // document's "bit_rate_of": "file"), which makes its BD-rate look
+        // worse than it is: said as a warning. Empty otherwise.
+        std::string whole_file_video{};
         bool operator==(const Encode&) const = default;
     };
     std::vector<std::string> metric_keys;  // its metric columns, in the registry's order
@@ -66,6 +71,10 @@ std::string rate_table_csv(const RateTable& table);
 // app shows (a frame metric's aggregate, CVVDP's score). None where the
 // test video's bitrate is not known.
 std::optional<RateTable::Encode> rate_encode(const ComparisonResult& result);
+
+// The warning for each encode of `table` whose bitrate is the whole file's
+// (Encode::whole_file_video), as the command line gives it.
+std::vector<std::string> whole_file_rate_warnings(const RateTable& table);
 
 // The bits per second that go with `result`'s scores: its test video's bitrate,
 // which is of the whole file, or 0 for scores of only a part of it (a range) or

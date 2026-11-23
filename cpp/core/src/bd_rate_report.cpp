@@ -319,6 +319,12 @@ std::optional<RateTable::Encode> document_encode(const nlohmann::json& video, co
     encode.reference = reference->get<std::string>();
     encode.sequence = platform::path_text(platform::path_from_text(encode.reference).stem());
     encode.kbps = rate->get<double>() / 1000;
+    if (video.value("bit_rate_of", nlohmann::json()) == "file") {
+        const auto path = video.find("path");
+        encode.whole_file_video = path != video.end() && path->is_string()
+                                      ? platform::path_text(platform::path_from_text(path->get<std::string>()).filename())
+                                      : encode.sequence;
+    }
     if (const auto scores = video.find("metrics"); scores != video.end() && scores->is_object()) {
         for (const MetricDefinition& metric : metrics()) {
             const auto found = scores->find(std::string(metric.key));
@@ -463,6 +469,9 @@ std::optional<RateTable::Encode> rate_encode(const ComparisonResult& result) {
     encode.sequence = platform::path_text(result.source.stem());
     encode.reference = platform::path_text(result.source);
     encode.kbps = static_cast<double>(bits_per_second) / 1000;
+    if (result.distorted_info.bit_rate_whole_file) {
+        encode.whole_file_video = platform::path_text(result.distorted.filename());
+    }
     for (const MetricDefinition& metric : metrics()) {
         const std::string key(metric.key);
         if (const FrameMetricResult* frames = result.metric_results.frame(key)) {
@@ -472,6 +481,16 @@ std::optional<RateTable::Encode> rate_encode(const ComparisonResult& result) {
         }
     }
     return encode;
+}
+
+std::vector<std::string> whole_file_rate_warnings(const RateTable& table) {
+    std::vector<std::string> warnings;
+    for (const RateTable::Encode& encode : table.encodes) {
+        if (!encode.whole_file_video.empty()) {
+            warnings.push_back(encode.whole_file_video + ": its bitrate is the whole file's, soundtrack included");
+        }
+    }
+    return warnings;
 }
 
 std::vector<std::string> group_columns(const RateTable& table) {

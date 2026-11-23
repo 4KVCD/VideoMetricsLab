@@ -479,6 +479,15 @@ void BdRatePanel::import_file(Side& side, const QString& path) {
     }
     const QString key = QStringLiteral("file:") + QFileInfo(path).absoluteFilePath();
     std::erase_if(side.sources, [&key](const auto& source) { return source.first == key; });
+    // Its encodes whose bitrate is the whole file's, warned of as a scored
+    // video's is: keyed by the file and the encode's place in it.
+    std::erase_if(side.whole_file_rates,
+                  [&key](const auto& item) { return item.first.startsWith(key + QLatin1Char('\n')); });
+    for (std::size_t index = 0; index < table.encodes.size(); ++index) {
+        if (const std::string& video = table.encodes[index].whole_file_video; !video.empty()) {
+            side.whole_file_rates[key + QLatin1Char('\n') + QString::number(index)] = qt_text(video);
+        }
+    }
     side.sources.emplace_back(key, std::move(table));
     if (side.name_edit->text().trimmed().isEmpty()) {
         side.name_edit->setText(QFileInfo(path).completeBaseName());
