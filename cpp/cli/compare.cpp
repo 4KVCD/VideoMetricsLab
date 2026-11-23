@@ -693,12 +693,12 @@ class RunWatch {
 
 public:
     RunWatch(const CompareArguments& arguments, CancelToken cancel, std::shared_ptr<Progress> progress,
-             std::shared_ptr<std::atomic<bool>> running)
+             std::shared_ptr<std::atomic<RunStage>> stage)
         : timeout_(arguments.timeout),
           video_timeout_(arguments.video_timeout),
           cancel_(std::move(cancel)),
           progress_(std::move(progress)),
-          running_(std::move(running)),
+          stage_(std::move(stage)),
           began_(Clock::now()),
           deadlines_(0.0, timeout_ ? std::optional<double>(static_cast<double>(*timeout_)) : std::nullopt,
                      video_timeout_ ? std::optional<double>(static_cast<double>(*video_timeout_)) : std::nullopt) {
@@ -744,6 +744,14 @@ public:
         deadlines_.ended(index);
     }
 
+    // The run is over: the stage is outside it from now, set under the lock
+    // the watch decides under, so that a --timeout due as the run ends has
+    // either cancelled it already or ends the command.
+    void run_ended() {
+        const std::lock_guard lock(mutex_);
+        *stage_ = RunStage::outside;
+    }
+
     // Whether --timeout cancelled the run; whether --video-timeout stopped job `index`.
     bool timed_out() const { return timed_out_; }
     bool timed_out(std::size_t index) const {
@@ -764,13 +772,15 @@ private:
         bool run_cancel_passed_on = false;
         while (!woken_.wait_for(lock, std::chrono::milliseconds(100), [this] { return stopping_; })) {
             const Deadlines::Due due = deadlines_.due(seconds());
-            if (due.run) {
+            const TimeoutAction action =
+                due.run ? on_run_timeout(*stage_, cancel_.cancelled()) : TimeoutAction::nothing;
+            if (action == TimeoutAction::end_command) {
+                // Before the run, or while the results are written, as Ctrl+C then: the command ends at once.
+                progress_->problem("Timed out after --timeout's " + std::to_string(*timeout_) + " s");
+                platform::end_process_now(exit_timeout);
+            }
+            if (action == TimeoutAction::cancel_run) {
                 timed_out_ = true;
-                if (!*running_) {
-                    // Before or after the run, as Ctrl+C then: the command ends at once.
-                    progress_->problem("Timed out after --timeout's " + std::to_string(*timeout_) + " s");
-                    platform::end_process_now(exit_timeout);
-                }
                 progress_->message("Timed out after --timeout's " + std::to_string(*timeout_) + " s: cancelling...");
                 app_log::write(app_log::Level::info, "vml.job_runner", "Run: cancel requested (--timeout)");
                 cancel_.cancel();
@@ -797,7 +807,7 @@ private:
     const std::optional<long long> video_timeout_;
     CancelToken cancel_;
     const std::shared_ptr<Progress> progress_;
-    const std::shared_ptr<std::atomic<bool>> running_;
+    const std::shared_ptr<std::atomic<RunStage>> stage_;
     const Clock::time_point began_;
     mutable std::mutex mutex_;
     std::condition_variable woken_;
@@ -1277,7 +1287,7 @@ namespace {
 // Ctrl+C: outside the run, the command ends at once with exit code 130 and
 // nothing more, as the Python app's KeyboardInterrupt ends it. An FFmpeg
 // check or ffprobe under way ends with it, as this process's job ends.
-// During the run (`running`), the run is cancelled and what finished is
+// During the run (RunStage::running), the run is cancelled and what finished is
 // reported, and the GPU checks started with the command are ended (a task
 // of the run may be waiting for one: nothing after the run asks for one);
 // a second Ctrl+C (or SIGTERM) ends the command at once, for a
@@ -1290,11 +1300,11 @@ namespace {
 // taking what to say ("Cancelling..." for Ctrl+C).
 std::function<void(const std::string&)> cancel_on_interrupt(CancelToken cancel,
                                                             const std::shared_ptr<Progress>& progress,
-                                                            const std::shared_ptr<std::atomic<bool>>& running) {
+                                                            const std::shared_ptr<std::atomic<RunStage>>& stage) {
     auto asked = std::make_shared<std::atomic<bool>>(false);
-    const std::function<void(const std::string&)> interrupt = [cancel, progress, running,
+    const std::function<void(const std::string&)> interrupt = [cancel, progress, stage,
                                                                asked](const std::string& saying) mutable {
-        if (!*running || asked->exchange(true)) {
+        if (*stage != RunStage::running || asked->exchange(true)) {
             platform::end_process_now(exit_cancelled);
         }
         progress->message(saying);
@@ -1307,14 +1317,19 @@ std::function<void(const std::string&)> cancel_on_interrupt(CancelToken cancel,
 }
 
 // --cancel-on-stdin-eof: standard input read to its end on a thread of its
-// own, which then cancels the run as Ctrl+C does (`interrupt`). Whatever is
-// written to it is read and dropped.
-void cancel_at_end_of_input(const std::function<void(const std::string&)>& interrupt) {
-    std::thread([interrupt] {
+// own, which then cancels the run as Ctrl+C does (`interrupt`): unless the
+// results are given already (`stage`), when a program that has read them
+// closes it and the command ends as the run did. Whatever is written to it
+// is read and dropped.
+void cancel_at_end_of_input(const std::function<void(const std::string&)>& interrupt,
+                            const std::shared_ptr<std::atomic<RunStage>>& stage) {
+    std::thread([interrupt, stage] {
         char buffer[4096];
         while (std::fread(buffer, 1, sizeof buffer, stdin) > 0) {
         }
-        interrupt("Standard input ended: cancelling...");
+        if (*stage != RunStage::results_given) {
+            interrupt("Standard input ended: cancelling...");
+        }
     }).detach();
 }
 
@@ -2489,12 +2504,12 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
     const Clock::time_point began = Clock::now();
     CancelToken cancel;
     const auto progress = std::make_shared<Progress>(given.quiet, given.progress == "jsonl");
-    const auto running = std::make_shared<std::atomic<bool>>(false);
-    const std::function<void(const std::string&)> interrupt = cancel_on_interrupt(cancel, progress, running);
+    const auto stage = std::make_shared<std::atomic<RunStage>>(RunStage::outside);
+    const std::function<void(const std::string&)> interrupt = cancel_on_interrupt(cancel, progress, stage);
     if (given.cancel_on_stdin_eof) {
-        cancel_at_end_of_input(interrupt);
+        cancel_at_end_of_input(interrupt, stage);
     }
-    RunWatch watch(given, cancel, progress, running);  // --timeout, --video-timeout
+    RunWatch watch(given, cancel, progress, stage);  // --timeout, --video-timeout
     // The test videos, found first (it reads only the file system), so that
     // a wrong command is said before any work.
     std::vector<BatchGroup> groups;  // --batch's rows, which the comparisons point to
@@ -2660,7 +2675,7 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
     bool cancelled = false;
     if (!jobs.empty()) {
         const Clock::time_point started = Clock::now();
-        *running = true;
+        *stage = RunStage::running;
         // What runs ended outright (End task, a crash) left in the temporary
         // folder goes while this one runs; waited for as the block ends.
         const std::future<void> leftovers = std::async(std::launch::async, [] {
@@ -2681,7 +2696,6 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
         }
         cancelled = cancel.cancelled();
         say_timed_out_videos(targets, watch);
-        *running = false;
         const double seconds = std::chrono::duration<double>(Clock::now() - started).count();
         progress->message(std::string(cancelled ? "Cancelled" : "Finished") + " after " + format_hms(seconds));
     } else {
@@ -2692,6 +2706,9 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
 
     // A video answered by its saved scores alone had no job to count its
     // frames in (frame_pairing.h): counted here, and saved with its scores.
+    // Part of the run: reading whole files can take minutes, and Ctrl+C or
+    // --timeout then cancels the counting, and the results are still given.
+    *stage = RunStage::running;
     const bool read_whole_files =
         arguments.frame_counts ? *arguments.frame_counts == "check" : settings.check_frame_counts;
     // Each file once: every saved test video's pairing asks for the reference's.
@@ -2740,6 +2757,8 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
             every_ok = every_ok && video_status(video, false) == "ok";
         }
     }
+    watch.run_ended();
+    cancelled = cancelled || cancel.cancelled();  // as the frames were counted, or right after
     // The command line cannot pause: no paused time
     RunRecord record{"cli",
                      arguments.command_line,
@@ -2756,6 +2775,7 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
                                        record,
                                        profile_json(chosen, scores, options_from_settings(arguments, gpu_from_settings)),
                                        fields, *progress);
+    *stage = RunStage::results_given;
     // A video below a --require bar, or with a weak segment (--fail-on-segments): its checks are made as the
     // results are written.
     bool gate_failed = false;

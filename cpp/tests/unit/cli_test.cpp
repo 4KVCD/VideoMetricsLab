@@ -1144,6 +1144,16 @@ TEST(CommandLine, TimeoutsStopTheRunOrOneVideo) {
     EXPECT_FALSE(tokens[2].cancelled());
 }
 
+// --timeout ends the command at once outside the run, cancels the run, and
+// does nothing once the results are given (which say it did not time out)
+// or once Ctrl+C has cancelled the run (whose 130 it does not change).
+TEST(CommandLine, TimeoutActsByTheRunsStage) {
+    EXPECT_EQ(on_run_timeout(RunStage::outside, false), TimeoutAction::end_command);
+    EXPECT_EQ(on_run_timeout(RunStage::running, false), TimeoutAction::cancel_run);
+    EXPECT_EQ(on_run_timeout(RunStage::running, true), TimeoutAction::nothing);
+    EXPECT_EQ(on_run_timeout(RunStage::results_given, false), TimeoutAction::nothing);
+}
+
 // The automation contract: every error, failure, note and why in the JSON has
 // a code beside it, a run that compared nothing still writes a document, and
 // an input not read is exit code 4, not a wrong command's 2.
