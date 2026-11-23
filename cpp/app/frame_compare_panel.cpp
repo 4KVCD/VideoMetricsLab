@@ -710,9 +710,12 @@ void FrameComparePanel::set_runs(std::vector<FrameComparisonEntry> entries) {
         if (is_video_mode()) {
             // Only when what is on screen changed: a result arrives for a
             // video several times while a run goes on, which must not
-            // restart the video being watched.
+            // restart the video being watched; nor must the files' facts
+            // that come in after they are opened and that nothing playing
+            // reads (VideoCompareView::plays_alike: on opening the tab,
+            // every decoder started twice).
             const FrameComparisonEntry* shown = current_entry();
-            if (!was_shown(*shown) || shown->comparison != *old_comparison) {
+            if (!was_shown(*shown) || !VideoCompareView::plays_alike(*old_comparison, shown->comparison)) {
                 load_current_video();
             }
         } else {
