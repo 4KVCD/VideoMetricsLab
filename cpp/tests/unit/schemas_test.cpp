@@ -23,7 +23,9 @@
 #include "weak_report.h"
 #include "vml/bd_rate_report.h"
 #include "vml/export_csv.h"
+#include "vml/platform/system.h"
 #include "vml/results_summary.h"
+#include "vml/run_file.h"
 #include "vml/run_record.h"
 #include "vml/weak_frames.h"
 
@@ -337,6 +339,24 @@ TEST(Schemas, DiffsMatchSegmentsAndHoldToTheirSchema) {
     EXPECT_EQ(schema_errors("diff", document), std::vector<std::string>{});
     EXPECT_EQ(schema_errors("diff", diff_json(old_result, "a", new_result, "b", SegmentRules{})),
               std::vector<std::string>{});
+}
+
+// diff takes --segments saved as saved show and report do: a preset that
+// does not exist is a usage error (exit code 2, its message printed), not a
+// failure (exit code 1, "Error: ...").
+TEST(Schemas, DiffTakesSavedSegmentsAsSavedShowDoes) {
+    const std::filesystem::path folder = std::filesystem::temp_directory_path() / "vml-diff-segments-test";
+    std::filesystem::create_directories(folder);
+    const std::filesystem::path run = folder / "a.metrics.json";
+    save_run(*scored_video().result, run, "a");
+    SavedArguments arguments;
+    arguments.action = "diff";
+    arguments.items = {platform::path_text(run), platform::path_text(run)};
+    arguments.output.segments_saved = true;
+    arguments.output.segments_preset = "no-such-preset";
+    arguments.output.quiet = true;
+    EXPECT_THROW(diff(arguments), UsageError);
+    std::filesystem::remove_all(folder);
 }
 
 }  // namespace

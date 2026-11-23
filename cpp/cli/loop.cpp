@@ -452,9 +452,14 @@ int diff(const SavedArguments& arguments) {
         }
     }
     if (output.segments_saved) {
-        for (const std::string& condition : take_saved_segments(output, Settings::load(), asked)) {
-            warn("--segments " + segments_source(output) + ": " + condition + " is left out: neither run has its metric");
-        }
+        // As saved show and report take them: a wrong preset is a usage
+        // error (exit code 2), and the notes are compare's
+        const auto note = [&output](const std::string& text) {
+            if (!output.quiet) {
+                print_error(text);
+            }
+        };
+        take_saved_segments_of_scores(output, Settings::load(), asked, note);
     }
     if (const std::optional<std::string> refused = segments_refusal(output.segments, asked)) {
         throw UsageError(*refused);
