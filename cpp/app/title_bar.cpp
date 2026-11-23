@@ -385,6 +385,25 @@ void TitleBar::attach() {
                  SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
 }
 
+int resize_edge(QPoint point, QSize client, int edge_x, int edge_y) {
+    const bool near_left = point.x() < edge_x;
+    const bool near_right = point.x() >= client.width() - edge_x;
+    if (point.y() < edge_y) {  // the top: a band inside, nothing above the bar
+        return near_left ? HTTOPLEFT : near_right ? HTTOPRIGHT : HTTOP;
+    }
+    const bool near_bottom = point.y() >= client.height() - edge_y;
+    if (point.x() < 0) {  // the rest: Windows' border, outside the client area
+        return near_bottom ? HTBOTTOMLEFT : HTLEFT;
+    }
+    if (point.x() >= client.width()) {
+        return near_bottom ? HTBOTTOMRIGHT : HTRIGHT;
+    }
+    if (point.y() >= client.height()) {
+        return near_left ? HTBOTTOMLEFT : near_right ? HTBOTTOMRIGHT : HTBOTTOM;
+    }
+    return HTNOWHERE;
+}
+
 int TitleBar::hit_test(QPoint native) const {
     // Every point of the window is answered here: left to Qt, a window with
     // Qt::ExpandedClientAreaHint and CustomizeWindowHint has its hit test
@@ -398,25 +417,15 @@ int TitleBar::hit_test(QPoint native) const {
     ScreenToClient(hwnd, &point);
     RECT client;
     GetClientRect(hwnd, &client);
-    // The edges resize, unless maximized or full screen: a band inside the
-    // window's area, and Windows' invisible border beyond it.
+    // The edges resize, unless maximized or full screen (resize_edge).
     if (!window_->isMaximized() && !window_->isFullScreen()) {
         const UINT dpi = GetDpiForWindow(hwnd);
         const int padding = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
-        const int edge_x = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) + padding;
-        const int edge_y = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + padding;
-        const bool left = point.x < edge_x;
-        const bool right = point.x >= client.right - edge_x;
-        const bool top = point.y < edge_y;
-        const bool bottom = point.y >= client.bottom - edge_y;
-        if (left) {
-            return top ? HTTOPLEFT : bottom ? HTBOTTOMLEFT : HTLEFT;
-        }
-        if (right) {
-            return top ? HTTOPRIGHT : bottom ? HTBOTTOMRIGHT : HTRIGHT;
-        }
-        if (top || bottom) {
-            return top ? HTTOP : HTBOTTOM;
+        const int edge = resize_edge(QPoint(point.x, point.y), QSize(client.right, client.bottom),
+                                     GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) + padding,
+                                     GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + padding);
+        if (edge != HTNOWHERE) {
+            return edge;
         }
     }
     const double ratio = window_->devicePixelRatioF();

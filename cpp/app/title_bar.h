@@ -81,6 +81,15 @@ private:
 
 #ifdef _WIN32
 
+// The resize edge WM_NCHITTEST answers at `point` (client pixels) of a
+// window whose client area is `client` pixels, or 0 for none (HTNOWHERE).
+// The left, right and bottom edges resize only outside the client area, on
+// Windows' own invisible border there: a band inside would take what is drawn
+// at the edge, such as the Close button's right side. The top has no border
+// above the app's bar, so it resizes within `edge_y` of it, and its corners
+// within `edge_x` of the sides.
+int resize_edge(QPoint point, QSize client, int edge_x, int edge_y);
+
 class TitleBar : public QWidget {
 public:
     // Whether the window can have the app's title bar: Windows, VML Modern
