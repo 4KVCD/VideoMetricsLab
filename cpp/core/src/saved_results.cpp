@@ -122,6 +122,7 @@ bool delete_saved_comparison(const std::filesystem::path& base, const SavedCompa
         return false;
     }
     std::filesystem::remove_all(folder, error);
+    saved_comparison_deleted(folder);  // gone, or in part
     return !error && !std::filesystem::exists(folder, error);
 }
 
