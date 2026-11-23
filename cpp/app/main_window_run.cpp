@@ -1180,6 +1180,9 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
     graph_panel_->add_run({std::shared_ptr<const ComparisonResult>(run, &run->result), run->label,
                            run->graph_identity, !continuing});
     sync_frame_compare();
+    if (tabs_->currentIndex() == tab_worst_frames) {
+        sync_worst_frames();  // shown: its videos as they are scored (else as it opens)
+    }
     if (final) {
         export_automatically(row_data);  // Settings' export, when on: once its bitrate is read
     }
