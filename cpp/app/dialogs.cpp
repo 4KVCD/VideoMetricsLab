@@ -105,6 +105,23 @@ std::optional<FrameRateAnswer> ask_frame_rate(QWidget* parent, const QString& vi
     return FrameRateAnswer{*entered_frame_rate(entry->text()), for_the_others->isChecked()};
 }
 
+std::optional<CloseAnswer> ask_close_during_run(QWidget* parent) {
+    QMessageBox box(QMessageBox::Question, tr("A run is in progress"),
+                    tr("Closing the window stops the run, and the videos still being scored are left unfinished."),
+                    QMessageBox::NoButton, parent);
+    QPushButton* stop = box.addButton(tr("Stop and close"), QMessageBox::DestructiveRole);
+    QPushButton* keep = box.addButton(tr("Keep running"), QMessageBox::RejectRole);
+    box.setDefaultButton(keep);  // Enter leaves the run going
+    box.setEscapeButton(keep);
+    auto* again = new QCheckBox(tr("Don't ask again (change it in Settings)"), &box);
+    box.setCheckBox(again);
+    box.exec();
+    if (box.clickedButton() != stop) {
+        return std::nullopt;
+    }
+    return CloseAnswer{again->isChecked()};
+}
+
 }  // namespace
 
 QString save_dialog_start(const QString& suggested, const QString& folder) {
@@ -141,6 +158,7 @@ Dialogs standard_dialogs(QWidget* parent, std::function<std::string()> export_di
         [parent](const QString& video, double reference_fps, int others) {
             return ask_frame_rate(parent, video, reference_fps, others);
         },
+        [parent] { return ask_close_during_run(parent); },
         export_folder,
         [parent](const QString& title, const QString& label, const QString& text) -> std::optional<QString> {
             bool ok = false;
