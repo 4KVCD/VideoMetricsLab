@@ -154,7 +154,19 @@ struct DevicesArguments {
     ProfileArguments profile;  // its settings only
 };
 
-enum class Command { none, compare, devices, bitrate, bdrate };
+// The saved command's arguments (list, show or delete the saved results),
+// and the report command's (run files): what to do, its items (IDs, test
+// videos' paths, or run files), and for show and report what to write, in
+// compare's own fields (--json, --csv, --frames-json, --run-dir, --segments
+// and its options, --worst, -q), which compare's reports read.
+struct SavedArguments {
+    std::string action;  // "list", "show" or "delete"; "report" for the report command
+    std::vector<std::string> items;
+    std::optional<std::string> filter;  // list --filter: part of a test video's or reference's name
+    CompareArguments output;
+};
+
+enum class Command { none, compare, devices, bitrate, bdrate, saved, report };
 
 struct Arguments {
     Command command = Command::none;
@@ -162,6 +174,7 @@ struct Arguments {
     std::optional<std::string> print_and_exit;
     CompareArguments compare;
     DevicesArguments devices;
+    SavedArguments saved;  // the saved command's, or the report command's
     BitrateArguments bitrate;
     BdrateArguments bdrate;
 };

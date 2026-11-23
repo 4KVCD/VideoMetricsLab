@@ -18,6 +18,7 @@
 #include "bitrate.h"
 #include "devices.h"
 #include "report.h"
+#include "saved.h"
 #include "weak_report.h"
 #include "vml/bd_rate_report.h"
 #include "vml/export_csv.h"
@@ -209,6 +210,60 @@ TEST(Schemas, HoldEveryDocument) {
     broken["format"] = "devices-2";
     broken["metrics"].erase("vmaf");
     EXPECT_EQ(schema_errors("devices", broken).size(), 2u);
+}
+
+// saved show and delete find a comparison by the first hex digits of its ID
+// (at least 6 to show, 12 to delete) or, to show, by its test video's path;
+// saved list --json holds to its schema.
+TEST(Schemas, SavedComparisonsAreNamedAndListed) {
+    const auto comparison = [](const std::string& id, const char* test) {
+        SavedComparison saved;
+        saved.folder = std::filesystem::path("Y:/cache/v2") / id;
+        saved.source = "Y:/clips/reference.mkv";
+        saved.distorted = test;
+        saved.bytes = 4096;
+        saved.scores = {SavedScoreFile{saved.folder / "vmaf_1.npz", "vmaf", {}, 4096}};
+        return saved;
+    };
+    const std::vector<SavedComparison> all{comparison(std::string(64, 'a'), "Y:/clips/a.mkv"),
+                                           comparison("ab" + std::string(62, 'c'), "Y:/clips/b.mkv"),
+                                           comparison(std::string(64, 'd'), "Y:/clips/a.mkv")};
+    EXPECT_EQ(saved_named(all, "AAAAAA", 6), std::vector<const SavedComparison*>{&all[0]});  // any case
+    EXPECT_EQ(saved_named(all, "abcccc", 6), std::vector<const SavedComparison*>{&all[1]});
+    EXPECT_TRUE(saved_named(all, "eeeeee", 6).empty());
+    EXPECT_THROW(saved_named(all, "aaa", 6), UsageError);          // too short, and no path
+    EXPECT_THROW(saved_named(all, "aaaaaaaaa", 12), UsageError);   // delete's 12
+    EXPECT_EQ(saved_named(all, "Y:/clips/A.mkv", 6),               // every comparison of that video
+              (std::vector<const SavedComparison*>{&all[0], &all[2]}));
+
+    const nlohmann::ordered_json listed = saved_list_json({&all[0], &all[1]});
+    EXPECT_EQ(listed["comparisons"][1]["id"], all[1].folder.filename().string());
+    EXPECT_EQ(listed["comparisons"][0]["metrics"], nlohmann::ordered_json::array({"vmaf"}));
+    EXPECT_EQ(schema_errors("saved-list", listed), std::vector<std::string>{});
+}
+
+// saved show and report take --segments saved as compare does: a wrong
+// preset is a usage error (exit code 2, its message printed), not a failure
+// (exit code 1, "Error: ..."), and a profile with no condition on the
+// metrics there takes the fallback, said in a note as compare says it.
+TEST(Schemas, SavedSegmentsOfScoresAreTakenAsCompareTakesThem) {
+    std::vector<std::string> notes;
+    const auto message = [&notes](const std::string& text) { notes.push_back(text); };
+    CompareArguments wrong;
+    wrong.segments_saved = true;
+    wrong.segments_preset = "no-such-preset";
+    EXPECT_THROW(take_saved_segments_of_scores(wrong, Settings{}, {"vmaf"}, message), UsageError);
+
+    Settings settings;
+    settings.weak_segment_conditions = {"ssimulacra2<70"};
+    CompareArguments output;
+    output.segments_saved = true;
+    take_saved_segments_of_scores(output, settings, {"vmaf"}, message);
+    ASSERT_EQ(output.segments.size(), 1U);
+    EXPECT_EQ(output.segments[0].key, "vmaf");
+    ASSERT_EQ(notes.size(), 2U);
+    EXPECT_NE(notes[0].find("ssimulacra2<70 is left out"), std::string::npos) << notes[0];
+    EXPECT_NE(notes[1].find("the profile has no condition on the metrics here"), std::string::npos) << notes[1];
 }
 
 }  // namespace

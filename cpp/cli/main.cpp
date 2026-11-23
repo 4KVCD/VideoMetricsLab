@@ -25,6 +25,7 @@
 #include "common.h"
 #include "compare.h"
 #include "devices.h"
+#include "saved.h"
 #include "vml/gpu_choice.h"
 #include "vml/hardware_decoding.h"
 #include "vml/settings.h"
@@ -102,6 +103,10 @@ int main(int argc, char** argv) {
                 return cli::bitrate(arguments.bitrate, chosen);
             case cli::Command::bdrate:
                 return cli::bdrate(arguments.bdrate);
+            case cli::Command::saved:
+                return cli::saved(arguments.saved);
+            case cli::Command::report:
+                return cli::report(arguments.saved);
             case cli::Command::devices:
                 return cli::devices(chosen.settings, arguments.devices.json_path);
             case cli::Command::none:
