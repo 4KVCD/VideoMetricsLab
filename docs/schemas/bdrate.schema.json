@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/4KVCD/VideoMetricsLab/blob/release/v2.7/docs/schemas/bdrate.schema.json",
+  "title": "VideoMetricsLab BD-rates (bdrate-1)",
+  "description": "bdrate --json.",
+  "type": "object",
+  "required": [
+    "app",
+    "version",
+    "commit",
+    "format",
+    "method",
+    "anchor",
+    "test",
+    "metrics",
+    "mean",
+    "median",
+    "groups",
+    "sequences",
+    "warnings"
+  ],
+  "properties": {
+    "app": {
+      "const": "VideoMetricsLab"
+    },
+    "version": {
+      "type": "string"
+    },
+    "commit": {
+      "type": "string"
+    },
+    "format": {
+      "const": "bdrate-1"
+    },
+    "method": {
+      "const": "pchip"
+    },
+    "anchor": {
+      "type": "string"
+    },
+    "test": {
+      "type": "string"
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "group_by": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "mean": {
+      "$ref": "#/$defs/row"
+    },
+    "median": {
+      "$ref": "#/$defs/row"
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "group",
+          "mean",
+          "median"
+        ]
+      }
+    },
+    "sequences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "sequence",
+          "anchor_encodes",
+          "test_encodes",
+          "bd_rate",
+          "why"
+        ]
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "row": {
+      "type": "object",
+      "required": [
+        "bd_rate"
+      ],
+      "properties": {
+        "bd_rate": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

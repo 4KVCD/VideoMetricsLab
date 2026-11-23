@@ -1,0 +1,621 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/4KVCD/VideoMetricsLab/blob/release/v2.7/docs/schemas/results.schema.json",
+  "title": "VideoMetricsLab results (format 2)",
+  "description": "compare --json and the window's results export (docs/RESULTS_JSON.md), or with --batch {\"batch\": [...]}, one document a reference. A later format only adds keys.",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/document"
+    },
+    {
+      "type": "object",
+      "required": [
+        "batch"
+      ],
+      "properties": {
+        "batch": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/document"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "reference",
+                  "error"
+                ],
+                "properties": {
+                  "reference": {
+                    "type": "string"
+                  },
+                  "error": {
+                    "type": "string"
+                  },
+                  "error_code": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "document": {
+      "type": "object",
+      "required": [
+        "app",
+        "version",
+        "commit",
+        "format",
+        "videos"
+      ],
+      "properties": {
+        "app": {
+          "const": "VideoMetricsLab"
+        },
+        "version": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string"
+        },
+        "format": {
+          "const": 2
+        },
+        "cancelled": {
+          "type": "boolean"
+        },
+        "reference": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          }
+        },
+        "videos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/video"
+          }
+        },
+        "run": {
+          "type": "object"
+        },
+        "machine": {
+          "type": "object"
+        },
+        "summary_rules": {
+          "type": "object"
+        },
+        "difference": {
+          "type": "object"
+        },
+        "log_file": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "error_code": {
+          "type": "string"
+        }
+      }
+    },
+    "video": {
+      "type": "object",
+      "required": [
+        "path",
+        "reference",
+        "status"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "reference": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "partial",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "error": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "failed_metrics": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "from_saved_scores": {
+          "type": "boolean"
+        },
+        "compared_frames": {
+          "type": "integer"
+        },
+        "csv": {
+          "type": "string"
+        },
+        "frames_json": {
+          "type": "string"
+        },
+        "run_file": {
+          "type": "string"
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/metric"
+          }
+        },
+        "weak_segments": {
+          "type": "object",
+          "required": [
+            "conditions",
+            "combine",
+            "min_frames",
+            "merge_frames",
+            "segments"
+          ],
+          "properties": {
+            "conditions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "left_out": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "combine": {
+              "enum": [
+                "any",
+                "all"
+              ]
+            },
+            "min_frames": {
+              "type": "integer"
+            },
+            "merge_frames": {
+              "type": "integer"
+            },
+            "ranges": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "first_frame",
+                  "last_frame"
+                ]
+              }
+            },
+            "segments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/segment"
+              }
+            }
+          }
+        },
+        "settings": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "metrics": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "vmaf_model": {
+                  "$ref": "#/$defs/model"
+                },
+                "vmaf_v1_model": {
+                  "$ref": "#/$defs/model"
+                },
+                "vmaf_hdr_model": {
+                  "$ref": "#/$defs/model"
+                }
+              }
+            }
+          ]
+        },
+        "metric_status": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "required": [
+                  "status"
+                ],
+                "properties": {
+                  "status": {
+                    "type": "string"
+                  },
+                  "why": {
+                    "type": "string"
+                  },
+                  "code": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "timings": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "error_code": {
+          "type": "string"
+        },
+        "note_codes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "failed_metric_codes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "metric": {
+      "type": "object",
+      "required": [
+        "score"
+      ],
+      "properties": {
+        "score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "enum": [
+                "inf",
+                "-inf"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frames": {
+          "type": "integer"
+        },
+        "median": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "enum": [
+                "inf",
+                "-inf"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stdev": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "enum": [
+                "inf",
+                "-inf"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "enum": [
+                "inf",
+                "-inf"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "enum": [
+                "inf",
+                "-inf"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "worst_is": {
+          "enum": [
+            "low",
+            "high"
+          ]
+        },
+        "worst_10_percent": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "enum": [
+                "inf",
+                "-inf"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "worst_5_percent": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "enum": [
+                "inf",
+                "-inf"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "worst_1_percent": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "enum": [
+                "inf",
+                "-inf"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "worst_0.1_percent": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "enum": [
+                "inf",
+                "-inf"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "percent_of_frames": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "worst_frames": {
+          "type": "object",
+          "properties": {
+            "frame": {
+              "type": "array"
+            },
+            "time": {
+              "type": "array"
+            },
+            "score": {
+              "type": "array"
+            }
+          }
+        },
+        "per_second": {
+          "type": "object"
+        },
+        "computed_on": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "implementation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "model": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "choice",
+            "model",
+            "id"
+          ],
+          "properties": {
+            "choice": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            },
+            "id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "segment": {
+      "type": "object",
+      "required": [
+        "first_frame",
+        "last_frame",
+        "start_time",
+        "end_time",
+        "frames",
+        "metrics"
+      ],
+      "properties": {
+        "first_frame": {
+          "type": "integer"
+        },
+        "last_frame": {
+          "type": "integer"
+        },
+        "start_time": {
+          "type": "number"
+        },
+        "end_time": {
+          "type": "number"
+        },
+        "frames": {
+          "type": "integer"
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "min",
+              "max",
+              "mean"
+            ],
+            "properties": {
+              "min": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "enum": [
+                      "inf",
+                      "-inf"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "max": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "enum": [
+                      "inf",
+                      "-inf"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "mean": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "enum": [
+                      "inf",
+                      "-inf"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

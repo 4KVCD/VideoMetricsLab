@@ -11,7 +11,34 @@ This page describes format 2 (VideoMetricsLab 2.5). A later format only adds
 keys, so a reader should skip the keys it does not know. A key that applies is
 always written, defaults included: a missing value is `null`, never a key left
 out. Times are UTC in ISO 8601 (`2026-11-14T21:42:25Z`), durations are in
-seconds, sizes are in bytes and bitrates are in bits per second.
+seconds, sizes are in bytes and bitrates are in bits per second. JSON has no
+infinity: an endless number (identical frames' PSNR) is the string `"inf"`
+(`"-inf"`), in this file and every other the app writes.
+
+## The format of each file
+
+Every JSON file the app writes for a program to read begins with `app`
+(`"VideoMetricsLab"`), `version`, `commit` (the build's) and `format`,
+which says what the file is and which version of it. A later version of a
+format only adds keys; one that changed a key's meaning would be a new
+version. Each has a JSON Schema in [`docs/schemas`](schemas), which the
+tests hold the app's output to.
+
+| `format` | The file | Written by | Schema |
+| --- | --- | --- | --- |
+| `2` | The results (this page) | `compare --json`, the window's results exports | `results.schema.json` |
+| `"segments-1"` | A video's weak segments, `<video>.<metrics>.segments.json` | `compare --segments-dir`, the window's exports | `segments.schema.json` |
+| `"segments-report-1"` | Every video's weak segments in one file | `compare --segments-report`, the window's exports | `segments-report.schema.json` |
+| `"frames-1"` | A video's per-frame scores ([below](#per-frame-scores-as-json)) | `compare --frames-json`, the window's exports | `frames.schema.json` |
+| `"worst-frames-1"` | A metric's worst dips ([below](#worst-frames-as-json-and-csv)) | the Worst Frames tab's **Worst frames as JSON...** | `worst-frames.schema.json` |
+| `"bitrate-1"` | Each video's bitrate | `bitrate --json` | `bitrate.schema.json` |
+| `"bdrate-1"` | BD-rates | `bdrate --json` | `bdrate.schema.json` |
+| `"devices-1"` | Where each metric would be calculated | `devices --json` | `devices.schema.json` |
+
+The results' format is a number, `2`, as it was before the others had one;
+the others are `<kind>-<version>`. A run file (`.metrics.json`) is the app's
+own, which it reads back: its `format_version` is not part of this
+convention.
 
 ## The document
 
@@ -91,7 +118,7 @@ the `low` or `high` ones, and its `bands`.
 | `notes`, `note_codes` | Command line only: what the reader should know about how the video was scored (a metric left out, colours guessed, a GPU metric that fell back...), and each note's [code](#codes), in step. |
 | `failed_metrics`, `failed_metric_codes` | Command line only: each metric that failed, why, and its [code](#codes). |
 | `from_saved_scores` | Command line only: whether the scores came from saved scores. |
-| `csv`, `run_file`, `segment_files` | Command line only: where `--csv`, `--run-dir` and `--segments-dir` wrote this video's files (the `.<metrics>.segments.json`, then the `.csv`), for a script to find them under the names they were given (`--name`, or a number after a name taken). A further CVVDP display's entry in `cvvdp_displays` has its own `csv` and `run_file`. |
+| `csv`, `frames_json`, `run_file`, `segment_files` | Command line only: where `--csv`, `--frames-json`, `--run-dir` and `--segments-dir` wrote this video's files (the `.<metrics>.segments.json`, then the `.csv`), for a script to find them under the names they were given (`--name`, or a number after a name taken). A further CVVDP display's entry in `cvvdp_displays` has its own `csv` and `run_file`. |
 | `width` ... `encoder_settings` | The test video's details (see [File details](#file-details)). |
 | `film_grain` | Where the stream carries film grain: its `kinds` and whether it was `scored` `with` or `without` it (and `why_without`). |
 | `compared_frames` | How many frame pairs were compared. |
@@ -104,6 +131,7 @@ the `low` or `high` ones, and its `bands`.
 | `variant_of` | Window only: for a row that scores another row's file another way (a film grain twin, a "Test both" companion, CVVDP on a further display listed apart), that file; else `null`. |
 | `cvvdp_display`, `cvvdp_displays` | The display CVVDP's score is for, and every display CVVDP was scored on: `display`, `score`, `display_parameters`, `cvvdp` (its full summary), and for a further display its own `timings`. |
 | `settings` | Every setting that changes the scores or how to read them (below). |
+| `weak_segments` | Command line with `--segments` only: the video's weak segments by the conditions given, as a [segments file](#the-format-of-each-file) has them but without its head: `conditions` (as written back, `vmaf<90`), `left_out` (conditions on a metric the video was not scored with, where any), `combine` (`any` or `all`), `min_frames`, `merge_frames`, `ranges` (the frames counted, `first_frame` and `last_frame` each; empty: all), and `segments`, each with `first_frame`, `last_frame`, `start_time`, `end_time` (seconds), `frames`, and for each condition's metric its `min`, `max` and `mean` there. |
 | `black_bars` | How the black bars were found (below). |
 | `metric_status` | For each metric asked for: `status` is `calculated`, `saved` (taken from saved scores), `failed` or `cancelled`, `not run`, or `not applicable` (command line: the metric does not apply to these videos, such as HDR VMAF of a video that is not PQ; it is left out, and not a failure); `why` and its [code](#codes) for the failed, not run and not applicable ones. |
 | `decode_plan` | For each pass, its `metrics` and the `decoders` it used for the `source` and the `test` video, after any fallback: FFmpeg's hardware decoder (`cuda`, `d3d11va`, `vulkan`, `videotoolbox`), `vvdec` (VVC decoded on the GPU by vvdec-vulkan) or `software`; for a video decoded in `software`, `source_why` or `test_why` says why (GPU decoding is off, a format or codec GPU decoders do not decode exactly, VVdeC decoding VVC on the CPU, the GPU's decoding having failed in the run, or no GPU decoder here for its codec). |
@@ -137,7 +165,7 @@ Each metric's key (`vmaf`, `vmaf_neg`, `vmaf_v1`, `vmaf_hdr`, `psnr`, `ssim`, `x
 | Key | Meaning |
 | --- | --- |
 | `metrics` | The metrics asked for, in order. |
-| `vmaf_model`, `vmaf_v1_model` | `choice` (`__auto__` picks by the size compared at) and the `model` used. `null` where that VMAF was not asked for (VMAF NEG uses `vmaf_model`). |
+| `vmaf_model`, `vmaf_v1_model` | `choice` (`__auto__` picks by the size compared at), the `model` used (the install's path of its file, or a version libvmaf has built in), and its `id`, the same on every install: a bundled model's or libvmaf's own version (`vmaf_v0.6.1`, `vmaf_v1.0.16_3d0h`), `null` for a model file of the user's. `null` where that VMAF was not asked for (VMAF NEG uses `vmaf_model`). |
 | `vmaf_hdr_model` | The same for HDR VMAF; present only where HDR VMAF was asked for. |
 | `custom_model_path` | A VMAF model file given by its path, or `null`. |
 | `cvvdp` | `display` (the preset's name, `""` for a display that is no preset) and its `parameters`; `null` without CVVDP. |
@@ -252,14 +280,16 @@ The `bitrate` command's videos have an `error_code` too: `no_match`,
 **Export per-frame scores** on the Saved Results tab, and exports with
 **Per-frame scores** and **JSON** ticked in Settings > Storage > Exports
 include, write each video's per-frame scores as JSON: the same table as
-their CSV, for scripts that read JSON.
+their CSV, for scripts that read JSON. So does the command line's
+`--frames-json`.
 
 | Key | Meaning |
 | --- | --- |
+| `app`, `version`, `commit`, `format` | As in [every file](#the-format-of-each-file): `format` is `"frames-1"`. |
 | `reference`, `test` | The videos' paths. |
 | `fps` | The comparison's frame rate, the one `time_s` counts in. |
 | `columns` | The CSV's header: `frame`, `time_s`, then a column per frame metric (`vmaf`, `vmaf_neg`, `psnr`, `ssim`, `xpsnr` always first, then the others), and `cvvdp_second_jod`, `cvvdp_video_jod` where CVVDP was scored. |
-| `rows` | One list a frame, in the columns' order, each on a line of its own: a blank cell of the CSV is `null`, an endless PSNR `Infinity` (as Python's `json` writes it). `time_s` is rounded to the microsecond, as in the CSV. |
+| `rows` | One list a frame, in the columns' order, each on a line of its own: a blank cell of the CSV is `null`, an endless PSNR `"inf"` (before VideoMetricsLab 2.7, Python's `Infinity`, which is not JSON). `time_s` is rounded to the microsecond, as in the CSV. |
 
 In Python, `pandas.DataFrame(doc["rows"], columns=doc["columns"])` gives the
 CSV's table.
@@ -273,6 +303,7 @@ shown there.
 
 | Key | Meaning |
 | --- | --- |
+| `app`, `version`, `commit`, `format` | As in [every file](#the-format-of-each-file): `format` is `"worst-frames-1"`. |
 | `metric` | The metric the dips are of (`vmaf`). |
 | `dips` | How many dips were asked for (10, 25 or 50); fewer are listed where the video has fewer. |
 | `ranges` | The frames looked in, `first_frame` and `last_frame` each (Metric Graphs' highlighted range); empty: the whole video. |

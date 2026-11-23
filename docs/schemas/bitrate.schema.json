@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/4KVCD/VideoMetricsLab/blob/release/v2.7/docs/schemas/bitrate.schema.json",
+  "title": "VideoMetricsLab bitrate (bitrate-1)",
+  "description": "bitrate --json.",
+  "type": "object",
+  "required": [
+    "app",
+    "version",
+    "commit",
+    "format",
+    "videos"
+  ],
+  "properties": {
+    "app": {
+      "const": "VideoMetricsLab"
+    },
+    "version": {
+      "type": "string"
+    },
+    "commit": {
+      "type": "string"
+    },
+    "format": {
+      "const": "bitrate-1"
+    },
+    "videos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "codec": {
+            "type": "string"
+          },
+          "width": {
+            "type": "integer"
+          },
+          "height": {
+            "type": "integer"
+          },
+          "fps": {
+            "type": "number"
+          },
+          "duration_s": {
+            "type": "number"
+          },
+          "frames": {
+            "type": "integer"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "average_kbps": {
+            "type": "number"
+          },
+          "minimum_kbps": {
+            "type": "number"
+          },
+          "maximum_kbps": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "difference": {
+      "type": "object"
+    }
+  }
+}

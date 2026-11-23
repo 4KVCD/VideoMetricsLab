@@ -51,7 +51,8 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--parallel N] [--frame-counts {check,skip}]
                                    [--recalculate] [--difference]
                                    [--test-remuxes {on,off}]
-                                   [--csv FOLDER] [--json FILE] [--batch CSV]
+                                   [--csv FOLDER] [--json FILE]
+                                   [--frames-json FOLDER] [--batch CSV]
                                    [--scores-csv FILE] [--worst N]
                                    [--segments CONDITIONS]
                                    [--segments-all | --segments-any]
@@ -66,7 +67,9 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [REFERENCE] [TEST ...]
 )";
 
-const char* const devices_usage = "usage: VideoMetricsLab-cli devices [-h] [--settings FILE | --no-settings]\n";
+const char* const devices_usage = R"(usage: VideoMetricsLab-cli devices [-h] [--json FILE]
+                                   [--settings FILE | --no-settings]
+)";
 
 const char* const bitrate_usage = R"(usage: VideoMetricsLab-cli bitrate [-h] [--fps RATE] [--csv FOLDER]
                                    [--no-adjust-start] [--difference]
@@ -305,6 +308,9 @@ R"(  --no-gpu-decode       decode the videos on the CPU
                         said, and is in the --json
   --json FILE           also write the results as JSON to FILE; - prints the
                         JSON instead of the tables
+  --frames-json FOLDER  write each video's per-frame scores to FOLDER as JSON,
+                        <video>.frames.json, as --csv's but JSON (further
+                        --cvvdp-display scores as <video>_<display>.frames.json)
   --batch CSV           compare the videos a CSV file lists, in place of
                         REFERENCE and TEST, in one run: a row per test video,
                         with the columns reference and test (a file or a
@@ -401,6 +407,8 @@ Shows FFmpeg's version and what would calculate each metric on this PC.
 
 options:
   -h, --help       show this help message and exit
+  --json FILE      also write what it finds as JSON to FILE; - prints the JSON
+                   instead of the lines
   --settings FILE  read the settings (FFmpeg's folder, the GPU chosen) from
                    FILE in place of the app's
   --no-settings    every setting at its default, whatever the app's say
@@ -1290,6 +1298,7 @@ Parser compare_parser(CompareArguments& parsed) {
         flag({"--difference"}, parsed.difference),
         option({"--csv"}, [&parsed](const std::string& value) { parsed.csv = value; }),
         option({"--json"}, [&parsed](const std::string& value) { parsed.json_path = value; }),
+        option({"--frames-json"}, [&parsed](const std::string& value) { parsed.frames_json = value; }),
         option({"--batch"}, [&parsed](const std::string& value) { parsed.batch = value; }),
         option({"--scores-csv"}, [&parsed](const std::string& value) { parsed.scores_csv = value; }),
         option({"--worst"}, [&parsed](const std::string& value) { parsed.worst = int_up_to(value, 1000); }),
@@ -1476,7 +1485,10 @@ Arguments parse_arguments(const std::vector<std::string>& arguments) {
                  command_extras = parse_command(parser, bdrate_usage, std::string(program) + " bdrate", rest);
              } else {
                  parsed.command = Command::devices;
-                 Parser parser{{help(std::string(devices_usage) + devices_sections)}, {}};
+                 Parser parser{
+                     {help(std::string(devices_usage) + devices_sections),
+                      option({"--json"}, [&parsed](const std::string& value) { parsed.devices.json_path = value; })},
+                     {}};
                  add_profile_options(parser, parsed.devices.profile, false);
                  command_extras = parse_command(parser, devices_usage, std::string(program) + " devices", rest);
              }

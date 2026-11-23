@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "vml/build_info.h"
 #include "vml/film_grain_detect.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/hardware_decoding.h"
@@ -111,6 +112,10 @@ void flatten(const Json& value, const std::string& name, std::vector<std::pair<s
 }
 
 }  // namespace
+
+Json document_head(const Json& format) {
+    return Json{{"app", "VideoMetricsLab"}, {"version", VML_VERSION}, {"commit", build_commit()}, {"format", format}};
+}
 
 Json json_number(const std::optional<double>& value) {
     if (!value || std::isnan(*value)) {

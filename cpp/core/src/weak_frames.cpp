@@ -401,6 +401,13 @@ Json segments_json(const std::vector<WeakSegment>& segments, const SegmentRules&
     return json;
 }
 
+Json segments_file_json(const std::vector<WeakSegment>& segments, const SegmentRules& rules,
+                        const std::vector<WeakCondition>& left_out) {
+    Json file = document_head(segments_format);
+    file.update(segments_json(segments, rules, left_out));
+    return file;
+}
+
 std::string segments_file_suffix(const SegmentRules& rules) {
     std::string name;
     for (const std::string& key : condition_keys(rules)) {
@@ -460,7 +467,10 @@ Json worst_frames_json(const MetricResultSet& results, const std::string& key, c
                             {"time", worst[i].time},
                             {"scores", std::move(scores)}});
     }
-    return Json{{"metric", key}, {"dips", dips}, {"ranges", std::move(range_list)}, {"worst_frames", std::move(list)}};
+    Json json = document_head(worst_frames_format);
+    json.update(
+        Json{{"metric", key}, {"dips", dips}, {"ranges", std::move(range_list)}, {"worst_frames", std::move(list)}});
+    return json;
 }
 
 std::string worst_frames_csv(const MetricResultSet& results, const std::vector<WorstFrame>& worst) {
@@ -525,7 +535,8 @@ std::string worst_frames_report_csv(const MetricResultSet& results, std::size_t 
 Json segments_report_json(const std::vector<SegmentsReportVideo>& videos, const SegmentRules& rules) {
     SegmentRules without_ranges = rules;
     without_ranges.ranges.clear();
-    Json report = segments_json({}, without_ranges);
+    Json report = document_head(segments_report_format);
+    report.update(segments_json({}, without_ranges));
     report.erase("ranges");
     report.erase("segments");
     Json list = Json::array();

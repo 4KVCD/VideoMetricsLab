@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/4KVCD/VideoMetricsLab/blob/release/v2.7/docs/schemas/worst-frames.schema.json",
+  "title": "VideoMetricsLab worst frames of a metric (worst-frames-1)",
+  "description": "A metric's worst dips, <video>.<metric>.worst.json: the Worst Frames tab's Worst frames as JSON.",
+  "type": "object",
+  "required": [
+    "app",
+    "version",
+    "commit",
+    "format",
+    "metric",
+    "dips",
+    "ranges",
+    "worst_frames"
+  ],
+  "properties": {
+    "app": {
+      "const": "VideoMetricsLab"
+    },
+    "version": {
+      "type": "string"
+    },
+    "commit": {
+      "type": "string"
+    },
+    "format": {
+      "const": "worst-frames-1"
+    },
+    "metric": {
+      "type": "string"
+    },
+    "dips": {
+      "type": "integer"
+    },
+    "ranges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "first_frame",
+          "last_frame"
+        ]
+      }
+    },
+    "worst_frames": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "rank",
+          "frame",
+          "time",
+          "scores"
+        ],
+        "properties": {
+          "rank": {
+            "type": "integer"
+          },
+          "frame": {
+            "type": "integer"
+          },
+          "time": {
+            "type": "number"
+          },
+          "scores": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "enum": [
+                    "inf",
+                    "-inf"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

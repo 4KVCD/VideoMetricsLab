@@ -163,6 +163,10 @@ std::vector<ConditionCount> condition_counts(const ComparisonResult& result, con
 // the rules' as "left_out", where there are any.
 nlohmann::ordered_json segments_json(const std::vector<WeakSegment>& segments, const SegmentRules& rules,
                                      const std::vector<WeakCondition>& left_out = {});
+// segments_json as a file of its own (<video>.<metrics>.segments.json):
+// led by document_head's "app", "version", "commit" and "format" (segments-1).
+nlohmann::ordered_json segments_file_json(const std::vector<WeakSegment>& segments, const SegmentRules& rules,
+                                          const std::vector<WeakCondition>& left_out = {});
 
 // What an export of segments by `rules` is named after, before ".json" or
 // ".csv": its conditions' metrics, each once, in the conditions' order,
@@ -174,8 +178,9 @@ std::string segments_file_suffix(const SegmentRules& rules);
 // start_time, end_time, frames, then <metric>_min, _max and _mean.
 std::string segments_csv(const std::vector<WeakSegment>& segments, const SegmentRules& rules);
 
-// Worst frames `worst` (worst_frames' list, for metric `key`) as JSON: the
-// metric, the number of dips asked for, the frame ranges looked in (empty:
+// Worst frames `worst` (worst_frames' list, for metric `key`) as JSON, led
+// by document_head's keys (worst-frames-1): the metric, the number of dips
+// asked for, the frame ranges looked in (empty:
 // all), then "worst_frames", one object per frame, worst first: rank (1 is
 // the worst), frame, time and "scores", every scored metric's score at that
 // frame, in the registry's order (null where it has none).
@@ -211,7 +216,8 @@ struct SegmentsReportVideo {
     const ComparisonResult* result = nullptr;
 };
 
-// Every video's segments by `rules`, as one JSON report: the rules (as
+// Every video's segments by `rules`, as one JSON report, led by
+// document_head's keys (segments-report-1): the rules (as
 // segments_json gives them, without ranges), then "videos", each with its
 // name, path, reference, segment_count, weak_frames (the segments' frames
 // added up) and segments (segments_json's); a video without scores for a
