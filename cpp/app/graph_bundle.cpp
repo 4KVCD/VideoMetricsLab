@@ -7,11 +7,13 @@
 #include <algorithm>
 #include <map>
 #include <optional>
+#include <string>
 
 #include "bitrate_panel.h"
 #include "graph_panel.h"
 #include "i18n.h"
 #include "vml/metrics.h"
+#include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "window_helpers.h"
 
@@ -47,22 +49,26 @@ QString file_safe(const QString& text) {
 }
 
 std::vector<QString> bundle_names(const std::vector<BundleVideo>& videos) {
+    // Names compared as the file names they become (issue #131): "a?b" and
+    // "a_b" name one file, as do "Film" and "film" on Windows, so the second
+    // video's files would replace the first's.
+    const auto key = [](const QString& name) { return platform::name_as_compared(file_safe(name).toStdString()); };
     std::vector<QString> names;
-    std::map<QString, int> uses;
+    std::map<std::string, int> uses;
     for (const BundleVideo& video : videos) {
         names.push_back(video.label.isEmpty() ? text_of(video.path.stem()) : video.label);
-        ++uses[names.back()];
+        ++uses[key(names.back())];
     }
     // Where several share a name: each with its folder's.
     for (std::size_t i = 0; i < names.size(); ++i) {
-        if (uses[names[i]] > 1) {
+        if (uses[key(names[i])] > 1) {
             names[i] += QStringLiteral(" (") + name_of(videos[i].path.parent_path()) + QStringLiteral(")");
         }
     }
     // Where those are shared too: numbered from the second on.
-    std::map<QString, int> seen;
+    std::map<std::string, int> seen;
     for (QString& name : names) {
-        const int count = ++seen[name];
+        const int count = ++seen[key(name)];
         if (count > 1) {
             name += QStringLiteral(" ") + QString::number(count);
         }

@@ -3,6 +3,8 @@
 // file name; and the files whose bitrate it reads.
 #include "graph_bundle.h"
 
+#include "vml/platform/system.h"
+
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -25,6 +27,19 @@ TEST(GraphBundle, EachVideosFilesAreNamedAfterItAndNamesAreNotShared) {
     // The same name in the same folder (two rows of one file): numbered.
     EXPECT_EQ(bundle_names({video("enc/Film.mkv"), video("enc/Film.mkv")}),
               (std::vector<QString>{"Film (enc)", "Film (enc) 2"}));
+    // Names of one file as the system compares them (issue #131): on Windows
+    // "Film" and "film" are one file, or one folder, so they are told apart
+    // as the same name is.
+    const std::vector<QString> cased = bundle_names({video("x264/Film.mkv"), video("x265/film.mkv")});
+    EXPECT_NE(platform::name_as_compared(cased[0].toStdString()), platform::name_as_compared(cased[1].toStdString()));
+#ifdef _WIN32
+    EXPECT_EQ(cased, (std::vector<QString>{"Film (x264)", "film (x265)"}));
+    EXPECT_EQ(bundle_names({video("enc/Film.mkv"), video("ENC/film.mkv")}),
+              (std::vector<QString>{"Film (enc)", "film (ENC) 2"}));
+#endif
+    // Or once fit for a file name: "a?b" and "a_b" are both a_b.
+    EXPECT_EQ(bundle_names({video("x/a.mkv", "a?b"), video("y/a_b.mkv")}),
+              (std::vector<QString>{"a?b (x)", "a_b (y)"}));
     EXPECT_EQ(file_safe("VMAF: a/b <c>?"), "VMAF_ a_b _c__");
 }
 
