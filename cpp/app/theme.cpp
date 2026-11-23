@@ -553,6 +553,16 @@ bool is_dark() {
     return QGuiApplication::palette().window().color().lightness() < 128;
 }
 
+QColor accent_shown() {
+    if (const std::optional<QColor> chosen = accent_chosen(is_dark())) {
+        return *chosen;
+    }
+    if (appearance().system_accent) {
+        return *appearance().system_accent;  // not the palette's: it may still have a look's
+    }
+    return QGuiApplication::palette().color(QPalette::Accent);
+}
+
 QString look() {
     const bool dark = is_dark();
     if (appearance().ui != Interface::modern) {

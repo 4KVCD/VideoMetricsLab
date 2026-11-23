@@ -272,7 +272,15 @@ TEST(SettingsPanel, AppearanceSavesEachChoice) {
     EXPECT_EQ(system->text(), system_name);
     modes[0]->click();
     EXPECT_EQ(settings.theme, "");
-    // The title bar's menu: a look chosen there as by its button here.
+    // The title bar's menu: a theme chosen there as by its button here, the
+    // accent's first choice named for the look it shows (Mocha's amber).
+    panel.choose_look(true, "mocha");
+    modes[1]->click();
+    EXPECT_EQ(system->text(), system_name);
+    panel.choose_theme("dark");
+    EXPECT_EQ(settings.theme, "dark");
+    EXPECT_EQ(system->text(), "Theme default");
+    // A look chosen there as by its button here.
     panel.choose_look(true, "joker");
     EXPECT_EQ(settings.dark_look, "joker");
     EXPECT_TRUE(dark_looks[2]->isChecked());

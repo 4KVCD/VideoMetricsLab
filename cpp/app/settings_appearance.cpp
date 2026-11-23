@@ -422,8 +422,10 @@ QWidget* SettingsPanel::build_appearance_page() {
 void SettingsPanel::choose_theme(const QString& value) {
     for (QAbstractButton* button : theme_buttons->buttons()) {
         if (button->property("value").toString() == value) {
-            button->setChecked(true);
-            on_edited();
+            // A click, as choose_look's: setChecked alone emits no
+            // buttonClicked, which saves, applies and names the accent's
+            // first choice (Theme default for Mocha's amber, say).
+            button->click();
             return;
         }
     }
@@ -454,16 +456,17 @@ void SettingsPanel::set_accent(const QString& hex) {
     }
     accent_buttons->setExclusive(true);
     const std::optional<QColor> colour = theme::accent_of(accent_value.toStdString());
-    accent_hex->setText(colour ? accent_value.toUpper()
-                               : QApplication::palette().color(QPalette::Accent).name().toUpper());
+    // None chosen: the one the window shows, the look's or the system's,
+    // even before the palette has followed a change between light and dark.
+    accent_hex->setText(colour ? accent_value.toUpper() : theme::accent_shown().name().toUpper());
     accent_hex->setPlaceholderText(QString());
     static_cast<InterfacePreview*>(modern_preview)->set_accent(colour);
 }
 
 void SettingsPanel::choose_custom_accent() {
-    // Starts at the accent in use: the chosen one, else the palette's.
+    // Starts at the accent in use: the chosen one, else the one shown.
     const std::optional<QColor> current = theme::accent_of(accent_value.toStdString());
-    QColorDialog dialog(current.value_or(QApplication::palette().color(QPalette::Accent)), this);
+    QColorDialog dialog(current.value_or(theme::accent_shown()), this);
     dialog.setWindowTitle(app::tr("Accent color"));
     dialog.setOption(QColorDialog::DontUseNativeDialog, true);
     if (dialog.exec() != QDialog::Accepted) {

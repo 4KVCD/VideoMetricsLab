@@ -66,6 +66,12 @@ QColor mocha_accent();
 // system's.
 std::optional<QColor> look_accent(const QString& look);
 
+// The accent the window shows for the theme and looks asked for now: the
+// one chosen, else the look's own, else the system's. Right at once after
+// apply_theme, before the palette catches up with a change between light and
+// dark (it follows the window's change event).
+QColor accent_shown();
+
 // A small picture of a look for Settings' look buttons: a card of its,
 // `size` pixels square, with a line of its text and one of its accent (or
 // muted text), and a gap after it for the button's text.

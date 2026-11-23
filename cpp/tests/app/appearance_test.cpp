@@ -330,6 +330,7 @@ TEST_F(Appearance, ModernLightLooks) {
     EXPECT_EQ(theme::look(), "desert");
     EXPECT_EQ(QApplication::palette().color(QPalette::Base), QColor("#fffaef"));
     EXPECT_EQ(QApplication::palette().color(QPalette::Accent), QColor("#903909"));
+    EXPECT_EQ(theme::accent_shown(), QColor("#903909"));  // Settings' accent box shows it
     EXPECT_EQ(theme::color("link"), QColor("#1c5e75"));
     theme::apply_appearance(theme::Interface::modern, accent);
     EXPECT_EQ(QApplication::palette().color(QPalette::Accent), accent);  // the one chosen
@@ -341,6 +342,7 @@ TEST_F(Appearance, ModernLightLooks) {
     EXPECT_EQ(QApplication::palette().color(QPalette::Base), theme::modern_colour("card", false));
     EXPECT_EQ(theme::modern_colour("card", false), QColor("#ffffff"));
     EXPECT_NE(QApplication::palette().color(QPalette::Accent), QColor("#903909"));  // the system's again
+    EXPECT_NE(theme::accent_shown(), QColor("#903909"));
 }
 
 }  // namespace
