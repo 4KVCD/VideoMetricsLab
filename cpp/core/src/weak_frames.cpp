@@ -546,30 +546,30 @@ std::string worst_frames_file_suffix(const std::string& key) { return key + ".wo
 
 namespace {
 
+using EveryMetricsWorst = std::vector<std::pair<std::string, std::vector<WorstFrame>>>;
+
 // Each scored metric's worst frames of `dips` dips, in the registry's order.
-std::vector<std::pair<std::string, std::vector<WorstFrame>>> every_metrics_worst(const MetricResultSet& results,
-                                                                                 std::size_t dips) {
-    std::vector<std::pair<std::string, std::vector<WorstFrame>>> every;
+EveryMetricsWorst every_metrics_worst(const MetricResultSet& results, std::size_t dips) {
+    EveryMetricsWorst every;
     for (const auto& [key, samples] : scored_metrics(results)) {
         every.emplace_back(key, worst_frames(samples, metric_definition(key).direction, dips));
     }
     return every;
 }
 
-}  // namespace
-
-Json worst_frames_report_json(const MetricResultSet& results, std::size_t dips) {
+// The reports of `every` metric's worst frames.
+Json report_json(const MetricResultSet& results, const EveryMetricsWorst& every, std::size_t dips) {
     Json list = Json::array();
-    for (const auto& [key, worst] : every_metrics_worst(results, dips)) {
+    for (const auto& [key, worst] : every) {
         Json one = worst_frames_json(results, key, worst, dips, {});
         list.push_back(Json{{"metric", key}, {"worst_frames", std::move(one["worst_frames"])}});
     }
     return Json{{"dips", dips}, {"metrics", std::move(list)}};
 }
 
-std::string worst_frames_report_csv(const MetricResultSet& results, std::size_t dips) {
+std::string report_csv(const MetricResultSet& results, const EveryMetricsWorst& every) {
     std::string text;
-    for (const auto& [key, worst] : every_metrics_worst(results, dips)) {
+    for (const auto& [key, worst] : every) {
         const std::string table = worst_frames_csv(results, worst);
         const std::size_t header_end = table.find('\n') + 1;
         if (text.empty()) {
@@ -582,6 +582,31 @@ std::string worst_frames_report_csv(const MetricResultSet& results, std::size_t 
         }
     }
     return text;
+}
+
+}  // namespace
+
+Json worst_frames_report_json(const MetricResultSet& results, std::size_t dips) {
+    return report_json(results, every_metrics_worst(results, dips), dips);
+}
+
+std::string worst_frames_report_csv(const MetricResultSet& results, std::size_t dips) {
+    return report_csv(results, every_metrics_worst(results, dips));
+}
+
+WorstFramesReports worst_frames_reports(const MetricResultSet& results, std::size_t dips, bool json, bool csv) {
+    WorstFramesReports reports;
+    if (!json && !csv) {
+        return reports;
+    }
+    const EveryMetricsWorst every = every_metrics_worst(results, dips);
+    if (json) {
+        reports.json = report_json(results, every, dips);
+    }
+    if (csv) {
+        reports.csv = report_csv(results, every);
+    }
+    return reports;
 }
 
 Json segments_report_json(const std::vector<SegmentsReportVideo>& videos, const SegmentRules& rules) {

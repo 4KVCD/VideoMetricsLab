@@ -241,6 +241,17 @@ std::string text_lines(const std::string& text) {
 
 std::vector<BundleFile> made_files(std::vector<BundleFile> files, const std::vector<FrameFiles>& frames) {
     for (const FrameFiles& video : frames) {
+        if (video.worst_dips > 0) {
+            WorstFramesReports reports =
+                worst_frames_reports(video.result->metric_results, video.worst_dips, video.json, video.csv);
+            if (video.json) {
+                files.at(video.json_at).second = python_json_dumps(reports.json) + "\n";
+            }
+            if (video.csv) {
+                files.at(video.csv_at).second = text_lines(reports.csv);
+            }
+            continue;
+        }
         PerFrameTexts texts = per_frame_texts(*video.result, video.csv, video.json);
         if (video.json) {
             files.emplace_back(video.stem + ".json", std::move(texts.json));
@@ -290,15 +301,20 @@ std::vector<BundleFile> export_files(const Settings& settings, const std::vector
         // Each video's, every metric's dips, as many as Worst Frames lists.
         const std::vector<QString> names = bundle_names(videos);
         const auto dips = static_cast<std::size_t>(std::max(settings.graph_worst_frames, 1));
+        // Listed here, made as they are written (made_files): issue #140's
+        // per-frame scores, for the same reason.
         for (std::size_t i = 0; i < videos.size(); ++i) {
             const std::string stem = file_safe(names[i] + QStringLiteral(" - worst frames")).toStdString();
-            const MetricResultSet& results = videos[i].result->metric_results;
+            FrameFiles worst{videos[i].result, stem, json, csv, dips};
             if (json) {
-                files.push_back({stem + ".json", python_json_dumps(worst_frames_report_json(results, dips)) + "\n"});
+                worst.json_at = files.size();
+                files.push_back({stem + ".json", std::string()});
             }
             if (csv) {
-                files.push_back({stem + ".csv", text_lines(worst_frames_report_csv(results, dips))});
+                worst.csv_at = files.size();
+                files.push_back({stem + ".csv", std::string()});
             }
+            frames.push_back(std::move(worst));
         }
     }
     if (!wanted("weak_segments") || videos.empty()) {

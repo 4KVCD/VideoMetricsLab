@@ -224,6 +224,15 @@ nlohmann::ordered_json worst_frames_report_json(const MetricResultSet& results, 
 // ("metric,rank,frame,time,<every scored metric>"), a metric after another.
 std::string worst_frames_report_csv(const MetricResultSet& results, std::size_t dips);
 
+// Both reports, each where wanted (else null, or empty), from one search
+// of each metric's worst frames: the search sorts all its frames, tens of
+// milliseconds for a 2-hour video's four metrics.
+struct WorstFramesReports {
+    nlohmann::ordered_json json;
+    std::string csv;
+};
+WorstFramesReports worst_frames_reports(const MetricResultSet& results, std::size_t dips, bool json, bool csv);
+
 // What an export of worst frames of `key` is named after, before ".json" or
 // ".csv": "<key>.worst" ("vmaf.worst").
 std::string worst_frames_file_suffix(const std::string& key);

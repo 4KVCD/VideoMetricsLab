@@ -105,27 +105,36 @@ std::vector<std::string> shared_stems(const QString& name);
 // CSV text as the command line writes it: CR LF on Windows.
 std::string text_lines(const std::string& text);
 
-// A video's per-frame scores in an export ("<stem>.json", "<stem>.csv"),
-// made only as they are written (made_files), on the file-write queue: a
-// 2-hour video's take most of a second, which the window's thread would
-// wait, and an export cancelled in its save dialog too.
+// A video's files of its frames in an export, made only as they are written
+// (made_files), on the file-write queue: a 2-hour video's per-frame scores
+// take most of a second, and its worst frames a tenth, which the window's
+// thread would wait, and an export cancelled in its save dialog too.
+// - Per-frame scores (worst_dips 0): "<stem>.json", "<stem>.csv", added
+//   after the other files.
+// - Worst frames of every metric, of `worst_dips` dips each: made into the
+//   files listed for them where they are (json_at, csv_at), so that the
+//   export's files keep their order.
 struct FrameFiles {
     std::shared_ptr<const ComparisonResult> result;
     std::string stem;
     bool json = false;
     bool csv = false;
+    std::size_t worst_dips = 0;
+    std::size_t json_at = 0;
+    std::size_t csv_at = 0;
 };
-// `files`, then each of `frames`' files, made now.
+// `files`, with each of `frames`' files made now.
 std::vector<BundleFile> made_files(std::vector<BundleFile> files, const std::vector<FrameFiles>& frames);
 
 // The files of an export besides its graphs, as Settings' Exports include
 // (exported_items) and its formats say, named after `name`: the results
 // (`document`, made only when they're included), each video's worst frames
 // of every metric ("<video> - worst frames", Settings' graph_worst_frames
-// dips each), and the weak segments by `rules` of the one video, or
-// (`several`) a report of all of `videos`; each video's per-frame scores
-// ("<video> - frames", named as its graphs are) in `frames`, made later. Weak segments need a condition in `rules`: without
-// one there are none, and `segments_skipped` is set.
+// dips each: listed empty, and in `frames` to be made later), and the weak
+// segments by `rules` of the one video, or (`several`) a report of all of
+// `videos`; each video's per-frame scores ("<video> - frames", named as its
+// graphs are) in `frames`, made later. Weak segments need a condition in
+// `rules`: without one there are none, and `segments_skipped` is set.
 std::vector<BundleFile> export_files(const Settings& settings, const std::vector<BundleVideo>& videos,
                                      const std::filesystem::path& reference,
                                      const std::function<nlohmann::ordered_json()>& document,
