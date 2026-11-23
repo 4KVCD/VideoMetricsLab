@@ -935,6 +935,65 @@ The rate is each test video's bitrate as the Videos table shows it: where the
 file does not record the video's own, an estimate (the file's bitrate less
 its other streams and the container's bytes, marked ≈).
 
+### Encoding loops: target and diff
+
+Two commands help a script that encodes, scores and encodes again.
+`target` says at what rate (or CRF) each sequence's encodes reach a score;
+`diff` says how a new run's scores and weak segments differ from an earlier
+run's.
+
+```powershell
+# The rate, then the CRF, at which each sequence's encodes reach VMAF 95
+.\VideoMetricsLab-cli.exe target --scores x264_scores.csv --metric vmaf --value 95
+.\VideoMetricsLab-cli.exe target --scores x264_scores.csv --metric vmaf --value 95 --by crf --json -
+
+# The rate at which the worst 1% of frames reach VMAF 90, from run files
+.\VideoMetricsLab-cli.exe target --scores runs\*.metrics.json --metric vmaf --value 90 --stat worst_1_percent
+
+# How the new encode's scores, and its weak segments, differ from the old one's
+.\VideoMetricsLab-cli.exe diff runs\old.metrics.json runs\new.metrics.json --segments "vmaf<90"
+```
+
+`target` reads the files `bdrate` reads (`--scores`, repeated or a pattern
+for more): CSV files such as `compare --scores-csv` writes, `compare --json`
+results, or run files. For each sequence it reads the curve `bdrate`
+integrates, the log of the rate against the score interpolated with PCHIP,
+at `--value`: the rate there, and the two encodes either side. With `--by
+COLUMN`, a CSV file's column of numbers takes the rate's place, as it is
+rather than its log: `crf` from a `--batch` file's extra column, say.
+Beyond the scores the encodes have, the straight line through the two
+nearest goes on to the value, and the answer is marked as extrapolated: an
+encode there, and a check of its score, is the way to be sure. `--stat`
+reads another statistic of each encode than its score (`median`, `min`,
+`max`, `worst_10_percent`, `worst_5_percent`, `worst_1_percent`,
+`worst_0.1_percent`), from JSON files only; `--sequence NAME` keeps one
+sequence. A sequence with fewer than 2 encodes with the score, or two with
+the same score, has no answer. The JSON (format `target-1`) gives each
+sequence's `setting`, `extrapolated`, `bracket` (the two encodes' `setting`,
+`kbps` and `score`), and where there is no answer `why` and `why_code`
+(`too_few_encodes`, `tied_scores` or `bad_number`). The exit code is 0 when
+every sequence has an answer, extrapolated or not; 1 when one has none (or
+the JSON file could not be written); 2 for a `--by` column no file has; 4
+when a file cannot be read, no file has scores of the metric, or no encode
+is of `--sequence` (`error_code` `rates_unreadable`, `no_metric_scores` or
+`no_sequence`).
+
+`diff OLD NEW` takes two runs, each a run file or a saved comparison's ID
+(at least 6 of its hex digits, as `saved list` gives them). It shows each
+metric both runs have, old, new and the change, for the score and the worst
+1%; its JSON (format `diff-1`) has every statistic, and the metrics only
+one run has. With `--segments` (and its options, as compare takes them), it
+finds both runs' weak segments and matches them by their frames: an old
+segment that no new one overlaps is fixed, overlapping ones remain
+(chained: an old segment overlapping two new ones joins them), and a new one
+that overlaps no old one appeared. The JSON's `segments` has both runs'
+segments, as a segments file has them, and `fixed`, `remaining` and
+`appeared` as indexes into them. Frames are matched by number, so the runs
+should be of the same reference (a warning says when their references
+differ). The exit code is 0; 1 when the JSON file could not be written; 2
+for a wrong command; 4 when a run cannot be read (`error_code`
+`run_unreadable`).
+
 ## Saved results and caches
 
 Save portable results as `.metrics.json` (the Videos box's **Export > Run file

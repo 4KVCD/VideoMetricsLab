@@ -35,6 +35,8 @@ tests hold the app's output to.
 | `"bdrate-1"` | BD-rates | `bdrate --json` | `bdrate.schema.json` |
 | `"devices-1"` | Where each metric would be calculated | `devices --json` | `devices.schema.json` |
 | `"saved-list-1"` | The saved comparisons | `saved list --json` | `saved-list.schema.json` |
+| `"target-1"` | The rate or setting at which encodes reach a score | `target --json` | `target.schema.json` |
+| `"diff-1"` | How a run's scores and weak segments differ from an earlier one's | `diff --json` | `diff.schema.json` |
 
 The results' format is a number, `2`, as it was before the others had one;
 the others are `<kind>-<version>`. A run file (`.metrics.json`) is the app's
@@ -278,7 +280,12 @@ The `bitrate` command's videos have an `error_code` too: `no_match`,
 `bdrate`'s JSON, when its files give no BD-rate, is its `app`, `version`,
 `commit`, `format`, `anchor` and `test` with `error` and `error_code`:
 `rates_unreadable` (a file cannot be read, or is not one it reads),
-`no_common_metric` or `no_common_sequence`.
+`no_common_metric` or `no_common_sequence`. `target`'s JSON, in the same
+way, is its head with `error` and `error_code`: `rates_unreadable`,
+`no_metric_scores` (no file has scores of the metric) or `no_sequence` (no
+encode is of `--sequence`); a sequence with no answer has a `why_code`:
+`too_few_encodes`, `tied_scores` or `bad_number`. `diff`'s, when a run
+cannot be read: `run_unreadable`.
 
 ## Per-frame scores as JSON
 

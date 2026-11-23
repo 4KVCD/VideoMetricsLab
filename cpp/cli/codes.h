@@ -26,6 +26,11 @@ inline constexpr const char* no_packets = "no_packets";        // bitrate: a raw
 inline constexpr const char* rates_unreadable = "rates_unreadable";
 inline constexpr const char* no_common_metric = "no_common_metric";
 inline constexpr const char* no_common_sequence = "no_common_sequence";
+// target's files: none with scores of the metric (and --stat), or no encode
+// of --sequence; diff's runs: one that cannot be read.
+inline constexpr const char* no_metric_scores = "no_metric_scores";
+inline constexpr const char* no_sequence = "no_sequence";
+inline constexpr const char* run_unreadable = "run_unreadable";
 
 // Why a metric was not calculated, beyond core's (`failed_metric_codes`, `metric_status`).
 inline constexpr const char* needs_every_frame = "needs_every_frame";  // CVVDP with --subsample above 1

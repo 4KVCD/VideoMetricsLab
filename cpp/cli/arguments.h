@@ -183,7 +183,19 @@ struct SavedArguments {
     CompareArguments output;
 };
 
-enum class Command { none, compare, devices, bitrate, bdrate, saved, report };
+// The target command's arguments: where encodes reach a score.
+struct TargetArguments {
+    std::vector<std::string> scores;  // files, or patterns: CSV, results JSON or run files
+    std::string metric;               // a key
+    double value = 0;                 // the score to reach
+    std::string by = "kbps";          // or a column of the CSV files', in lower case (crf)
+    std::string stat = "score";       // a metric summary's statistic (loop.h's summary_stats)
+    std::optional<std::string> sequence;
+    std::optional<std::string> json_path;  // "-" prints the JSON instead of the table
+    bool quiet = false;
+};
+
+enum class Command { none, compare, devices, bitrate, bdrate, saved, report, target, diff };
 
 struct Arguments {
     Command command = Command::none;
@@ -191,7 +203,8 @@ struct Arguments {
     std::optional<std::string> print_and_exit;
     CompareArguments compare;
     DevicesArguments devices;
-    SavedArguments saved;  // the saved command's, or the report command's
+    SavedArguments saved;  // the saved command's, the report command's, or diff's (OLD and NEW its items)
+    TargetArguments target;
     BitrateArguments bitrate;
     BdrateArguments bdrate;
 };

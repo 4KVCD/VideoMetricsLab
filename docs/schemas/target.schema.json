@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/4KVCD/VideoMetricsLab/blob/release/v2.7/docs/schemas/target.schema.json",
+  "title": "VideoMetricsLab targets (target-1)",
+  "description": "target --json: where each sequence's encodes reach a score, or why they do not.",
+  "type": "object",
+  "required": [
+    "app",
+    "version",
+    "commit",
+    "format"
+  ],
+  "properties": {
+    "app": {
+      "const": "VideoMetricsLab"
+    },
+    "version": {
+      "type": "string"
+    },
+    "commit": {
+      "type": "string"
+    },
+    "format": {
+      "const": "target-1"
+    },
+    "error": {
+      "type": "string"
+    },
+    "error_code": {
+      "enum": [
+        "rates_unreadable",
+        "no_metric_scores",
+        "no_sequence"
+      ]
+    },
+    "method": {
+      "const": "pchip"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "metric": {
+      "type": "string"
+    },
+    "stat": {
+      "type": "string"
+    },
+    "value": {
+      "type": "number"
+    },
+    "by": {
+      "type": "string"
+    },
+    "sequences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "sequence",
+          "encodes",
+          "setting",
+          "extrapolated",
+          "bracket",
+          "why",
+          "why_code"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "sequence": {
+            "type": "string"
+          },
+          "encodes": {
+            "type": "integer"
+          },
+          "setting": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "extrapolated": {
+            "type": "boolean"
+          },
+          "bracket": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/point"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "why": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "why_code": {
+            "enum": [
+              "too_few_encodes",
+              "tied_scores",
+              "bad_number",
+              null
+            ]
+          }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "point": {
+      "type": "object",
+      "required": [
+        "setting",
+        "kbps",
+        "score"
+      ],
+      "properties": {
+        "setting": {
+          "type": "number"
+        },
+        "kbps": {
+          "type": "number"
+        },
+        "score": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}

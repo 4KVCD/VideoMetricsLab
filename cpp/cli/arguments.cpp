@@ -10,6 +10,7 @@
 #include <set>
 
 #include "file_names.h"
+#include "loop.h"
 #include "vml/append.h"
 #include "vml/crop_detect.h"
 #include "vml/ffprobe.h"
@@ -105,6 +106,18 @@ const char* const report_usage = R"(usage: VideoMetricsLab-cli report [-h] [--js
                                   RUNFILE [RUNFILE ...]
 )";
 
+const char* const target_usage = R"(usage: VideoMetricsLab-cli target [-h] --scores FILE --metric KEY --value N
+                                  [--by COLUMN] [--stat STAT]
+                                  [--sequence NAME] [--json FILE] [-q]
+)";
+
+const char* const diff_usage = R"(usage: VideoMetricsLab-cli diff [-h] [--segments CONDITIONS]
+                                [--segments-all | --segments-any]
+                                [--segment-min-frames N]
+                                [--segment-merge-frames N] [--json FILE] [-q]
+                                OLD NEW
+)";
+
 const char* const bdrate_usage = R"(usage: VideoMetricsLab-cli bdrate [-h] --anchor FILE --test FILE [-m LIST]
                                   [--group-by COLUMN] [--json FILE] [-q]
 )";
@@ -152,6 +165,10 @@ const char* const examples = R"(examples:
       a saved comparison's scores and weak segments, its videos gone or not
   VideoMetricsLab-cli report runs\*.metrics.json --worst 5
       the scores of run files, and each metric's 5 worst dips
+  VideoMetricsLab-cli target --scores x264.csv --metric vmaf --value 95
+      the rate at which each sequence's encodes reach VMAF 95
+  VideoMetricsLab-cli diff old.metrics.json new.metrics.json --segments "vmaf<90"
+      each score's change, and which weak segments were fixed or are new
 )";
 
 const char* const top_sections = R"(
@@ -163,6 +180,8 @@ positional arguments:
     bdrate    calculate BD-rates from two encoders' rates and scores
     saved     list, show or delete the saved comparisons, without the videos
     report    report the scores of run files (.metrics.json)
+    target    find the rate or CRF at which encodes reach a score
+    diff      how two runs' scores and weak segments differ
 
 options:
   -h, --help  show this help message and exit
@@ -582,6 +601,66 @@ options:
   --segments-report FILE
                         write every video's segments to FILE as one report
   -q, --quiet           only the results
+)";
+
+const char* const target_sections = R"(
+Where each sequence's encodes reach a score: the rate (or another column,
+such as crf) at which the curve bdrate integrates, the log of the rate
+against the score interpolated with PCHIP, reaches --value. Beyond the
+scores the encodes have, the straight line through the two nearest goes on
+to it, marked as extrapolated. Exit code 1 when a sequence has no answer.
+
+options:
+  -h, --help       show this help message and exit
+  --scores FILE    the encodes: a CSV file with a row per encode (compare
+                   --scores-csv: the columns sequence, kbps and the
+                   metrics' scores), compare's --json, or run files
+                   (.metrics.json); repeat it, or give a pattern, for more
+  --metric KEY     the metric: vmaf, vmaf_neg, vmaf_v1, vmaf_hdr, psnr,
+                   ssim, xpsnr, ssimulacra2, butteraugli, cvvdp
+  --value N        the score to reach
+  --by COLUMN      kbps (default), or a CSV file's column of numbers, such
+                   as crf from compare --batch's extra columns
+  --stat STAT      the statistic to reach, from JSON files only: score (the
+                   default, the one the app shows), median, min, max,
+                   worst_10_percent, worst_5_percent, worst_1_percent,
+                   worst_0.1_percent
+  --sequence NAME  only this sequence (its reference's name without the
+                   extension)
+  --json FILE      also write the answers as JSON to FILE; - prints the
+                   JSON instead of the table
+  -q, --quiet      no warnings, only the results
+
+)";
+
+const char* const diff_sections = R"(
+How a run's scores differ from an earlier one's, for an encoding loop: each
+statistic of each metric both have (old, new and the change), and with
+--segments, which of the old run's weak segments are fixed, which remain
+(overlapping a new one) and which new ones appeared.
+
+positional arguments:
+  OLD                   the earlier run: a run file (.metrics.json), or a
+                        saved comparison's ID (at least 6 hex digits, saved
+                        list gives them)
+  NEW                   the later run, in either form
+
+options:
+  -h, --help            show this help message and exit
+  --segments CONDITIONS
+                        the weak segments where scores fall past these, such
+                        as "vmaf<90,ssimulacra2<70"; or saved, profile:NAME or
+                        preset:KEY, as compare takes them
+  --segments-all        a frame is weak only where every condition holds
+  --segments-any        a frame is weak where any condition holds
+  --segment-min-frames N
+                        leave out segments shorter than N frames (default 1)
+  --segment-merge-frames N
+                        join segments at most N frames apart (default 0)
+  --json FILE           also write the differences as JSON to FILE; - prints
+                        the JSON instead of the table
+  -q, --quiet           no warnings, only the results
+
 )";
 
 const char* const bdrate_sections = R"(
@@ -1580,6 +1659,75 @@ std::optional<std::string> saved_misuse(const SavedArguments& parsed) {
     return std::nullopt;
 }
 
+// A number as Python's float() reads it, and finite.
+double finite_float(const std::string& text) {
+    const std::optional<double> value = python_float(text);
+    if (!value) {
+        throw ArgumentError{"invalid float value: " + python_string_repr(text)};
+    }
+    if (!std::isfinite(*value)) {
+        throw ArgumentError{"must be a finite number"};
+    }
+    return *value;
+}
+
+// The target command's parser, keeping what it reads in `parsed`.
+Parser target_parser(TargetArguments& parsed) {
+    Action scores = option({"--scores"}, [&parsed](const std::string& value) { parsed.scores.push_back(value); });
+    Action metric = option({"--metric"}, [&parsed](const std::string& value) {
+        const std::string key = ascii_lower(python_strip(value));
+        if (find_metric(key) == nullptr) {
+            std::string keys;
+            for (const MetricDefinition& each : metrics()) {
+                keys += (keys.empty() ? "" : ", ") + std::string(each.key);
+            }
+            throw ArgumentError{"no metric has the key " + python_string_repr(value) + "; choose from: " + keys};
+        }
+        parsed.metric = key;
+    });
+    Action target = option({"--value"}, [&parsed](const std::string& value) { parsed.value = finite_float(value); });
+    scores.required = metric.required = target.required = true;
+    Parser parser;
+    parser.actions = {
+        help(std::string(target_usage) + target_sections + examples),
+        std::move(scores),
+        std::move(metric),
+        std::move(target),
+        option({"--by"}, [&parsed](const std::string& value) { parsed.by = ascii_lower(python_strip(value)); }),
+        option({"--stat"}, [&parsed](const std::string& value) { parsed.stat = choice(value, summary_stats()); }),
+        option({"--sequence"}, [&parsed](const std::string& value) { parsed.sequence = value; }),
+        option({"--json"}, [&parsed](const std::string& value) { parsed.json_path = value; }),
+        flag({"-q", "--quiet"}, parsed.quiet),
+    };
+    return parser;
+}
+
+// The diff command's parser: OLD and NEW are `parsed`'s items, in order.
+Parser diff_parser(SavedArguments& parsed) {
+    CompareArguments& output = parsed.output;
+    Parser parser;
+    parser.actions = {
+        help(std::string(diff_usage) + diff_sections + examples),
+        {{}, "OLD", Nargs::one, true,
+         [&parsed](const std::vector<std::string>& values) { parsed.items.push_back(values.front()); }},
+        {{}, "NEW", Nargs::one, true,
+         [&parsed](const std::vector<std::string>& values) { parsed.items.push_back(values.front()); }},
+        option({"--segments"}, [&output](const std::string& value) { read_segments(value, output); }),
+        flag({"--segments-all"}, output.segments_all),
+        flag({"--segments-any"}, output.segments_any),
+        option({"--segment-min-frames"},
+               [&output](const std::string& value) {
+                   output.segment_min_frames = int_up_to(value, std::numeric_limits<int>::max());
+               }),
+        option({"--segment-merge-frames"},
+               [&output](const std::string& value) { output.segment_merge_frames = int_from_zero(value); }),
+        option({"--json"}, [&output](const std::string& value) { output.json_path = value; }),
+        flag({"-q", "--quiet"}, output.quiet),
+    };
+    parser.exclusive = {{"--segments-all", "--segments-any"}};
+    return parser;
+}
+
 // The bdrate command's parser, keeping what it reads in `parsed`.
 Parser bdrate_parser(BdrateArguments& parsed) {
     Action anchor = option({"--anchor"}, [&parsed](const std::string& value) { parsed.anchor = value; });
@@ -1682,7 +1830,8 @@ Arguments parse_arguments(const std::vector<std::string>& arguments) {
          [&](const std::vector<std::string>& values) {
              std::string command;
              try {
-                 command = choice(values.front(), {"compare", "devices", "bitrate", "bdrate", "saved", "report"});
+                 command = choice(values.front(),
+                                  {"compare", "devices", "bitrate", "bdrate", "saved", "report", "target", "diff"});
              } catch (const ArgumentError& error) {
                  throw ArgumentError{"argument COMMAND: " + error.message};
              }
@@ -1730,6 +1879,20 @@ Arguments parse_arguments(const std::vector<std::string>& arguments) {
                  }
                  if (const std::optional<std::string> option = segment_option_alone(parsed.saved.output)) {
                      throw UsageError(std::string(usage) + prog + ": error: argument " + *option +
+                                      ": only with --segments, whose segments it shapes");
+                 }
+             } else if (command == "target") {
+                 parsed.command = Command::target;
+                 const Parser parser = target_parser(parsed.target);
+                 command_extras = parse_command(parser, target_usage, std::string(program) + " target", rest);
+             } else if (command == "diff") {
+                 parsed.command = Command::diff;
+                 parsed.saved.action = "diff";
+                 const Parser parser = diff_parser(parsed.saved);
+                 const std::string prog = std::string(program) + " diff";
+                 command_extras = parse_command(parser, diff_usage, prog, rest);
+                 if (const std::optional<std::string> option = segment_option_alone(parsed.saved.output)) {
+                     throw UsageError(std::string(diff_usage) + prog + ": error: argument " + *option +
                                       ": only with --segments, whose segments it shapes");
                  }
              } else if (command == "bdrate") {

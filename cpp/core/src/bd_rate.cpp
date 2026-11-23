@@ -126,6 +126,69 @@ std::vector<double> pchip_slopes(std::span<const double> x, std::span<const doub
     return slopes;
 }
 
+TargetResult setting_for_score(std::span<const SettingPoint> points, double score, bool log_setting) {
+    TargetResult result;
+    if (points.size() < 2) {
+        result.gap = BdRateGap::too_few_points;
+        return result;
+    }
+    if (!std::isfinite(score)) {
+        result.gap = BdRateGap::bad_number;
+        return result;
+    }
+    std::vector<std::size_t> order(points.size());
+    std::iota(order.begin(), order.end(), std::size_t{0});
+    for (const SettingPoint& point : points) {
+        if (!std::isfinite(point.score) || !std::isfinite(point.setting) || (log_setting && point.setting <= 0)) {
+            result.gap = BdRateGap::bad_number;
+            return result;
+        }
+    }
+    std::ranges::stable_sort(order, {}, [&points](std::size_t index) { return points[index].score; });
+    std::vector<double> x;
+    std::vector<double> y;
+    for (const std::size_t index : order) {
+        if (!x.empty() && points[index].score <= x.back()) {
+            result.gap = BdRateGap::tied_scores;
+            return result;
+        }
+        x.push_back(points[index].score);
+        y.push_back(log_setting ? std::log(points[index].setting) : points[index].setting);
+    }
+    const std::size_t last = x.size() - 1;
+    double value = 0;
+    if (score < x.front() || score > x.back()) {
+        // The straight line through the two encodes at that end
+        const std::size_t from = score < x.front() ? 0 : last - 1;
+        value = y[from] + (y[from + 1] - y[from]) / (x[from + 1] - x[from]) * (score - x[from]);
+        result.extrapolated = true;
+        result.bracket = std::pair{order[from], order[from + 1]};
+    } else {
+        const std::size_t at =
+            static_cast<std::size_t>(std::ranges::lower_bound(x, score) - x.begin());  // x[at] >= score
+        if (x[at] == score) {
+            value = y[at];
+            result.bracket = std::pair{order[at], order[at]};
+        } else {
+            const std::vector<double> slopes = pchip_slopes(x, y);
+            const std::size_t i = at - 1;
+            const double h = x[at] - x[i];
+            const double s = (score - x[i]) / h;
+            const double s2 = s * s;
+            const double s3 = s2 * s;
+            // The Hermite cubic of the interval at the fraction s of it
+            value = (2 * s3 - 3 * s2 + 1) * y[i] + (s3 - 2 * s2 + s) * h * slopes[i] + (-2 * s3 + 3 * s2) * y[at] +
+                    (s3 - s2) * h * slopes[at];
+            result.bracket = std::pair{order[i], order[at]};
+        }
+    }
+    result.setting = log_setting ? std::exp(value) : value;
+    if (!std::isfinite(*result.setting)) {
+        return {std::nullopt, false, std::nullopt, BdRateGap::bad_number};
+    }
+    return result;
+}
+
 BdRateResult bd_rate(std::span<const RatePoint> anchor, std::span<const RatePoint> test, bool lower_is_better) {
     Curve anchor_curve;
     Curve test_curve;
