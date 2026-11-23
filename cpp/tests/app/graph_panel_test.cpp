@@ -840,6 +840,33 @@ std::shared_ptr<const ComparisonResult> range_run(const std::string& name, const
     return std::make_shared<const ComparisonResult>(std::move(result));
 }
 
+// Times reach every line, not only the first: the frame boxes reach the
+// longest line's last frame, and so do the time boxes and the range shaded
+// (as issue #140 had it in the Bitrate Viewer).
+TEST_F(GraphPanelTest, TimesAndTheRangeReachTheLongestLine) {
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    FrameControls& controls = frame_controls(panel);
+    // 30 fps: the first line 100 frames long (to 3.3 s), the second 200.
+    panel.add_run({shared(vmaf_result("short.mkv", std::vector<float>(100, 90.0F))), "short", "row short", false});
+    panel.add_run({shared(vmaf_result("long.mkv", std::vector<float>(200, 80.0F))), "long", "row long", false});
+    MetricPage& vmaf = page(panel, "vmaf");
+    type_time(*controls.time_edit, "0:00:05.000");
+    EXPECT_EQ(frame_spin(panel).value(), 150);
+
+    type_time(*controls.range_start_time, "0:00:04.000");
+    type_time(*controls.range_end_time, "0:00:06.000");
+    EXPECT_EQ(range_start_spin(panel).value(), 120);
+    EXPECT_EQ(range_end_spin(panel).value(), 180);
+
+    range_start_spin(panel).setValue(50);
+    range_end_spin(panel).setValue(150);
+    ASSERT_TRUE(vmaf.chart().highlight());
+    EXPECT_NEAR(vmaf.chart().highlight()->first, 49.5 / 30, 1e-9);
+    EXPECT_NEAR(vmaf.chart().highlight()->second, 150.5 / 30, 1e-9);
+    EXPECT_EQ(controls.range_end_time->text(), "0:00:05.000");
+}
+
 // Go to time and a range in times, to the millisecond, as complements of the
 // frame boxes: a time is the frame shown then; a range of times the frames
 // from the first at its start or after to the last at its end or before.

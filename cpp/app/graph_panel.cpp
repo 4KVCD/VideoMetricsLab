@@ -599,9 +599,9 @@ void MetricPage::set_selected_frames(std::optional<std::pair<int, int>> frames) 
 }
 
 void MetricPage::refresh_highlight() {
-    // Placed by the first shown line with a point among the frames: the runs
-    // of one video share its times, and a shorter or subsampled line without
-    // a point there is passed over.
+    // From the shown lines with points among the frames, together: the runs
+    // of one video share its times, a shorter line reaches only part of the
+    // range, and a subsampled one without a point there is passed over.
     std::optional<std::pair<double, double>> seconds;
     if (selected_frames_) {
         for (const auto& [id, curve] : curves_) {
@@ -610,8 +610,9 @@ void MetricPage::refresh_highlight() {
             }
             const auto [begin, end] = points_in_range(curve.frames, *selected_frames_, !curve.starts.empty());
             if (begin < end) {
-                seconds = time_span(curve, begin, end);
-                break;
+                const auto [first, second] = time_span(curve, begin, end);
+                seconds = seconds ? std::pair(std::min(seconds->first, first), std::max(seconds->second, second))
+                                  : std::pair(first, second);
             }
         }
     }
@@ -1101,31 +1102,51 @@ std::span<const double> point_times(const MetricCurve& curve) {
 }  // namespace
 
 std::optional<double> MetricPage::time_of_frame(int frame) const {
+    // From the first shown line whose frames reach `frame`, else the first
+    // shown line at its own pace: the frame boxes reach the longest line's
+    // last frame (frame_range). The first line alone answered before, so a
+    // frame past its end was given its pace, not the longer line's time.
+    const MetricCurve* chosen = nullptr;
     for (const auto& [id, curve] : curves_) {
-        const std::span<const double> times = point_times(curve);
-        if (!curve.visible || curve.frames.empty() || times.size() != curve.frames.size()) {
+        if (!curve.visible || curve.frames.empty() || point_times(curve).size() != curve.frames.size()) {
             continue;
         }
-        // Between two points, as far between their times as between their frames.
-        const auto after = std::upper_bound(curve.frames.begin(), curve.frames.end(), frame) - curve.frames.begin();
-        const auto i = static_cast<std::size_t>(std::max<std::ptrdiff_t>(after - 1, 0));
-        if (i + 1 >= curve.frames.size()) {
-            // Past the last point: at the line's own pace.
-            const double per_frame = curve.frames.size() > 1 && curve.frames.back() > curve.frames.front()
-                                         ? (times.back() - times.front()) /
-                                               static_cast<double>(curve.frames.back() - curve.frames.front())
-                                         : 0.0;
-            return times[i] + per_frame * static_cast<double>(frame - curve.frames[i]);
+        if (chosen == nullptr || frame <= curve.frames.back()) {
+            chosen = &curve;
         }
-        const double span = static_cast<double>(curve.frames[i + 1] - curve.frames[i]);
-        return times[i] + (times[i + 1] - times[i]) * static_cast<double>(frame - curve.frames[i]) / span;
+        if (frame <= curve.frames.back()) {
+            break;
+        }
     }
-    return std::nullopt;
+    if (chosen == nullptr) {
+        return std::nullopt;
+    }
+    const MetricCurve& curve = *chosen;
+    const std::span<const double> times = point_times(curve);
+    // Between two points, as far between their times as between their frames.
+    const auto after = std::upper_bound(curve.frames.begin(), curve.frames.end(), frame) - curve.frames.begin();
+    const auto i = static_cast<std::size_t>(std::max<std::ptrdiff_t>(after - 1, 0));
+    if (i + 1 >= curve.frames.size()) {
+        // Past the last point: at the line's own pace.
+        const double per_frame = curve.frames.size() > 1 && curve.frames.back() > curve.frames.front()
+                                     ? (times.back() - times.front()) /
+                                           static_cast<double>(curve.frames.back() - curve.frames.front())
+                                     : 0.0;
+        return times[i] + per_frame * static_cast<double>(frame - curve.frames[i]);
+    }
+    const double span = static_cast<double>(curve.frames[i + 1] - curve.frames[i]);
+    return times[i] + (times[i + 1] - times[i]) * static_cast<double>(frame - curve.frames[i]) / span;
 }
 
 std::optional<int> MetricPage::frame_at_time(double seconds, bool at_or_after) const {
+    // The first shown line the time is not past the end of answers, as the
+    // first line with the frame does in time_of_frame (and as the Bitrate
+    // Viewer has it since issue #140).
+    std::optional<int> last;  // past every line's end: the latest last frame
     for (const auto& [id, curve] : curves_) {
-        if (!curve.visible || curve.frames.empty()) {
+        // As in time_of_frame: a line whose times are not one a frame (none,
+        // say) is passed over, as its times index its frames below.
+        if (!curve.visible || curve.frames.empty() || point_times(curve).size() != curve.frames.size()) {
             continue;
         }
         if (!curve.starts.empty()) {
@@ -1145,17 +1166,20 @@ std::optional<int> MetricPage::frame_at_time(double seconds, bool at_or_after) c
             return frame;
         }
         const std::span<const double> times = curve.times;
+        if (seconds - half_a_millisecond > times.back()) {
+            last = std::max(last.value_or(0), curve.frames.back());
+            continue;
+        }
         if (at_or_after) {
             const auto found = std::lower_bound(times.begin(), times.end(), seconds - half_a_millisecond);
-            return found == times.end() ? std::nullopt
-                                        : std::optional(curve.frames[static_cast<std::size_t>(found - times.begin())]);
+            return curve.frames[static_cast<std::size_t>(found - times.begin())];
         }
         const auto found = std::upper_bound(times.begin(), times.end(), seconds + half_a_millisecond);
         return found == times.begin()
                    ? std::nullopt
                    : std::optional(curve.frames[static_cast<std::size_t>(found - times.begin()) - 1]);
     }
-    return std::nullopt;
+    return at_or_after ? std::nullopt : last;
 }
 
 std::pair<int, int> MetricPage::frame_range() const {
