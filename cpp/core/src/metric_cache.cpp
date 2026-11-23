@@ -10,6 +10,7 @@
 #include <utility>
 #include <iterator>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <regex>
 #include <set>
@@ -1188,6 +1189,8 @@ struct RecordedComparison {
     std::string source_path, source_sampled, source_video;
     std::string distorted_path, distorted_sampled;
     std::string distorted_rate, distorted_head, distorted_stream;
+    // Its folder's time when it was read (as_read).
+    std::filesystem::file_time_type folder_time{};
 };
 
 // A comparison folder as last read: its time as its folder's listing gave
@@ -1195,7 +1198,27 @@ struct RecordedComparison {
 // either was missing or unreadable).
 struct ReadComparison {
     std::filesystem::file_time_type folder_time;
-    std::optional<RecordedComparison> recorded;
+    std::shared_ptr<const RecordedComparison> recorded;
+};
+
+// The saved comparisons recorded under a base (recorded_comparisons).
+using RecordedList = std::vector<std::shared_ptr<const RecordedComparison>>;
+
+// A base's comparison folders as last listed and read, kept for the process
+// (recorded_comparisons).
+struct Listing {
+    // Whether its folder was listed, and the folder's time then (none where
+    // there was no folder).
+    bool listed = false;
+    std::optional<std::filesystem::file_time_type> folder_time;
+    // By folder, and those with a record.
+    std::map<std::filesystem::path, ReadComparison> folders;
+    std::shared_ptr<const RecordedList> list = std::make_shared<const RecordedList>();
+    // The folders this process changed since (recorded_changed), each by the
+    // number of its latest change; and the number of the latest change to
+    // the whole folder (recorded_forgotten), 0 for none since it was listed.
+    std::map<std::filesystem::path, std::uint64_t> changed;
+    std::uint64_t forgotten = 0;
 };
 
 struct KnownFiles {
@@ -1205,10 +1228,13 @@ struct KnownFiles {
     std::map<std::string, std::optional<std::string>> sampled;
     std::map<std::string, std::optional<std::string>> video;
     std::map<std::pair<std::string, int>, std::optional<std::string>> stream;
-    // By base, then by folder.
-    std::map<std::filesystem::path, std::map<std::filesystem::path, ReadComparison>> recorded;
-    // Counts this process's changes to the comparisons' files
-    // (recorded_changed): a listing read across one is not kept.
+    // By base. A Listing's folders and list are changed only by the thread
+    // that holds `listing` as well as `mutex`: that thread reads them with
+    // `listing` alone.
+    std::map<std::filesystem::path, Listing> recorded;
+    std::mutex listing;
+    // Numbers this process's changes to the comparisons' files
+    // (recorded_changed, recorded_forgotten).
     std::uint64_t changes = 0;
 };
 
@@ -1218,17 +1244,27 @@ KnownFiles& known_files() {
 }
 
 // This process wrote the identity.json or context.json of the comparison in
-// `folder`: it is read again at the next lookup (recorded_comparisons),
-// whether or not the file system changed the folder's time.
+// `folder`, made it or deleted it: it is read again (or dropped) at the next
+// lookup (recorded_comparisons), whatever the file system did to the times.
 void recorded_changed(const std::filesystem::path& folder) {
     KnownFiles& known = known_files();
     const std::lock_guard lock(known.mutex);
-    for (auto& [base, comparisons] : known.recorded) {
-        std::erase_if(comparisons, [&folder](const auto& comparison) {
-            return comparison.first.filename() == folder.filename();
-        });
-    }
     ++known.changes;
+    for (auto& [base, listing] : known.recorded) {
+        // A listing being made has it read again too, after.
+        listing.changed[base / format_folder / folder.filename()] = known.changes;
+    }
+}
+
+// This process deleted comparisons under `base` (Settings' Clear): its
+// folder is listed again at the next lookup.
+void recorded_forgotten(const std::filesystem::path& base) {
+    KnownFiles& known = known_files();
+    const std::lock_guard lock(known.mutex);
+    ++known.changes;
+    if (const auto found = known.recorded.find(base); found != known.recorded.end()) {
+        found->second.forgotten = known.changes;
+    }
 }
 
 std::optional<std::string> sampled_of(const std::filesystem::path& file) {
@@ -1257,8 +1293,8 @@ std::optional<std::string> video_of(const std::filesystem::path& file) {
         }
         // One recorded for this file before (another comparison of the same
         // reference): no decoding.
-        for (const auto& [base, comparisons] : known.recorded) {
-            for (const auto& [folder, read] : comparisons) {
+        for (const auto& [base, listing] : known.recorded) {
+            for (const auto& [folder, read] : listing.folders) {
                 if (read.recorded && read.recorded->source_path == identity && !read.recorded->source_video.empty()) {
                     known.video[identity] = read.recorded->source_video;
                     return read.recorded->source_video;
@@ -1348,74 +1384,148 @@ bool stream_of_this_format(const nlohmann::json& data) {
     return format.is_number_integer() && format.get<int>() == stream_fingerprint_format;
 }
 
-// Every comparison under `base` with an identity.json, as its files are
-// now. The folder is listed each time, which finds the comparisons saved
-// and deleted since, by this process or another; a comparison is read again
-// only where its folder's time changed since it was last read (saved again,
-// or saved by another process meanwhile, on a file system that changes it)
-// or this process changed it (recorded_changed). The folder's time comes
-// with the listing. Issue #136: the times of every comparison's
-// identity.json and context.json, looked up at each listing, held up each
-// lookup or save whose own folder is missing, with a large cache or one on
-// a network share.
-std::vector<RecordedComparison> recorded_comparisons(const std::filesystem::path& base) {
+// What the comparison in `folder` (whose time is `folder_time`) recorded in
+// its identity.json and context.json: nothing where either is missing or
+// cannot be read (saved before identity.json was recorded: nothing to know
+// it by).
+ReadComparison read_comparison(const std::filesystem::path& folder, std::filesystem::file_time_type folder_time) {
+    ReadComparison read{folder_time, nullptr};
+    const std::optional<nlohmann::json> identity = read_json(folder / "identity.json");
+    const std::optional<nlohmann::json> context = read_json(folder / "context.json");
+    if (identity && identity->is_object() && context && context->is_object()) {
+        RecordedComparison recorded{folder,
+                                    context->value("recipe", nlohmann::json()),
+                                    text_at(*identity, "source", "path"),
+                                    text_at(*identity, "source", "sampled"),
+                                    text_at(*identity, "source", "video"),
+                                    text_at(*identity, "distorted", "path"),
+                                    text_at(*identity, "distorted", "sampled"),
+                                    text_at(*identity, "distorted", "rate"),
+                                    text_at(*identity, "distorted", "stream_head"),
+                                    text_at(*identity, "distorted", "stream")};
+        if (!stream_of_this_format(*identity)) {
+            recorded.distorted_head.clear();
+            recorded.distorted_stream.clear();
+        }
+        recorded.folder_time = folder_time;
+        read.recorded = std::make_shared<const RecordedComparison>(std::move(recorded));
+    }
+    return read;
+}
+
+// Every comparison under `base` with an identity.json. Issue #136: the
+// whole folder was listed at every lookup or save whose own folder is
+// missing, which with thousands of comparisons, or a cache on a network
+// share, held up every new row and every first save.
+//
+// The listing is kept for the process. The folder is listed again (a
+// comparison read again only where its folder's time changed) where its own
+// time changed since: comparisons saved or deleted by another process (the
+// command line, another window), on a file system that changes it (NTFS,
+// network shares); and after Settings' Clear. What this process saves or
+// deletes is read again on its own (recorded_changed). A comparison another
+// process deleted or saved again is read again when a lookup would take it
+// (as_read), whatever the file system did to the folder's time; one it
+// saved, on a file system that leaves the folder's time (FAT, a RAM drive),
+// is found once that time changes, or in the next session.
+std::shared_ptr<const RecordedList> recorded_comparisons(const std::filesystem::path& base) {
     KnownFiles& known = known_files();
-    std::map<std::filesystem::path, ReadComparison> before;
+    const std::lock_guard one_listing(known.listing);  // one lists, the others take what it found
+    const std::filesystem::path root = base / format_folder;
+    std::optional<std::filesystem::file_time_type> folder_time;
+    std::error_code error;
+    if (const auto time = std::filesystem::last_write_time(root, error); !error) {
+        folder_time = time;
+    }
+    Listing* listing = nullptr;
     std::uint64_t changes = 0;
+    bool whole = false;
+    std::set<std::filesystem::path> changed;
     {
         const std::lock_guard lock(known.mutex);
-        if (const auto found = known.recorded.find(base); found != known.recorded.end()) {
-            before = found->second;
-        }
+        listing = &known.recorded[base];
         changes = known.changes;
+        whole = !listing->listed || listing->forgotten != 0 || listing->folder_time != folder_time;
+        if (!whole && listing->changed.empty()) {
+            return listing->list;
+        }
+        for (const auto& [folder, number] : listing->changed) {
+            changed.insert(folder);
+        }
     }
+    // Read without `mutex`: only this thread changes the listing's folders.
     std::map<std::filesystem::path, ReadComparison> now;
-    std::error_code error;
-    std::filesystem::directory_iterator folder(base / format_folder, error);
-    for (; !error && folder != std::filesystem::directory_iterator(); folder.increment(error)) {
-        std::error_code unread;
-        const std::filesystem::file_time_type folder_time = folder->last_write_time(unread);
-        if (unread || !folder->is_directory(unread)) {
-            continue;
-        }
-        if (const auto known_read = before.find(folder->path());
-            known_read != before.end() && known_read->second.folder_time == folder_time) {
-            now.insert(*known_read);
-            continue;
-        }
-        // Nothing recorded where it has no identity.json (saved before it
-        // was recorded): nothing to know it by.
-        ReadComparison read{folder_time, std::nullopt};
-        const std::optional<nlohmann::json> identity = read_json(folder->path() / "identity.json");
-        const std::optional<nlohmann::json> context = read_json(folder->path() / "context.json");
-        if (identity && identity->is_object() && context && context->is_object()) {
-            read.recorded = RecordedComparison{folder->path(), context->value("recipe", nlohmann::json()),
-                                               text_at(*identity, "source", "path"),
-                                               text_at(*identity, "source", "sampled"),
-                                               text_at(*identity, "source", "video"),
-                                               text_at(*identity, "distorted", "path"),
-                                               text_at(*identity, "distorted", "sampled"),
-                                               text_at(*identity, "distorted", "rate"),
-                                               text_at(*identity, "distorted", "stream_head"),
-                                               text_at(*identity, "distorted", "stream")};
-            if (!stream_of_this_format(*identity)) {
-                read.recorded->distorted_head.clear();
-                read.recorded->distorted_stream.clear();
+    std::vector<std::pair<std::filesystem::path, std::optional<ReadComparison>>> updates;
+    if (whole) {
+        std::filesystem::directory_iterator folder(root, error);
+        for (; !error && folder != std::filesystem::directory_iterator(); folder.increment(error)) {
+            std::error_code unread;
+            const std::filesystem::file_time_type time = folder->last_write_time(unread);
+            if (unread || !folder->is_directory(unread)) {
+                continue;
             }
+            if (const auto known_read = listing->folders.find(folder->path());
+                known_read != listing->folders.end() && known_read->second.folder_time == time &&
+                !changed.contains(folder->path())) {
+                now.insert(*known_read);
+                continue;
+            }
+            now.emplace(folder->path(), read_comparison(folder->path(), time));
         }
-        now.emplace(folder->path(), std::move(read));
-    }
-    std::vector<RecordedComparison> list;
-    for (const auto& [path, read] : now) {
-        if (read.recorded) {
-            list.push_back(*read.recorded);
+    } else {
+        for (const std::filesystem::path& folder : changed) {
+            std::error_code unread;
+            const std::filesystem::file_time_type time = std::filesystem::last_write_time(folder, unread);
+            if (unread || !std::filesystem::is_directory(folder, unread)) {
+                updates.emplace_back(folder, std::nullopt);  // deleted
+            } else {
+                updates.emplace_back(folder, read_comparison(folder, time));
+            }
         }
     }
     const std::lock_guard lock(known.mutex);
-    if (known.changes == changes) {  // else what was read may predate the change
-        known.recorded[base] = std::move(now);
+    if (whole) {
+        listing->folders = std::move(now);
+        listing->listed = true;
+        listing->folder_time = folder_time;
+        if (listing->forgotten <= changes) {
+            listing->forgotten = 0;  // else cleared meanwhile: listed again next time
+        }
+    } else {
+        for (auto& [folder, read] : updates) {
+            if (read) {
+                listing->folders[folder] = std::move(*read);
+            } else {
+                listing->folders.erase(folder);
+            }
+        }
     }
-    return list;
+    // A folder changed again while it was being read is read again next time.
+    std::erase_if(listing->changed, [changes](const auto& folder) { return folder.second <= changes; });
+    auto list = std::make_shared<RecordedList>();
+    list->reserve(listing->folders.size());
+    for (const auto& [path, read] : listing->folders) {
+        if (read.recorded) {
+            list->push_back(read.recorded);
+        }
+    }
+    listing->list = std::move(list);
+    return listing->list;
+}
+
+// Whether the comparison `recorded`, of a kept listing, is still as it was
+// read: its identity.json there, its folder's time the same. Where it is
+// not (deleted or saved again by another process), it is read again at the
+// next lookup (recorded_comparisons).
+bool as_read(const RecordedComparison& recorded) {
+    std::error_code error;
+    const std::filesystem::file_time_type time = std::filesystem::last_write_time(recorded.folder, error);
+    if (!error && time == recorded.folder_time &&
+        std::filesystem::is_regular_file(recorded.folder / "identity.json", error)) {
+        return true;
+    }
+    recorded_changed(recorded.folder);
+    return false;
 }
 
 // Those of `candidates` saved with the reference `source`, cheapest first:
@@ -1454,7 +1564,7 @@ std::vector<RecordedComparison> with_same_reference(const std::vector<RecordedCo
 // Nothing is read unless a comparison of the same recipe and rate recorded a
 // stream; the whole test stream only where its first packets and the
 // reference matched one.
-std::optional<std::filesystem::path> folder_of_same_stream(std::vector<RecordedComparison> recorded_list,
+std::optional<RecordedComparison> folder_of_same_stream(const RecordedList& recorded_list,
                                                           const std::filesystem::path& source,
                                                           const std::filesystem::path& distorted,
                                                           const ComparisonRecipe& recipe) {
@@ -1469,10 +1579,10 @@ std::optional<std::filesystem::path> folder_of_same_stream(std::vector<RecordedC
     const nlohmann::json identity = without_rate(recipe.identity());
     const std::string rate = rate_text(recipe.test_rate);
     std::vector<RecordedComparison> candidates;
-    for (RecordedComparison& recorded : recorded_list) {
-        if (!rate.empty() && recorded.distorted_rate == rate && !recorded.distorted_head.empty() &&
-            !recorded.distorted_stream.empty() && without_rate(recorded.recipe) == identity) {
-            candidates.push_back(std::move(recorded));
+    for (const std::shared_ptr<const RecordedComparison>& recorded : recorded_list) {
+        if (!rate.empty() && recorded->distorted_rate == rate && !recorded->distorted_head.empty() &&
+            !recorded->distorted_stream.empty() && without_rate(recorded->recipe) == identity) {
+            candidates.push_back(*recorded);
         }
     }
     if (candidates.empty()) {
@@ -1528,50 +1638,70 @@ std::optional<std::filesystem::path> folder_of_same_stream(std::vector<RecordedC
                                             .count(),
                                         1) +
                            " s, " + (stream.empty() ? "not read" : same != candidates.end() ? "a remux" : "another encode"));
-        return same == candidates.end() ? std::nullopt : std::optional(same->folder);
+        return same == candidates.end() ? std::nullopt : std::optional(*same);
     }
     const std::string stream = whole.value_or("");
     for (const RecordedComparison& candidate : candidates) {
         if (!stream.empty() && candidate.distorted_stream == stream) {
-            return candidate.folder;
+            return candidate;
         }
     }
     return std::nullopt;
 }
 
-// A folder saved for the same files under other paths (recipe_directory).
-std::optional<std::filesystem::path> folder_of_same_files(const std::filesystem::path& base,
-                                                         const std::filesystem::path& source,
-                                                         const std::filesystem::path& distorted,
-                                                         const ComparisonRecipe& recipe) {
+// The comparison of `recorded_list` saved for the same files under other
+// paths.
+std::optional<RecordedComparison> folder_of_same_files_in(const RecordedList& recorded_list,
+                                                            const std::filesystem::path& source,
+                                                            const std::filesystem::path& distorted,
+                                                            const ComparisonRecipe& recipe) {
     const nlohmann::json identity = recipe.identity();
     const std::string distorted_path = file_identity(distorted);
     std::optional<std::string> distorted_sampled;
-    std::vector<RecordedComparison> recorded_list = recorded_comparisons(base);
     std::vector<RecordedComparison> candidates;
-    for (const RecordedComparison& recorded : recorded_list) {
-        if (recorded.recipe != identity) {
-            continue;
-        }
-        bool same = recorded.distorted_path == distorted_path;
-        if (!same && !recorded.distorted_sampled.empty()) {
+    // The file first, the recipe only where it is the same: comparing the
+    // recipes (JSON) of thousands of comparisons takes longer.
+    for (const std::shared_ptr<const RecordedComparison>& recorded : recorded_list) {
+        bool same = recorded->distorted_path == distorted_path;
+        if (!same && !recorded->distorted_sampled.empty()) {
             if (!distorted_sampled) {
                 distorted_sampled = sampled_of(distorted).value_or("");
             }
-            same = !distorted_sampled->empty() && *distorted_sampled == recorded.distorted_sampled;
+            same = !distorted_sampled->empty() && *distorted_sampled == recorded->distorted_sampled;
         }
-        if (same) {
-            candidates.push_back(recorded);
+        if (same && recorded->recipe == identity) {
+            candidates.push_back(*recorded);
         }
     }
     if (!candidates.empty()) {
         const std::vector<RecordedComparison> same = with_same_reference(candidates, source);
         if (!same.empty()) {
-            return same.front().folder;
+            return same.front();
         }
     }
     // Not this file: perhaps its stream in another (a remux).
-    return folder_of_same_stream(std::move(recorded_list), source, distorted, recipe);
+    return folder_of_same_stream(recorded_list, source, distorted, recipe);
+}
+
+// A folder saved for the same files under other paths (recipe_directory),
+// as it was read.
+std::optional<std::filesystem::path> folder_of_same_files(const std::filesystem::path& base,
+                                                         const std::filesystem::path& source,
+                                                         const std::filesystem::path& distorted,
+                                                         const ComparisonRecipe& recipe) {
+    // One found changed since it was read is read again and all looked at
+    // again: a few times at most, should another process change them as fast.
+    for (int tries = 0; tries < 4; ++tries) {
+        const std::optional<RecordedComparison> found =
+            folder_of_same_files_in(*recorded_comparisons(base), source, distorted, recipe);
+        if (!found) {
+            return std::nullopt;
+        }
+        if (as_read(*found)) {
+            return found->folder;
+        }
+    }
+    return std::nullopt;
 }
 
 }  // namespace
@@ -1611,16 +1741,31 @@ namespace {
 // no test stream recorded.
 std::vector<std::filesystem::path> folders_without_stream(const std::filesystem::path& base,
                                                           const std::string& path) {
-    std::vector<std::filesystem::path> folders;
-    for (const RecordedComparison& recorded : recorded_comparisons(base)) {
-        if (recorded.distorted_path == path && recorded.distorted_stream.empty()) {
-            folders.push_back(recorded.folder);
+    // Those saved for it, as they are now (as_read): a few times at most,
+    // should another process change them as fast.
+    for (int tries = 0; tries < 4; ++tries) {
+        std::vector<std::filesystem::path> folders;
+        bool changed = false;
+        for (const std::shared_ptr<const RecordedComparison>& recorded : *recorded_comparisons(base)) {
+            if (recorded->distorted_path == path) {
+                changed = !as_read(*recorded) || changed;
+                if (recorded->distorted_stream.empty()) {
+                    folders.push_back(recorded->folder);
+                }
+            }
+        }
+        if (!changed) {
+            return folders;
         }
     }
-    return folders;
+    return {};
 }
 
 }  // namespace
+
+void saved_comparison_deleted(const std::filesystem::path& folder) {
+    recorded_changed(folder);
+}
 
 bool test_stream_wanted(const std::filesystem::path& base, const std::filesystem::path& distorted) {
     return !folders_without_stream(base, file_identity(distorted)).empty();
@@ -1753,8 +1898,11 @@ std::filesystem::path recipe_directory(const std::filesystem::path& base, const 
     if (error) {
         return legacy.front();
     }
+    recorded_changed(legacy.front());
+    recorded_changed(directory);
     for (std::size_t i = 1; i < legacy.size(); ++i) {
         merge_legacy(legacy[i], directory);
+        recorded_changed(legacy[i]);
     }
     return directory;
 }
@@ -1936,6 +2084,7 @@ int clear_metrics(const std::filesystem::path& base, const std::filesystem::path
     }
     if (!error && !scores_left) {
         std::filesystem::remove_all(directory, error);
+        recorded_changed(directory);
     }
     return removed;
 }
@@ -2062,6 +2211,7 @@ ClearedResults clear_saved_results(const std::filesystem::path& base, bool keep_
     clear_saved_bitrate(base, kept);
     if (cleared.kept == 0) {
         std::filesystem::remove_all(root, error);  // everything, as before
+        recorded_forgotten(base);
         cleared.removed = error ? 0 : static_cast<int>(deleted.size());
         return cleared;
     }
@@ -2071,6 +2221,7 @@ ClearedResults clear_saved_results(const std::filesystem::path& base, bool keep_
         std::filesystem::remove_all(folder, not_removed);
         all = all && !not_removed;
     }
+    recorded_forgotten(base);
     cleared.removed = all ? static_cast<int>(deleted.size()) : 0;
     return cleared;
 }

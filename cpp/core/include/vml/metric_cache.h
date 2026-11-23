@@ -97,6 +97,11 @@ bool record_test_stream(const std::filesystem::path& base, const std::filesystem
 // test video is calculated again. Reads nothing of the file.
 bool test_stream_wanted(const std::filesystem::path& base, const std::filesystem::path& distorted);
 
+// This process deleted the comparison saved in `folder` itself (saved_results.h's
+// delete_saved_comparison): the listing of the saved comparisons that
+// recipe_directory keeps, to find files moved, renamed or remuxed, drops it.
+void saved_comparison_deleted(const std::filesystem::path& folder);
+
 // The hash that names a comparison's folder: of both files' identities and
 // the recipe's.
 std::string recipe_hash(const std::filesystem::path& source, const std::filesystem::path& distorted,

@@ -998,6 +998,61 @@ TEST(MetricCache, ComparisonsAreReadAgainOnlyWhereTheirFolderChanged) {
     EXPECT_NE(folder_of("t renamed.mkv"), saved);
 }
 
+// The saved comparisons are listed once and kept (issue #136: the whole
+// folder was listed again at every lookup or save whose own folder is
+// missing): a comparison another process saves is found only once the
+// folder's time changes; what this process saves is found at once; one
+// another process deleted is not picked, though the folder's time stayed.
+// The folder's time is set by hand, as NTFS would set it and as a RAM
+// drive or FAT would not.
+TEST(MetricCache, SavedComparisonsAreListedOnceAndKept) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mkv", std::string(5000, 's'));
+    for (const std::string name : {"t", "u", "w"}) {
+        touch(folder / (name + ".mkv"), std::string(4000 + name[0], name[0]));
+        std::filesystem::copy_file(folder / (name + ".mkv"), folder / (name + " renamed.mkv"));
+    }
+    const AnalysisRequest request = request_from(stored);
+    ComparisonResult result = test::result_from(stored.at("result"));
+    result.source = folder / "s.mkv";
+    const std::filesystem::path cache = folder / "cache";
+    const auto save = [&](const std::filesystem::path& base, const std::string& name) {
+        result.distorted = folder / (name + ".mkv");
+        return store_result(base, result.source, result.distorted, request.recipe, result, name, request.metrics);
+    };
+    const auto folder_of = [&](const std::string& name) {
+        return recipe_directory(cache, folder / "s.mkv", folder / (name + " renamed.mkv"), request.recipe);
+    };
+    const std::filesystem::path v2 = cache / "v2";
+    const std::filesystem::path t = save(cache, "t");
+    // As another process would (saved here before the lookup, which takes
+    // what this process saves).
+    const std::filesystem::path elsewhere = save(folder / "other process", "u");
+    ASSERT_EQ(folder_of("t"), t);
+    const std::filesystem::file_time_type listed = std::filesystem::last_write_time(v2);
+
+    // Saved by another process, the folder's time left: not listed again.
+    const std::filesystem::path u = v2 / elsewhere.filename();
+    std::filesystem::copy(elsewhere, u);
+    std::filesystem::last_write_time(v2, listed);
+    EXPECT_NE(folder_of("u"), u);
+    // The folder's time changed: listed again, found.
+    std::filesystem::last_write_time(v2, listed + std::chrono::seconds(1));
+    EXPECT_EQ(folder_of("u"), u);
+
+    // Saved by this process: found without a listing.
+    const std::filesystem::path w = save(cache, "w");
+    std::filesystem::last_write_time(v2, listed + std::chrono::seconds(1));
+    EXPECT_EQ(folder_of("w"), w);
+
+    // Deleted by another process, the folder's time left: not picked.
+    std::filesystem::remove_all(t);
+    std::filesystem::last_write_time(v2, listed + std::chrono::seconds(1));
+    EXPECT_NE(folder_of("t"), t);
+    EXPECT_FALSE(std::filesystem::exists(t));
+}
+
 // A test video remuxed (raw <-> MKV <-> MP4) keeps its scores by its stream
 // fingerprint, recorded after the save, read at the same rate, with the
 // same reference: its first packets first, the whole stream only where they
@@ -1186,7 +1241,7 @@ TEST(MetricCache, AStreamRecordedInAnotherFormIsReadAgainAndNotMatched) {
         std::ofstream(saved / "identity.json") << identity.dump();
     }
     // Read again as a record of an earlier version is: its folder's time
-    // changed (recorded_comparisons reads again only where it did).
+    // changed (a lookup that would take it reads it again where it did: as_read).
     std::filesystem::last_write_time(saved, std::filesystem::last_write_time(saved) + std::chrono::seconds(2));
     EXPECT_FALSE(load());
     EXPECT_TRUE(test_stream_wanted(cache, folder / "t.mkv"));
