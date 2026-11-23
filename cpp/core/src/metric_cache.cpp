@@ -1826,8 +1826,17 @@ void cache_parts::record_identity(const std::filesystem::path& directory, const 
     if (only_if_missing && std::filesystem::exists(directory / "identity.json", error)) {
         return;
     }
-    nlohmann::json source_side = {{"path", file_identity(source)}, {"sampled", sampled_of(source).value_or("")}};
-    if (const std::optional<std::string> video = video_of(source)) {
+    // What this folder recorded before (a metric added since): the
+    // reference's picture fingerprint is taken from it where it is of this
+    // same file, rather than decoded again by each process's first save.
+    const std::optional<nlohmann::json> before = read_json(directory / "identity.json");
+    const std::string source_identity = file_identity(source);
+    nlohmann::json source_side = {{"path", source_identity}, {"sampled", sampled_of(source).value_or("")}};
+    const bool recorded_video = before && before->is_object() && text_at(*before, "source", "path") == source_identity &&
+                                !text_at(*before, "source", "video").empty();
+    if (recorded_video) {
+        source_side["video"] = text_at(*before, "source", "video");
+    } else if (const std::optional<std::string> video = video_of(source)) {
         source_side["video"] = *video;
     }
     nlohmann::json distorted_side = {{"path", file_identity(distorted)},
@@ -1842,7 +1851,6 @@ void cache_parts::record_identity(const std::filesystem::path& directory, const 
     std::optional<std::string> stream = stream_of(distorted, 0, false);
     if (!head || !stream) {
         // Or as recorded before for this same file (a metric added since).
-        const std::optional<nlohmann::json> before = read_json(directory / "identity.json");
         if (before && before->is_object() && text_at(*before, "distorted", "path") == file_identity(distorted) &&
             !text_at(*before, "distorted", "stream").empty() && stream_of_this_format(*before)) {
             head = text_at(*before, "distorted", "stream_head");

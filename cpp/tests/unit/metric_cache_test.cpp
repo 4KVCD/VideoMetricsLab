@@ -951,6 +951,47 @@ TEST(MetricCache, ScoresFollowRenamedAndRemuxedFiles) {
     set_video_fingerprinter(nullptr);
 }
 
+// #205: every process's first save into a comparison (vml-cli adding a
+// metric, the app's first run of the day) decoded the reference again for
+// its picture fingerprint (five decodes, which a 2-hour film on a share takes
+// a while for), though the folder's identity.json recorded it for this same
+// file. It is taken from there.
+TEST(MetricCache, ASaveTakesTheReferencesRecordedFingerprint) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mkv", std::string(5000, 's'));
+    touch(folder / "t.mkv", std::string(4000, 't'));
+    const AnalysisRequest request = request_from(stored);
+    ComparisonResult result = test::result_from(stored.at("result"));
+    result.source = folder / "s.mkv";
+    result.distorted = folder / "t.mkv";
+    const std::filesystem::path cache = folder / "cache";
+    set_video_fingerprinter(nullptr);  // none worked out in this process
+    const std::filesystem::path saved =
+        store_result(cache, folder / "s.mkv", folder / "t.mkv", request.recipe, result, "t", request.metrics);
+    // As another process recorded it.
+    nlohmann::json identity = nlohmann::json::parse(*platform::read_file(saved / "identity.json"));
+    ASSERT_EQ(identity["source"]["path"], file_identity(folder / "s.mkv"));
+    identity["source"]["video"] = "recorded";
+    std::ofstream(saved / "identity.json") << identity.dump();
+
+    int decoded = 0;
+    set_video_fingerprinter([&decoded](const std::filesystem::path&) -> std::optional<std::string> {
+        ++decoded;
+        return std::string("decoded");
+    });
+    store_result(cache, folder / "s.mkv", folder / "t.mkv", request.recipe, result, "t", request.metrics);
+    EXPECT_EQ(decoded, 0);
+    identity = nlohmann::json::parse(*platform::read_file(saved / "identity.json"));
+    EXPECT_EQ(identity["source"]["video"], "recorded");
+
+    // Another reference at that path since: worked out again.
+    touch(folder / "s.mkv", std::string(6000, 'S'));
+    store_result(cache, folder / "s.mkv", folder / "t.mkv", request.recipe, result, "t", request.metrics);
+    EXPECT_EQ(decoded, 1);
+    set_video_fingerprinter(nullptr);
+}
+
 // Issue #136: a lookup whose own folder is missing looked up the times of
 // every saved comparison's identity.json and context.json, each time. A
 // comparison is read again only where its folder's time changed: a file
