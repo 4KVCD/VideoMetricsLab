@@ -1767,6 +1767,11 @@ void GraphPanel::series_changed() {
     refresh_shown_names();
     refresh_stats_table();
     refresh_page_controls();
+    // A readout shown tells the lines as they are now, a line added or given
+    // new scores too, as it does a line ticked on (set_visible).
+    for (const auto& [key, page] : pages_) {
+        page->refresh_readout(entries_);
+    }
 }
 
 void GraphPanel::set_order(std::vector<std::string> identities) {

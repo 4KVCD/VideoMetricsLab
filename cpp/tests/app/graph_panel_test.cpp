@@ -567,6 +567,25 @@ TEST_F(GraphPanelTest, TheReadoutFollowsTheLinesShown) {
     EXPECT_TRUE(lines_fit()) << readout(vmaf).toStdString();
 }
 
+// A line added or given new scores while a readout is shown (a run's next
+// result, a run file imported): the readout tells it, as it does a line
+// ticked on, rather than the numbers before.
+TEST_F(GraphPanelTest, TheReadoutTellsALineAddedOrRescored) {
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(10, 90.0F))), "a", "row a", false});
+    MetricPage& vmaf = page(panel, "vmaf");
+    vmaf.chart().resize(800, 400);
+    vmaf.show_frame(3, entries(panel));
+    ASSERT_TRUE(readout(vmaf).contains(QStringLiteral("[a]"))) << readout(vmaf).toStdString();
+    panel.add_run({shared(vmaf_result("b.mkv", std::vector<float>(10, 80.0F))), "b", "row b", false});
+    EXPECT_TRUE(readout(vmaf).contains(QStringLiteral("[b]"))) << readout(vmaf).toStdString();
+    EXPECT_TRUE(readout(vmaf).contains(QStringLiteral("80.00"))) << readout(vmaf).toStdString();
+    panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(10, 70.0F))), "a", "row a", false});
+    EXPECT_TRUE(readout(vmaf).contains(QStringLiteral("70.00"))) << readout(vmaf).toStdString();
+    EXPECT_FALSE(readout(vmaf).contains(QStringLiteral("90.00"))) << readout(vmaf).toStdString();
+}
+
 // A readout over a long-named video: its line is cut at the edge, not made
 // the chart's least width. It was, which widened the tab past the window
 // (the tab scrolled sideways) and left Worst frames' divider nowhere to go.
