@@ -78,7 +78,11 @@ std::optional<SavedBitrate> load_saved_bitrate(const std::filesystem::path& base
             keys.push_back(key != 0.0);
         }
         saved.data = bitrate_data(path, *times, *durations, std::move(byte_counts), std::move(keys));
-        if (types && metadata.value("frame_types_read", false)) {
+        // No types saved by a version that saved a reading cut short as none
+        // (frame_types_whole missing): read again, as not known.
+        const bool none_known = types && types->empty() && !saved.data.sizes.empty() &&
+                                !metadata.value("frame_types_whole", false);
+        if (types && metadata.value("frame_types_read", false) && !none_known) {
             saved.frame_types.emplace();
             for (const double type : *types) {
                 saved.frame_types->push_back(static_cast<std::uint8_t>(type));
@@ -98,6 +102,8 @@ void save_bitrate(const std::filesystem::path& base, const std::string& sampled_
                                      {"path", platform::path_text(bitrate.info.path)},
                                      {"info", video_info_to_dict(bitrate.info)},
                                      {"frame_types_read", bitrate.frame_types.has_value()},
+                                     // Types saved only from a file read to its end (frame_types.h).
+                                     {"frame_types_whole", bitrate.frame_types.has_value()},
                                      {"saved_by", build_stamp()}};
     std::vector<std::pair<std::string, NpyArray>> arrays{
         {"metadata", npy_text(python_json_compact(metadata))},

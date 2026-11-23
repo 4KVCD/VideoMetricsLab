@@ -1350,6 +1350,18 @@ TEST(MetricCache, BitrateIsSavedByContent) {
     save_bitrate(cache, "unknown", bitrate);
     EXPECT_FALSE(load_saved_bitrate(cache, "unread", folder / "a.mkv")->frame_types);
     EXPECT_EQ(load_saved_bitrate(cache, "unknown", folder / "a.mkv")->frame_types, std::vector<std::uint8_t>{});
+    // #205: saved as "read, not known" before a reading cut short was told
+    // apart from one read whole (no frame_types_whole): read again.
+    std::map<std::string, NpyArray> earlier = *read_npz(bitrate_store_folder(cache) / "unknown.npz");
+    nlohmann::json metadata = nlohmann::json::parse(*npy_text_value(earlier.at("metadata")));
+    metadata.erase("frame_types_whole");
+    earlier["metadata"] = npy_text(metadata.dump());
+    const std::string bytes = npz_bytes({earlier.begin(), earlier.end()});
+    std::ofstream(bitrate_store_folder(cache) / "earlier.npz", std::ios::binary) << bytes;
+    const std::optional<SavedBitrate> unsure = load_saved_bitrate(cache, "earlier", folder / "a.mkv");
+    ASSERT_TRUE(unsure);
+    EXPECT_FALSE(unsure->frame_types);
+    EXPECT_EQ(unsure->data.sizes, bitrate.data.sizes);  // its packets still taken
 
     EXPECT_GT(cache_summary(cache).bytes, 0U);
     clear_saved_results(cache, true);  // as Settings clears: the bitrate too

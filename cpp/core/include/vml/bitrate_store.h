@@ -25,8 +25,9 @@ namespace vml {
 struct SavedBitrate {
     VideoInfo info;
     BitrateData data;
-    // A type per frame, or none where they cannot be known; not read at all
-    // (the command line's reading): nothing.
+    // A type per frame, or none where the file, read to its end, gives none
+    // that match; not read to its end, or not read at all (the command
+    // line's reading): nothing, and the app reads them again.
     std::optional<std::vector<std::uint8_t>> frame_types;
 };
 

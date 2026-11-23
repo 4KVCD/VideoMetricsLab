@@ -191,7 +191,10 @@ void BitrateWorker::run() {
             const std::string content =
                 store_.empty() || raw ? std::string() : sampled_file_hash(path).value_or("");
             std::optional<SavedBitrate> saved = load_saved_bitrate(store_, content, path);
-            if (saved && saved->frame_types && !saved->info.is_raw_stream()) {
+            if (saved && saved->info.is_raw_stream()) {
+                saved.reset();
+            }
+            if (saved && saved->frame_types) {
                 VideoInfo info = known ? *known : saved->info;
                 info.path = path;
                 emit analyzed({name, std::move(info), std::make_shared<const BitrateData>(std::move(saved->data)),
@@ -199,8 +202,12 @@ void BitrateWorker::run() {
                                std::move(read_as)});
                 continue;
             }
-            VideoInfo info = known ? *known : probe_video(path, ffprobe_, cancel_);
-            if (!known && info.is_raw_stream()) {
+            // Saved without its frame types (their reading did not get to the
+            // file's end, or vml-cli saved it): its packets are taken, and
+            // only the types read.
+            VideoInfo info = known ? *known : saved ? saved->info : probe_video(path, ffprobe_, cancel_);
+            info.path = path;
+            if (!known && !saved && info.is_raw_stream()) {
                 info = raw_stream_as_found(std::move(info), ffprobe_, cancel_);
             }
             if (cancel_.cancelled()) {
@@ -213,20 +220,28 @@ void BitrateWorker::run() {
             }
             FrameTypeReader type_reader(info, cancel_);
             // Here, off the window's thread: the summary walks every packet.
-            auto data = std::make_shared<const BitrateData>(analyze_video_bitrate(
-                ffprobe_, info, cancel_, [this, &name](long long done, long long total) {
-                    emit progress(name, done, total);
-                }));
-            auto types = std::make_shared<const std::vector<std::uint8_t>>(type_reader.types_of(*data));
-            if (!content.empty() && !info.is_raw_stream() && !cancel_.cancelled()) {
+            auto data = saved ? std::make_shared<const BitrateData>(std::move(saved->data))
+                              : std::make_shared<const BitrateData>(analyze_video_bitrate(
+                                    ffprobe_, info, cancel_, [this, &name](long long done, long long total) {
+                                        emit progress(name, done, total);
+                                    }));
+            std::optional<std::vector<std::uint8_t>> types = type_reader.types_of(*data);
+            // Saved as read: the types only where read to the file's end (a
+            // read cut short would leave them out for good), and nothing of a
+            // file replaced while it was read, whose hash is the old file's.
+            const bool unchanged = !cancel_.cancelled() && file_identity(path) == read_as;
+            if (!content.empty() && !info.is_raw_stream() && unchanged && (!saved || types)) {
                 try {
-                    save_bitrate(store_, content, {info, *data, *types});
+                    save_bitrate(store_, content, {info, *data, types});
                 } catch (const std::exception&) {
                     // Not saved: read again next time.
                 }
             }
             if (!cancel_.cancelled()) {
-                emit analyzed({name, info, std::move(data), std::move(types), std::move(read_as)});
+                emit analyzed({name, info, std::move(data),
+                               std::make_shared<const std::vector<std::uint8_t>>(
+                                   std::move(types).value_or(std::vector<std::uint8_t>())),
+                               std::move(read_as)});
             }
         } catch (const Cancelled&) {
             return;

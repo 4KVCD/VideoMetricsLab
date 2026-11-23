@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <span>
 #include <thread>
+#include <optional>
 #include <vector>
 
 #include "vml/bitrate.h"
@@ -46,11 +47,14 @@ public:
     FrameTypeReader(const FrameTypeReader&) = delete;
     FrameTypeReader& operator=(const FrameTypeReader&) = delete;
 
-    // Waits for the reading to end. A type for each frame of `data`; none where
-    // they cannot be known: without FFmpeg's libraries, for a format they do not
-    // read (AV2), once cancelled, or if the packets do not match `data`
-    // (types_matching_frames). Once only.
-    std::vector<std::uint8_t> types_of(const BitrateData& data);
+    // Waits for the reading to end. A type for each frame of `data`, or none
+    // where the file was read to its end and its packets do not match `data`
+    // (types_matching_frames): what reading it again would give. Nothing where
+    // it was not read to its end: without FFmpeg's libraries, a file that
+    // would not open (a format they do not read, AV2), once cancelled, a read
+    // error (a share gone for a moment), or out of memory; another reading
+    // may give its types. Once only.
+    std::optional<std::vector<std::uint8_t>> types_of(const BitrateData& data);
 
     // Whether the reading is to end now (FFmpeg asks, from the thread).
     bool stopping() const { return stop_ || cancel_.cancelled(); }
@@ -60,6 +64,7 @@ private:
     const CancelToken& cancel_;
     std::atomic<bool> stop_ = false;
     std::vector<ReadFrame> frames_;  // the thread's, until it has ended
+    bool read_whole_ = false;        // the thread's: read to the file's end
     std::thread thread_;
 };
 
