@@ -1167,14 +1167,21 @@ void VideoCompareView::native_tick() {
             set_playing(false);
         }
         const QString separator = QString::fromUtf8(" \xC2\xB7 ");
-        status((wanted_playing_ ? QStringLiteral("Playing") : QStringLiteral("Paused")) + separator +
+        if (pool.ended() && !wanted_playing_) {
+            // Stopped at the end, said as the FFmpeg path says it (check_end):
+            // rebuilt here at every tick, it read "Paused" instead. A seek, or
+            // Play from the start, ends it (NativePool::seek).
+            status(QStringLiteral("Playback ended"));
+        } else {
+            status((wanted_playing_ ? QStringLiteral("Playing") : QStringLiteral("Paused")) + separator +
 #ifdef _WIN32
-               QStringLiteral("FFmpeg D3D11") + separator +
+                   QStringLiteral("FFmpeg D3D11") + separator +
 #else
-               QStringLiteral("FFmpeg VideoToolbox") + separator +
+                   QStringLiteral("FFmpeg VideoToolbox") + separator +
 #endif
-               QStringLiteral("%1/%2 streams").arg(pool.decoders()).arg(decoder_limit()) + separator +
-               pool.description());
+                   QStringLiteral("%1/%2 streams").arg(pool.decoders()).arg(decoder_limit()) + separator +
+                   pool.description());
+        }
         check_end();
         if (wanted_playing_ && !pool.buffering() && !pool.ended()) {
             // The next tick when the next frame is due, if ticking at all:

@@ -198,6 +198,9 @@ protected:
         pool.audio_deadline_ = now + 15;
     }
     static void set_buffering(NativePool& pool, bool buffering) { pool.buffering_ = buffering; }
+    static void set_ended(NativePool& pool) { pool.ended_ = true; }
+    static void native_tick(VideoCompareView& view) { view.native_tick(); }
+    static QString last_status(const VideoCompareView& view) { return view.last_status_; }
     static std::map<std::string, std::optional<std::array<float, 16>>>& shadings(NativePool& pool) {
         return pool.shadings_;
     }
@@ -242,6 +245,20 @@ TEST_F(NativePoolTest, AFastSourceNeverAdvancesPastTheTestVideosFrame) {
     ASSERT_TRUE(choose_pair(*pool_, 12));
     EXPECT_EQ(shown_frame(*pool_), 11);
     EXPECT_EQ(pair(*pool_), std::pair(s11, d11));
+}
+
+// Played natively to the end, the status says "Playback ended", as the
+// FFmpeg path says it, and goes on saying it at the ticks that follow: it
+// was rebuilt as "Paused · ..." at every tick, so the end read as a pause.
+TEST_F(NativePoolTest, TheEndIsSaidAsPlaybackEnded) {
+    pool_ = make_pool(1, true);
+    EXPECT_TRUE(view_->playback_requested());
+    set_ended(*pool_);
+    native_tick(*view_);
+    EXPECT_FALSE(view_->playback_requested());
+    EXPECT_EQ(last_status(*view_).toStdString(), "Playback ended");
+    native_tick(*view_);  // a tick while stopped there
+    EXPECT_EQ(last_status(*view_).toStdString(), "Playback ended");
 }
 
 // Switching to another test video shows the same frame from it; Hold S then
