@@ -285,7 +285,11 @@ void FillColumnTable::dropEvent(QDropEvent* event) {
     const QStringList files = dropped_files(event->mimeData());
     event->setDropAction(Qt::CopyAction);
     event->accept();
-    emit filesDropped(files);
+    // Said once the drop has returned: what the files start may ask a
+    // question ("Already added"), and one opened while the system's drag
+    // and drop is still running opened at the window's corner, not centred
+    // over it (issue #202).
+    QMetaObject::invokeMethod(this, [this, files] { emit filesDropped(files); }, Qt::QueuedConnection);
 }
 
 void FillColumnTable::paintEvent(QPaintEvent* event) {

@@ -106,7 +106,8 @@ public:
     void keep_a_row_selected();
 
 signals:
-    // Files dropped on the table from outside it: their paths.
+    // Files dropped on the table from outside it: their paths, once the
+    // drop has returned (issue #202).
     void filesDropped(const QStringList& paths);
     // Rows dragged within the table: the rows moved, in order, and the row
     // they go before (rowCount() for the end).

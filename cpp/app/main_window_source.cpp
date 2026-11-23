@@ -123,8 +123,15 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
         drop->setDropAction(Qt::CopyAction);
         drop->accept();
         if (type == QEvent::Drop) {
-            remember_video_dir("reference", path_of(reference_drop_.front()));
-            choose_source(path_of(reference_drop_.front()));
+            // Chosen once the drop has returned, as a drop on the Videos
+            // table is (FillColumnTable::dropEvent, issue #202).
+            const QString path = reference_drop_.front();
+            QTimer::singleShot(0, this, [this, path] {
+                if (!run_active_) {
+                    remember_video_dir("reference", path_of(path));
+                    choose_source(path_of(path));
+                }
+            });
         }
         return true;
     }

@@ -4,10 +4,14 @@
 #include <QColor>
 #include <QCoreApplication>
 #include <QImage>
+#include <QDropEvent>
+#include <QFileInfo>
 #include <QItemSelectionModel>
+#include <QMimeData>
 #include <QSignalSpy>
 #include <QTableWidget>
 #include <QTest>
+#include <QUrl>
 
 #include <gtest/gtest.h>
 
@@ -161,6 +165,31 @@ TEST(TableSelection, ASelectedRowKeepsItsBestAndWorstColours) {
     EXPECT_LE(std::abs(edge.red() - selected.red()) + std::abs(edge.green() - selected.green()) +
                   std::abs(edge.blue() - selected.blue()),
               6);
+}
+
+// Issue #202: files dropped from outside are said once the drop has returned,
+// not inside it: a question the files start ("Already added") opened while
+// the system's drag and drop still ran was placed at the window's corner.
+// The drop handed to the table as the system's drag and drop hands it.
+class DropTable : public FillColumnTable {
+public:
+    DropTable() : FillColumnTable(0, 3, 1, {0, 2}) {}
+    using FillColumnTable::dropEvent;
+};
+
+TEST(TableSelection, DroppedFilesAreSaidAfterTheDrop) {
+    DropTable table;
+    const QString file = QCoreApplication::applicationFilePath();  // a file that is there
+    QMimeData mime;
+    mime.setUrls({QUrl::fromLocalFile(file)});
+    QSignalSpy dropped(&table, &FillColumnTable::filesDropped);
+    QDropEvent drop(QPointF(5, 5), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    table.dropEvent(&drop);
+    EXPECT_TRUE(drop.isAccepted());
+    EXPECT_EQ(dropped.count(), 0);  // not yet: the drop is still running
+    QCoreApplication::processEvents();
+    ASSERT_EQ(dropped.count(), 1);
+    EXPECT_EQ(QFileInfo(dropped.front().front().toStringList().front()), QFileInfo(file));
 }
 
 }  // namespace
