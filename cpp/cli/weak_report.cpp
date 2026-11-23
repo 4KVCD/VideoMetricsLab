@@ -201,15 +201,29 @@ std::string worst_text(const std::vector<TestVideo>& videos, std::size_t count) 
     return joined(lines);
 }
 
-std::string segments_text(const std::vector<TestVideo>& videos, const SegmentRules& rules, std::size_t shown) {
-    std::string conditions;
-    for (const WeakCondition& condition : rules.conditions) {
-        conditions += (conditions.empty() ? "" : rules.all ? " and " : " or ") + condition.text();
-    }
+std::string segments_text(const std::vector<TestVideo>& videos, const SegmentRules& given, std::size_t shown) {
     std::vector<std::string> lines;
     for (const TestVideo& video : videos) {
         if (!video.result) {
             continue;
+        }
+        // By the conditions on metrics it has scores of, as its
+        // --segments-dir file and the JSON: the others are said left out.
+        std::vector<WeakCondition> unscored;
+        const SegmentRules rules = scored_rules(video.result->metric_results, given, &unscored);
+        std::string said_left_out;
+        for (const WeakCondition& condition : unscored) {
+            said_left_out += (said_left_out.empty() ? "" : ", ") + condition.text();
+        }
+        if (rules.conditions.empty()) {
+            lines.push_back("");
+            lines.push_back(video.name() + ": no weak segments: it has no scores of the conditions' metrics (" +
+                            said_left_out + ", left out)");
+            continue;
+        }
+        std::string conditions;
+        for (const WeakCondition& condition : rules.conditions) {
+            conditions += (conditions.empty() ? "" : rules.all ? " and " : " or ") + condition.text();
         }
         const std::vector<WeakSegment> segments = weak_segments(*video.result, rules);
         const Json summary = segments_summary_json(*video.result, rules, segments);
@@ -238,6 +252,10 @@ std::string segments_text(const std::vector<TestVideo>& videos, const SegmentRul
                              : in == holds  ? frames + (holds == 1 ? ", in a segment" : ", all in segments")
                                             : frames + ", " + with_thousands(in) + " of them in segments"));
             left_out = left_out || in < holds;
+        }
+        if (!said_left_out.empty()) {
+            lines.push_back("  " + said_left_out + ": left out, as it has no scores of " +
+                            (unscored.size() == 1 ? "its metric" : "their metrics"));
         }
         if (left_out && rules.min_frames > 1) {
             lines.push_back("  Runs shorter than " + std::to_string(rules.min_frames) + " frames are left out.");
@@ -299,8 +317,12 @@ void add_segments_json(Json& document, const std::vector<TestVideo>& videos, con
     Json& entries = document.at("videos");
     for (std::size_t v = 0; v < videos.size() && v < entries.size(); ++v) {
         if (videos[v].result) {
-            entries[v]["weak_segments"] =
-                video_segments_json(*videos[v].result, weak_segments(*videos[v].result, rules), rules);
+            // As its --segments-dir file: by the conditions on metrics it
+            // has scores of, the others in "left_out".
+            std::vector<WeakCondition> left_out;
+            const SegmentRules used = scored_rules(videos[v].result->metric_results, rules, &left_out);
+            entries[v]["weak_segments"] = video_segments_json(*videos[v].result, weak_segments(*videos[v].result, used),
+                                                              used, left_out);
         }
     }
 }
