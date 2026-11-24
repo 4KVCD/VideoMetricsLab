@@ -195,6 +195,25 @@ QString export_action_text(ExportScope scope, const std::vector<std::string>& it
     return contents;
 }
 
+QString export_item_title(const std::string& key) {
+    if (key == "results") {
+        return app::tr("Results");
+    }
+    if (key == "frames") {
+        return app::tr("Per-frame scores");
+    }
+    if (key == "graphs") {
+        return app::tr("Graphs");
+    }
+    if (key == "worst_frames") {
+        return app::tr("Worst frames");
+    }
+    if (key == "weak_segments") {
+        return app::tr("Weak segments");
+    }
+    return QString::fromStdString(key);
+}
+
 QString nothing_scored_text() {
     return app::tr("No test video has been scored against the reference yet.");
 }

@@ -425,36 +425,23 @@ TEST_F(GraphPanelTest, TheStatisticsMenuOffersTheVideosExports) {
     const std::string text((std::istreambuf_iterator<char>(json)), std::istreambuf_iterator<char>());
     EXPECT_NE(text.find("\"metric\": \"vmaf\""), std::string::npos) << text;
     EXPECT_NE(text.find("\"frames\": null"), std::string::npos) << text;
+    // The line's video's archive, where the window can export it; every
+    // video's is the tab bar's Export panel's.
     std::vector<std::string> items{"results", "graphs", "weak_segments"};
-    bool run = true;
     panel.export_items = [&items] { return items; };
     panel.video_exportable = [](const std::string& identity) { return identity == "row-a"; };
-    panel.videos_exportable = [&run] { return run; };
-    EXPECT_EQ(stats_menu(panel, "a"), (QStringList{"Export this video's results, graphs and weak segments...",
-                                                   "Export all videos' results, graphs and weak segments..."} +
-                                       statistics));
-    EXPECT_EQ(stats_menu(panel, "b"),
-              QStringList{"Export all videos' results, graphs and weak segments..."} + statistics);
-    EXPECT_EQ(stats_menu(panel, "nowhere"),
-              QStringList{"Export all videos' results, graphs and weak segments..."} + statistics);
-    items = {"results", "frames"};
-    EXPECT_EQ(stats_menu(panel, "a"), (QStringList{"Export this video's results and per-frame scores...",
-                                                   "Export all videos' results and per-frame scores..."} +
-                                       statistics));
-    items = {"results"};
     EXPECT_EQ(stats_menu(panel, "a"),
-              (QStringList{"Export this video's results...", "Export all videos' results..."} + statistics));
-    run = false;
-    QStringList disabled;
-    stats_menu(panel, "a", &disabled);
-    EXPECT_EQ(disabled, QStringList{"Export all videos' results..."});
+              QStringList{"Export this video's results, graphs and weak segments..."} + statistics);
+    EXPECT_EQ(stats_menu(panel, "b"), statistics);
+    EXPECT_EQ(stats_menu(panel, "nowhere"), statistics);
+    items = {"results", "frames"};
+    EXPECT_EQ(stats_menu(panel, "a"),
+              QStringList{"Export this video's results and per-frame scores..."} + statistics);
     items.clear();
-    disabled.clear();
+    QStringList disabled;
     EXPECT_EQ(stats_menu(panel, "a", &disabled),
-              (QStringList{"Export: nothing is ticked in Settings > Storage > Exports include",
-                           "Export: nothing is ticked in Settings > Storage > Exports include"} +
-               statistics));
-    EXPECT_EQ(disabled.size(), 2);
+              QStringList{"Export: nothing is ticked in Settings > Storage > Exports include"} + statistics);
+    EXPECT_EQ(disabled.size(), 1);
 }
 
 // An export that cannot be written says so on the indicator, and not that it

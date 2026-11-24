@@ -1492,18 +1492,6 @@ QWidget* GraphPanel::build_action_bar() {
     });
     layout->addWidget(difference_box_);
     layout->addStretch(1);
-    // Export, at the bar's right end: all the videos' archive, and the quick
-    // grabs of the page shown, filled as it opens.
-    auto* export_button = new QPushButton(app::tr("Export"));
-    auto* exports = new QMenu(export_button);
-    connect(exports, &QMenu::aboutToShow, this, [this, exports] {
-        exports->clear();
-        StatsMenu items;
-        fill_stats_menu(*exports, -1, items, true);
-        connect_menu(items);
-    });
-    export_button->setMenu(exports);
-    layout->addWidget(export_button);
     return bar;
 }
 
@@ -2427,11 +2415,29 @@ std::optional<std::pair<int, int>> GraphPanel::shown_difference_pair() const {
     return page == pages_.end() ? std::nullopt : page->second->difference_pair();
 }
 
+std::vector<std::string> GraphPanel::selected_identities() const {
+    std::set<int> rows;
+    for (const QModelIndex& index : stats_table_->selectionModel()->selectedIndexes()) {
+        rows.insert(index.row());
+    }
+    std::vector<std::string> identities;
+    for (const int row : rows) {
+        if (const QTableWidgetItem* item = stats_table_->item(row, 0)) {
+            const auto entry = entries_.find(item->data(Qt::UserRole).toInt());
+            if (entry != entries_.end()) {
+                identities.push_back(entry->second.identity);
+            }
+        }
+    }
+    return identities;
+}
+
 void GraphPanel::fill_stats_menu(QMenu& menu, int row, StatsMenu& items, bool graph) const {
-    // The archive first, as the Videos table's menu: the clicked line's
-    // video's, where the window can export it on its own (not a line of a
-    // saved run loaded), and all the videos', each of what Settings'
-    // Exports include and named after it; then the quick grabs.
+    // The archive of the clicked line's video first, as the Videos table's
+    // menu has it, where the window can export it on its own (not a line of
+    // a saved run loaded), of what Settings' Exports include and named
+    // after it; then the quick grabs. Every video's archive is the tab
+    // bar's Export panel's.
     if (const QTableWidgetItem* item = stats_table_->item(row, 0)) {
         const auto entry = entries_.find(item->data(Qt::UserRole).toInt());
         if (entry != entries_.end()) {
@@ -2443,10 +2449,6 @@ void GraphPanel::fill_stats_menu(QMenu& menu, int row, StatsMenu& items, bool gr
     if (!items.identity.empty() && video_exportable && video_exportable(items.identity)) {
         items.this_video = menu.addAction(export_action_text(ExportScope::this_video, chosen));
         items.this_video->setEnabled(anything);
-    }
-    if (videos_exportable) {
-        items.all_videos = menu.addAction(export_action_text(ExportScope::all_videos, chosen));
-        items.all_videos->setEnabled(anything && videos_exportable());
     }
     add_quick_grabs(menu, items, graph, true);
 }
@@ -2478,9 +2480,6 @@ void GraphPanel::connect_menu(const StatsMenu& items) {
     if (items.this_video != nullptr) {
         connect(items.this_video, &QAction::triggered, this,
                 [this, identity = items.identity] { emit video_export_requested(identity); });
-    }
-    if (items.all_videos != nullptr) {
-        connect(items.all_videos, &QAction::triggered, this, [this] { emit all_videos_export_requested(); });
     }
     if (items.graph != nullptr) {
         connect(items.graph, &QAction::triggered, this, [this] { on_export_png(); });

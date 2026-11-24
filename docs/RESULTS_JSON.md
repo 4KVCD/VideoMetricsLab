@@ -311,8 +311,8 @@ CSV's table.
 ## Worst frames as JSON and CSV
 
 **Worst frames as JSON...** and **Worst frames as CSV...** on the Worst
-Frames tab (its Worst frames card's Export menu, or a right-click on the
-list) write the dips listed: the metric, the number of dips and the range
+Frames tab (a right-click on its Worst frames card's save icon or on the
+list; the save icon itself writes both at one click) write the dips listed: the metric, the number of dips and the range
 shown there.
 
 | Key | Meaning |

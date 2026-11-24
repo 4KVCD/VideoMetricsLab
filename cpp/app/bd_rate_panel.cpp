@@ -179,6 +179,7 @@ QGroupBox* BdRatePanel::build_side(Side& side, const QString& title) {
     layout->addLayout(name_row);
 
     side.sequences = new QTableWidget(0, 3);
+    not_exported(side.sequences);  // the encodes compared, not data to save: the table's is the BD-rates
     side.sequences->setHorizontalHeaderLabels({app::tr("Sequence"), app::tr("Encodes"), app::tr("Metrics scored")});
     side.sequences->setEditTriggers(QAbstractItemView::NoEditTriggers);
     side.sequences->setSelectionMode(QAbstractItemView::NoSelection);

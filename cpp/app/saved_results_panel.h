@@ -109,7 +109,7 @@ public:
     bool locked_by_run(const SavedComparison& saved) const;
     // The selected comparisons, read with the scores picked.
     std::vector<LoadedSavedResult> selected_results() const;
-    // The weak segment rules offered under Export > Weak segments, by their
+    // The weak segment rules the tab bar's Export panel offers, by their
     // choice ("in-use", "profile:<name>", "preset:<key>") with their text:
     // the profile in use, every profile and every preset, as they are now.
     std::vector<std::pair<QString, QString>> segment_rule_choices() const;
@@ -137,11 +137,6 @@ public:
     // The score read for `file` (details_read_), or nothing where it could
     // not be read.
     const SavedScore* read_score(const std::filesystem::path& file) const;
-    // The Export button's menu, made as it opens: the selection's archive,
-    // the quick grabs (add_quick_grabs), and the weak segment rules they're
-    // found by (add_export_items).
-    QMenu* export_menu() const { return export_menu_; }
-    void fill_export_menu(QMenu& menu);
     void delete_selected();
     // The table's right-click menu: the selected comparisons' export, of
     // what Settings' Exports include and named after it ("this video's"
@@ -151,8 +146,12 @@ public:
     // The table's right-click menu, made as it opens: Open in Metric Graphs,
     // then the Export menu's items; nothing with nothing selected.
     void fill_context_menu(QMenu& menu);
-    // The Export menu's items, added to `menu`.
+    // The archive of the selection, then the quick grabs
+    // (add_quick_items), added to `menu`: the table's right-click's.
     void add_export_items(QMenu& menu);
+    // The quick grabs of the selection (add_quick_grabs): the save icon's
+    // Save as... items.
+    void add_quick_items(QMenu& menu);
     // The header's right-click menu: every column with a tick, unticked
     // hiding it (the test video's always shown), then Reset column widths.
     void fill_column_menu(QMenu& menu);
@@ -242,8 +241,6 @@ private:
     std::map<std::string, QComboBox*> score_combos_;
     QString rules_choice_ = QStringLiteral("in-use");
     QPushButton* open_button_ = nullptr;
-    QPushButton* export_button_ = nullptr;
-    QMenu* export_menu_ = nullptr;
     QPushButton* delete_button_ = nullptr;
     // A Delete queued on file_writes_: set by it as it ends (done last),
     // read once the queue says it is idle (on_writes_idle).

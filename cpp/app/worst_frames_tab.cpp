@@ -168,6 +168,7 @@ WorstFramesTab::WorstFramesTab(Dialogs dialogs, QWidget* parent) : QWidget(paren
     theme::set_role(videos_title, "title");
     side->addWidget(videos_title);
     videos_table_ = make_table();
+    not_exported(videos_table_);  // the videos to pick one from, not data to save
     videos_table_->setColumnCount(3);
     videos_table_->setHorizontalHeaderLabels({app::tr("Video"), app::tr("Segments"), app::tr("Worst")});
     videos_table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
@@ -299,15 +300,8 @@ void WorstFramesTab::fill_segments_menu(QMenu* menu) {
     connect(json, &QAction::triggered, this, [this] { export_segments(ExportKind::json); });
     QAction* csv = menu->addAction(app::tr("Weak segments as CSV..."));
     connect(csv, &QAction::triggered, this, [this] { export_segments(ExportKind::csv); });
-    QAction* report = menu->addAction(app::tr("All videos' weak segments as JSON or CSV..."));
-    report->setToolTip(app::tr("Every scored test video's weak segments by these conditions, in one JSON or CSV file."));
-    connect(report, &QAction::triggered, this, [this] {
-        SegmentRules rules = editor_ != nullptr ? editor_->rules() : SegmentRules{};
-        emit report_requested(rules);
-    });
     json->setEnabled(video);
     csv->setEnabled(video);
-    report->setEnabled(video);
 }
 
 QWidget* WorstFramesTab::build_conditions() {

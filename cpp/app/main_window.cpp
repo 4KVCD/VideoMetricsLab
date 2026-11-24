@@ -698,8 +698,6 @@ void MainWindow::build_ui() {
     worst_tab_ = new WorstFramesTab(dialogs_);
     worst_tab_->set_worst_count(settings_.graph_worst_frames);
     worst_tab_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
-    connect(worst_tab_, &WorstFramesTab::report_requested, this,
-            [this](const SegmentRules& rules) { export_segments_report(rules); });
     connect(worst_tab_, &WorstFramesTab::rules_saved, this, [this](const std::string& profile, const SegmentRules& rules) {
         store_segment_profile(settings_, profile, rules);
         save_settings();
@@ -776,13 +774,11 @@ void MainWindow::build_ui() {
     graph_panel_->video_exportable = [this](const std::string& identity) {
         return row_of_graph(identity).has_value();
     };
-    graph_panel_->videos_exportable = [this] { return !exported_runs().empty(); };
     connect(graph_panel_, &GraphPanel::video_export_requested, this, [this](const std::string& identity) {
         if (const std::optional<int> row = row_of_graph(identity)) {
             export_this_video(*row);
         }
     });
-    connect(graph_panel_, &GraphPanel::all_videos_export_requested, this, [this] { export_all_videos(); });
     graph_panel_->row_identities = [this] {
         std::vector<std::string> identities;
         for (const std::shared_ptr<RowData>& row_data : rows_) {
@@ -903,6 +899,7 @@ void MainWindow::make_title_buttons() {
         // right end, after what is there (build_tab_corner).
         title_buttons_ = new TitleButtons;
         tab_corner_->layout()->addWidget(title_buttons_);
+        tab_corner_->layout()->setAlignment(title_buttons_, Qt::AlignBottom);  // as the corner alone: on the tab pane
         title_buttons_->show();
     }
     title_buttons_->set_modern(modern);
@@ -1067,7 +1064,7 @@ QHBoxLayout* MainWindow::build_table_heading() {
     };
     videos_save_->describe = [this] { return quick_save_tooltip(rows_save_text(), quick_formats(settings_)); };
     videos_save_->save = [this] { save_rows_results(); };
-    videos_save_->save_as = [this](QMenu& menu) { fill_videos_export_menu(menu); };
+    videos_save_->save_as = [this](QMenu& menu) { fill_videos_quick_menu(menu); };
     table_heading->addWidget(videos_save_, 0, Qt::AlignBottom);
     return table_heading;
 }
@@ -1240,15 +1237,6 @@ std::vector<QWidget*> MainWindow::add_file_buttons(QBoxLayout* buttons) {
     highlight_check_->setChecked(settings_.highlight_best_worst);
     connect(highlight_check_, &QCheckBox::toggled, this, [this](bool on) { on_highlight_toggled(on); });
     buttons->addWidget(highlight_check_);
-    buttons->addWidget(theme::separator(12));
-    // The rows' exports, one menu made as it opens (fill_videos_export_menu),
-    // as Saved Results' Export: usable during a run, as the right-click
-    // menu's are.
-    export_button_ = new QPushButton(app::tr("Export"));
-    auto* export_menu = new QMenu(export_button_);
-    connect(export_menu, &QMenu::aboutToShow, this, [this, export_menu] { fill_videos_export_menu(*export_menu); });
-    export_button_->setMenu(export_menu);
-    buttons->addWidget(export_button_);
     best_worst_timer_ = new QTimer(this);
     best_worst_timer_->setSingleShot(true);
     best_worst_timer_->setInterval(0);

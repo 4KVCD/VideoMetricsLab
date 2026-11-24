@@ -21,6 +21,7 @@ add_library(vml_app STATIC
     dialogs.cpp
     export_image.cpp
     export_indicator.cpp
+    export_panel.cpp
     ffmpeg_download_dialog.cpp
     file_writes.cpp
     formatting.cpp

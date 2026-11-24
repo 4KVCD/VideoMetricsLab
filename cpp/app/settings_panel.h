@@ -83,6 +83,9 @@ public:
     // Settings > Appearance would: saved and applied (the title bar's theme
     // menu).
     void choose_theme(const QString& value);
+    // Shows the export folder and Exports include as the settings have them
+    // now: changed by the tab bar's Export panel.
+    void show_export_choices();
     // Settings.light_look (`dark` false) or dark_look set to `value`, as its
     // button in Settings > Appearance would (the title bar's theme menu).
     void choose_look(bool dark, const QString& value);

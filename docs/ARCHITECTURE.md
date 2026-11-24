@@ -290,49 +290,111 @@ not the first. Each rule here is one a reviewer can check.
 
 ## Exports
 
-The window offers two kinds of export, and a new one is one of them. (Still
-to come: BD-rate's table as JSON, and its chart as PNG, to share one BD-rate
-JSON with the command line.)
+The window offers two kinds of export, through two doors (issue #224), and
+says how each went in one place. A new export is one of the two.
 
-**A quick grab exports what is shown.** Every view that shows something
-exportable (a graph, a list or table, the statistics) has a right-click menu
-on it, and the same items in an **Export** menu: a `QPushButton` with a
-`QMenu`, labelled "Export", at the right end of that view's bar or card
-header, left of its primary button if it has one. The menu is there even
-with one item, so that it always looks and sits the same.
-- Items read "{What} as {FORMAT}...": "Graph as PNG...", "Worst frames as
-  CSV...". Where there is a choice of scope it comes first: "This video's
-  results as JSON...", "All videos' weak segments as JSON or CSV...". "..."
-  (three ASCII dots) ends every item that opens a dialog.
-- A table or list offers CSV and JSON; a graph PNG.
-- It exports the metric, conditions, dips, range and videos on screen. It
-  ignores Settings' *Exports include* and zip choice; it uses the export
-  folder and, for a graph, Settings' *Exported graphs* colours.
-- It opens the save dialog (`Dialogs::save_file`) with a
-  `suggested_file_name`. The one exception, a capture that names itself
-  (Video Compare's frames), says in the status line where it saved.
+**A quick save saves what a card shows.** Every card that shows something
+exportable (a table or list, a graph, the statistics, BD-rate's table and
+chart, the Bitrate Viewer's graph, Video Compare's frame pair) has a save
+icon (`SaveButton`, quick_save.h) in its top-right corner.
+- One click saves what the card shows (its metric, conditions, dips, range
+  and videos) into the export folder (Settings' Export folder, Documents
+  where it is blank), in the formats Settings > Storage > *Quick saves*
+  names: JSON and/or CSV for data, PNG for a graph. Its files are named as
+  the Save dialog suggests them (`suggested_file_name`).
+- Its tooltip says what it will save, in which formats, and where. Where it
+  can't save, it is grayed and its tooltip says why: before the click, not
+  in a window after it.
+- A right-click on it, or on the card's view, offers Save as...: the same
+  saves one at a time, each with the Save dialog (`Dialogs::save_file`).
+  Items read "{What} as {FORMAT}...": "Graph as PNG...", "Worst frames as
+  CSV...", JSON before CSV; "..." (three ASCII dots) ends every item that
+  opens a dialog.
+- It ignores Settings' *Exports include* and zip choice; it uses the export
+  folder and, for a graph, Settings' *Exported graphs* colors.
 
-**The archive exports the saved recipe.** One item, "Export {this video's |
-the selected videos' | all videos'} {contents}..." (`export_action_text`),
-first in every Export and right-click menu that has videos, and after each
-run when Settings asks for it.
-- It follows Settings > Storage > *Exports include*: the items (results,
-  per-frame scores, graphs, worst frames, weak segments), the formats (JSON,
-  CSV or both, for data; graphs are always PNG), a .zip or loose files; the
-  weak segment profile in use and the Worst Frames tab's number of dips; the
-  whole videos.
+**The archive exports the saved recipe.** "Everything for these encodes":
+the tab bar's Export button, at its right end in both interfaces, opens a
+panel (`ExportPanel`, export_panel.h).
+- Which videos: the open tab's selection where it lists videos (Videos,
+  Metric Graphs' statistics, Saved Results), else every scored video, with
+  every scored video the other choice.
+- What: Settings > Storage > *Exports include* itself, not a copy (a change
+  in the panel is saved there): the items (results, per-frame scores,
+  graphs, worst frames, weak segments), the formats (JSON, CSV or both, for
+  data; graphs are always PNG), a .zip or loose files; the weak segment
+  rules picked in the panel (the profile in use until another is); the
+  Worst Frames tab's number of dips; the whole videos.
+- Where: the export folder, with Change...; no dialog.
+- The panel also links to the open tab's own quick save, for the one-off.
+- A right-click on a list of videos (the Videos table, Metric Graphs'
+  statistics, Saved Results) keeps "Export {this video's | the selected
+  videos'} {contents}..." (`export_action_text`), the same archive with a
+  dialog, for those who select first. It is the only archive item outside
+  the panel. After each run, when Settings asks for it, each video's own.
 - One video's files are at the top. With several, each video's own files
   (`"<video> - ..."`) are in a folder of its name (`in_video_folders`), and
   the files of all of them together (results, the weak segments report,
   "All test videos - ..." graphs) at the top.
-- Nothing is replaced: where a name is taken, the new files are numbered
-  (`unique_output_names`). The user's own choice in a save dialog is the
-  exception: they were asked.
 
-**Same data, same items.** Views of the same kind of data (the Videos
-table, Saved Results, Metric Graphs' statistics) offer the same archive and
-quick-grab items. A right-click on a table acts on the selection when the
-row clicked is in it, and on the row clicked otherwise.
+**Nothing is replaced.** Where a name is taken, every file of the export is
+numbered alike (`unique_output_names`). The user's own choice in a save
+dialog is the exception: they were asked.
+
+**Confirmation is the indicator** (`ExportIndicator`, export_indicator.h)
+beside the Export button: "Saving..." while an export is written, "Saved 2
+files · Open folder" once it is (it fades), "Not saved: {why} · Details"
+where it failed (kept until clicked). No export opens a window to say it
+worked, or a status line to say where; a refusal is said on the grayed
+control before the click. The after-run export says only where it fails.
+
+### Adding an export
+
+**A new tab or card that shows data** gets, in the same change:
+- a `SaveButton` in the card's top-right corner, its `why_not` and
+  `describe` saying what it saves or why it can't (grayed);
+- its Save as... items on a right-click, "{What} as {FORMAT}...", JSON
+  before CSV;
+- the Export panel's "On this tab" link, where it is the tab's main card
+  (`MainWindow::tab_save`).
+
+A table, list or chart that is not data to save (a list of files to read,
+one to pick from) is marked `not_exported`, with why. The appearance tests
+(`EveryCardThatShowsDataHasASaveIcon`) fail on any other without a save
+icon on its card.
+
+**A new kind of data** decides, and says in its change:
+- whether it is an archive item: then a key in `export_item_keys`, which
+  makes it a tick in Settings' *Exports include* and in the Export panel
+  (`export_item_title`), and is written after each run too (`export_files`);
+- where its files go in the archive: a video's own (`"<video> - ..."`, in
+  its folder with several videos, `in_video_folders`) or all the videos'
+  together (`shared_stems`);
+- its file names: `suggested_file_name`, numbered alike with the rest of
+  its export where taken (`unique_output_names`).
+
+**Settings say what is written**, and nothing else does: *Exports include*
+(`Settings::export_items`, `export_formats`, `export_zip`) for the archive,
+*Quick saves* (`Settings::quick_save_formats`) for the save icons, each a
+settings.json key. A new file format is:
+- a key in `export_format_keys`, in the order everything lists it (JSON,
+  CSV, then the new one), with its tooltip in *Exports include*'s row
+  (`SettingsPanel::build_export_choices`); the *Quick saves* row, the
+  Export panel and `quick_formats` take it from there;
+- ticked by default only for new settings: in settings already saved it
+  starts off, until the user ticks it;
+- written by every quick save and archive item whose data it can hold, and
+  refused (grayed, with why) by those it can't;
+- the same format behind the command line's flag for it, where `vml-cli`
+  writes that data.
+
+Graphs stay PNG: a graph format is added the same way, as its own setting.
+
+**One writer for each kind of file**, in core when `vml-cli` writes it too
+(as `bd_rate_json`), so that the window and the command line write the same
+file. A new file kind or key is documented in `docs/RESULTS_JSON.md`, a new
+control in `docs/USER_GUIDE.md`, and its text is in all 20 catalogs
+(`scripts/i18n_catalog.py check`).
 
 Not exports, and so not in these menus: *Copy as markdown* (the clipboard),
 *Export log* (Settings, for diagnosis) and *Import run file...*.

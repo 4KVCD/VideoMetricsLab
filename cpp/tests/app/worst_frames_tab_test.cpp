@@ -180,14 +180,13 @@ TEST(WorstFramesTab, ListsTheDipsAndTheSegmentsAndOpensThemInVideoCompare) {
     QStringList labels;
     for (QAction* action : export_items(exporting.tab)) {
         labels.append(action->text());
-        if (action->isEnabled() && !action->text().startsWith("All videos'")) {
+        if (action->isEnabled()) {
             action->trigger();
         }
     }
     labels.sort();
-    EXPECT_EQ(labels, (QStringList{"All videos' weak segments as JSON or CSV...", "Graph as PNG...",
-                                   "Weak segments as CSV...", "Weak segments as JSON...", "Worst frames as CSV...",
-                                   "Worst frames as JSON..."}));
+    EXPECT_EQ(labels, (QStringList{"Graph as PNG...", "Weak segments as CSV...", "Weak segments as JSON...",
+                                   "Worst frames as CSV...", "Worst frames as JSON..."}));
     suggested.sort();
     EXPECT_EQ(suggested, (QStringList{"a.vmaf.segments.csv", "a.vmaf.segments.json", "a.vmaf.worst.csv",
                                       "a.vmaf.worst.json", "a_vmaf.png"}));
@@ -355,21 +354,6 @@ TEST(WorstFramesTab, StartsFromAProfileAndSavesOnlyWhenAsked) {
     shown->save_new_button()->click();
     EXPECT_EQ(bench.saved.size(), 2U);
     EXPECT_EQ(alerted, "Profile not saved");
-
-    // All videos' weak segments asks the window for its report of every video, by
-    // the rules shown: unsaved ones too.
-    threshold = shown->editor()->findChild<QDoubleSpinBox*>();
-    threshold->setValue(85.0);
-    std::vector<SegmentRules> reports;
-    QObject::connect(shown, &WorstFramesTab::report_requested,
-                     [&reports](const SegmentRules& rules) { reports.push_back(rules); });
-    for (QAction* action : export_items(*shown)) {
-        if (action->text() == "All videos' weak segments as JSON or CSV...") {
-            action->trigger();
-        }
-    }
-    ASSERT_EQ(reports.size(), 1U);
-    EXPECT_EQ(condition_texts(reports[0].conditions), std::vector<std::string>{"vmaf<85"});
 }
 
 TEST(WorstFramesTab, TakesProfilesChangedInSettings) {

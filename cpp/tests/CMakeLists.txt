@@ -134,6 +134,7 @@ if(TARGET vml_app)
         app/chart_test.cpp
         app/click_twice_test.cpp
         app/export_indicator_test.cpp
+        app/export_panel_test.cpp
         app/film_grain_control_test.cpp
         app/frame_drag_test.cpp
         app/resample_target_dialog_test.cpp

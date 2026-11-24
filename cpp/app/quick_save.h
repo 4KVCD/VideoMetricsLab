@@ -54,6 +54,13 @@ QString nothing_shown_text();
 // export folder."; then where Save as... is. `formats` empty: images alone.
 QString quick_save_tooltip(const QString& what, const std::vector<std::string>& formats);
 
+// Marks `view` (a table, list or chart) as not data to save: a list of files
+// to read, a list to pick from. Every other one is on a card with a save icon
+// (the appearance tests check it: EveryCardThatShowsDataHasASaveIcon).
+void not_exported(QWidget* view);
+// Whether `view` is marked so.
+bool is_not_exported(const QWidget* view);
+
 // One file of a quick save: its name, and what writes it at the path given
 // (the error, empty when written).
 struct QuickFile {
@@ -99,6 +106,9 @@ public:
 
     // Greyed or not, and its tooltip, as things are now.
     void refresh();
+    // What it saves, or why it can't: its tooltip's first line, as plain
+    // text (the window may show tooltips as rich text).
+    QString summary() const;
 
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;

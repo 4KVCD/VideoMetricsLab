@@ -77,6 +77,8 @@ public:
     ExportReport export_report;
     // The export folder and formats its save icons save in (quick_save.h).
     QuickSaves quick_saves;
+    // The worst frames list's save icon, the tab's own one-click save.
+    SaveButton* worst_save() const { return saves_.size() > 1 ? saves_[1] : nullptr; }
 
     // The videos to choose from (the graph's lines, in their order). The
     // video chosen stays chosen while it is among them; else the first is.
@@ -130,9 +132,6 @@ signals:
     // Save to profile, or Save as new profile: the profile's name ("" for
     // Default) and rules_to_save(), for Settings.
     void rules_saved(const std::string& profile, const vml::SegmentRules& rules);
-    // Export all videos...: the report of every scored test video, by the
-    // rules shown (without the range).
-    void report_requested(const vml::SegmentRules& rules);
     void count_changed(int count);
 
 protected:

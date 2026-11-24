@@ -332,13 +332,17 @@ public:
     // The colours Export graph as PNG draws in (Settings' Exported graphs), asked at
     // each export; the light chart colours when not set.
     std::function<theme::ChartColours()> export_colours;
-    // The statistics' right-click exports, as the Videos table's: what they
-    // include (exported_items of the Settings), whether a line's video (its
-    // identity) can be exported on its own, and whether the run can: the
-    // window's, asked as the menu opens. Not set: no such export offered.
+    // The statistics' right-click archive, as the Videos table's: what it
+    // includes (exported_items of the Settings), and whether a line's video
+    // (its identity) can be exported on its own: the window's, asked as the
+    // menu opens. Not set: no such export offered.
     std::function<std::vector<std::string>()> export_items;
     std::function<bool(const std::string& identity)> video_exportable;
-    std::function<bool()> videos_exportable;
+    // The identities of the lines selected in the statistics table, in its
+    // order (the tab bar's Export panel's "the selected videos").
+    std::vector<std::string> selected_identities() const;
+    // The statistics' save icon, the tab's own one-click save.
+    SaveButton* stats_save() const { return stats_save_; }
     // The identities of the Videos tab's rows' lines: those removed with
     // their row still there are what Show removed videos brings back.
     std::function<std::vector<std::string>()> row_identities;
@@ -351,9 +355,8 @@ signals:
     // The metric the user chose to look at.
     void metric_changed(const QString& key);
     // The statistics' right-click menu, as the Videos table's: a line's
-    // video's export, or all the videos', of what Settings' Exports include.
+    // video's export, of what Settings' Exports include.
     void video_export_requested(const std::string& identity);
-    void all_videos_export_requested();
     // Show removed videos: the rows' lines removed here, to add again with
     // restore (the window has their results).
     void restore_removed_requested();
@@ -426,7 +429,6 @@ private:
     struct StatsMenu {
         std::string identity;  // the row's line's, if any
         QAction* this_video = nullptr;
-        QAction* all_videos = nullptr;
         QAction* graph = nullptr;
         QAction* statistics_csv = nullptr;
         QAction* statistics_json = nullptr;

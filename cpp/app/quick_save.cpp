@@ -46,6 +46,10 @@ QString no_format_text() {
 
 QString nothing_shown_text() { return app::tr("Nothing to save yet: this card shows nothing."); }
 
+void not_exported(QWidget* view) { view->setProperty("vmlNotExported", true); }
+
+bool is_not_exported(const QWidget* view) { return view->property("vmlNotExported").toBool(); }
+
 std::vector<QuickFile> data_files(const QString& stem, const std::vector<std::string>& formats,
                                   const std::function<std::string(const std::string& format)>& text) {
     std::vector<QuickFile> files;
@@ -124,6 +128,12 @@ void SaveButton::refresh() {
     const QString why = why_not ? why_not() : QString();
     setEnabled(why.isEmpty());
     setToolTip(!why.isEmpty() ? why : describe ? describe() : QString());
+}
+
+QString SaveButton::summary() const {
+    const QString why = why_not ? why_not() : QString();
+    const QString text = !why.isEmpty() ? why : describe ? describe() : QString();
+    return text.section(QLatin1Char('\n'), 0, 0);
 }
 
 QSize SaveButton::sizeHint() const {

@@ -1,7 +1,6 @@
 #include "saved_results_panel.h"
 
 #include <QAction>
-#include <QActionGroup>
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDateTime>
@@ -201,7 +200,7 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
             save_results(selected_results());
         }
     };
-    save_button_->save_as = [this](QMenu& menu) { add_export_items(menu); };
+    save_button_->save_as = [this](QMenu& menu) { add_quick_items(menu); };
     top->addWidget(save_button_);
     layout->addLayout(top);
 
@@ -301,14 +300,6 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     connect(open_button_, &QPushButton::clicked, this, [this] { emit open_requested(selected_results()); });
     buttons->addWidget(open_button_);
     buttons->addStretch(1);
-    // One Export button, at the right end beside Delete (docs/ARCHITECTURE.md,
-    // "Exports"): its menu is made as it opens (fill_export_menu).
-    export_button_ = new QPushButton(app::tr("Export"));
-    export_menu_ = new QMenu(export_button_);
-    export_menu_->setToolTipsVisible(true);
-    connect(export_menu_, &QMenu::aboutToShow, this, [this] { fill_export_menu(*export_menu_); });
-    export_button_->setMenu(export_menu_);
-    buttons->addWidget(export_button_);
     delete_button_ = new QPushButton(app::tr("Delete..."));
     theme::set_role(delete_button_, "danger");
     connect(delete_button_, &QPushButton::clicked, this, [this] { delete_selected(); });
@@ -955,7 +946,6 @@ bool SavedResultsPanel::locked_by_run(const SavedComparison& saved) const {
 void SavedResultsPanel::update_buttons() {
     const std::vector<const SavedComparison*> chosen = selected();
     open_button_->setEnabled(!chosen.empty());
-    export_button_->setEnabled(!chosen.empty());
     save_button_->refresh();
     // Locked where any selected comparison is one the run uses (the others
     // can be deleted while it runs), and while a Delete is queued.
@@ -994,24 +984,9 @@ void SavedResultsPanel::add_quick_grabs(QMenu& menu, bool enabled, const std::fu
     add(app::tr("Run file (.metrics.json)..."), Export::run_file);
 }
 
-void SavedResultsPanel::fill_export_menu(QMenu& menu) {
-    menu.clear();
-    for (QMenu* kind : menu.findChildren<QMenu*>(Qt::FindDirectChildrenOnly)) {
-        delete kind;  // clear() leaves the menus addMenu made
-    }
-    add_export_items(menu);
-}
-
-void SavedResultsPanel::add_export_items(QMenu& menu) {
-    // The selection's archive first; then the quick grabs, for a one-off;
-    // then the rules the weak segments are found by.
-    const QAction* contents = fill_menu(menu);
-    if (contents == nullptr) {
-        return;
-    }
-    connect(contents, &QAction::triggered, this,
-            [this] { emit export_requested(Export::contents, selected_results()); });
-    menu.addSeparator();
+void SavedResultsPanel::add_quick_items(QMenu& menu) {
+    // The quick grabs of the selected comparisons, each with the Save
+    // dialog; those that cannot be made greyed, saying why.
     std::map<Export, QString> refused;
     if (several_references()) {
         refused[Export::graphs] = one_reference_text();
@@ -1019,22 +994,22 @@ void SavedResultsPanel::add_export_items(QMenu& menu) {
     } else if (segment_rules().conditions.empty()) {
         refused[Export::segments] = no_conditions_text();
     }
-    add_quick_grabs(menu, true, [this](Export kind) { emit export_requested(kind, selected_results()); }, refused);
-    QMenu* segments = menu.addMenu(app::tr("Weak segments by"));
-    segments->setToolTipsVisible(true);
-    // The rules, one picked: the weak segments' quick grab's and the
-    // archive's.
-    auto* rules = new QActionGroup(segments);
-    const QString picked = segment_rule_choice();
-    for (const auto& [choice, text] : segment_rule_choices()) {
-        QAction* action = segments->addAction(text);
-        action->setCheckable(true);
-        action->setChecked(choice == picked);
-        action->setToolTip(app::tr("The rules the weak segments are found by: they are not saved with the scores, "
-                                   "but found from them now."));
-        rules->addAction(action);
-        connect(action, &QAction::triggered, this, [this, choice] { pick_segment_rules(choice); });
+    add_quick_grabs(menu, !selected().empty(),
+                    [this](Export kind) { emit export_requested(kind, selected_results()); }, refused);
+}
+
+void SavedResultsPanel::add_export_items(QMenu& menu) {
+    // The selection's archive first, the one archive item outside the tab
+    // bar's Export panel (whose picker sets the weak segment rules); then
+    // the quick grabs, for a one-off.
+    const QAction* contents = fill_menu(menu);
+    if (contents == nullptr) {
+        return;
     }
+    connect(contents, &QAction::triggered, this,
+            [this] { emit export_requested(Export::contents, selected_results()); });
+    menu.addSeparator();
+    add_quick_items(menu);
 }
 
 QString SavedResultsPanel::segment_rule_choice() const {
