@@ -641,7 +641,6 @@
   "Frame {frame}: no visible series.": "Quadro {frame}: nenhuma série visível.",
   "Frame {frame}": "Quadro {frame}",
   "Series and statistics": "Séries e estatísticas",
-  "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "{label} não foi calculada. Marque-a na coluna {label} em Vídeos ou carregue resultados que a contenham.",
   "Export results": "Exportar resultados",
   "CSV file (*.csv)": "Arquivo CSV (*.csv)",
   "JSON file (*.json)": "Arquivo JSON (*.json)",

@@ -641,7 +641,6 @@
   "Frame {frame}": "第 {frame} 帧",
   "Series and statistics": "系列与统计",
   "Calculate metrics or import a run file to view graphs.": "计算指标或导入运行结果文件以查看图表。",
-  "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "未计算 {label}。请在“视频”中勾选 {label} 列，或加载包含它的结果。",
   "Export results": "导出结果",
   "CSV file (*.csv)": "CSV 文件 (*.csv)",
   "JSON file (*.json)": "JSON 文件 (*.json)",

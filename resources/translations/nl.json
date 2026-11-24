@@ -641,7 +641,6 @@
   "Frame {frame}: no visible series.": "Frame {frame}: geen zichtbare reeksen.",
   "Frame {frame}": "Frame {frame}",
   "Series and statistics": "Reeksen en statistieken",
-  "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "{label} is niet berekend. Vink het aan in de kolom {label} op Video's, of laad resultaten die het bevatten.",
   "Export results": "Resultaten exporteren",
   "CSV file (*.csv)": "CSV-bestand (*.csv)",
   "JSON file (*.json)": "JSON-bestand (*.json)",

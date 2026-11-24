@@ -641,7 +641,6 @@
   "Frame {frame}: no visible series.": "Kare {frame}: görünür seri yok.",
   "Frame {frame}": "Kare {frame}",
   "Series and statistics": "Seriler ve istatistikler",
-  "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "{label} hesaplanmadı. Videolar sekmesinde {label} sütununu işaretleyin veya onu içeren sonuçları yükleyin.",
   "Export results": "Sonuçları dışa aktar",
   "CSV file (*.csv)": "CSV dosyası (*.csv)",
   "JSON file (*.json)": "JSON dosyası (*.json)",

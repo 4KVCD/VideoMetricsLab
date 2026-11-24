@@ -641,7 +641,6 @@
   "Frame {frame}: no visible series.": "Кадр {frame}: нет видимых рядов.",
   "Frame {frame}": "Кадр {frame}",
   "Series and statistics": "Ряды и статистика",
-  "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "{label} не вычислялась. Отметьте её в столбце {label} на вкладке «Видео» или загрузите результаты, где она есть.",
   "Export results": "Экспорт результатов",
   "CSV file (*.csv)": "Файл CSV (*.csv)",
   "JSON file (*.json)": "Файл JSON (*.json)",

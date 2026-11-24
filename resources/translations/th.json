@@ -641,7 +641,6 @@
   "Frame {frame}: no visible series.": "เฟรม {frame}: ไม่มีชุดข้อมูลที่แสดง",
   "Frame {frame}": "เฟรม {frame}",
   "Series and statistics": "ชุดข้อมูลและสถิติ",
-  "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "ยังไม่ได้คำนวณ {label} ทำเครื่องหมายในคอลัมน์ {label} ในแท็บวิดีโอ หรือโหลดผลลัพธ์ที่มีเมตริกนี้",
   "Export results": "ส่งออกผลลัพธ์",
   "CSV file (*.csv)": "ไฟล์ CSV (*.csv)",
   "JSON file (*.json)": "ไฟล์ JSON (*.json)",
