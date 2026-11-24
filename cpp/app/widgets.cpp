@@ -7,6 +7,7 @@
 #include <QTextDocument>
 #include <QApplication>
 #include <QComboBox>
+#include <QContextMenuEvent>
 #include <QCoreApplication>
 #include <QDragEnterEvent>
 #include <QDragLeaveEvent>
@@ -38,6 +39,7 @@
 #include <QTabBar>
 #include <QTableView>
 #include <QUrl>
+#include <QWheelEvent>
 
 #include <algorithm>
 #include <numeric>
@@ -126,40 +128,76 @@ void CheckableHeaderView::mousePressEvent(QMouseEvent* event) {
 // ------------------------------------------------------------- FrozenColumnsView
 
 // freeze_leading_columns' view: the table's leading columns again, over the
-// table's own. It covers the whole of the table's viewport and header, so
-// that both viewports share their coordinates, and a mask leaves only the
-// strip of its columns (frozen_strip) to be seen and clicked. It only shows:
-// whatever is done over it (presses, drags, drops, the wheel, a context menu,
-// a tooltip) is passed on to the table, which then finds the cell drawn here
+// table's own, in the strip of those columns (frozen_strip). It is a child of
+// the table's viewport, not a sibling over it: Qt scrolls a widget by moving
+// its pixels (a blit) only while no sibling lies over it, and otherwise
+// redraws only what no opaque sibling covers, which for a sibling as large as
+// the viewport is nothing: the cells on screen would go stale. Its heading is
+// a FrozenHeader of its own, over the table's header.
+//
+// It only shows: whatever is done over it (presses, drags, drops, the wheel,
+// a context menu, a tooltip) is passed on to the table, at the same place in
+// the table's viewport, and the table then finds the cell drawn here
 // (indexAt, visualRect). One view then holds the selection's anchor, the
-// pressed cell and the drag, wherever the user clicks.
+// pressed cell and the drag, wherever the user clicks. Its own hover stays
+// its own, for the cells it draws; a mouse move passed on brings the table's.
 class FrozenColumnsView : public QTableView {
 public:
-    explicit FrozenColumnsView(FillColumnTable& table) : QTableView(&table), table_(table) {}
+    explicit FrozenColumnsView(FillColumnTable& table) : QTableView(table.viewport()), table_(table) {}
 
 protected:
     bool viewportEvent(QEvent* event) override {
         switch (event->type()) {
-            case QEvent::HoverEnter:
-            case QEvent::HoverLeave:
-                // Its own hover, for the cells it draws, and the table's: a
-                // table left through the strip must not keep its hovered row.
-                // (A mouse move passed on brings the table's HoverMove.)
-                QTableView::viewportEvent(event);
-                return QCoreApplication::sendEvent(table_.viewport(), event);
             case QEvent::MouseButtonPress:
             case QEvent::MouseButtonRelease:
             case QEvent::MouseButtonDblClick:
-            case QEvent::MouseMove:
-            case QEvent::Wheel:
-            case QEvent::ContextMenu:
+            case QEvent::MouseMove: {
+                const auto* mouse = static_cast<QMouseEvent*>(event);
+                QMouseEvent moved(mouse->type(), to_table(mouse->position()), mouse->scenePosition(),
+                                  mouse->globalPosition(), mouse->button(), mouse->buttons(), mouse->modifiers(),
+                                  mouse->pointingDevice());
+                moved.setTimestamp(mouse->timestamp());  // double-clicks are told by it
+                return pass_on(event, moved);
+            }
+            case QEvent::Wheel: {
+                const auto* wheel = static_cast<QWheelEvent*>(event);
+                QWheelEvent moved(to_table(wheel->position()), wheel->globalPosition(), wheel->pixelDelta(),
+                                  wheel->angleDelta(), wheel->buttons(), wheel->modifiers(), wheel->phase(),
+                                  wheel->inverted(), wheel->source(), wheel->pointingDevice());
+                moved.setTimestamp(wheel->timestamp());
+                return pass_on(event, moved);
+            }
+            case QEvent::ContextMenu: {
+                const auto* menu = static_cast<QContextMenuEvent*>(event);
+                QContextMenuEvent moved(menu->reason(), to_table(menu->pos()), menu->globalPos(), menu->modifiers());
+                return pass_on(event, moved);
+            }
             case QEvent::ToolTip:
             case QEvent::QueryWhatsThis:
-            case QEvent::WhatsThis:
-            case QEvent::DragEnter:
-            case QEvent::DragMove:
-            case QEvent::DragLeave:
-            case QEvent::Drop:
+            case QEvent::WhatsThis: {
+                const auto* help = static_cast<QHelpEvent*>(event);
+                QHelpEvent moved(help->type(), to_table(help->pos()), help->globalPos());
+                return pass_on(event, moved);
+            }
+            case QEvent::DragEnter: {
+                auto* drag = static_cast<QDragEnterEvent*>(event);
+                QDragEnterEvent moved(to_table(drag->position()), drag->possibleActions(), drag->mimeData(),
+                                      drag->buttons(), drag->modifiers());
+                return pass_on_drop(drag, moved);
+            }
+            case QEvent::DragMove: {
+                auto* drag = static_cast<QDragMoveEvent*>(event);
+                QDragMoveEvent moved(to_table(drag->position()), drag->possibleActions(), drag->mimeData(),
+                                     drag->buttons(), drag->modifiers());
+                return pass_on_drop(drag, moved);
+            }
+            case QEvent::Drop: {
+                auto* drop = static_cast<QDropEvent*>(event);
+                QDropEvent moved(to_table(drop->position()), drop->possibleActions(), drop->mimeData(),
+                                 drop->buttons(), drop->modifiers());
+                return pass_on_drop(drop, moved);
+            }
+            case QEvent::DragLeave:  // no position
                 QCoreApplication::sendEvent(table_.viewport(), event);
                 return true;
             default:
@@ -173,18 +211,48 @@ protected:
     }
 
 private:
+    // A point on this view's viewport, on the table's.
+    QPointF to_table(QPointF position) const { return position + viewport()->mapTo(table_.viewport(), QPoint()); }
+    QPoint to_table(QPoint position) const { return position + viewport()->mapTo(table_.viewport(), QPoint()); }
+
+    // Sends `moved`, the table's copy of `event`, to the table's viewport,
+    // and gives `event` its answer.
+    bool pass_on(QEvent* event, QEvent& moved) {
+        QCoreApplication::sendEvent(table_.viewport(), &moved);
+        event->setAccepted(moved.isAccepted());
+        return true;
+    }
+    bool pass_on_drop(QDropEvent* event, QDropEvent& moved) {
+        pass_on(event, moved);
+        event->setDropAction(moved.dropAction());  // the drag shows it, and the drop reports it
+        return true;
+    }
+
     FillColumnTable& table_;
 };
 
 namespace {
 
-// frozen_'s header, which draws the sort arrow of the table's own header
-// (which the sorting sets) on the frozen columns.
+// The frozen columns' heading, over the table's header at frozen_'s strip.
+// It draws the sort arrow of the table's own header (which the sorting sets).
+// A child of the table, like the header itself, not of the header's
+// viewport: that one is scrolled outside of scrollContentsBy too.
 class FrozenHeader : public QHeaderView {
 public:
     FrozenHeader(const QTableView& table, QWidget* parent) : QHeaderView(Qt::Horizontal, parent), table_(table) {}
 
 protected:
+    // Some styles (Windows 11's) draw header sections see-through, over the
+    // table's base; the table's own scrolled heading lies under this one, so
+    // fill the base first or its text shows through.
+    void paintEvent(QPaintEvent* event) override {
+        {
+            QPainter painter(viewport());
+            painter.fillRect(event->rect(), table_.palette().brush(QPalette::Base));
+        }
+        QHeaderView::paintEvent(event);
+    }
+
     void initStyleOptionForIndex(QStyleOptionHeader* option, int logical_index) const override {
         QHeaderView::initStyleOptionForIndex(option, logical_index);
         const QHeaderView* header = table_.horizontalHeader();
@@ -267,7 +335,7 @@ void FillColumnTable::setHorizontalHeader(QHeaderView* header) {
     connect(header, &QHeaderView::sectionResized, this, &FillColumnTable::on_section_resized);
     if (frozen_ != nullptr) {
         header->viewport()->installEventFilter(this);  // eventFilter: the sort arrow
-        frozen_->raise();                              // over the new header too
+        frozen_header_->raise();                       // over the new header too
         place_frozen_view();
     }
 }
@@ -426,10 +494,13 @@ void FillColumnTable::focusOutEvent(QFocusEvent* event) {
 }
 
 void FillColumnTable::on_section_resized(int logical_index, int /*old_size*/, int new_size) {
-    // A frozen column's width, the fill column's included, is frozen_'s too,
-    // and moves the edge of its strip.
+    // A frozen column's width, the fill column's included, is frozen_'s and
+    // its heading's too, and moves the edge of its strip.
     if (frozen_ != nullptr && is_frozen(logical_index)) {
         frozen_->setColumnWidth(logical_index, new_size);
+        if (frozen_header_->sectionSize(logical_index) != new_size) {
+            frozen_header_->resizeSection(logical_index, new_size);
+        }
         place_frozen_view();
     }
     if (recalculating_) {
@@ -467,7 +538,10 @@ void FillColumnTable::freeze_leading_columns(int count) {
     auto* view = new FrozenColumnsView(*this);
     frozen_ = view;
     view->setObjectName(QStringLiteral("frozenColumns"));  // VML Modern draws it without the table's border
-    view->setHorizontalHeader(new FrozenHeader(*this, view));
+    view->horizontalHeader()->hide();                       // frozen_header_ is its heading
+    // Opaque, as the viewport under it is: Qt then moves it by moving its
+    // pixels too (scrollContentsBy).
+    view->setAutoFillBackground(true);
     // The table's rows, selection and cell painting.
     view->setModel(model());
     QItemSelectionModel* own_selection = view->selectionModel();
@@ -499,7 +573,13 @@ void FillColumnTable::freeze_leading_columns(int count) {
     view->viewport()->setMouseTracking(viewport()->hasMouseTracking());
 
     QHeaderView* header = horizontalHeader();
-    QHeaderView* frozen_header = view->horizontalHeader();
+    auto* frozen_header = new FrozenHeader(*this, this);
+    frozen_header_ = frozen_header;
+    frozen_header->setObjectName(QStringLiteral("frozenHeader"));
+    frozen_header->setModel(model());
+    QItemSelectionModel* header_selection = frozen_header->selectionModel();
+    frozen_header->setSelectionModel(selectionModel());  // for highlightSections
+    delete header_selection;
     frozen_header->setSectionResizeMode(QHeaderView::Interactive);
     frozen_header->setStretchLastSection(false);
     frozen_header->setSectionsClickable(header->sectionsClickable());
@@ -507,19 +587,22 @@ void FillColumnTable::freeze_leading_columns(int count) {
     frozen_header->setDefaultAlignment(header->defaultAlignment());
     frozen_header->setMinimumSectionSize(header->minimumSectionSize());
     frozen_header->setContextMenuPolicy(header->contextMenuPolicy());
-    // The frozen columns in the table's order, the others hidden.
-    for (int visual = 0; visual < count && visual < header->count(); ++visual) {
-        frozen_header->moveSection(frozen_header->visualIndex(header->logicalIndex(visual)), visual);
-    }
-    for (int column = 0; column < columnCount(); ++column) {
-        view->setColumnHidden(column, !is_frozen(column) || isColumnHidden(column));
-        if (is_frozen(column)) {
-            view->setColumnWidth(column, columnWidth(column));
+    // In frozen_ and its heading, the frozen columns in the table's order,
+    // the others hidden.
+    for (QHeaderView* columns : {view->horizontalHeader(), static_cast<QHeaderView*>(frozen_header)}) {
+        for (int visual = 0; visual < count && visual < header->count(); ++visual) {
+            columns->moveSection(columns->visualIndex(header->logicalIndex(visual)), visual);
+        }
+        for (int column = 0; column < columnCount(); ++column) {
+            columns->setSectionHidden(column, !is_frozen(column) || isColumnHidden(column));
+            if (is_frozen(column)) {
+                columns->resizeSection(column, columnWidth(column));
+            }
         }
     }
 
-    // A frozen column resized on frozen_'s header is resized in the table
-    // (on_section_resized brings frozen_ along the other way).
+    // A frozen column resized on its heading is resized in the table
+    // (on_section_resized brings frozen_ and the heading along).
     connect(frozen_header, &QHeaderView::sectionResized, this, [this](int column, int, int size) {
         if (columnWidth(column) != size) {
             setColumnWidth(column, size);
@@ -541,13 +624,13 @@ void FillColumnTable::freeze_leading_columns(int count) {
             [this] { frozen_->verticalScrollBar()->setValue(verticalScrollBar()->value()); });
     connect(verticalHeader(), &QHeaderView::sectionResized, this,
             [this](int row, int, int size) { frozen_->setRowHeight(row, size); });
-    // The sort arrow, which frozen_'s header copies, is checked as the
+    // The sort arrow, which frozen_header_ copies, is checked as the
     // table's header paints (eventFilter).
     header->viewport()->installEventFilter(this);
 
     setHorizontalScrollMode(ScrollPerPixel);  // a column slides under frozen_, not jumps
     view->show();
-    view->raise();
+    frozen_header->show();
     place_frozen_view();
 }
 
@@ -579,16 +662,16 @@ void FillColumnTable::place_frozen_view() {
         return;
     }
     const QRect strip = frozen_strip();
-    frozen_->setVisible(!strip.isEmpty());  // an empty mask would show all of it (setMask)
+    QHeaderView* header = horizontalHeader();
+    frozen_->setVisible(!strip.isEmpty());
+    frozen_header_->setVisible(!strip.isEmpty() && !header->isHidden());
     if (strip.isEmpty()) {
         return;
     }
-    // Over the viewport and the header above it, the header as high as the
-    // table's, so that both viewports share their coordinates.
-    const int header_height = horizontalHeader()->isHidden() ? 0 : horizontalHeader()->height();
-    if (frozen_->horizontalHeader()->height() != header_height) {
-        frozen_->horizontalHeader()->setFixedHeight(header_height);
-    }
+    // Only moves what is not in place (after a scroll, scrollContentsBy).
+    frozen_->setGeometry(strip);
+    const QRect heading(viewport()->x() + strip.x(), header->y(), strip.width(), header->height());
+    frozen_header_->setGeometry(heading);
     // Rows as high as the table's, which the style and font set.
     QHeaderView* rows = verticalHeader();
     QHeaderView* frozen_rows = frozen_->verticalHeader();
@@ -598,30 +681,36 @@ void FillColumnTable::place_frozen_view() {
     if (frozen_rows->defaultSectionSize() != rows->defaultSectionSize()) {
         frozen_rows->setDefaultSectionSize(rows->defaultSectionSize());
     }
-    const QRect port = viewport()->geometry();
-    frozen_->setGeometry(port.left(), port.top() - header_height, port.width(), port.height() + header_height);
-    const QRegion mask(strip.left(), 0, strip.width(), header_height + strip.height());
-    if (frozen_->mask() != mask) {
-        frozen_->setMask(mask);
-    }
+}
+
+QPoint FillColumnTable::frozen_offset() const {
+    return frozen_->viewport()->mapTo(viewport(), QPoint());
 }
 
 QModelIndex FillColumnTable::indexAt(const QPoint& position) const {
     if (frozen_ != nullptr && !frozen_->isHidden() && frozen_strip().contains(position)) {
-        return frozen_->indexAt(position);
+        return frozen_->indexAt(position - frozen_offset());
     }
     return QTableWidget::indexAt(position);
 }
 
 QRect FillColumnTable::visualRect(const QModelIndex& index) const {
     if (frozen_ != nullptr && !frozen_->isHidden() && index.isValid() && is_frozen(index.column())) {
-        return frozen_->visualRect(index);
+        return frozen_->visualRect(index).translated(frozen_offset());
     }
     return QTableWidget::visualRect(index);
 }
 
 void FillColumnTable::updateGeometries() {
     QTableWidget::updateGeometries();
+    place_frozen_view();
+}
+
+void FillColumnTable::scrollContentsBy(int dx, int dy) {
+    // The viewport's scroll moves its children with it, frozen_ too: back to
+    // the strip, once the scroll has returned (frozen_'s move event comes
+    // while the viewport is still being scrolled).
+    QTableWidget::scrollContentsBy(dx, dy);
     place_frozen_view();
 }
 
@@ -652,7 +741,7 @@ bool FillColumnTable::eventFilter(QObject* watched, QEvent* event) {
                               header->sortIndicatorOrder()};
         if (sort != frozen_sort_) {
             frozen_sort_ = sort;
-            frozen_->horizontalHeader()->viewport()->update();
+            frozen_header_->viewport()->update();
         }
     }
     return QTableWidget::eventFilter(watched, event);

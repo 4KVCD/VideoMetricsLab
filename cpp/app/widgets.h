@@ -139,6 +139,7 @@ protected:
     void focusInEvent(QFocusEvent* event) override;
     void focusOutEvent(QFocusEvent* event) override;
     void updateGeometries() override;
+    void scrollContentsBy(int dx, int dy) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
@@ -155,10 +156,14 @@ private:
     bool is_frozen(int logical_column) const;
     // Where frozen_'s columns are seen, in the viewport's coordinates.
     QRect frozen_strip() const;
+    // Puts frozen_ on the strip and its heading over the header.
     void place_frozen_view();
+    // Where frozen_'s viewport starts in the table's.
+    QPoint frozen_offset() const;
 
     std::optional<int> drop_line_;  // the row a dragged row would go before, while dragging
     QTableView* frozen_ = nullptr;   // freeze_leading_columns' view, over the table's leading edge
+    QHeaderView* frozen_header_ = nullptr;  // frozen_'s heading, over the table's header
     int frozen_count_ = 0;
     // The header's sort arrow as frozen_ last drew it: (shown, column, order).
     std::tuple<bool, int, Qt::SortOrder> frozen_sort_{false, -1, Qt::AscendingOrder};

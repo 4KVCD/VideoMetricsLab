@@ -6,8 +6,10 @@
 #include <QImage>
 #include <QDropEvent>
 #include <QFileInfo>
+#include <QHeaderView>
 #include <QItemSelectionModel>
 #include <QMimeData>
+#include <QPaintEvent>
 #include <QScrollBar>
 #include <QSignalSpy>
 #include <QTableWidget>
@@ -193,17 +195,21 @@ TEST(TableSelection, DroppedFilesAreSaidAfterTheDrop) {
     EXPECT_EQ(QFileInfo(dropped.front().front().toStringList().front()), QFileInfo(file));
 }
 
-TEST(TableSelection, FrozenColumnsStayWhileTheOthersScroll) {
-    // As the Videos table: the tick box and File name (the fill column)
-    // frozen, many metric columns beside them in a narrow table.
-    constexpr int columns = 20;
+// As the Videos table: the tick box and File name (the fill column), then
+// metric columns, 20 in all; the first two are frozen once it is shown.
+constexpr int frozen_test_columns = 20;
+
+std::vector<int> all_but_the_file_name() {
     std::vector<int> others;
-    for (int column = 0; column < columns; ++column) {
+    for (int column = 0; column < frozen_test_columns; ++column) {
         if (column != 1) {
             others.push_back(column);
         }
     }
-    FillColumnTable table(4, columns, 1, others);
+    return others;
+}
+
+void set_up_like_the_videos_table(FillColumnTable& table, QSize size) {
     table.setSelectionBehavior(QAbstractItemView::SelectRows);
     table.setSelectionMode(QAbstractItemView::ExtendedSelection);
     table.verticalHeader()->setVisible(false);
@@ -214,13 +220,43 @@ TEST(TableSelection, FrozenColumnsStayWhileTheOthersScroll) {
         table.setItem(row, 0, tick);
         table.setItem(row, 1, new QTableWidgetItem(QStringLiteral("video %1.mkv").arg(row)));
     }
-    for (int column = 2; column < columns; ++column) {
+    for (int column = 2; column < frozen_test_columns; ++column) {
         table.setColumnWidth(column, 80);
     }
     table.setColumnWidth(0, 28);
-    table.resize(500, 200);
+    table.resize(size);
     table.freeze_leading_columns(2);
     table.show();
+}
+
+// The area a widget's paint events cover, from its making on.
+class PaintedArea : public QObject {
+public:
+    explicit PaintedArea(QWidget& widget) { widget.installEventFilter(this); }
+    long long area = 0;
+
+protected:
+    bool eventFilter(QObject*, QEvent* event) override {
+        if (event->type() == QEvent::Paint) {
+            for (const QRect& rect : static_cast<QPaintEvent*>(event)->region()) {
+                area += static_cast<long long>(rect.width()) * rect.height();
+            }
+        }
+        return false;
+    }
+};
+
+// Paints what is waiting to be painted in `window` now: Qt paints on an
+// update request it posts for later, not in processEvents.
+void paint_now(QWidget& window) {
+    QCoreApplication::processEvents();
+    QEvent update(QEvent::UpdateRequest);
+    QCoreApplication::sendEvent(&window, &update);
+}
+
+TEST(TableSelection, FrozenColumnsStayWhileTheOthersScroll) {
+    FillColumnTable table(4, frozen_test_columns, 1, all_but_the_file_name());
+    set_up_like_the_videos_table(table, QSize(500, 200));
     ASSERT_TRUE(QTest::qWaitForWindowExposed(&table));
     auto* frozen = table.findChild<QTableView*>(QStringLiteral("frozenColumns"));
     ASSERT_NE(frozen, nullptr);
@@ -233,7 +269,7 @@ TEST(TableSelection, FrozenColumnsStayWhileTheOthersScroll) {
     bar->setValue(bar->maximum());
     EXPECT_EQ(table.visualRect(table.model()->index(1, 1)), name_cell);
     EXPECT_EQ(table.indexAt(name_cell.center()), table.model()->index(1, 1));
-    // frozen_'s viewport lies exactly over the table's.
+    // Left to right, frozen_ starts at the corner of the table's viewport.
     EXPECT_EQ(frozen->viewport()->mapToGlobal(QPoint()), table.viewport()->mapToGlobal(QPoint()));
 
     // Going to a cell scrolled under the frozen columns brings it out past
@@ -262,6 +298,59 @@ TEST(TableSelection, FrozenColumnsStayWhileTheOthersScroll) {
     EXPECT_GT(name_rtl.center().x(), table.viewport()->width() / 2);
     EXPECT_GT(table.visualRect(table.model()->index(1, 0)).left(), name_rtl.right());
     EXPECT_EQ(table.indexAt(name_rtl.center()), table.model()->index(1, 1));
+    // A click there, on frozen_ (which no longer starts where the table's
+    // viewport does), reaches the table at the point clicked.
+    const QRect tick_rtl = table.visualRect(table.model()->index(3, 0));
+    QTest::mouseClick(frozen->viewport(), Qt::LeftButton, {},
+                      frozen->viewport()->mapFrom(table.viewport(), tick_rtl.center()));
+    EXPECT_EQ(table.item(3, 0)->checkState(), Qt::Checked);
+}
+
+TEST(TableSelection, FrozenColumnsLetTheTableScrollWithoutRepaintingIt) {
+    // A step of scrolling, sideways or down, paints what comes into view, in
+    // the table and in frozen_, and not the rest: Qt moves what is drawn
+    // already only for a viewport no sibling widget lies over, and with one
+    // over it (frozen_ as it was) it painted nothing at all, leaving the
+    // cells where they were before the scroll. Left to right and right to
+    // left; frozen_ and its heading stay at the leading edge.
+    FillColumnTable table(40, frozen_test_columns, 1, all_but_the_file_name());
+    set_up_like_the_videos_table(table, QSize(600, 300));
+    ASSERT_TRUE(QTest::qWaitForWindowExposed(&table));
+    auto* frozen = table.findChild<QTableView*>(QStringLiteral("frozenColumns"));
+    ASSERT_NE(frozen, nullptr);
+    QWidget* port = table.viewport();
+    const long long port_area = static_cast<long long>(port->width()) * port->height();
+    for (const Qt::LayoutDirection direction : {Qt::LeftToRight, Qt::RightToLeft}) {
+        table.setLayoutDirection(direction);
+        for (QScrollBar* bar : {table.horizontalScrollBar(), table.verticalScrollBar()}) {
+            paint_now(table);  // what the direction's change painted
+            const int x_before = table.horizontalHeader()->offset();
+            const int y_before = table.verticalHeader()->offset();
+            PaintedArea painted(*port);
+            PaintedArea painted_frozen(*frozen->viewport());
+            bar->setValue(bar->value() + bar->singleStep());
+            paint_now(table);
+            // The band that came into view, all along the viewport.
+            const long long in_view =
+                static_cast<long long>(std::abs(table.horizontalHeader()->offset() - x_before)) * port->height() +
+                static_cast<long long>(std::abs(table.verticalHeader()->offset() - y_before)) * port->width();
+            ASSERT_GT(in_view, 0);
+            const long long all_painted = painted.area + painted_frozen.area;
+            const char* step = bar == table.horizontalScrollBar() ? "sideways" : "down";
+            const char* way = direction == Qt::LeftToRight ? "left to right" : "right to left";
+            EXPECT_GE(all_painted, in_view) << way << ", " << step;
+            EXPECT_LT(all_painted, port_area / 2) << way << ", " << step;
+            const int leading_x = direction == Qt::LeftToRight ? 0 : port->width() - frozen->width();
+            EXPECT_EQ(frozen->geometry().topLeft(), QPoint(leading_x, 0)) << way << ", " << step;
+        }
+    }
+    // The frozen heading lies over the header, above frozen_.
+    auto* heading = table.findChild<QHeaderView*>(QStringLiteral("frozenHeader"));
+    ASSERT_NE(heading, nullptr);
+    const QHeaderView* header = table.horizontalHeader();
+    EXPECT_EQ(heading->mapToGlobal(QPoint()),
+              QPoint(frozen->mapToGlobal(QPoint()).x(), header->mapToGlobal(QPoint()).y()));
+    EXPECT_EQ(heading->size(), QSize(frozen->width(), header->height()));
 }
 
 }  // namespace
