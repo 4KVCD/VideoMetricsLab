@@ -1,6 +1,5 @@
 // A menu of check boxes that stays open while boxes are ticked, so several
-// can be switched in one visit: the Videos table's metrics, the Saved Results
-// table's columns.
+// can be switched in one visit: the Saved Results table's columns.
 #pragma once
 
 #include <QAction>

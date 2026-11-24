@@ -480,8 +480,15 @@ private:
     // The metrics Add/remove metrics lists: every metric but the planes.
     static long long listed_metric_count();
     void apply_metric_visibility();
-    void show_metrics_menu(const QPoint& position);
-    void on_metric_visibility_toggled(const std::string& key, bool shown, QMenu* menu);
+    // Add/remove metrics' panel (MetricsPanel), its top left at `top_left`,
+    // or its top right at `top_right` (under the button).
+    // `anchor`: the button that opened it, whose next click closes it.
+    void show_metrics_panel(const QPoint& top_left, std::optional<QPoint> top_right = std::nullopt,
+                            QWidget* anchor = nullptr);
+    // The panel's ticks changed: `shown` are the metrics whose columns show.
+    void on_metrics_shown_changed(const std::set<std::string>& shown);
+    // The panel's switch for the planes' columns: its own handling, as the
+    // planes are not among the metrics it shows or counts.
     void on_yuv_planes_toggled(bool shown);
     // Every row's cells after metric columns were shown or hidden; with
     // `more_shown`, their saved scores looked up again.
@@ -966,7 +973,7 @@ private:
     QPushButton* source_browse_button_ = nullptr;
     QLabel* source_info_label_ = nullptr;
     QPushButton* metrics_button_ = nullptr;
-    QLabel* metrics_count_label_ = nullptr;  // "x/y metrics selected", beside metrics_button_
+    QLabel* metrics_count_label_ = nullptr;  // "x of y shown", beside metrics_button_
     FillColumnTable* distorted_table_ = nullptr;
     CheckableHeaderView* metric_header_ = nullptr;
     QPushButton* remove_all_button_ = nullptr;

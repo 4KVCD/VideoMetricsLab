@@ -2,9 +2,11 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "reference.h"
@@ -119,6 +121,55 @@ TEST(Metrics, TooSmallPicturesNameTheMetricsAndTheSizeEachNeeds) {
     EXPECT_EQ(too_small_problem({"psnr", "xpsnr", "cvvdp"}, 2, 2), std::nullopt);
     EXPECT_EQ(too_small_problem({"ssimulacra2"}, 8, 7),
               "The compared pictures, 8x7, are too small for SSIMULACRA2 (at least 8x8).");
+}
+
+// Add/remove metrics' and Settings' two sections come from the one list,
+// metrics_hidden_at_first, in the registry's order; a plane is in its
+// metric's and listed in neither.
+TEST(Metrics, SectionsComeFromTheListHiddenAtFirst) {
+    using Keys = std::vector<std::string_view>;
+    EXPECT_EQ(metrics_in(MetricSection::general_purpose),
+              (Keys{"vmaf", "vmaf_neg", "vmaf_v1", "vmaf_hdr", "psnr", "ssim", "xpsnr", "ssimulacra2", "butteraugli",
+                    "cvvdp"}));
+    EXPECT_EQ(metrics_in(MetricSection::specialized), Keys(metrics_hidden_at_first.begin(), metrics_hidden_at_first.end()));
+    EXPECT_EQ(section_of("psnr_yuv_u"), MetricSection::specialized);
+    EXPECT_EQ(metric_guide("ssim_yuv_v").measures, metric_guide("ssim_yuv").measures);
+}
+
+// docs/ARCHITECTURE.md's "Adding a metric", for every metric in the
+// registry: its few words and tooltip text; in exactly one section, the one
+// metrics_hidden_at_first gives it (each of whose keys is a metric, not a
+// plane); ranges exactly where a source is named (ranges_source), and ranges
+// wherever it has bands. A plane takes all of these from its metric.
+TEST(Metrics, EveryMetricFollowsTheRulesForAddingOne) {
+    const std::vector<std::string_view> general = metrics_in(MetricSection::general_purpose);
+    const std::vector<std::string_view> specialized = metrics_in(MetricSection::specialized);
+    const auto in = [](const std::vector<std::string_view>& keys, std::string_view key) {
+        return std::find(keys.begin(), keys.end(), key) != keys.end();
+    };
+    for (const std::string_view key : metrics_hidden_at_first) {
+        ASSERT_NE(find_metric(key), nullptr) << key;
+        EXPECT_FALSE(find_metric(key)->is_plane()) << key;
+    }
+    for (const MetricDefinition& metric : metrics()) {
+        const std::string_view key = metric.key;
+        if (metric.is_plane()) {
+            EXPECT_FALSE(in(general, key) || in(specialized, key)) << key;
+            EXPECT_EQ(section_of(key), section_of(metric.plane_of)) << key;
+            continue;
+        }
+        const MetricGuide guide = metric_guide(key);
+        EXPECT_FALSE(guide.brief.empty()) << key << ": no few words beside its name";
+        EXPECT_FALSE(guide.measures.empty()) << key << ": no tooltip text";
+        EXPECT_NE(in(general, key), in(specialized, key)) << key << ": not in exactly one section";
+        EXPECT_EQ(in(specialized, key), in({metrics_hidden_at_first.begin(), metrics_hidden_at_first.end()}, key))
+            << key << ": its section is not metrics_hidden_at_first's";
+        EXPECT_EQ(guide.ranges.empty(), guide.ranges_source.empty())
+            << key << ": ranges without a source, or a source without ranges";
+        if (!metric.thresholds.empty()) {
+            EXPECT_FALSE(guide.ranges.empty()) << key << ": bands, but no ranges in its tooltip";
+        }
+    }
 }
 
 }  // namespace

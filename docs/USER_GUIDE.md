@@ -39,7 +39,8 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
 
 **HDR VMAF** scores PQ (HDR10) videos with Netflix's HDR VMAF models (1080p,
 phone, 4K, and high-frame-rate variants), chosen in **HDR VMAF model**. It is
-off by default: tick its column to score it. Both videos are converted to the
+shown but unticked at first, as an SDR video fails it: tick its column to
+score it (its tick only matters for HDR10 videos). Both videos are converted to the
 model's ICtCp form and its features calculated on the GPU when VMAF runs on the
 GPU (else on the CPU), with the same scores. The GPU's conversion is checked
 against the CPU's on the first frame; where the GPU cannot convert the
@@ -478,6 +479,23 @@ its distortion-based convention, not an arithmetic average of dB values.
 Identical XPSNR frames score infinity and contribute zero distortion while
 remaining in the aggregate's frame count. An em dash indicates unavailable data.
 
+**Add/remove metrics**, above the Videos table (or a right-click on the
+metric columns' headings), lists the 17 metrics in two sections, each with a
+few words on what it measures, and on hover what its scores mean: its unit,
+which way is better, and its broad ranges where they have a source (the
+app's own bands, or the metric's authors' scale). *General purpose* (VMAF
+v0.6.1, VMAF NEG, VMAF v1, HDR VMAF, PSNR, SSIM, XPSNR, SSIMULACRA2,
+Butteraugli and CVVDP) is what a new install shows, HDR VMAF unticked.
+*Specialized* (PSNR YUV, SSIM YUV, MS-SSIM, MS-SSIM YUV, PSNR-HVS-M, CAMBI
+and CIEDE2000) is folded away
+until one of them is shown. A tick there shows or hides a metric's column,
+nothing more; the tick in a column says whether that row calculates it, and a
+run calculates what is ticked and shown. The Specialized metrics start
+ticked but hidden, so showing one is enough to calculate it (settings already
+saved keep the ticks they have). Settings > Metrics' **Default
+metrics**, what new videos start with ticked, lists the same 17 in the same
+two sections, side by side.
+
 PSNR, SSIM and XPSNR are of the luma (Y) plane alone: PSNR is what an
 encoder reports as PSNR-Y, not a weighted average of Y, U and V, and its
 score is the mean of the frames' PSNR. XPSNR takes the reference as the
@@ -485,7 +503,7 @@ original, which FFmpeg's `xpsnr` filter wants as its first input whatever
 its inputs are called, so it differs from FFmpeg commands that give the test
 video first (`[dist][ref]xpsnr`).
 
-PSNR YUV (6:1:1) and SSIM YUV (6:1:1), off by default, weigh the planes as
+PSNR YUV (6:1:1) and SSIM YUV (6:1:1), among the Specialized metrics, weigh the planes as
 JVET's common test conditions weigh PSNR (their YUV BD-rates) and MSU's
 codec comparisons weigh YUV-SSIM, for comparing with those: each frame's (6 x Y + Cb + Cr) / 8 of its three planes' PSNR or
 SSIM, and the score is the mean of the frames'. VVenC's and VTM's own
@@ -501,10 +519,7 @@ for every metric here, so a 4:4:4 video's chroma scores are those of its
 rather than their luma alone, which costs some speed and memory.
 
 MS-SSIM, MS-SSIM YUV (6:1:1), PSNR-HVS-M, CAMBI and CIEDE2000 are the other
-metrics codec comparisons such as MSU's and Xiph's report. They are listed
-unticked in Add/remove metrics, above the Videos table (they are not among
-Settings' default metrics): ticking one there shows its column, and the
-next run calculates it for every video in the table. Only the app
+metrics codec comparisons such as MSU's and Xiph's report. Only the app
 calculates them, with its libvmaf-fast, beside VMAF on the GPU or the CPU
 or alone, on every GPU maker's route:
 
@@ -533,7 +548,7 @@ at most 12 bits, and CIEDE2000 8, 10, 12 or 16 bits. MS-SSIM YUV, PSNR-HVS-M
 and CIEDE2000 read the chroma, so turning one on makes the decoders hand over
 whole pictures, as the 6:1:1 metrics do.
 
-**Y, U and V of the YUV metrics**, at the bottom of Add/remove metrics, adds
+**Y, U and V of the YUV metrics**, in Add/remove metrics' Specialized section, adds
 a column for each plane (Y, U, V) beside PSNR YUV, SSIM YUV, MS-SSIM YUV and
 PSNR-HVS-M, for the ones shown. The planes are calculated in their metric's
 pass at no extra cost, whenever that metric is ticked; they have no tick box

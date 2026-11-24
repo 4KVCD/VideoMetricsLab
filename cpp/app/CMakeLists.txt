@@ -41,6 +41,7 @@ add_library(vml_app STATIC
     main_window_run_files.cpp
     main_window_saved_scores.cpp
     main_window_source.cpp
+    metric_list.cpp
     options_panel.cpp
     playback_worker.cpp
     probe_worker.cpp

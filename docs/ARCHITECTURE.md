@@ -76,6 +76,48 @@ A run works on its own copy of each row's options: a row edited while it
 runs changes the next run, not this one. A finished result is attached only
 to the row, source and settings it was calculated for.
 
+### Adding a metric
+
+**The registry entry is the only source** (`metrics.cpp`): its key, labels,
+column header, unit, direction and bands, and in `guides` the few words
+beside its name and its tooltip text (`metric_guide`). Add/remove metrics,
+Settings > Metrics' Default metrics (`MetricList`) and the column header's
+tooltip (`metric_tip`) read them, and the user guide says the same; nothing
+is written twice.
+
+**Its section and first state come from one list.** A new metric is
+Specialized unless the maintainer agrees it is general purpose. Specialized
+means in `metrics_hidden_at_first`, which makes it start ticked but hidden,
+in new settings and in saved ones (`hide_new_metrics`, by `listed_metrics`),
+so showing it is enough to calculate it. A general-purpose metric starts
+shown, ticked by its `default_compute_<key>`: unticked where most videos
+would fail it, as HDR VMAF is (PQ videos only).
+
+**Ranges only with a source:** the app's own calibrated bands (its
+thresholds) or the metric's authors' published scale, with the source named
+in `ranges_source` and in a comment beside the numbers. Without one, the
+tooltip says what it measures, its unit and which way is better, and gives
+no ranges. The line on grainy film against clean content, the lists'
+footer, applies to every metric.
+
+**A plane-weighted (YUV) metric** also gets its Y, U and V entries
+(`plane_of`), shown with *Y, U and V of the YUV metrics*: no tick of their
+own, outside the count and Settings' default metrics, their headers'
+tooltips from their metric's text.
+
+**The command line by default:** its `-m` key and its place in `all` (or
+why it is left out, as HDR VMAF is), `--help`'s text, and its JSON key in
+`docs/RESULTS_JSON.md`, in the same change.
+
+**Everywhere else it shows,** in the same change: exports, Metric Graphs
+and Worst Frames, Weak segments' conditions (its thresholds), BD-rate, and
+its text in all 20 catalogs (`scripts/i18n_catalog.py check`).
+
+`Metrics.EveryMetricFollowsTheRulesForAddingOne` fails on a metric without
+its few words or tooltip text, outside the sections or in one that doesn't
+match `metrics_hidden_at_first`, with ranges and no `ranges_source` (or a
+source and no ranges), or with bands and no ranges.
+
 ## Persistence contracts
 
 The C++ app reads and writes the Python app's files, so a user's saved
