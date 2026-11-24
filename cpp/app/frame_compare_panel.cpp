@@ -36,6 +36,7 @@
 #endif
 #include "widgets.h"
 #include "window_helpers.h"
+#include "vml/app_log.h"
 #include "vml/crop_detect.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/metrics.h"
@@ -1082,6 +1083,12 @@ void FrameComparePanel::on_play_clicked() {
         return;
     }
     const bool play = !view.playback_requested();
+    // What was pressed, and what the view held then: a Play that does
+    // nothing (issue #220) shows here against the states logged.
+    app_log::write(app_log::Level::info, "vml.playback",
+                   std::string("Video Compare: ") + (play ? "Play" : "Pause") + " pressed (playing asked for: " +
+                       (view.playback_requested() ? "yes" : "no") + ", playing: " +
+                       (view.is_playing() ? "yes" : "no") + ", at frame " + std::to_string(frame_) + ")");
     user_paused_ = !play;
     if (play && loop_checkbox->isChecked() && frame_ == loop_centre_ && entry->comparison.fps > 0) {
         // Just gone to the frame: the loop plays from its beginning.

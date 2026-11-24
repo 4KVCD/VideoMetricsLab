@@ -860,6 +860,7 @@
   "the reference's audio could not be read: {error}": "audio referensi tidak dapat dibaca: {error}",
   "no sound device": "tidak ada perangkat suara",
   "the sound device can't play": "perangkat suara tidak dapat memutar",
+  "the video plays slower than real time": "video diputar lebih lambat dari waktu nyata",
   "No sound: {reason}": "Tanpa suara: {reason}",
   "hardware decode + GPU tone mapping/RGB (host transfer)": "Dekode perangkat keras + tone mapping/RGB GPU (transfer lewat host)",
   "software decode + GPU tone mapping/RGB": "Dekode perangkat lunak + tone mapping/RGB GPU",

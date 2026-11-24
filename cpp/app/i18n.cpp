@@ -433,6 +433,8 @@ const char* const templates[] = {
     "the reference's audio could not be read: {error}",
     "no sound device",
     "the sound device can't play",
+    // why (video_compare_view.cpp, FFmpeg playback), after "audio unavailable"
+    "the video plays slower than real time",
     "hardware decode + GPU tone mapping/RGB (host transfer)",
     "software decode + GPU tone mapping/RGB",
     "CPU fallback (GPU processing unavailable)",

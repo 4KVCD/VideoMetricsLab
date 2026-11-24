@@ -860,6 +860,7 @@
   "the reference's audio could not be read: {error}": "อ่านเสียงของวิดีโออ้างอิงไม่ได้: {error}",
   "no sound device": "ไม่มีอุปกรณ์เสียง",
   "the sound device can't play": "อุปกรณ์เสียงเล่นไม่ได้",
+  "the video plays slower than real time": "วิดีโอเล่นช้ากว่าเวลาจริง",
   "No sound: {reason}": "ไม่มีเสียง: {reason}",
   "hardware decode + GPU tone mapping/RGB (host transfer)": "ถอดรหัสด้วยฮาร์ดแวร์ + โทนแมปปิง/RGB บน GPU (ส่งผ่านโฮสต์)",
   "software decode + GPU tone mapping/RGB": "ถอดรหัสด้วยซอฟต์แวร์ + โทนแมปปิง/RGB บน GPU",

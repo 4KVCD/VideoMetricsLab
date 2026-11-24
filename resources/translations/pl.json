@@ -860,6 +860,7 @@
   "the reference's audio could not be read: {error}": "nie można odczytać dźwięku referencji: {error}",
   "no sound device": "brak urządzenia dźwiękowego",
   "the sound device can't play": "urządzenie dźwiękowe nie może odtwarzać",
+  "the video plays slower than real time": "wideo odtwarza się wolniej niż w czasie rzeczywistym",
   "No sound: {reason}": "Brak dźwięku: {reason}",
   "hardware decode + GPU tone mapping/RGB (host transfer)": "dekodowanie sprzętowe + mapowanie tonów/RGB na GPU (transfer przez hosta)",
   "software decode + GPU tone mapping/RGB": "dekodowanie programowe + mapowanie tonów/RGB na GPU",

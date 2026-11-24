@@ -860,6 +860,7 @@
   "the reference's audio could not be read: {error}": "не удалось прочитать звук эталона: {error}",
   "no sound device": "нет звукового устройства",
   "the sound device can't play": "звуковое устройство не может воспроизводить",
+  "the video plays slower than real time": "видео воспроизводится медленнее реального времени",
   "No sound: {reason}": "Нет звука: {reason}",
   "hardware decode + GPU tone mapping/RGB (host transfer)": "аппаратное декодирование + тональная компрессия/RGB на GPU (передача через хост)",
   "software decode + GPU tone mapping/RGB": "программное декодирование + тональная компрессия/RGB на GPU",

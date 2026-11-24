@@ -860,6 +860,7 @@
   "the reference's audio could not be read: {error}": "无法读取参考视频的音频：{error}",
   "no sound device": "没有声音设备",
   "the sound device can't play": "声音设备无法播放",
+  "the video plays slower than real time": "视频播放慢于实时",
   "No sound: {reason}": "无声音：{reason}",
   "hardware decode + GPU tone mapping/RGB (host transfer)": "硬件解码 + GPU 色调映射/RGB（主机传输）",
   "software decode + GPU tone mapping/RGB": "软件解码 + GPU 色调映射/RGB",

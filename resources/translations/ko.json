@@ -860,6 +860,7 @@
   "the reference's audio could not be read: {error}": "참조 영상의 오디오를 읽을 수 없습니다: {error}",
   "no sound device": "사운드 장치가 없습니다",
   "the sound device can't play": "사운드 장치에서 재생할 수 없습니다",
+  "the video plays slower than real time": "동영상이 실시간보다 느리게 재생됩니다",
   "No sound: {reason}": "소리 없음: {reason}",
   "hardware decode + GPU tone mapping/RGB (host transfer)": "하드웨어 디코딩 + GPU 톤 매핑/RGB(호스트 전송)",
   "software decode + GPU tone mapping/RGB": "소프트웨어 디코딩 + GPU 톤 매핑/RGB",

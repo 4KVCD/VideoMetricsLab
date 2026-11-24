@@ -860,6 +860,7 @@
   "the reference's audio could not be read: {error}": "de audio van de referentie kon niet worden gelezen: {error}",
   "no sound device": "geen geluidsapparaat",
   "the sound device can't play": "het geluidsapparaat kan niet afspelen",
+  "the video plays slower than real time": "de video speelt langzamer dan realtime af",
   "No sound: {reason}": "Geen geluid: {reason}",
   "hardware decode + GPU tone mapping/RGB (host transfer)": "Hardwaredecodering + tone mapping/RGB op de GPU (overdracht via host)",
   "software decode + GPU tone mapping/RGB": "Softwaredecodering + tone mapping/RGB op de GPU",

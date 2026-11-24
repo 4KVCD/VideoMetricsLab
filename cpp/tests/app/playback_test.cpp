@@ -474,4 +474,69 @@ TEST_F(PlaybackTest, AWayThatEndedWithoutAnErrorIsTriedAgain) {
     EXPECT_EQ(ways_started("interop"), 2);
 }
 
+// Issue #220: paused while playback was behind (the frames late on the clock,
+// buffering left set), Play did nothing: the clock waited for a pair to come,
+// and only pairs due by the clock are taken. Now it starts from the pair on
+// screen, and the next pairs come as they are due.
+TEST_F(PlaybackTest, PlayAfterAPauseWhileBehindGoesOn) {
+    const auto view = make_view(1);  // at frame 24
+    double now = 0.0;
+    view->clock = [&now] { return now; };
+    const FramePixels pixels = frame_pixels();
+    view->set_playing(true);
+    for (const char* side : {"s:", "d:0"}) {
+        decoder(*view, side).frames = {{24, pixels}, {25, pixels}};
+    }
+    tick(*view);
+    ASSERT_EQ(presented(*view), 24);
+    now = 1.0;  // a second on: frame 48 due, only 25 there
+    tick(*view);
+    ASSERT_EQ(presented(*view), 25);
+    now = 1.5;  // the clock went on from 25 as it was shown: 37 due, nothing newer there
+    tick(*view);  // behind: buffering
+    view->set_playing(false);
+    for (const char* side : {"s:", "d:0"}) {
+        decoder(*view, side).frames = {{26, pixels}, {27, pixels}, {28, pixels}};
+    }
+    view->set_playing(true);
+    tick(*view);
+    EXPECT_EQ(presented(*view), 25);  // none due yet
+    now += 0.1;  // 2.4 frames on: 27 due
+    tick(*view);
+    EXPECT_EQ(presented(*view), 27);
+}
+
+// Issue #204: while the frames are behind the clock, the sound waits for them
+// to keep up, and the status says so ("audio unavailable", then why, which
+// the frame line shows as "No sound: ..."). Not said while paused, nor once
+// played again.
+TEST_F(PlaybackTest, SoundHeldBackForSlowFramesIsSaid) {
+    const auto view = make_view(1);
+    view->set_audio_enabled(true);  // no ffplay beside this FFmpeg: nothing plays, which is not the point
+    double now = 0.0;
+    view->clock = [&now] { return now; };
+    const FramePixels pixels = frame_pixels();
+    view->set_playing(true);
+    for (const char* side : {"s:", "d:0"}) {
+        decoder(*view, side).frames = {{24, pixels}};
+    }
+    tick(*view);
+    ASSERT_EQ(presented(*view), 24);
+    const QString held = QString::fromUtf8("audio unavailable \xC2\xB7 the video plays slower than real time");
+    EXPECT_FALSE(last_status(*view).contains(held)) << last_status(*view).toStdString();
+    now = 1.0;
+    tick(*view);  // nothing newer: behind
+    EXPECT_TRUE(last_status(*view).contains(held)) << last_status(*view).toStdString();
+    view->set_playing(false);
+    EXPECT_FALSE(last_status(*view).contains(held)) << last_status(*view).toStdString();
+    view->set_playing(true);
+    EXPECT_FALSE(last_status(*view).contains(held)) << last_status(*view).toStdString();
+    // Audio unticked while it is held back: not said.
+    now += 1.0;
+    tick(*view);
+    ASSERT_TRUE(last_status(*view).contains(held));
+    view->set_audio_enabled(false);
+    EXPECT_FALSE(last_status(*view).contains(held)) << last_status(*view).toStdString();
+}
+
 }  // namespace vml::app

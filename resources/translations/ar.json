@@ -860,6 +860,7 @@
   "the reference's audio could not be read: {error}": "تعذّرت قراءة صوت المرجع: {error}",
   "no sound device": "لا يوجد جهاز صوت",
   "the sound device can't play": "لا يمكن لجهاز الصوت التشغيل",
+  "the video plays slower than real time": "يُعرض الفيديو أبطأ من الوقت الفعلي",
   "No sound: {reason}": "لا صوت: {reason}",
   "hardware decode + GPU tone mapping/RGB (host transfer)": "فك ترميز عبر العتاد + تعيين النغمات/RGB عبر GPU (نقل عبر المضيف)",
   "software decode + GPU tone mapping/RGB": "فك ترميز برمجي + تعيين النغمات/RGB عبر GPU",
