@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 
+#include "quick_save.h"
 #include "display_hdr.h"
 #include "frame_drag.h"
 #include "video_names.h"
@@ -275,8 +276,10 @@ public:
     void set_loop_seconds(double before, double after);
     // Loop ticked or not, as last left (the saved settings).
     void set_loop_on(bool on);
-    // Where Export frame as PNG writes: Settings' Export folder.
+    // Where the frame pair's save icon writes: Settings' Export folder; and
+    // the folder its Save as... asks for (nothing: Cancel).
     std::function<QString()> export_folder;
+    std::function<QString()> choose_folder;
     // Shows the next (1) or previous (-1) test video.
     void cycle_distorted(int direction);
     // How many test videos playback keeps decoding (the Settings tab).
@@ -323,7 +326,7 @@ public:
     QLabel* loop_before_to_label = nullptr;
     QLabel* loop_after_label = nullptr;
     QLabel* loop_range_label = nullptr;
-    QPushButton* save_still_button = nullptr;
+    SaveButton* save_still_button = nullptr;
     // Previous / Next worst and where the list is: shown while the list's
     // video is (update_worst_row).
     QWidget* worst_row_ = nullptr;
@@ -407,7 +410,8 @@ private:
     void loop_jump_to(long long frame);
     void follow_loop(long long frame);
     void restart_loop_at_end();
-    void save_still();
+    // This frame of the reference and of the test video, as PNG, in `folder`.
+    void save_still(const QString& folder);
     void release_held();
     void on_video_selected(int index);
     void on_zoom_chosen(int index);

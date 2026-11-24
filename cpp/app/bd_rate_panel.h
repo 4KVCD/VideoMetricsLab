@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "export_indicator.h"
+#include "quick_save.h"
 #include "dialogs.h"
 #include "graph_panel.h"
 #include "vml/bd_rate_report.h"
@@ -58,6 +59,8 @@ public:
     // Where its exports say how they went: the window's indicator
     // (export_indicator.h). Not set: nowhere.
     ExportReport export_report;
+    // The export folder and formats its save icons save in (quick_save.h).
+    QuickSaves quick_saves;
     // Which of `items` (the scored videos) to add: their places in the list;
     // none for Cancel.
     std::function<std::vector<int>(const QStringList& items)> choose_videos;
@@ -88,8 +91,10 @@ public:
     Side test;
     QComboBox* group_combo = nullptr;
     QPushButton* warnings_button = nullptr;
-    QPushButton* export_button = nullptr;
     QPushButton* copy_button = nullptr;
+    // The save icons of the table's card and the chart's (issue #224).
+    SaveButton* table_save = nullptr;
+    SaveButton* chart_save = nullptr;
     QLabel* heading_label = nullptr;
     QTableWidget* results = nullptr;
     QComboBox* metric_combo = nullptr;
@@ -119,7 +124,19 @@ private:
     bool update_videos_of(Side& side, const std::vector<GraphPanel::Run>& runs, QStringList& without_rate);
     void on_import(Side& side);
     void on_clear(Side& side);
-    void on_export();
+    // The table as JSON or CSV, the chart as PNG: where the user says
+    // (Save as...), or in the export folder at one click.
+    void on_export(const std::string& format);
+    void on_export_chart();
+    void save_table();
+    void save_chart();
+    void fill_table_menu(QMenu& menu);
+    void fill_chart_menu(QMenu& menu);
+    // The table's file name, without extension ("slow vs fast - BD-rate"),
+    // and the text of its file in `format` ("json" or "csv").
+    QString table_stem() const;
+    std::string table_text(const std::string& format) const;
+    QString chart_name() const;
     void on_copy();
     void on_show_warnings();
     // A side's sources changed: its table, the group choices and the report.

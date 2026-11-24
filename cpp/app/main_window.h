@@ -712,6 +712,13 @@ private:
     void export_rows();
     // The menu's export of one kind, of its rows as they are now.
     void export_rows_as(SavedResultsPanel::Export kind);
+    // Saves `document` (Export results') in Settings' Quick saves formats,
+    // into the export folder, named after `name`: a save icon's results.
+    void quick_save_results(const nlohmann::ordered_json& document, const QString& name);
+    // The Videos card's save icon: the selected rows' results (else every
+    // scored row's), what it would save, and why it cannot.
+    void save_rows_results();
+    QString rows_save_text() const;
     // The Videos table's quick grabs that cannot be made now, with why
     // (SavedResultsPanel::add_quick_grabs).
     std::map<SavedResultsPanel::Export, QString> videos_refused() const;
@@ -1069,6 +1076,8 @@ private:
     std::vector<std::shared_ptr<RowData>> checked_rows_for_run_;
     // The Videos box's Export menu (fill_videos_export_menu).
     QPushButton* export_button_ = nullptr;
+    // The test videos' card's save icon (issue #224).
+    SaveButton* videos_save_ = nullptr;
     // Graph exports waiting for their bitrate (queue_bundle), and the timer
     // that looks whether it is read.
     std::vector<PendingBundle> pending_bundles_;

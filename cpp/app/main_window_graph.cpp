@@ -1,6 +1,8 @@
 // The window's side of Metric Graphs (the Python app's _sync_graph,
 // _open_or_update_graph): the rows' results on the graph.
 #include "main_window.h"
+
+#include "quick_save.h"
 #include "worst_frames_tab.h"
 
 #include <QTabWidget>
@@ -34,6 +36,13 @@ void MainWindow::on_tab_changed(int index) {
         saved_results_panel_->refresh();
     } else if (index == tab_settings) {
         settings_panel_->refresh_status();
+    }
+    // Its save icons greyed or not for what it shows now: what they save
+    // may have changed while another tab was open.
+    if (QWidget* page = tabs_->widget(index)) {
+        for (SaveButton* save : page->findChildren<SaveButton*>()) {
+            save->refresh();
+        }
     }
     // Ctrl+Tab and Ctrl+Shift+Tab reach Video Compare from the tabs beside
     // it without the pointer crossing its tab, so those tabs prepare its

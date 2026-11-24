@@ -180,6 +180,29 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     auto* refresh_button = new QPushButton(app::tr("Refresh"));
     connect(refresh_button, &QPushButton::clicked, this, [this] { refresh(); });
     top->addWidget(refresh_button);
+    // The list's save icon, at its top right (issue #224).
+    save_button_ = new SaveButton;
+    save_button_->why_not = [this] {
+        return selected().empty()                                   ? app::tr("Select the comparisons to save.")
+               : !quick_formats || quick_formats().empty() ? no_format_text()
+                                                                    : QString();
+    };
+    save_button_->describe = [this] {
+        const std::vector<const SavedComparison*> chosen = selected();
+        const QString what = chosen.size() == 1
+                                 ? app::tr("the selected comparison's results ({name})",
+                                           {{"name", text_of(chosen.front()->distorted.filename())}})
+                                 : app::tr("the selected comparisons' results ({count})",
+                                           {{"count", static_cast<long long>(chosen.size())}});
+        return quick_save_tooltip(what, quick_formats ? quick_formats() : std::vector<std::string>{});
+    };
+    save_button_->save = [this] {
+        if (save_results) {
+            save_results(selected_results());
+        }
+    };
+    save_button_->save_as = [this](QMenu& menu) { add_export_items(menu); };
+    top->addWidget(save_button_);
     layout->addLayout(top);
 
     table_ = new QTableWidget(0, column_count);
@@ -933,6 +956,7 @@ void SavedResultsPanel::update_buttons() {
     const std::vector<const SavedComparison*> chosen = selected();
     open_button_->setEnabled(!chosen.empty());
     export_button_->setEnabled(!chosen.empty());
+    save_button_->refresh();
     // Locked where any selected comparison is one the run uses (the others
     // can be deleted while it runs), and while a Delete is queued.
     const bool locked = std::any_of(chosen.begin(), chosen.end(),

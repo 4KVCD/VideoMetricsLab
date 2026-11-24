@@ -238,6 +238,7 @@ QGroupBox* SettingsPanel::build_storage_box() {
     show_export_colors();
 
     storage_form->addRow(app::tr("Exports include:"), build_export_choices());
+    storage_form->addRow(app::tr("Quick saves:"), build_quick_save_choices());
     storage_form->addRow(app::tr("After each run:"), build_after_run_export());
 
 
@@ -399,6 +400,33 @@ QWidget* SettingsPanel::build_export_choices() {
     row->addWidget(export_form);
     row->addStretch(1);
     return exports;
+}
+
+QWidget* SettingsPanel::build_quick_save_choices() {
+    // The formats each card's save icon writes what it shows in (issue
+    // #224): a box for each, as Exports include has; graphs are images.
+    auto* quick = new QWidget;
+    auto* row = new QHBoxLayout(quick);
+    row->setContentsMargins(0, 0, 0, 0);
+    for (const std::string& key : export_format_keys()) {
+        auto* box = new QCheckBox(QString::fromStdString(key).toUpper());
+        box->setToolTip(Qt::convertFromPlainText(
+            app::tr("The formats a table's or list's save icon writes what it shows in. With neither ticked, "
+                    "only graphs are saved at one click."),
+            Qt::WhiteSpaceNormal));
+        box->setChecked(std::find(settings_.quick_save_formats.begin(), settings_.quick_save_formats.end(), key) !=
+                        settings_.quick_save_formats.end());
+        connect(box, &QCheckBox::toggled, this, [this] { on_edited(); });
+        quick_format_boxes[key] = box;
+        row->addWidget(box);
+    }
+    row->addSpacing(12);
+    auto* note = new QLabel(app::tr("Graphs: always PNG. Each table's, list's and graph's save icon saves what it "
+                                    "shows, at one click, in the export folder."));
+    note->setWordWrap(true);
+    theme::style(note, "color: {muted};");
+    row->addWidget(note, 1);
+    return quick;
 }
 
 QWidget* SettingsPanel::build_after_run_export() {
@@ -1114,6 +1142,12 @@ void SettingsPanel::read_controls() {
         }
     }
     settings_.export_zip = export_form->currentData().toBool();
+    settings_.quick_save_formats.clear();
+    for (const std::string& key : export_format_keys()) {
+        if (quick_format_boxes.at(key)->isChecked()) {
+            settings_.quick_save_formats.push_back(key);
+        }
+    }
     settings_.after_run_export = after_run_box->isChecked();
     settings_.after_run_place = after_run_place->currentData().toString().toStdString();
     // The editor shows the profile in use.

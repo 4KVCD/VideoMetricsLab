@@ -31,8 +31,10 @@
 #include "theme.h"
 #include "vml/append.h"
 #include "vml/bd_rate.h"
+#include "vml/bd_rate_report.h"
 #include "vml/metrics.h"
 #include "vml/platform/system.h"
+#include "vml/python_json.h"
 #include "widgets.h"
 #include "window_helpers.h"
 
@@ -222,17 +224,11 @@ void BdRatePanel::add_options_row(QVBoxLayout* root) {
     connect(warnings_button, &QPushButton::clicked, this, [this] { on_show_warnings(); });
     row->addWidget(warnings_button);
     row->addStretch(1);
-    // Copy as markdown is the clipboard's, not an export; Export, at the
-    // right end, the table as shown (docs/ARCHITECTURE.md, "Exports"), as a
-    // right-click on the table has it.
+    // Copy as markdown is the clipboard's, not an export: the table's and
+    // the chart's saves are their cards' save icons (add_results, add_chart).
     copy_button = new QPushButton(app::tr("Copy as markdown"));
     connect(copy_button, &QPushButton::clicked, this, [this] { on_copy(); });
-    export_button = new QPushButton(app::tr("Export"));
-    auto* exports = new QMenu(export_button);
-    connect(exports->addAction(app::tr("Table as CSV...")), &QAction::triggered, this, [this] { on_export(); });
-    export_button->setMenu(exports);
     row->addWidget(copy_button);
-    row->addWidget(export_button);
     root->addWidget(bar);
     refresh_group_choices();
 }
@@ -248,14 +244,30 @@ void BdRatePanel::add_results(QVBoxLayout* root) {
     heading_label = new QLabel;
     heading_label->setWordWrap(true);
     theme::set_role(heading_label, "title");
-    layout->addWidget(heading_label);
+    // The table's save icon in the card's top-right corner (issue #224): the
+    // table as shown, in Settings' Quick saves formats.
+    table_save = new SaveButton;
+    table_save->why_not = [this] {
+        return !report_                               ? nothing_shown_text()
+               : quick_saves.data_formats().empty() ? no_format_text()
+                                                      : QString();
+    };
+    table_save->describe = [this] {
+        return quick_save_tooltip(app::tr("the BD-rate table"), quick_saves.data_formats());
+    };
+    table_save->save = [this] { save_table(); };
+    table_save->save_as = [this](QMenu& menu) { fill_table_menu(menu); };
+    auto* head = new QHBoxLayout;
+    head->addWidget(heading_label, 1);
+    head->addWidget(table_save, 0, Qt::AlignTop);
+    layout->addLayout(head);
     results = new QTableWidget(0, 1 + static_cast<int>(metrics().size()));
-    // A right-click: the Export menu's item.
+    // A right-click: the save icon's Save as... items.
     results->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(results, &QWidget::customContextMenuRequested, this, [this](const QPoint& at) {
         if (report_) {
             QMenu menu;
-            connect(menu.addAction(app::tr("Table as CSV...")), &QAction::triggered, this, [this] { on_export(); });
+            fill_table_menu(menu);
             menu.exec(results->viewport()->mapToGlobal(at));
         }
     });
@@ -298,8 +310,23 @@ void BdRatePanel::add_chart(QVBoxLayout* root) {
     connect(metric_combo, &QComboBox::currentIndexChanged, this, [this] { refresh_chart(); });
     row->addWidget(metric_combo);
     row->addStretch(1);
+    // The chart's save icon: the chart shown, as PNG.
+    chart_save = new SaveButton;
+    chart_save->why_not = [this] { return chart->plot() ? QString() : nothing_shown_text(); };
+    chart_save->describe = [] { return quick_save_tooltip(app::tr("the chart as PNG"), {}); };
+    chart_save->save = [this] { save_chart(); };
+    chart_save->save_as = [this](QMenu& menu) { fill_chart_menu(menu); };
+    row->addWidget(chart_save);
     layout->addLayout(row);
     chart = new RateCurveChart;
+    chart->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(chart, &QWidget::customContextMenuRequested, this, [this](const QPoint& at) {
+        if (chart->plot()) {
+            QMenu menu;
+            fill_chart_menu(menu);
+            menu.exec(chart->mapToGlobal(at));
+        }
+    });
     chart->setMinimumHeight(300);
     layout->addWidget(chart);
     root->addWidget(card);
@@ -622,10 +649,11 @@ void BdRatePanel::recalculate() {
     }
     warnings_button->setText(app::tr("Warnings: {count}", {{"count", static_cast<long long>(warnings_.size())}}));
     warnings_button->setVisible(!warnings_.isEmpty());
-    export_button->setEnabled(report_.has_value());
     copy_button->setEnabled(report_.has_value());
     fill_results();
     refresh_chart();
+    table_save->refresh();
+    chart_save->refresh();
 }
 
 // The names are in the heading, the chart's legend and the copied table.
@@ -781,18 +809,71 @@ void BdRatePanel::refresh_chart() {
 
 // ------------------------------------------------------------- the buttons
 
-void BdRatePanel::on_export() {
+QString BdRatePanel::table_stem() const {
+    // Named after the two encoders compared, as the heading names them.
+    return side_name(test) + QStringLiteral(" vs ") + side_name(anchor) + QStringLiteral(" - BD-rate");
+}
+
+std::string BdRatePanel::table_text(const std::string& format) const {
+    // As the command line's bdrate writes it, the encoders named as the
+    // heading names them.
+    if (format == "json") {
+        return python_json_dumps(bd_rate_json(*report_, side_name(anchor).toStdString(), side_name(test).toStdString())) +
+               "\n";
+    }
+    return bd_rate_csv(*report_);
+}
+
+QString BdRatePanel::chart_name() const {
+    return suggested_file_name(table_stem() + QStringLiteral(" ") + metric_combo->currentText(), ".png");
+}
+
+void BdRatePanel::on_export(const std::string& format) {
     if (!report_) {
         return;
     }
-    // Named after the two encoders compared, as the heading names them.
-    const QString path = dialogs.save_file(
-        app::tr("Export BD-rates"),
-        suggested_file_name(side_name(test) + QStringLiteral(" vs ") + side_name(anchor) + QStringLiteral(" - BD-rate"),
-                            ".csv"),
-        app::tr("CSV file (*.csv)"));
-    const std::string text = bd_rate_csv(*report_);
+    const bool json = format == "json";
+    const QString path = dialogs.save_file(app::tr("Export BD-rates"),
+                                           suggested_file_name(table_stem(), json ? ".json" : ".csv"),
+                                           json ? app::tr("JSON file (*.json)") : app::tr("CSV file (*.csv)"));
+    const std::string text = path.isEmpty() ? std::string() : table_text(format);
     report_to(export_report, save_as(path, [&text](const QString& out) { return write_text_file(out, text); }));
+}
+
+void BdRatePanel::on_export_chart() {
+    if (!chart->plot()) {
+        return;
+    }
+    const QString path = dialogs.save_file(app::tr("Export graph"), chart_name(), app::tr("PNG image (*.png)"));
+    report_to(export_report, save_as(path, [this](const QString& out) {
+                  return chart->grab().save(out) ? QString() : could_not_write(out);
+              }));
+}
+
+void BdRatePanel::save_table() {
+    if (report_) {
+        report_to(export_report,
+                  save_quick(quick_saves.export_folder(),
+                             data_files(table_stem(), quick_saves.data_formats(),
+                                        [this](const std::string& format) { return table_text(format); })));
+    }
+}
+
+void BdRatePanel::save_chart() {
+    if (chart->plot()) {
+        report_to(export_report, save_quick(quick_saves.export_folder(),
+                                            {image_file(chart_name(), [this] { return chart->grab(); })}));
+    }
+}
+
+void BdRatePanel::fill_table_menu(QMenu& menu) {
+    // JSON first, as Settings lists the formats.
+    connect(menu.addAction(app::tr("Table as JSON...")), &QAction::triggered, this, [this] { on_export("json"); });
+    connect(menu.addAction(app::tr("Table as CSV...")), &QAction::triggered, this, [this] { on_export("csv"); });
+}
+
+void BdRatePanel::fill_chart_menu(QMenu& menu) {
+    connect(menu.addAction(app::tr("Chart as PNG...")), &QAction::triggered, this, [this] { on_export_chart(); });
 }
 
 void BdRatePanel::on_copy() {

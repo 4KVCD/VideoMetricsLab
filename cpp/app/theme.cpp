@@ -1011,6 +1011,7 @@ QPushButton[vmlRole="danger"]:disabled { color: {disabled}; border-color: {borde
 QPushButton[vmlRole="quiet"] { background: transparent; border-color: transparent; }
 QPushButton[vmlRole="quiet"]:hover { background: {hover}; }
 QPushButton[vmlRole="quiet"]:disabled { color: {disabled}; }
+QPushButton[vmlRole="icon"] { padding: 4px 6px; min-width: 16px; margin-left: 4px; }
 QPushButton::menu-indicator { subcontrol-origin: padding; subcontrol-position: right center; right: 4px; }
 QLineEdit, QComboBox { background: {field}; color: {text}; border: 1px solid {border_strong}; border-radius: 5px; padding: 2px 6px; min-height: 18px; selection-background-color: {accent}; selection-color: {accent_text}; }
 QLineEdit:focus, QComboBox:focus { border-color: {accent}; }

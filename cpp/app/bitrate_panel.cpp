@@ -39,6 +39,7 @@
 #include "vml/file_fingerprint.h"
 #include "vml/geometry.h"
 #include "vml/platform/system.h"
+#include "vml/python_json.h"
 #include "vml/time_format.h"
 #include "widgets.h"
 #include "window_helpers.h"
@@ -386,6 +387,18 @@ void BitratePanel::add_plot_controls(QBoxLayout* root) {
     plot_controls->addStretch(1);
     reset_zoom_button = new QPushButton(app::tr("Reset zoom"));
     plot_controls->addWidget(reset_zoom_button);
+    // The card's save icon, in its top-right corner (issue #224).
+    graph_save = new SaveButton;
+    graph_save->why_not = [this] { return chart->has_data() ? QString() : nothing_shown_text(); };
+    graph_save->describe = [this] {
+        const std::vector<std::string> formats = quick_saves.data_formats();
+        return quick_save_tooltip(formats.empty() ? app::tr("the graph as PNG")
+                                                  : app::tr("the graph as PNG and the bitrate data"),
+                                  formats);
+    };
+    graph_save->save = [this] { save_graph(); };
+    graph_save->save_as = [this](QMenu& menu) { fill_graph_menu(menu); };
+    plot_controls->addWidget(graph_save);
     root->addLayout(plot_controls);
 }
 
@@ -428,18 +441,12 @@ void BitratePanel::add_frame_controls(QVBoxLayout* root) {
     range_label = new QLabel;
     row->addWidget(range_label);
     row->addStretch(1);
-    // Export (docs/ARCHITECTURE.md, "Exports"): the graph as shown; the same
-    // on a right-click on the graph. Usable once a graph is drawn.
-    export_button = new QPushButton(app::tr("Export"));
-    auto* exports = new QMenu(export_button);
-    connect(exports->addAction(app::tr("Graph as PNG...")), &QAction::triggered, this, [this] { on_export_png(); });
-    export_button->setMenu(exports);
-    row->addWidget(export_button);
+    // A right-click on the graph: the save icon's Save as... items.
     chart->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(chart, &QWidget::customContextMenuRequested, this, [this](const QPoint& at) {
         if (chart->has_data()) {
             QMenu menu;
-            connect(menu.addAction(app::tr("Graph as PNG...")), &QAction::triggered, this, [this] { on_export_png(); });
+            fill_graph_menu(menu);
             menu.exec(chart->mapToGlobal(at));
         }
     });
@@ -981,7 +988,7 @@ void BitratePanel::update_buttons() {
                                        : app::tr(calculate_tooltip));
     analyze_button->setEnabled((running || !entries_.empty()) && !stopping_);
     remove_button->setEnabled(!entries_.empty());
-    export_button->setEnabled(chart->has_data());
+    graph_save->refresh();
 }
 
 // ------------------------------------------------------------------ the graph
@@ -1511,11 +1518,7 @@ void BitratePanel::adopt_read(const BitratePanel& from, const std::vector<std::f
     refresh_plot();
 }
 
-void BitratePanel::on_export_png() {
-    if (!chart->has_data()) {
-        dialogs.inform(app::tr("No bitrate data"), app::tr("Analyze at least one video first."));
-        return;
-    }
+QString BitratePanel::png_name() const {
     // Named as Metric Graphs' export: after the one test video shown, or
     // else after the reference (the first file shown when none is one).
     const BitrateEntry* first = nullptr;
@@ -1535,12 +1538,86 @@ void BitratePanel::on_export_png() {
         }
     }
     const BitrateEntry* named = tests == 1 ? test : reference ? reference : first;
-    const QString suggested =
-        named ? suggested_file_name(text_of(named->path.stem()) + "_bitrate", ".png") : QStringLiteral("bitrate_plot.png");
-    const QString path = dialogs.save_file(app::tr("Export bitrate plot"), suggested, app::tr("PNG image (*.png)"));
+    return named ? suggested_file_name(text_of(named->path.stem()) + "_bitrate", ".png")
+                 : QStringLiteral("bitrate_plot.png");
+}
+
+void BitratePanel::on_export_png() {
+    if (!chart->has_data()) {
+        return;  // its items are offered only with a graph drawn
+    }
+    const QString path =dialogs.save_file(app::tr("Export bitrate plot"), png_name(), app::tr("PNG image (*.png)"));
     report_to(export_report, save_as(path, [this](const QString& out) {
                   return render_export_image().save(out) ? QString() : could_not_write(out);
               }));
+}
+
+std::vector<QuickFile> BitratePanel::data_files_of(const std::vector<std::string>& formats) const {
+    // Each file drawn, named after its file as the command line names them:
+    // <name>_bitrate.json; <name>_bitrate_frames.csv, _seconds and _gops.
+    std::vector<QuickFile> files;
+    const bool adjust_start = adjust_start_checkbox->isChecked();
+    for (const auto& [key, entry] : entries_) {
+        if (!entry.enabled || !entry.data) {
+            continue;
+        }
+        const QString stem = text_of(entry.path.stem()) + QStringLiteral("_bitrate");
+        const std::shared_ptr<const BitrateData> figures = entry.data;
+        const std::optional<VideoInfo> info = entry.info;
+        for (const std::string& format : formats) {
+            if (format == "json") {
+                files.push_back({suggested_file_name(stem, ".json"), [figures, info, adjust_start,
+                                                                      path = entry.path](const QString& out) {
+                                     nlohmann::ordered_json document{{"path", platform::path_text(path)}};
+                                     if (info) {
+                                         document["codec"] = info->codec_name;
+                                         document["width"] = info->width;
+                                         document["height"] = info->height;
+                                         document["fps"] = info->fps;
+                                     }
+                                     document["adjust_start"] = adjust_start;
+                                     document.update(figures_json(*figures, adjust_start));
+                                     return write_text_file(out, python_json_dumps(document) + "\n");
+                                 }});
+                continue;
+            }
+            const std::pair<const char*, std::string (*)(const BitrateData&, bool)> tables[] = {
+                {"_frames", &frames_csv}, {"_seconds", &seconds_csv}, {"_gops", &gops_csv}};
+            for (const auto& [suffix, write_table] : tables) {
+                files.push_back({suggested_file_name(stem + QString::fromUtf8(suffix), ".csv"),
+                                 [figures, adjust_start, write_table](const QString& out) {
+                                     return write_text_file(out, write_table(*figures, adjust_start));
+                                 }});
+            }
+        }
+    }
+    return files;
+}
+
+void BitratePanel::save_graph() {
+    if (!chart->has_data()) {
+        return;
+    }
+    std::vector<QuickFile> files{image_file(png_name(), [this] { return render_export_image(); })};
+    for (QuickFile& file : data_files_of(quick_saves.data_formats())) {
+        files.push_back(std::move(file));
+    }
+    report_to(export_report, save_quick(quick_saves.export_folder(), files));
+}
+
+void BitratePanel::on_export_data(const std::string& format) {
+    const QString folder = dialogs.choose_folder(app::tr("Export bitrate data to"), quick_saves.export_folder());
+    if (!folder.isEmpty()) {
+        report_to(export_report, save_quick(folder, data_files_of({format})));
+    }
+}
+
+void BitratePanel::fill_graph_menu(QMenu& menu) {
+    connect(menu.addAction(app::tr("Graph as PNG...")), &QAction::triggered, this, [this] { on_export_png(); });
+    connect(menu.addAction(app::tr("Bitrate data as JSON...")), &QAction::triggered, this,
+            [this] { on_export_data("json"); });
+    connect(menu.addAction(app::tr("Bitrate data as CSV...")), &QAction::triggered, this,
+            [this] { on_export_data("csv"); });
 }
 
 }  // namespace vml::app

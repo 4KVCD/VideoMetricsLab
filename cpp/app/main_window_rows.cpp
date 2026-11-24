@@ -4,6 +4,7 @@
 #include "main_window.h"
 
 #include "click_twice.h"
+#include "quick_save.h"
 
 #include <QCheckBox>
 #include <QDialog>
@@ -1421,6 +1422,9 @@ void MainWindow::on_highlight_toggled(bool on) {
 void MainWindow::schedule_best_worst() { best_worst_timer_->start(); }
 
 void MainWindow::apply_best_worst() {
+    // Run once whatever lands in the table has landed (schedule_best_worst):
+    // the test videos card's save icon greyed or not for it too.
+    videos_save_->refresh();
     // Colours each metric's best score green and its worst red, among the
     // test videos' (MetricDefinition::best_and_worst), while Highlight
     // best/worst results is ticked: only where two or more videos have a

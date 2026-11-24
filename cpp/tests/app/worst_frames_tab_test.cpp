@@ -23,6 +23,8 @@
 
 #include "chart.h"
 #include "worst_frames_tab.h"
+
+#include "quick_save.h"
 #include "vml/results.h"
 #include "vml/segment_profiles.h"
 #include "vml/settings.h"
@@ -49,12 +51,12 @@ QString header(const QTableWidget& table, int column) { return table.horizontalH
 
 // Every Export menu's items, as each shows them when opened.
 QList<QAction*> export_items(const WorstFramesTab& tab) {
+    // Every card's save icon's Save as... items.
     QList<QAction*> items;
-    for (QPushButton* button : tab.findChildren<QPushButton*>()) {
-        if (button->text() == "Export") {
-            emit button->menu()->aboutToShow();
-            items += button->menu()->actions();
-        }
+    for (SaveButton* button : tab.findChildren<SaveButton*>()) {
+        auto* menu = new QMenu(button);
+        button->save_as(*menu);
+        items += menu->actions();
     }
     return items;
 }
@@ -165,8 +167,8 @@ TEST(WorstFramesTab, ListsTheDipsAndTheSegmentsAndOpensThemInVideoCompare) {
     EXPECT_EQ(list.item(0, 0)->text(), "70");
     EXPECT_EQ(tab.segments().size(), 1U);
 
-    // The exports are named after the metrics they cover; each has its
-    // card's Export menu.
+    // The exports are named after the metrics they cover; each is on a
+    // right-click on its card's save icon.
     QStringList suggested;
     Dialogs dialogs;
     dialogs.save_file = [&suggested](const QString&, const QString& name, const QString&) {

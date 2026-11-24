@@ -12,6 +12,7 @@
 #include <QTemporaryDir>
 
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
 
 #include <filesystem>
 #include <memory>
@@ -131,12 +132,35 @@ TEST(BdRatePanel, ShowsTheBdRatesOfTwoEncoders) {
     EXPECT_EQ(copied.toStdString(), bd_rate_table(*panel.report(), "fast", "slower"));
     const QString exported = folder.filePath("bd.csv");
     panel.dialogs.save_file = [&exported](const QString&, const QString&, const QString&) { return exported; };
-    ASSERT_NE(panel.export_button->menu(), nullptr);
-    EXPECT_EQ(panel.export_button->menu()->actions().front()->text().toStdString(), "Table as CSV...");
-    panel.export_button->menu()->actions().front()->trigger();
+    // The table card's save icon: Save as... on a right-click, JSON first.
+    QMenu items;
+    panel.table_save->save_as(items);
+    ASSERT_EQ(items.actions().size(), 2);
+    EXPECT_EQ(items.actions()[0]->text().toStdString(), "Table as JSON...");
+    EXPECT_EQ(items.actions()[1]->text().toStdString(), "Table as CSV...");
+    items.actions()[1]->trigger();
     QFile file(exported);
     ASSERT_TRUE(file.open(QIODevice::ReadOnly));
     EXPECT_EQ(file.readAll().toStdString(), bd_rate_csv(*panel.report()));
+    // At one click, in the export folder: the table as JSON (the command
+    // line's bdrate --json, the encoders named) and CSV; the chart as PNG.
+    panel.quick_saves = {[&folder] { return folder.path(); }, [] { return std::vector<std::string>{"json", "csv"}; }};
+    std::vector<ExportOutcome> told;
+    panel.export_report = [&told](const ExportOutcome& outcome) { told.push_back(outcome); };
+    panel.table_save->refresh();  // as the pointer coming to it does
+    panel.table_save->click();
+    panel.chart_save->click();
+    ASSERT_EQ(told.size(), 2U);
+    EXPECT_EQ(told[0].files.size(), 2) << told[0].error.toStdString();
+    EXPECT_EQ(told[1].files.size(), 1) << told[1].error.toStdString();
+    QFile json(folder.filePath("slower vs fast - BD-rate.json"));
+    ASSERT_TRUE(json.open(QIODevice::ReadOnly));
+    const auto document = nlohmann::json::parse(json.readAll().toStdString());
+    EXPECT_EQ(document["format"], "bdrate-1");
+    EXPECT_EQ(document["anchor"], "fast");
+    EXPECT_EQ(document["test"], "slower");
+    EXPECT_TRUE(QFile::exists(folder.filePath("slower vs fast - BD-rate.csv")));
+    EXPECT_TRUE(QFile::exists(folder.filePath("slower vs fast - BD-rate PSNR.png")));
 
     // Scored videos: the one without a bitrate refused, the whole file's
     // rate among the warnings

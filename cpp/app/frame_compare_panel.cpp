@@ -9,6 +9,7 @@
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QMenu>
 #include <QLineEdit>
 #include <QMouseEvent>
 #include <QPainter>
@@ -512,6 +513,30 @@ void FrameComparePanel::add_colour_row(QBoxLayout* root) {
     advanced_info_button = new QPushButton(app::tr("Advanced info"));
     advanced_info_button->setToolTip(app::tr("Playback details will appear here when a video is loaded."));
     color_row->addWidget(advanced_info_button);
+    // The frame pair's save icon, at the top card's right end (issue #224):
+    // this frame of the reference and of the test video, as PNG.
+    save_still_button = new SaveButton;
+    save_still_button->why_not = [this] {
+        return current_entry() == nullptr ? nothing_shown_text()
+               : still_worker_ != nullptr ? app::tr("Saving...")
+                                          : QString();
+    };
+    save_still_button->describe = [] {
+        return quick_save_tooltip(app::tr("this frame pair as PNG: the reference's frame and the test video's"), {}) +
+               QStringLiteral("\n") +
+               app::tr("Cropped and scaled as they are compared, HDR mapped to SDR, decoded as Video Compare's still "
+                       "frames are.");
+    };
+    save_still_button->save = [this] { save_still(export_folder ? export_folder() : QString()); };
+    save_still_button->save_as = [this](QMenu& menu) {
+        connect(menu.addAction(app::tr("Frame pair as PNG...")), &QAction::triggered, this, [this] {
+            const QString folder = choose_folder ? choose_folder() : QString();
+            if (!folder.isEmpty()) {
+                save_still(folder);
+            }
+        });
+    };
+    color_row->addWidget(save_still_button);
     root->addLayout(color_row);
 }
 
@@ -577,15 +602,6 @@ void FrameComparePanel::add_seek_rows(QBoxLayout* root) {
     seek->addWidget(new QLabel(app::tr("Timestamp:")));
     seek->addWidget(timestamp_edit);
     seek->addWidget(next_frame_button);
-    // This frame's stills: with the frame controls, not in the loop's row
-    // (issue #201: there it read as a loop setting).
-    save_still_button = new QPushButton(app::tr("Export frame as PNG"));
-    save_still_button->setToolTip(app::tr("Saves this frame of the reference and of the test video as PNG files in "
-                                          "Settings' Export folder, cropped and scaled as they are compared, HDR "
-                                          "mapped to SDR. They are decoded as Video Compare's still frames are."));
-    connect(save_still_button, &QPushButton::clicked, this, [this] { save_still(); });
-    seek->addWidget(theme::separator(12));
-    seek->addWidget(save_still_button);
     root->addLayout(seek);
 
     timeline = new BandSlider(Qt::Horizontal);
@@ -1360,7 +1376,7 @@ void FrameComparePanel::update_enabled_state() {
     audio_checkbox->setEnabled(available && playable);
     loop_checkbox->setEnabled(available && playable);
     refresh_loop_frames();  // at the frame rate of the pair now shown; the rest of the loop's row
-    save_still_button->setEnabled(available && still_worker_ == nullptr);
+    save_still_button->refresh();
     source_resolution_combo->setEnabled(playable);
     color_mode_combo->setEnabled(available);
 }

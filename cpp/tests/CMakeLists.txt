@@ -148,6 +148,7 @@ if(TARGET vml_app)
         app/notifier_test.cpp
         app/options_panel_test.cpp
         app/playback_test.cpp
+        app/quick_save_test.cpp
         app/results_export_test.cpp
         app/saved_results_panel_test.cpp
         app/settings_panel_test.cpp

@@ -121,22 +121,17 @@ TEST_F(BitratePanelTest, AFileReadFillsItsRowAndEachGraph) {
     EXPECT_EQ(panel->table->editTriggers(), QAbstractItemView::NoEditTriggers);
     EXPECT_TRUE(panel->analyze_button->isEnabled());
     EXPECT_EQ(panel->analyze_button->text().toStdString(), "Calculate bitrate");
-    EXPECT_FALSE(panel->export_button->isEnabled());
-    // Export is in the footer under the graph, at its right end, as on
-    // Metric Graphs (docs/ARCHITECTURE.md, "Exports"): Graph as PNG...
-    EXPECT_EQ(panel->export_button->text().toStdString(), "Export");
-    ASSERT_NE(panel->export_button->menu(), nullptr);
-    EXPECT_EQ(panel->export_button->menu()->actions().front()->text().toStdString(), "Graph as PNG...");
-    // (In a toolbar of its own: its place is taken in the panel's terms.)
-    panel->resize(1200, 800);
-    panel->layout()->activate();
-    panel->export_button->parentWidget()->layout()->activate();
-    const auto in_panel = [&panel](const QWidget* widget) {
-        return QRect(widget->mapTo(panel.get(), QPoint(0, 0)), widget->size());
-    };
-    EXPECT_GT(in_panel(panel->export_button).top(), in_panel(panel->chart).bottom());
-    EXPECT_GT(in_panel(panel->export_button).left(), in_panel(panel->frame_controls).right());
-    EXPECT_EQ(panel->export_button->parentWidget()->property("vmlRole").toString().toStdString(), "toolbar");
+    panel->graph_save->refresh();
+    EXPECT_FALSE(panel->graph_save->isEnabled());  // no graph yet
+    // The graph card's save icon, at its top right above the graph
+    // (docs/ARCHITECTURE.md, "Exports"); Save as... on a right-click.
+    QMenu items;
+    panel->graph_save->save_as(items);
+    ASSERT_EQ(items.actions().size(), 3);
+    EXPECT_EQ(items.actions()[0]->text().toStdString(), "Graph as PNG...");
+    EXPECT_EQ(items.actions()[1]->text().toStdString(), "Bitrate data as JSON...");
+    EXPECT_EQ(items.actions()[2]->text().toStdString(), "Bitrate data as CSV...");
+    EXPECT_EQ(panel->graph_save->parentWidget(), panel->chart->parentWidget());  // the graph's card
 
     analyzed(*panel, path, two_seconds(path));
     EXPECT_EQ(cell(*panel, 0, col_duration).toStdString(), "0:00:02.00");
@@ -162,13 +157,34 @@ TEST_F(BitratePanelTest, AFileReadFillsItsRowAndEachGraph) {
         suggested = name;
         return QString::fromStdString(platform::path_text(png));
     };
-    panel->export_button->menu()->actions().front()->trigger();
+    QMenu menu;
+    panel->graph_save->save_as(menu);
+    menu.actions().front()->trigger();
     EXPECT_FALSE(QImage(QString::fromStdString(platform::path_text(png))).isNull());
     EXPECT_EQ(suggested.toStdString(), "encode_bitrate.png");  // named after the one video shown
 
+    // At one click: the graph and the data, in the export folder, as the
+    // command line names the data; again, all numbered alike.
+    const std::filesystem::path out = folder / "out";
+    panel->quick_saves = {[&out] { return QString::fromStdString(platform::path_text(out)); },
+                          [] { return std::vector<std::string>{"json", "csv"}; }};
+    std::vector<ExportOutcome> told;
+    panel->export_report = [&told](const ExportOutcome& outcome) { told.push_back(outcome); };
+    panel->graph_save->click();
+    ASSERT_EQ(told.size(), 1U);
+    EXPECT_EQ(told.back().files.size(), 5);
+    for (const char* name : {"encode_bitrate.png", "encode_bitrate.json", "encode_bitrate_frames.csv",
+                             "encode_bitrate_seconds.csv", "encode_bitrate_gops.csv"}) {
+        EXPECT_TRUE(std::filesystem::exists(out / name)) << name;
+    }
+    panel->graph_save->click();
+    ASSERT_EQ(told.size(), 2U);
+    EXPECT_TRUE(std::filesystem::exists(out / "encode_bitrate_2.png"));
+    EXPECT_TRUE(std::filesystem::exists(out / "encode_bitrate_frames_2.csv"));
+
     panel->table->item(0, col_use)->setCheckState(Qt::Unchecked);
     EXPECT_FALSE(panel->chart->has_data());
-    EXPECT_FALSE(panel->export_button->isEnabled());
+    EXPECT_FALSE(panel->graph_save->isEnabled());
 }
 
 // Beside the time, each line's frame in their order, as videos differ in frame

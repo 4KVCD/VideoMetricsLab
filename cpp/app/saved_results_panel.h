@@ -23,6 +23,7 @@
 #include <variant>
 #include <vector>
 
+#include "quick_save.h"
 #include "dialogs.h"
 #include "file_writes.h"
 #include "vml/metric_cache.h"
@@ -74,6 +75,13 @@ public:
     // `file_writes` the window's queue of writes, which Delete goes through.
     SavedResultsPanel(const Settings& settings, const Dialogs& dialogs, FileWrites& file_writes,
                       QWidget* parent = nullptr);
+
+    // The list's save icon (issue #224): the selected comparisons' results,
+    // saved at one click by the window (`save_results`, in Settings' Quick
+    // saves `formats`); Save as... on a right-click is the Export menu's.
+    std::function<void(const std::vector<LoadedSavedResult>& results)> save_results;
+    std::function<std::vector<std::string>()> quick_formats;
+    SaveButton* save_button() const { return save_button_; }
     ~SavedResultsPanel() override;
 
     // Lists the saved comparisons again, read on a thread of their own.
@@ -189,6 +197,7 @@ private:
     // A tile's height, the same for every tile: the box is sized from it.
     int tile_height() const;
     std::vector<const SavedComparison*> selected() const;
+    SaveButton* save_button_ = nullptr;
     // Whether the selected comparisons are of more than one reference, which
     // graphs and weak segments are not made for.
     bool several_references() const;

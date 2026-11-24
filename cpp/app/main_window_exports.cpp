@@ -20,6 +20,7 @@
 #include "bitrate_panel.h"
 #include "export_indicator.h"
 #include "file_writes.h"
+#include "quick_save.h"
 #include "i18n.h"
 #include "theme.h"
 #include "vml/app_log.h"
@@ -270,6 +271,51 @@ void MainWindow::fill_videos_export_menu(QMenu& menu) {
     menu.addSeparator();
     SavedResultsPanel::add_quick_grabs(
         menu, any, [this](SavedResultsPanel::Export kind) { export_rows_as(kind); }, videos_refused());
+}
+
+void MainWindow::quick_save_results(const nlohmann::ordered_json& document, const QString& name) {
+    // Named as Export results names it; JSON and CSV numbered alike.
+    std::vector<QuickFile> files;
+    for (const std::string& format : quick_formats(settings_)) {
+        const bool csv = format == "csv";
+        files.push_back({file_safe(name + QStringLiteral(" - results")) + (csv ? ".csv" : ".json"),
+                         [text = csv ? results_csv(document) : python_json_dumps(document) + "\n"](const QString& path) {
+                             return write_text_file(path, text);
+                         }});
+    }
+    report_export(save_quick(dialogs_.export_folder(), files));
+}
+
+QString MainWindow::rows_save_text() const {
+    const std::vector<int> rows = export_menu_rows();
+    if (rows_selected() && rows.size() == 1) {
+        return app::tr("the selected video's results ({name})",
+                       {{"name", rows_[static_cast<std::size_t>(rows.front())]->completed_run->label}});
+    }
+    const auto count = static_cast<long long>(rows.size());
+    return rows_selected() ? app::tr("the selected videos' results ({count})", {{"count", count}})
+                           : app::tr("every scored video's results ({count})", {{"count", count}});
+}
+
+void MainWindow::save_rows_results() {
+    // As Results as JSON / CSV in the Export menu (export_rows_as), at one click.
+    const std::vector<int> rows = export_menu_rows();
+    if (rows.empty() || !source_info_) {
+        return;
+    }
+    std::set<const ComparisonResult*> chosen;
+    for (const int row : rows) {
+        chosen.insert(&rows_[static_cast<std::size_t>(row)]->completed_run->result);
+    }
+    std::vector<ExportedRun> runs;
+    for (ExportedRun& run : exported_runs()) {
+        if (chosen.contains(run.result.get())) {
+            runs.push_back(std::move(run));
+        }
+    }
+    const QString name = rows.size() == 1 ? rows_[static_cast<std::size_t>(rows.front())]->completed_run->label
+                                          : text_of(source_info_->path.stem());
+    quick_save_results(export_document(source_info_, runs, current_machine()), name);
 }
 
 std::map<SavedResultsPanel::Export, QString> MainWindow::videos_refused() const {

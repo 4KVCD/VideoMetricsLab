@@ -22,8 +22,4 @@ int bdrate(const BdrateArguments& arguments);
 // The command's options as the core's report takes them.
 BdRateOptions bd_rate_options(const BdrateArguments& arguments);
 
-// The report as the command writes it in JSON, its numbers in full.
-nlohmann::ordered_json bd_rate_json(const BdRateReport& report, const std::string& anchor_path,
-                                    const std::string& test_path);
-
 }  // namespace vml::cli

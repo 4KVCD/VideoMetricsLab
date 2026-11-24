@@ -8,6 +8,7 @@
 #include <stdexcept>
 
 #include "vml/bd_rate.h"
+#include "vml/build_info.h"
 #include "vml/csv_rows.h"
 #include "vml/metrics.h"
 #include "vml/number_format.h"
@@ -635,6 +636,60 @@ std::string bd_rate_csv(const BdRateReport& report) {
         text += csv_row(sequence.name, sequence.row, &sequence, report);
     }
     return text;
+}
+
+namespace {
+
+using Json = nlohmann::ordered_json;
+
+// A number in the JSON, in full, or null for none.
+Json number_or_null(const std::optional<double>& value) { return value ? Json(*value) : Json(nullptr); }
+
+Json row_json(const BdRateRow& row, const BdRateReport& report) {
+    Json percent = Json::object();
+    for (const std::string& metric : report.metrics) {
+        percent[metric] = number_or_null(row.percent.at(metric));
+    }
+    return Json{{"bd_rate", percent}};
+}
+
+}  // namespace
+
+nlohmann::ordered_json bd_rate_json(const BdRateReport& report, const std::string& anchor_path, const std::string& test_path) {
+    Json groups = Json::array();
+    for (const BdRateSummary& group : report.groups) {
+        groups.push_back(Json{{"group", group.group},
+                              {"sequences", group.sequences},
+                              {"mean", row_json(group.mean, report)},
+                              {"median", row_json(group.median, report)}});
+    }
+    Json sequences = Json::array();
+    for (const BdRateSequence& sequence : report.sequences) {
+        Json entry = row_json(sequence.row, report);
+        Json described{{"sequence", sequence.name}};
+        if (report.group_by) {
+            described["group"] = sequence.group;
+        }
+        described["anchor_encodes"] = sequence.anchor_encodes;
+        described["test_encodes"] = sequence.test_encodes;
+        described.update(entry);
+        described["why"] = sequence.why;
+        sequences.push_back(described);
+    }
+    return Json{{"app", "VideoMetricsLab"},
+                {"version", VML_VERSION},
+                {"commit", build_commit()},
+                {"format", bd_rate_format},
+                {"method", "pchip"},
+                {"anchor", anchor_path},
+                {"test", test_path},
+                {"metrics", report.metrics},
+                {"group_by", report.group_by ? Json(*report.group_by) : Json(nullptr)},
+                {"mean", row_json(report.all.mean, report)},
+                {"median", row_json(report.all.median, report)},
+                {"groups", groups},
+                {"sequences", sequences},
+                {"warnings", report.warnings}};
 }
 
 }  // namespace vml

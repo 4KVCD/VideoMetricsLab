@@ -408,6 +408,46 @@ std::string gops_csv(const BitrateData& data, bool adjust_start) {
     return text;
 }
 
+namespace {
+
+// A figure rounded as the CSV files write it (`places` decimals), or null.
+nlohmann::ordered_json rounded_to(double value, int places) {
+    if (!std::isfinite(value)) {
+        return nullptr;
+    }
+    const double scale = std::pow(10.0, places);
+    return std::round(value * scale) / scale;
+}
+
+}  // namespace
+
+nlohmann::ordered_json figures_json(const BitrateData& data, bool adjust_start) {
+    using Json = nlohmann::ordered_json;
+    const double offset = adjust_start ? data.start_time() : 0.0;
+    Json frames = Json::array();
+    for (std::size_t index = 0; index < data.times.size(); ++index) {
+        frames.push_back(Json::array({index, rounded_to(data.times[index] - offset, 6), data.sizes[index],
+                                      data.keyframes[index] ? 1 : 0}));
+    }
+    const SecondBins seconds = second_bins(data, adjust_start);
+    Json second_rows = Json::array();
+    for (std::size_t index = 0; index < seconds.starts.size(); ++index) {
+        second_rows.push_back(Json::array({rounded_to(seconds.starts[index], 6), rounded_to(seconds.ends[index], 6),
+                                           rounded_to(seconds.rates[index], 1)}));
+    }
+    const GopBins gops = gop_bins(data, adjust_start);
+    Json gop_rows = Json::array();
+    for (std::size_t index = 0; index < gops.starts.size(); ++index) {
+        gop_rows.push_back(Json::array({rounded_to(gops.starts[index], 6), rounded_to(gops.ends[index], 6),
+                                        gops.frames[index], gops.bytes[index], rounded_to(gops.rates[index], 1)}));
+    }
+    return Json{
+        {"frames", Json{{"columns", {"frame", "time_s", "size_bytes", "keyframe"}}, {"rows", std::move(frames)}}},
+        {"seconds", Json{{"columns", {"start_s", "end_s", "kbps"}}, {"rows", std::move(second_rows)}}},
+        {"gops", Json{{"columns", {"start_s", "end_s", "frames", "bytes", "kbps"}}, {"rows", std::move(gop_rows)}}},
+    };
+}
+
 std::string frame_difference_csv(const BitrateData& first, const BitrateData& second, bool adjust_start) {
     const double offset = adjust_start ? first.start_time() : 0.0;
     std::string text = "frame,time_s,size_bytes\r\n";

@@ -29,6 +29,7 @@
 #include <vector>
 
 #include "export_indicator.h"
+#include "quick_save.h"
 #include "dialogs.h"
 #include "results_export.h"
 #include "theme.h"
@@ -326,6 +327,8 @@ public:
     // Where its exports say how they went: the window's indicator
     // (export_indicator.h). Not set: nowhere.
     ExportReport export_report;
+    // The export folder and formats its save icons save in (quick_save.h).
+    QuickSaves quick_saves;
     // The colours Export graph as PNG draws in (Settings' Exported graphs), asked at
     // each export; the light chart colours when not set.
     std::function<theme::ChartColours()> export_colours;
@@ -436,6 +439,20 @@ private:
     // Each of `items` doing what it says.
     void connect_menu(const StatsMenu& items);
     void show_graph_menu(ChartWidget& chart, const QPoint& position);
+    // The statistics' file name without extension, and their text as JSON
+    // or CSV (export_statistics' and the save icon's).
+    QString statistics_stem() const;
+    std::string statistics_text(bool json);
+    // The save icons' one-click saves, into the export folder.
+    void save_statistics();
+    void save_graph();
+    // Whether the page shown draws a graph, and its PNG's name.
+    bool shown_graph() const;
+    QString png_name() const;
+    // The difference of the lines `pair`: its file's name, and its writing
+    // to `path`, said with the files `with` once written.
+    QString difference_name(const std::pair<int, int>& pair) const;
+    void write_difference(const std::pair<int, int>& pair, const QString& path, const QStringList& with);
 
     VideoColors* colors_;
     // By series: ids rise as runs are added, and are given again in the
@@ -450,6 +467,9 @@ private:
     bool selecting_available_metric_ = false;
     bool populating_stats_ = false;  // the table is being filled: its edits are not the user's
     FileWrites* file_writes_ = nullptr;
+    // The save icons of the statistics' card and the graph's (issue #224).
+    SaveButton* stats_save_ = nullptr;
+    SaveButton* graph_save_ = nullptr;
 
     QLabel* stats_hint_ = nullptr;
     QTableWidget* stats_table_ = nullptr;
