@@ -385,15 +385,22 @@ settings.json key. A new file format is:
   starts off, until the user ticks it;
 - written by every quick save and archive item whose data it can hold, and
   refused (grayed, with why) by those it can't;
-- the same format behind the command line's flag for it, where `vml-cli`
-  writes that data.
+- written by the command line too (below).
 
 Graphs stay PNG: a graph format is added the same way, as its own setting.
 
-**One writer for each kind of file**, in core when `vml-cli` writes it too
-(as `bd_rate_json`), so that the window and the command line write the same
-file. A new file kind or key is documented in `docs/RESULTS_JSON.md`, a new
-control in `docs/USER_GUIDE.md`, and its text is in all 20 catalogs
+**The command line by default.** A new export, kind of data or file format
+comes with its `vml-cli` support in the same change: the same file written
+by the same option where one exists (`--json`, `--csv`, `--frames-json`,
+`--run-dir`...), else a new one, with its test, and the command line's own
+docs. It is left out only where the data needs the window (what is on
+screen, such as Video Compare's frame pair as shown), or where the
+maintainer has agreed to leave it out; the change says which and why.
+
+**One writer for each kind of file**, in core, shared by the window and the
+command line (as `bd_rate_json`), so that both write the same file. A new
+file kind or key is documented in `docs/RESULTS_JSON.md`, a new control in
+`docs/USER_GUIDE.md`, and its text is in all 20 catalogs
 (`scripts/i18n_catalog.py check`).
 
 Not exports, and so not in these menus: *Copy as markdown* (the clipboard),
