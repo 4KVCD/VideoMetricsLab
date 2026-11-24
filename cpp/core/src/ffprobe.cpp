@@ -118,20 +118,23 @@ double parse_frame_rate(const std::string& rate) {
     return python_float(rate).value_or(0.0);
 }
 
-// The first video stream that is a video, not cover art or a thumbnail,
-// which FFmpeg lists as video streams too (the same stream FFmpeg's
-// commands read: "V:0").
+// Whether a stream is cover art or a thumbnail: a picture or a few, which
+// FFmpeg lists as a video stream (in Matroska, an attachment), not a stream
+// with a rate.
+bool is_picture(const Json& stream) {
+    const Json* disposition = member(stream, "disposition");
+    return disposition != nullptr &&
+           (truthy(member(*disposition, "attached_pic")) || truthy(member(*disposition, "timed_thumbnails")));
+}
+
+// The first video stream that is a video, not cover art or a thumbnail
+// (the same stream FFmpeg's commands read: "V:0").
 const Json* video_stream(const Json& streams) {
     if (!streams.is_array()) {
         return nullptr;
     }
     for (const Json& stream : streams) {
-        const Json* disposition = member(stream, "disposition");
-        const auto disposed = [disposition](const char* key) {
-            return disposition != nullptr && truthy(member(*disposition, key));
-        };
-        if (string_member(stream, "codec_type") == "video" && !disposed("attached_pic") &&
-            !disposed("timed_thumbnails")) {
+        if (string_member(stream, "codec_type") == "video" && !is_picture(stream)) {
             return &stream;
         }
     }
@@ -241,11 +244,16 @@ long long stream_bit_rate(const Json& stream, double duration, long long file_si
 // Whether a file's statistics tags describe it. FFmpeg writes none of its own,
 // and copies its input's into what it writes, even through a re-encode, where
 // they can be far from the truth. So in a file it wrote they are used only
-// where they add up: every stream but the attachments has its size, together
-// they are the file but for its container's own bytes (at least 99.5 % of it:
-// a 2-hour Matroska film's are 0.3 %), and the video is at least half of it.
-// A stale set passes only where the new video is at most 0.5 % of the file
-// larger than the old: its rate is then at most about 1 % off.
+// where they add up: every stream but the attachments and cover art has its
+// size, together they are the file but for its container's own bytes (at
+// least 99.5 % of it: a 2-hour Matroska film's are 0.3 %), and the video is
+// at least half of it. A stale set passes only where the new video is at
+// most 0.5 % of the file larger than the old: its rate is then at most about
+// 1 % off. The sizes are the packets' as read: mkvmerge may store a subtitle
+// track compressed (zlib, as it does PGS) and counts it uncompressed, so only
+// the other streams must fit in the file. "Lavf" also names a file mkvmerge
+// wrote from one FFmpeg did, as mkvmerge keeps its input's ENCODER tag, with
+// statistics of its own.
 bool statistics_are_true(const Json& streams, const Json& format, const Json& video) {
     const Json* encoder = tag(format, "ENCODER");
     if (encoder == nullptr || !encoder->is_string() || !encoder->get<std::string>().starts_with("Lavf")) {
@@ -256,21 +264,27 @@ bool statistics_are_true(const Json& streams, const Json& format, const Json& vi
         return false;
     }
     long long streams_bytes = 0;
+    long long stored_as_is = 0;  // all but the subtitles, which may be stored compressed
     long long video_bytes = 0;
     for (const Json& stream : streams) {
-        if (string_member(stream, "codec_type") == "attachment") {
-            continue;  // fonts and covers: Matroska keeps no statistics of them
+        const std::string type = string_member(stream, "codec_type");
+        if (type == "attachment" || is_picture(stream)) {
+            continue;  // fonts and covers, as attachments or as pictures: Matroska keeps no statistics of them
         }
         const Json* bytes = tag(stream, "NUMBER_OF_BYTES");
         if (bytes == nullptr) {
             return false;
         }
-        streams_bytes += std::max(0LL, whole(bytes));
+        const long long size = std::max(0LL, whole(bytes));
+        streams_bytes += size;
+        if (type != "subtitle") {
+            stored_as_is += size;
+        }
         if (&stream == &video) {
-            video_bytes = whole(bytes);
+            video_bytes = size;
         }
     }
-    return streams_bytes <= file_size && streams_bytes * 1000 >= file_size * 995 && video_bytes * 2 >= file_size;
+    return stored_as_is <= file_size && streams_bytes * 1000 >= file_size * 995 && video_bytes * 2 >= file_size;
 }
 
 // What the video's display matrix says a player turns it by: 0, 90, 180 or 270
@@ -324,9 +338,7 @@ std::optional<long long> rate_less_the_rest(const Json& video, const Json& strea
             attachment_bytes += std::max(0LL, whole(member(stream, "extradata_size")));
             continue;
         }
-        if (const Json* disposition = member(stream, "disposition");
-            disposition != nullptr &&
-            (truthy(member(*disposition, "attached_pic")) || truthy(member(*disposition, "timed_thumbnails")))) {
+        if (is_picture(stream)) {
             continue;
         }
         long long rate = stream_bit_rate(stream, stream_duration(stream, container), file_size, statistics);

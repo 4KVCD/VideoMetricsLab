@@ -158,16 +158,26 @@ TEST(Ffprobe, StatisticsTagsWithALanguageAreTheTracks) {
 
 // A file FFmpeg wrote, of 1,000,000 bytes over 10 s (800 kb/s), with a video
 // and an Opus track whose sizes the tags give as `video_bytes` and
-// `audio_bytes` ("" for no tags).
-VideoInfo ffmpeg_written(const std::string& video_bytes, const std::string& audio_bytes) {
+// `audio_bytes` ("" for no tags); with `cover_art`, a cover as FFmpeg lists
+// one (a picture stream, with no tags); and with `subtitle_bytes`, a PGS
+// track of that size.
+VideoInfo ffmpeg_written(const std::string& video_bytes, const std::string& audio_bytes, bool cover_art = false,
+                         const std::string& subtitle_bytes = "") {
     const auto tags = [](const std::string& bytes) {
         return bytes.empty() ? std::string() : R"(,"tags":{"NUMBER_OF_BYTES":")" + bytes + R"("})";
     };
+    std::string extra = cover_art ? R"(,{"index":2,"codec_type":"video","codec_name":"mjpeg",)"
+                                    R"("disposition":{"attached_pic":1}})"
+                                  : "";
+    if (!subtitle_bytes.empty()) {
+        extra += R"(,{"index":3,"codec_type":"subtitle","codec_name":"hdmv_pgs_subtitle")" + tags(subtitle_bytes) +
+                 "}";
+    }
     const std::string probe = R"({"streams":[{"index":0,"codec_type":"video","codec_name":"hevc","width":1280,)"
                               R"("height":720,"pix_fmt":"yuv420p","r_frame_rate":"24/1","avg_frame_rate":"24/1")" +
                               tags(video_bytes) + R"(},{"index":1,"codec_type":"audio","codec_name":"opus")" +
-                              tags(audio_bytes) +
-                              R"(}],"format":{"duration":"10.0","size":"1000000","bit_rate":"800000",)"
+                              tags(audio_bytes) + "}" + extra +
+                              R"(],"format":{"duration":"10.0","size":"1000000","bit_rate":"800000",)"
                               R"("format_name":"matroska,webm","tags":{"ENCODER":"Lavf63.1.101"}}})";
     return video_info_from_probe("a.mkv", probe);
 }
@@ -185,6 +195,23 @@ TEST(Ffprobe, TheVideosRateIsItsOwnWhereTheTagsAddUp) {
     EXPECT_EQ(stale.bit_rate, 800000);
     EXPECT_TRUE(stale.bit_rate_whole_file);
     EXPECT_EQ(stale.stream_bytes, 0);
+
+    // Cover art has no statistics, as an attachment has none: the tags still
+    // count (it used to make them all untrusted, and the rate the file's).
+    const VideoInfo with_cover = ffmpeg_written("900000", "97000", true);
+    EXPECT_EQ(with_cover.bit_rate, 720000);
+    EXPECT_FALSE(with_cover.bit_rate_estimated || with_cover.bit_rate_whole_file);
+
+    // mkvmerge, writing a file FFmpeg made (its ENCODER tag kept), stores PGS
+    // subtitles compressed and counts them uncompressed: with them, the tags
+    // add up to more than the file (102.7 %), and still count.
+    const VideoInfo compressed_subtitles = ffmpeg_written("900000", "97000", true, "30000");
+    EXPECT_EQ(compressed_subtitles.bit_rate, 720000);
+    EXPECT_FALSE(compressed_subtitles.bit_rate_estimated || compressed_subtitles.bit_rate_whole_file);
+    // The video and audio alone more than the file (102 %): stale, not counted.
+    const VideoInfo too_big = ffmpeg_written("900000", "120000", true, "30000");
+    EXPECT_EQ(too_big.bit_rate, 800000);
+    EXPECT_TRUE(too_big.bit_rate_whole_file);
 }
 
 // A 100 s Matroska file of 800 kb/s (10,000,000 bytes) whose video states no
