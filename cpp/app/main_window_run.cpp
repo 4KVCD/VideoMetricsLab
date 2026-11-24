@@ -8,7 +8,6 @@
 #include <QFutureWatcher>
 #include <QLineEdit>
 #include <QLocale>
-#include <QMessageBox>
 #include <QPushButton>
 #include <QTableWidgetItem>
 #include <QTimer>
@@ -24,6 +23,7 @@
 
 #include "bitrate_panel.h"
 #include "file_writes.h"
+#include "click_twice.h"
 #include "title_bar.h"
 #include "graph_panel.h"
 #include "i18n.h"
@@ -171,20 +171,19 @@ bool MainWindow::ready_to_run(const std::vector<int>& checked) {
         return false;
     }
     if (!source_info_) {
-        QMessageBox::warning(this, app::tr("No reference"), app::tr("Please select a reference video."));
+        dialogs_.warn(app::tr("No reference"), app::tr("Please select a reference video."));
         return false;
     }
     if (checked.empty()) {
-        QMessageBox::warning(this, app::tr("No test videos"),
-                             app::tr("Check at least one test video to calculate metrics."));
+        dialogs_.warn(app::tr("No test videos"), app::tr("Check at least one test video to calculate metrics."));
         return false;
     }
     if (std::any_of(checked.begin(), checked.end(), [this](int row) {
             return requested_metrics(*rows_[static_cast<std::size_t>(row)]).empty();
         })) {
-        QMessageBox::warning(this, app::tr("No metrics selected"),
-                             app::tr("Select at least one metric for every checked video, or uncheck videos you do "
-                                     "not want to calculate."));
+        dialogs_.warn(app::tr("No metrics selected"),
+                      app::tr("Select at least one metric for every checked video, or uncheck videos you do "
+                              "not want to calculate."));
         return false;
     }
     // Asked at the click, not seconds later once the GPU checks are done.
@@ -467,11 +466,10 @@ bool MainWindow::confirm_skipping(const std::vector<std::pair<std::shared_ptr<Ro
     }
     const QString text = app::tr("Cannot be compared with the reference:") + "\n\n" + listed.join("\n");
     if (!others) {
-        QMessageBox::warning(this, app::tr("Cannot compare"), text);
+        dialogs_.warn(app::tr("Cannot compare"), text);
         return false;
     }
-    return QMessageBox::question(this, app::tr("Cannot compare"), text + "\n\n" + app::tr("Calculate the rest?")) ==
-           QMessageBox::Yes;
+    return dialogs_.ask(app::tr("Cannot compare"), text + "\n\n" + app::tr("Calculate the rest?"));
 }
 
 bool MainWindow::wait_for_gpu_checks(const std::vector<int>& checked) {
@@ -579,24 +577,33 @@ bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<R
     if (lines.isEmpty()) {
         return true;
     }
-    const auto answer = QMessageBox::warning(
-        this, app::tr("CPU perceptual metrics on long videos"),
+    Message message;
+    message.kind = MessageKind::warning;
+    message.title = app::tr("CPU perceptual metrics on long videos");
+    message.text =
         app::tr("Calculating SSIMULACRA2 or Butteraugli on the CPU is not recommended for videos longer than 10 "
                 "minutes:\n\n") +
             lines.join("\n") +
             app::tr("\n\nNo supported GPU was found, so they are calculated on the CPU: about 0.35 s per 4K frame "
                     "for both, and half that for SSIMULACRA2 alone, on a 24-core CPU, so a film takes many hours (the "
                     "estimates above assume a CPU like the one they were measured on). Set a range to score only a "
-                    "part of the videos.\n\nCalculate anyway?"),
-        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-    return answer == QMessageBox::Yes;
+                    "part of the videos.\n\nCalculate anyway?");
+    message.buttons = {{app::tr("Yes"), MessageButton::Role::plain}, {app::tr("No"), MessageButton::Role::primary}};
+    message.default_button = 1;  // Enter doesn't start hours of work
+    message.escape_button = 1;
+    return dialogs_.message(message).button == 0;
 }
 
 void MainWindow::set_run_ui_active(bool active) {
     // Freezes every input that can change the meaning of a live job.
     run_active_ = active;
-    if (!active) {
+    if (active) {
+        if (click_twice_ != nullptr) {
+            click_twice_->disarm();  // Remove all and Start over are frozen for the run
+        }
+    } else {
         show_run_in_title({});  // the progress button goes with the run
+        refresh_length_note();  // the videos scored are compared already
     }
     // Saved Results' Delete, locked for the run's pairs' comparisons: the
     // run reads and saves their scores. The reference with each test video

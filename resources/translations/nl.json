@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Start over": "Opnieuw beginnen",
+  "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Maakt de referentie leeg en verwijdert alle testvideo's, voor een nieuwe vergelijking. Opgeslagen resultaten blijven bewaard.",
+  "Click Start over again to clear the reference.": "Klik nogmaals op 'Opnieuw beginnen' om de referentie leeg te maken.",
+  "Every saved score in this folder is deleted. This can't be undone.": "Alle opgeslagen scores in deze map worden verwijderd. Dit kan niet ongedaan worden gemaakt.",
+  "Show details": "Details weergeven",
+  "Hide details": "Details verbergen",
+  "OK": "OK",
   "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM, as SSIM YUV weighs them. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 van de MS-SSIM van de drie vlakken, zoals SSIM YUV ze weegt. Tot 1, hoger is beter.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' PSNR, as JVET's common test conditions weigh it. In dB, higher is better.": "(6 × Y + Cb + Cr) / 8 van de PSNR van de drie vlakken, zoals de common test conditions van JVET hem wegen. In dB, hoger is beter.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' SSIM, as MSU's codec comparisons weigh YUV-SSIM. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 van de SSIM van de drie vlakken, zoals de codecvergelijkingen van MSU YUV-SSIM wegen. Tot 1, hoger is beter.",
@@ -470,7 +477,6 @@
   "Reading reference video...": "Referentievideo lezen...",
   "Could not read video": "Kan video niet lezen",
   "Resolution tests removed": "Resolutietests verwijderd",
-  "Videos of a different length": "Video's met een andere lengte",
   "\n\nAdd them again to test the new source.": "\n\nVoeg ze opnieuw toe om de nieuwe bron te testen.",
   "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nVoor het berekenen van de metrieken is een bereik binnen beide video's nodig (Bereik, onder Videovoorbereiding). Video vergelijken toont het deel dat ze gemeen hebben.",
   "Ready.": "Gereed.",
@@ -531,7 +537,6 @@
   "Select test videos": "Testvideo's kiezen",
   "Reading...": "Lezen...",
   "Complete (cached)": "Voltooid (opgeslagen)",
-  "Remove all videos": "Alle video's verwijderen",
   "\nLoaded from a previous run (matching files and calculation settings) -- right-click to recompute.": "\nGeladen uit een eerdere run (dezelfde bestanden en berekeningsinstellingen) — rechtsklik om opnieuw te berekenen.",
   "Recalculate selected metrics (ignore cached/previous results)": "Aangevinkte metrieken opnieuw berekenen (opgeslagen/eerdere resultaten negeren)",
   "Nothing to add": "Niets toe te voegen",
@@ -1374,6 +1379,9 @@
   "Calculated with {metric}.": "Berekend met {metric}."
  },
  "plurals": {
+  "Click Remove all again to remove {count} video. Saved results are kept.": ["Klik nogmaals op 'Alles verwijderen' om {count} video te verwijderen. Opgeslagen resultaten blijven bewaard.", "Klik nogmaals op 'Alles verwijderen' om alle {count} video's te verwijderen. Opgeslagen resultaten blijven bewaard."],
+  "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["Klik nogmaals op 'Opnieuw beginnen' om de referentie leeg te maken en {count} video te verwijderen. Opgeslagen resultaten blijven bewaard.", "Klik nogmaals op 'Opnieuw beginnen' om de referentie leeg te maken en alle {count} video's te verwijderen. Opgeslagen resultaten blijven bewaard."],
+  "{count} test video does not last as long as the reference ({length}).": ["{count} testvideo duurt niet even lang als de referentie ({length}).", "{count} testvideo's duren niet even lang als de referentie ({length})."],
   "{count} shown": ["{count} getoond", "{count} getoond"],
   "{count} ticked": ["{count} aangevinkt", "{count} aangevinkt"],
   "{shown} of {count} shown": ["{shown} van {count} getoond", "{shown} van {count} getoond"],
@@ -1417,10 +1425,6 @@
   "Reading {count} video...": [
    "{count} video lezen...",
    "{count} video's lezen..."
-  ],
-  "Remove {count} video from the list?\n\nSaved results are kept -- re-adding a video shows its scores again.": [
-   "{count} video uit de lijst verwijderen?\n\nOpgeslagen resultaten blijven bewaard — als u de video opnieuw toevoegt, komen de scores terug.",
-   "Alle {count} video's uit de lijst verwijderen?\n\nOpgeslagen resultaten blijven bewaard — als u een video opnieuw toevoegt, komen de scores terug."
   ],
   "{count} scored frame; metrics: ": [
    "{count} frame beoordeeld; metrieken: ",

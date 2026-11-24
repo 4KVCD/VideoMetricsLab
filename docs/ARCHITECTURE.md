@@ -253,6 +253,38 @@ When you add to the window:
   `vml_appearance_tests` saves every tab in each when `VML_UI_SNAPSHOTS` names
   a folder (`CONTRIBUTING.md`).
 
+## Asking and telling the user
+
+A window that stops the user is the last way to tell or ask them anything,
+not the first. Each rule here is one a reviewer can check.
+
+- **What happened is told where it happened.** A result, a note or a
+  failure goes beside what the user did: a card's line (the Videos footer's
+  note), a row's ⚠ and tooltip, the tab bar's indicator (exports,
+  `ExportIndicator`). No window opens to say something worked.
+- **An action that can't run yet is disabled**, its tooltip saying why, rather
+  than enabled and then refusing in a window.
+- **A destructive action that can be redone is clicked twice**
+  (`ClickTwice`, `app/click_twice.h`): the first click arms the button in the
+  danger colour and puts a line beside it saying what the second click does;
+  the second, while armed, does it (Remove all, Start over). Saved scores
+  are kept by such actions, so they can be had again.
+- **A modal only where the action can't go on without an answer:** a
+  decision partway through an action (Calculate the rest?), closing the
+  window during a run, a form whose values the action needs (the frame rate
+  of a raw stream), and what can't be undone at all (Clear saved results,
+  which deletes every saved score: a `danger` message, its headline in the
+  danger colour, Cancel Enter's answer). And the system's own file dialogs.
+- **Every modal goes through `Dialogs`** (`app/dialogs.h`), which the
+  window's tests answer, and is built on `AppDialog` (`app/app_dialog.h`): in
+  VML Modern on Windows the app's own title bar (`TitleBar`, as the main
+  window's), elsewhere the system's; a message's icon drawn by the app in
+  the theme's colours (`message_icon`), never the system's. Not
+  `QMessageBox`, `QInputDialog`, `QProgressDialog`, `QColorDialog` or a bare
+  `QDialog`: `show_message`, `ask_line`, `ProgressDialog`, `choose_color` and
+  `AppDialog` take their places. `QFileDialog` is called in `dialogs.cpp`
+  alone. `DialogRules.EveryDialogIsTheAppsOwn` fails on any other.
+
 ## Exports
 
 The window offers two kinds of export, and a new one is one of them. (Still

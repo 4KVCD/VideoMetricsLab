@@ -3,7 +3,6 @@
 // score.
 #pragma once
 
-#include <QDialog>
 #include <QString>
 
 #include <map>
@@ -11,6 +10,7 @@
 #include <set>
 #include <string>
 
+#include "app_dialog.h"
 #include "vml/cvvdp.h"
 
 class QCheckBox;
@@ -22,7 +22,7 @@ class QSpinBox;
 
 namespace vml::app {
 
-class CvvdpDisplayDialog : public QDialog {
+class CvvdpDisplayDialog : public AppDialog {
     Q_OBJECT
 
 public:

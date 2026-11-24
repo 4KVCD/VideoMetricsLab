@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Start over": "البدء من جديد",
+  "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "يمسح المرجع ويزيل كل فيديوهات الاختبار لبدء مقارنة جديدة. تبقى النتائج المحفوظة.",
+  "Click Start over again to clear the reference.": "انقر «البدء من جديد» مرة أخرى لمسح المرجع.",
+  "Every saved score in this folder is deleted. This can't be undone.": "تُحذف كل الدرجات المحفوظة في هذا المجلد. لا يمكن التراجع عن ذلك.",
+  "Show details": "عرض التفاصيل",
+  "Hide details": "إخفاء التفاصيل",
+  "OK": "موافق",
   "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM, as SSIM YUV weighs them. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 لقيم MS-SSIM للمستويات الثلاثة، كما يزنها SSIM YUV. حتى 1، والأعلى أفضل.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' PSNR, as JVET's common test conditions weigh it. In dB, higher is better.": "(6 × Y + Cb + Cr) / 8 لقيم PSNR للمستويات الثلاثة، كما تزنها شروط الاختبار المشتركة لدى JVET. بوحدة dB، والأعلى أفضل.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' SSIM, as MSU's codec comparisons weigh YUV-SSIM. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 لقيم SSIM للمستويات الثلاثة، كما تزن مقارنات الترميز لدى MSU قيمة YUV-SSIM. حتى 1، والأعلى أفضل.",
@@ -470,7 +477,6 @@
   "Reading reference video...": "جارٍ قراءة الفيديو المرجعي...",
   "Could not read video": "تعذّرت قراءة الفيديو",
   "Resolution tests removed": "أزيلت اختبارات الدقة",
-  "Videos of a different length": "مقاطع فيديو بطول مختلف",
   "\n\nAdd them again to test the new source.": "\n\nأضفها من جديد لاختبار المصدر الجديد.",
   "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nيتطلب حساب المقاييس نطاقًا داخل كلا الفيديوهين (النطاق، ضمن تحضير الفيديو). يعرض مقارنة الفيديو الجزء المشترك بينهما.",
   "Ready.": "جاهز.",
@@ -531,7 +537,6 @@
   "Select test videos": "اختيار فيديوهات الاختبار",
   "Reading...": "جارٍ القراءة...",
   "Complete (cached)": "مكتمل (محفوظ)",
-  "Remove all videos": "إزالة كل مقاطع الفيديو",
   "\nLoaded from a previous run (matching files and calculation settings) -- right-click to recompute.": "\nحُمّل من تشغيل سابق (الملفات وإعدادات الحساب متطابقة) — انقر بزر الماوس الأيمن لإعادة الحساب.",
   "Recalculate selected metrics (ignore cached/previous results)": "إعادة حساب المقاييس المحددة (تجاهل النتائج المحفوظة/السابقة)",
   "Nothing to add": "لا شيء لإضافته",
@@ -1374,6 +1379,9 @@
   "Calculated with {metric}.": "يُحسب مع {metric}."
  },
  "plurals": {
+  "Click Remove all again to remove {count} video. Saved results are kept.": ["انقر «إزالة الكل» مرة أخرى لإزالة {count} فيديو. تبقى النتائج المحفوظة.", "انقر «إزالة الكل» مرة أخرى لإزالة فيديو واحد ({count}). تبقى النتائج المحفوظة.", "انقر «إزالة الكل» مرة أخرى لإزالة فيديوين ({count}). تبقى النتائج المحفوظة.", "انقر «إزالة الكل» مرة أخرى لإزالة {count} فيديوهات. تبقى النتائج المحفوظة.", "انقر «إزالة الكل» مرة أخرى لإزالة {count} فيديو. تبقى النتائج المحفوظة.", "انقر «إزالة الكل» مرة أخرى لإزالة {count} فيديو. تبقى النتائج المحفوظة."],
+  "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["انقر «البدء من جديد» مرة أخرى لمسح المرجع وإزالة {count} فيديو. تبقى النتائج المحفوظة.", "انقر «البدء من جديد» مرة أخرى لمسح المرجع وإزالة فيديو واحد ({count}). تبقى النتائج المحفوظة.", "انقر «البدء من جديد» مرة أخرى لمسح المرجع وإزالة فيديوين ({count}). تبقى النتائج المحفوظة.", "انقر «البدء من جديد» مرة أخرى لمسح المرجع وإزالة {count} فيديوهات. تبقى النتائج المحفوظة.", "انقر «البدء من جديد» مرة أخرى لمسح المرجع وإزالة {count} فيديو. تبقى النتائج المحفوظة.", "انقر «البدء من جديد» مرة أخرى لمسح المرجع وإزالة {count} فيديو. تبقى النتائج المحفوظة."],
+  "{count} test video does not last as long as the reference ({length}).": ["{count} فيديو اختبار لا يدوم بطول المرجع ({length}).", "فيديو اختبار واحد ({count}) لا يدوم بطول المرجع ({length}).", "فيديوها اختبار ({count}) لا يدومان بطول المرجع ({length}).", "{count} فيديوهات اختبار لا تدوم بطول المرجع ({length}).", "{count} فيديو اختبار لا تدوم بطول المرجع ({length}).", "{count} فيديو اختبار لا تدوم بطول المرجع ({length})."],
   "{count} shown": ["الظاهرة: {count}", "الظاهرة: {count}", "الظاهرة: {count}", "الظاهرة: {count}", "الظاهرة: {count}", "الظاهرة: {count}"],
   "{count} ticked": ["المحددة: {count}", "المحددة: {count}", "المحددة: {count}", "المحددة: {count}", "المحددة: {count}", "المحددة: {count}"],
   "{shown} of {count} shown": ["الظاهرة: {shown} من {count}", "الظاهرة: {shown} من {count}", "الظاهرة: {shown} من {count}", "الظاهرة: {shown} من {count}", "الظاهرة: {shown} من {count}", "الظاهرة: {shown} من {count}"],
@@ -1453,14 +1461,6 @@
    "جارٍ قراءة {count} فيديوهات...",
    "جارٍ قراءة {count} فيديو...",
    "جارٍ قراءة {count} فيديو..."
-  ],
-  "Remove {count} video from the list?\n\nSaved results are kept -- re-adding a video shows its scores again.": [
-   "إزالة {count} فيديو من القائمة؟\n\nتبقى النتائج المحفوظة — إعادة إضافة الفيديو تُظهر درجاته مجددًا.",
-   "إزالة {count} فيديو من القائمة؟\n\nتبقى النتائج المحفوظة — إعادة إضافة الفيديو تُظهر درجاته مجددًا.",
-   "إزالة الفيديوين ({count}) من القائمة؟\n\nتبقى النتائج المحفوظة — إعادة إضافة الفيديو تُظهر درجاته مجددًا.",
-   "إزالة كل الفيديوهات ({count}) من القائمة؟\n\nتبقى النتائج المحفوظة — إعادة إضافة الفيديو تُظهر درجاته مجددًا.",
-   "إزالة كل الفيديوهات ({count}) من القائمة؟\n\nتبقى النتائج المحفوظة — إعادة إضافة الفيديو تُظهر درجاته مجددًا.",
-   "إزالة كل الفيديوهات ({count}) من القائمة؟\n\nتبقى النتائج المحفوظة — إعادة إضافة الفيديو تُظهر درجاته مجددًا."
   ],
   "{count} scored frame; metrics: ": [
    "{count} إطار مقيَّم؛ المقاييس: ",

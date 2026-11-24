@@ -5,7 +5,6 @@
 #include <QApplication>
 #include <QButtonGroup>
 #include <QColor>
-#include <QColorDialog>
 #include <QFrame>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -27,6 +26,7 @@
 #include <utility>
 
 #include "i18n.h"
+#include "app_dialog.h"
 #include "settings_panel.h"
 #include "theme.h"
 
@@ -466,13 +466,11 @@ void SettingsPanel::set_accent(const QString& hex) {
 void SettingsPanel::choose_custom_accent() {
     // Starts at the accent in use: the chosen one, else the one shown.
     const std::optional<QColor> current = theme::accent_of(accent_value.toStdString());
-    QColorDialog dialog(current.value_or(theme::accent_shown()), this);
-    dialog.setWindowTitle(app::tr("Accent color"));
-    dialog.setOption(QColorDialog::DontUseNativeDialog, true);
-    if (dialog.exec() != QDialog::Accepted) {
+    const ColorChoice choice = choose_color(this, app::tr("Accent color"), current.value_or(theme::accent_shown()));
+    if (choice.outcome != ColorChoice::Outcome::chosen) {
         return;
     }
-    set_accent(dialog.currentColor().name());
+    set_accent(choice.color.name());
     on_edited();
 }
 

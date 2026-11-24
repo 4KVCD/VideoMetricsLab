@@ -1,8 +1,6 @@
 #include "series_colors.h"
 
 #include <QAbstractButton>
-#include <QColorDialog>
-#include <QDialogButtonBox>
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QStyle>
@@ -10,6 +8,7 @@
 
 #include <system_error>
 
+#include "app_dialog.h"
 #include "i18n.h"
 #include "vml/platform/system.h"
 
@@ -54,16 +53,11 @@ void VideoColors::set_color(const std::filesystem::path& path, const QColor& col
 }
 
 void VideoColors::choose(const std::filesystem::path& path, QWidget* parent) {
-    QColorDialog dialog(for_path(path), parent);
-    dialog.setWindowTitle(app::tr("Choose video color"));
-    dialog.setOption(QColorDialog::DontUseNativeDialog, true);
-    if (auto* buttons = dialog.findChild<QDialogButtonBox*>()) {
-        QAbstractButton* reset = buttons->addButton(app::tr("Reset color"), QDialogButtonBox::ResetRole);
-        const QColor first = defaults_.at(path_key(path));
-        connect(reset, &QAbstractButton::clicked, &dialog, [&dialog, first] { dialog.setCurrentColor(first); });
-    }
-    if (dialog.exec() == QDialog::Accepted) {
-        set_color(path, dialog.currentColor());
+    const ColorChoice choice = choose_color(parent, app::tr("Choose video color"), for_path(path), app::tr("Reset color"));
+    if (choice.outcome == ColorChoice::Outcome::chosen) {
+        set_color(path, choice.color);
+    } else if (choice.outcome == ColorChoice::Outcome::reset) {
+        set_color(path, defaults_.at(path_key(path)));
     }
 }
 

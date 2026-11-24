@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Start over": "Начать заново",
+  "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Очищает эталон и убирает все тестовые видео, чтобы начать новое сравнение. Сохранённые результаты остаются.",
+  "Click Start over again to clear the reference.": "Нажмите «Начать заново» ещё раз, чтобы очистить эталон.",
+  "Every saved score in this folder is deleted. This can't be undone.": "Все сохранённые оценки в этой папке будут удалены. Это действие нельзя отменить.",
+  "Show details": "Показать подробности",
+  "Hide details": "Скрыть подробности",
+  "OK": "ОК",
   "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM, as SSIM YUV weighs them. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 от MS-SSIM трёх плоскостей, с весами как в SSIM YUV. До 1, чем выше, тем лучше.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' PSNR, as JVET's common test conditions weigh it. In dB, higher is better.": "(6 × Y + Cb + Cr) / 8 от PSNR трёх плоскостей, с весами как в общих условиях тестирования JVET. В dB, чем выше, тем лучше.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' SSIM, as MSU's codec comparisons weigh YUV-SSIM. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 от SSIM трёх плоскостей, с весами YUV-SSIM как в сравнениях кодеков MSU. До 1, чем выше, тем лучше.",
@@ -470,7 +477,6 @@
   "Reading reference video...": "Чтение эталонного видео...",
   "Could not read video": "Не удалось прочитать видео",
   "Resolution tests removed": "Тесты разрешения удалены",
-  "Videos of a different length": "Видео другой длины",
   "\n\nAdd them again to test the new source.": "\n\nДобавьте их снова, чтобы проверить новый исходник.",
   "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nДля расчёта метрик нужен диапазон внутри обоих видео (Диапазон, в разделе «Подготовка видео»). Сравнение видео показывает их общую часть.",
   "Ready.": "Готово.",
@@ -531,7 +537,6 @@
   "Select test videos": "Выберите тестовые видео",
   "Reading...": "Чтение...",
   "Complete (cached)": "Готово (сохранено)",
-  "Remove all videos": "Убрать все видео",
   "\nLoaded from a previous run (matching files and calculation settings) -- right-click to recompute.": "\nЗагружено из предыдущего расчёта (совпадают файлы и настройки расчёта) — щёлкните правой кнопкой, чтобы пересчитать.",
   "Recalculate selected metrics (ignore cached/previous results)": "Пересчитать выбранные метрики (игнорировать сохранённые/прежние результаты)",
   "Nothing to add": "Нечего добавить",
@@ -1374,6 +1379,9 @@
   "Calculated with {metric}.": "Вычисляется вместе с {metric}."
  },
  "plurals": {
+  "Click Remove all again to remove {count} video. Saved results are kept.": ["Нажмите «Убрать все» ещё раз, чтобы убрать {count} видео. Сохранённые результаты остаются.", "Нажмите «Убрать все» ещё раз, чтобы убрать все {count} видео. Сохранённые результаты остаются.", "Нажмите «Убрать все» ещё раз, чтобы убрать все {count} видео. Сохранённые результаты остаются."],
+  "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["Нажмите «Начать заново» ещё раз, чтобы очистить эталон и убрать {count} видео. Сохранённые результаты остаются.", "Нажмите «Начать заново» ещё раз, чтобы очистить эталон и убрать все {count} видео. Сохранённые результаты остаются.", "Нажмите «Начать заново» ещё раз, чтобы очистить эталон и убрать все {count} видео. Сохранённые результаты остаются."],
+  "{count} test video does not last as long as the reference ({length}).": ["{count} тестовое видео отличается по длине от эталона ({length}).", "{count} тестовых видео отличаются по длине от эталона ({length}).", "{count} тестовых видео отличаются по длине от эталона ({length})."],
   "{count} shown": ["{count} показана", "{count} показаны", "{count} показано"],
   "{count} ticked": ["{count} отмечена", "{count} отмечены", "{count} отмечено"],
   "{shown} of {count} shown": ["Показано {shown} из {count}", "Показано {shown} из {count}", "Показано {shown} из {count}"],
@@ -1426,11 +1434,6 @@
    "Чтение {count} видео...",
    "Чтение {count} видео...",
    "Чтение {count} видео..."
-  ],
-  "Remove {count} video from the list?\n\nSaved results are kept -- re-adding a video shows its scores again.": [
-   "Убрать {count} видео из списка?\n\nСохранённые результаты остаются — при повторном добавлении видео его оценки снова появятся.",
-   "Убрать все {count} видео из списка?\n\nСохранённые результаты остаются — при повторном добавлении видео его оценки снова появятся.",
-   "Убрать все {count} видео из списка?\n\nСохранённые результаты остаются — при повторном добавлении видео его оценки снова появятся."
   ],
   "{count} scored frame; metrics: ": [
    "{count} оценённый кадр; метрики: ",

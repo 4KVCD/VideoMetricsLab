@@ -6,11 +6,9 @@
 #include <QCheckBox>
 #include <QClipboard>
 #include <QButtonGroup>
-#include <QColorDialog>
 #include <QComboBox>
 #include <QDateTime>
 #include <QDesktopServices>
-#include <QDialogButtonBox>
 #include <QFontMetrics>
 #include <QRawFont>
 #include <QFormLayout>
@@ -45,6 +43,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include "app_dialog.h"
 #include "file_writes.h"
 #include "formatting.h"
 #include "i18n.h"
@@ -985,11 +984,22 @@ void SettingsPanel::clear_saved_results() {
         status->setText(app::tr("Saved results are already being cleared."));
         return;
     }
-    if (!dialogs_.ask(app::tr("Clear saved results"),
-                      app::tr("Delete saved results from {directory}?\n\nVideos already scored will have to be "
-                              "recomputed. Those whose reference video is no longer where it was are kept: their "
-                              "scores could not be calculated again. Delete them in the Saved Results tab.",
-                              {{"directory", text_of(directory)}}))) {
+    // Every saved score at once, which can't be undone: the danger message,
+    // Enter and Esc keeping them (docs/ARCHITECTURE.md, "Asking and telling
+    // the user": a modal kept, as clicking twice is too light for it).
+    Message message;
+    message.kind = MessageKind::danger;
+    message.title = app::tr("Clear saved results");
+    message.headline = app::tr("Every saved score in this folder is deleted. This can't be undone.");
+    message.text = app::tr("Delete saved results from {directory}?\n\nVideos already scored will have to be "
+                           "recomputed. Those whose reference video is no longer where it was are kept: their "
+                           "scores could not be calculated again. Delete them in the Saved Results tab.",
+                           {{"directory", text_of(directory)}});
+    message.buttons = {{app::tr("Delete saved results"), MessageButton::Role::danger},
+                       {app::tr("Cancel"), MessageButton::Role::plain}};
+    message.default_button = 1;
+    message.escape_button = 1;
+    if (dialogs_.message(message).button != 0) {
         return;
     }
     // Saved scores are written and deleted through the same queue, one after
@@ -1228,21 +1238,13 @@ void SettingsPanel::choose_export_color(QPushButton* button, const QString& titl
     const bool background = button == export_background_button;
     const theme::ChartColours colours = theme::export_chart_colours(
         settings_.export_graph_theme, settings_.export_graph_background, settings_.export_graph_text);
-    QColorDialog dialog(background ? colours.background : colours.text, this);
-    dialog.setWindowTitle(title);
-    dialog.setOption(QColorDialog::DontUseNativeDialog, true);
-    bool reset = false;
-    if (auto* buttons = dialog.findChild<QDialogButtonBox*>()) {
-        QAbstractButton* reset_button = buttons->addButton(app::tr("Reset color"), QDialogButtonBox::ResetRole);
-        connect(reset_button, &QAbstractButton::clicked, &dialog, [&dialog, &reset] {
-            reset = true;
-            dialog.accept();
-        });
-    }
-    if (dialog.exec() != QDialog::Accepted) {
+    const ColorChoice choice =
+        choose_color(this, title, background ? colours.background : colours.text, app::tr("Reset color"));
+    if (choice.outcome == ColorChoice::Outcome::cancelled) {
         return;
     }
-    button->setProperty("chosen", reset ? QString() : dialog.currentColor().name());
+    button->setProperty("chosen",
+                        choice.outcome == ColorChoice::Outcome::reset ? QString() : choice.color.name());
     on_edited();
 }
 

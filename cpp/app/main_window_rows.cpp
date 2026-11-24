@@ -3,14 +3,14 @@
 // order, sorting, removal and best/worst highlighting.
 #include "main_window.h"
 
+#include "click_twice.h"
+
 #include <QCheckBox>
 #include <QDialog>
-#include <QFileDialog>
 #include <QFont>
 #include <QHeaderView>
 #include <QItemSelection>
 #include <QItemSelectionModel>
-#include <QMessageBox>
 #include <QScopedValueRollback>
 #include <QTableWidgetItem>
 #include <QTextDocument>
@@ -719,7 +719,7 @@ void MainWindow::set_row_status(int row, RowState state, const QString& detail) 
 
 void MainWindow::on_add_distorted() {
     const QStringList paths =
-        QFileDialog::getOpenFileNames(this, app::tr("Select test videos"), video_dialog_dir("test"));
+        dialogs_.open_files_at(app::tr("Select test videos"), video_dialog_dir("test"));
     if (paths.isEmpty()) {
         return;
     }
@@ -780,7 +780,7 @@ void MainWindow::add_test_videos(const std::vector<std::filesystem::path>& paths
 void MainWindow::on_add_resample_test() {
     // Adds a resolution test for the size the user picks.
     if (!source_info_) {
-        QMessageBox::warning(this, app::tr("No reference"), app::tr("Please select a reference video first."));
+        dialogs_.warn(app::tr("No reference"), app::tr("Please select a reference video first."));
         return;
     }
     const Size reference(source_info_->width, source_info_->height);
@@ -1007,45 +1007,70 @@ void MainWindow::ask_new_frame_rates() {
             }
         }
         if (!reference && videos.empty()) {
-            warn_about_lengths();  // with the rates just entered
+            refresh_length_note();  // with the rates just entered
             return;
         }
         ask_frame_rates(reference, videos);
     }
 }
 
-void MainWindow::warn_about_lengths() {
+void MainWindow::refresh_length_note() {
     // Told as the videos are added, not only when Calculate metrics refuses
-    // them (pair_problem). Rows with scores were compared already; a row
-    // with a range end compares only that part; a stand-in row (a resolution
-    // test, a "Test both directions" companion) is its video's again.
-    if (!source_info_ || source_info_->frame_rate_unknown() || source_info_->duration <= 0) {
-        return;
-    }
+    // them (pair_problem), in the footer rather than a window: it is found
+    // again from the rows as they are, so it goes once they match, whichever
+    // was changed first (the reference, or the videos). Rows with scores were
+    // compared already; a row with a range end compares only that part; a
+    // stand-in row (a resolution test, a "Test both directions" companion) is
+    // its video's again.
     QStringList names;
-    for (const std::shared_ptr<RowData>& row_data : rows_) {
-        if (row_data->length_checked || row_data->media_path || !row_data->video_info ||
-            row_data->video_info->frame_rate_unknown()) {
-            continue;
-        }
-        row_data->length_checked = true;  // before the dialog, whose event loop may bring this back
-        const VideoInfo& info = *row_data->video_info;
-        if (!row_data->completed_run && row_data->options.range_end <= 0 && info.duration > 0 &&
-            !durations_match(*source_info_, info)) {
-            names.append("  " + name_of(row_data->path) + " (" + length_string(info) + ")");
+    if (source_info_ && !source_info_->frame_rate_unknown() && source_info_->duration > 0) {
+        for (const std::shared_ptr<RowData>& row_data : rows_) {
+            if (row_data->media_path || !row_data->video_info || row_data->video_info->frame_rate_unknown()) {
+                continue;
+            }
+            const VideoInfo& info = *row_data->video_info;
+            if (!row_data->completed_run && row_data->options.range_end <= 0 && info.duration > 0 &&
+                !durations_match(*source_info_, info)) {
+                names.append("  " + name_of(row_data->path) + " (" + length_string(info) + ")");
+            }
         }
     }
     if (names.isEmpty()) {
-        return;
-    }
-    dialogs_.inform(
-        app::tr("Videos of a different length"),
-        ntr("{count} test video does not last as long as the reference ({length}):\n\n",
-            "{count} test videos do not last as long as the reference ({length}):\n\n",
-            static_cast<long long>(names.size()), {{"length", length_string(*source_info_)}}) +
+        length_note_.clear();
+        length_note_tip_.clear();
+    } else {
+        const auto count = static_cast<long long>(names.size());
+        const QString length = length_string(*source_info_);
+        length_note_ = QString::fromUtf8("\xE2\x9A\xA0 ") +
+                       ntr("{count} test video does not last as long as the reference ({length}).",
+                           "{count} test videos do not last as long as the reference ({length}).", count,
+                           {{"length", length}});
+        length_note_tip_ =
+            ntr("{count} test video does not last as long as the reference ({length}):\n\n",
+                "{count} test videos do not last as long as the reference ({length}):\n\n", count,
+                {{"length", length}}) +
             names.join("\n") +
             app::tr("\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). "
-                    "Video Compare shows the part they share."));
+                    "Video Compare shows the part they share.");
+    }
+    show_footer_note();
+}
+
+void MainWindow::show_footer_note() {
+    // An armed button's line in the error colour; the length note muted.
+    if (footer_note_ == nullptr) {
+        return;  // the footer is not built yet
+    }
+    if (click_twice_->armed() != nullptr) {
+        footer_note_->setStyleSheet(
+            QStringLiteral("QLabel { color: %1; font-weight: 600; }").arg(theme::color("failed").name()));
+        footer_note_->setText(click_twice_->line());
+        footer_note_->setToolTip(QString());
+        return;
+    }
+    footer_note_->setStyleSheet(QString());  // its role's: muted (hint)
+    footer_note_->setText(length_note_);
+    footer_note_->setToolTip(length_note_tip_);
 }
 
 bool MainWindow::settle_frame_rates(const std::vector<int>& checked) {
@@ -1336,25 +1361,43 @@ void MainWindow::on_remove_distorted() {
     }
     on_table_selection_changed();
     sync_frame_compare();
+    refresh_length_note();
 }
 
 void MainWindow::on_remove_all_distorted() {
     if (rows_.empty()) {
         return;
     }
-    // Confirmed, because it can discard a lot of completed work from the
+    // Clicked twice, because it can take a lot of completed work from the
     // table at once. The saved scores themselves are kept.
-    const auto answer = QMessageBox::question(
-        this, app::tr("Remove all videos"),
-        ntr("Remove {count} video from the list?\n\nSaved results are kept -- re-adding a video shows its scores "
-            "again.",
-            "Remove all {count} videos from the list?\n\nSaved results are kept -- re-adding a video shows its "
-            "scores again.",
-            static_cast<long long>(rows_.size())),
-        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-    if (answer != QMessageBox::Yes) {
+    if (!click_twice_->click(remove_all_button_,
+                       ntr("Click Remove all again to remove {count} video. Saved results are kept.",
+                           "Click Remove all again to remove all {count} videos. Saved results are kept.",
+                           static_cast<long long>(rows_.size())))) {
         return;
     }
+    remove_all_rows();
+}
+
+void MainWindow::on_start_over() {
+    if (rows_.empty() && !source_info_ && !source_reading_) {
+        return;
+    }
+    const QString line =
+        rows_.empty() ? app::tr("Click Start over again to clear the reference.")
+                      : ntr("Click Start over again to clear the reference and remove {count} video. Saved results "
+                            "are kept.",
+                            "Click Start over again to clear the reference and remove all {count} videos. Saved "
+                            "results are kept.",
+                            static_cast<long long>(rows_.size()));
+    if (!click_twice_->click(start_over_button_, line)) {
+        return;
+    }
+    remove_all_rows();
+    clear_reference();
+}
+
+void MainWindow::remove_all_rows() {
     std::vector<std::string> lines;
     for (const std::shared_ptr<RowData>& row_data : rows_) {
         if (row_data->completed_run) {
@@ -1366,6 +1409,7 @@ void MainWindow::on_remove_all_distorted() {
     rows_.clear();
     on_table_selection_changed();
     sync_frame_compare();
+    refresh_length_note();
 }
 
 void MainWindow::on_highlight_toggled(bool on) {

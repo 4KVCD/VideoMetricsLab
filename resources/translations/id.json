@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Start over": "Mulai ulang",
+  "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Mengosongkan referensi dan menghapus semua video uji, untuk perbandingan baru. Hasil tersimpan tetap ada.",
+  "Click Start over again to clear the reference.": "Klik \"Mulai ulang\" lagi untuk mengosongkan referensi.",
+  "Every saved score in this folder is deleted. This can't be undone.": "Semua skor tersimpan di folder ini dihapus. Tindakan ini tidak dapat dibatalkan.",
+  "Show details": "Tampilkan detail",
+  "Hide details": "Sembunyikan detail",
+  "OK": "OK",
   "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM, as SSIM YUV weighs them. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 dari MS-SSIM ketiga bidang, seperti bobot SSIM YUV. Paling tinggi 1, makin tinggi makin baik.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' PSNR, as JVET's common test conditions weigh it. In dB, higher is better.": "(6 × Y + Cb + Cr) / 8 dari PSNR ketiga bidang, seperti bobot kondisi uji bersama JVET. Dalam dB, makin tinggi makin baik.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' SSIM, as MSU's codec comparisons weigh YUV-SSIM. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 dari SSIM ketiga bidang, seperti perbandingan codec MSU membobot YUV-SSIM. Paling tinggi 1, makin tinggi makin baik.",
@@ -470,7 +477,6 @@
   "Reading reference video...": "Membaca video referensi...",
   "Could not read video": "Tidak dapat membaca video",
   "Resolution tests removed": "Uji resolusi dihapus",
-  "Videos of a different length": "Video dengan durasi berbeda",
   "\n\nAdd them again to test the new source.": "\n\nTambahkan lagi untuk menguji sumber baru.",
   "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nMenghitung metrik memerlukan rentang di dalam kedua video (Rentang, di bawah Persiapan video). Bandingkan video menampilkan bagian yang sama-sama dimiliki keduanya.",
   "Ready.": "Siap.",
@@ -531,7 +537,6 @@
   "Select test videos": "Pilih video uji",
   "Reading...": "Membaca...",
   "Complete (cached)": "Selesai (tersimpan)",
-  "Remove all videos": "Hapus semua video",
   "\nLoaded from a previous run (matching files and calculation settings) -- right-click to recompute.": "\nDimuat dari proses sebelumnya (file dan pengaturan perhitungan sama) — klik kanan untuk menghitung ulang.",
   "Recalculate selected metrics (ignore cached/previous results)": "Hitung ulang metrik yang dicentang (abaikan hasil tersimpan/sebelumnya)",
   "Nothing to add": "Tidak ada yang ditambahkan",
@@ -1374,6 +1379,9 @@
   "Calculated with {metric}.": "Dihitung bersama {metric}."
  },
  "plurals": {
+  "Click Remove all again to remove {count} video. Saved results are kept.": ["Klik \"Hapus semua\" lagi untuk menghapus {count} video. Hasil tersimpan tetap ada."],
+  "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["Klik \"Mulai ulang\" lagi untuk mengosongkan referensi dan menghapus {count} video. Hasil tersimpan tetap ada."],
+  "{count} test video does not last as long as the reference ({length}).": ["{count} video uji tidak sama panjang dengan referensi ({length})."],
   "{count} shown": ["{count} ditampilkan"],
   "{count} ticked": ["{count} dicentang"],
   "{shown} of {count} shown": ["{shown} dari {count} ditampilkan"],
@@ -1408,9 +1416,6 @@
   ],
   "Reading {count} video...": [
    "Membaca {count} video..."
-  ],
-  "Remove {count} video from the list?\n\nSaved results are kept -- re-adding a video shows its scores again.": [
-   "Hapus semua {count} video dari daftar?\n\nHasil tersimpan tetap ada — menambahkan video lagi menampilkan skornya kembali."
   ],
   "{count} scored frame; metrics: ": [
    "{count} bingkai dinilai; metrik: "

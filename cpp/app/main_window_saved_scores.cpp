@@ -361,6 +361,7 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
     }
     run->from_saved_scores = true;
     row_data.completed_run = std::move(run);
+    refresh_length_note();  // scored already: compared
     row_data.analysis_status = has_requested_results(row_data) ? std::optional(RowState::cached) : std::nullopt;
     row_data.status_detail =
         scores_detail(row_data.completed_run->result) +

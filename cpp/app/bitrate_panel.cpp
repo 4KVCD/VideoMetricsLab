@@ -5,7 +5,6 @@
 #include <QCheckBox>
 #include <QDragEnterEvent>
 #include <QDropEvent>
-#include <QFileDialog>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
@@ -581,7 +580,7 @@ void BitratePanel::dropEvent(QDropEvent* event) {
 }
 
 void BitratePanel::on_add_files() {
-    const QStringList chosen = QFileDialog::getOpenFileNames(this, app::tr("Add videos for bitrate analysis"));
+    const QStringList chosen = dialogs.open_files_at(app::tr("Add videos for bitrate analysis"), QString());
     std::vector<std::filesystem::path> paths;
     for (const QString& path : chosen) {
         paths.push_back(platform::path_from_text(path.toStdString()));

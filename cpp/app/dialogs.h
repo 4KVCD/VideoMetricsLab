@@ -1,10 +1,14 @@
-// The dialogs that wait for the user (QMessageBox, QFileDialog), behind
-// functions: the window's tests answer them in the user's place, as the test
-// harness fails any dialog that opens.
+// The dialogs that wait for the user, behind functions: the window's tests
+// answer them in the user's place, as the test harness fails any dialog that
+// opens. Every one of the window's modals goes through here (the messages in
+// show_message's look, app_dialog.h; the file dialogs Windows' own), as
+// docs/ARCHITECTURE.md's "Asking and telling the user" says.
 #pragma once
 
 #include <QString>
 #include <QStringList>
+
+#include "app_dialog.h"
 
 #include <functional>
 #include <optional>
@@ -35,6 +39,10 @@ struct Dialogs {
     // A message with an OK button: information, and a failure (critical).
     std::function<void(const QString& title, const QString& text)> inform;
     std::function<void(const QString& title, const QString& text)> alert;
+    // A warning with an OK button: something to know before going on.
+    std::function<void(const QString& title, const QString& text)> warn;
+    // Any other message (app_dialog.h): its own icon, buttons and tick box.
+    std::function<MessageAnswer(const Message& message)> message;
     // A question answered Yes or No: whether Yes.
     std::function<bool(const QString& title, const QString& text)> ask;
     // The same with No the default button, for a question whose No keeps
@@ -42,6 +50,10 @@ struct Dialogs {
     std::function<bool(const QString& title, const QString& text)> ask_no_default;
     // The file dialogs; an empty answer is Cancel.
     std::function<QString(const QString& title, const QString& filter)> open_file;
+    // The same, opening at `start` (empty: wherever it opens); and several
+    // files at once.
+    std::function<QString(const QString& title, const QString& start, const QString& filter)> open_file_at;
+    std::function<QStringList(const QString& title, const QString& start)> open_files_at;
     std::function<QString(const QString& title, const QString& suggested, const QString& filter)> save_file;
     // A folder, the dialog opening at `start` (none: wherever it opens).
     std::function<QString(const QString& title, const QString& start)> choose_folder;

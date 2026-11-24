@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Start over": "새로 시작",
+  "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "참조 영상을 비우고 모든 테스트 영상을 제거하여 새 비교를 시작합니다. 저장된 결과는 유지됩니다.",
+  "Click Start over again to clear the reference.": "'새로 시작'을 한 번 더 클릭하면 참조 영상을 비웁니다.",
+  "Every saved score in this folder is deleted. This can't be undone.": "이 폴더에 저장된 모든 점수가 삭제됩니다. 되돌릴 수 없습니다.",
+  "Show details": "세부 정보 표시",
+  "Hide details": "세부 정보 숨기기",
+  "OK": "확인",
   "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM, as SSIM YUV weighs them. Up to 1, higher is better.": "세 평면 MS-SSIM의 (6 × Y + Cb + Cr) / 8로, SSIM YUV와 같은 가중 방식입니다. 최대 1이며 높을수록 좋습니다.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' PSNR, as JVET's common test conditions weigh it. In dB, higher is better.": "세 평면 PSNR의 (6 × Y + Cb + Cr) / 8로, JVET 공통 테스트 조건의 가중 방식입니다. 단위는 dB이며 높을수록 좋습니다.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' SSIM, as MSU's codec comparisons weigh YUV-SSIM. Up to 1, higher is better.": "세 평면 SSIM의 (6 × Y + Cb + Cr) / 8로, MSU 코덱 비교에서 YUV-SSIM을 가중하는 방식입니다. 최대 1이며 높을수록 좋습니다.",
@@ -468,7 +475,6 @@
   "Reading reference video...": "참조 영상 읽는 중...",
   "Could not read video": "영상을 읽을 수 없음",
   "Resolution tests removed": "해상도 테스트 제거됨",
-  "Videos of a different length": "길이가 다른 동영상",
   "\n\nAdd them again to test the new source.": "\n\n새 원본을 테스트하려면 다시 추가하세요.",
   "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\n메트릭을 계산하려면 두 동영상 모두에 들어가는 범위가 필요합니다(영상 준비의 범위). 영상 비교에서는 두 동영상이 공유하는 부분을 보여줍니다.",
   "Ready.": "준비됨.",
@@ -529,7 +535,6 @@
   "Select test videos": "테스트 영상 선택",
   "Reading...": "읽는 중...",
   "Complete (cached)": "완료(저장됨)",
-  "Remove all videos": "모든 영상 제거",
   "\nLoaded from a previous run (matching files and calculation settings) -- right-click to recompute.": "\n이전 실행에서 불러왔습니다(파일과 계산 설정 일치). 다시 계산하려면 마우스 오른쪽 단추를 클릭하세요.",
   "Recalculate selected metrics (ignore cached/previous results)": "선택한 지표 다시 계산(저장된/이전 결과 무시)",
   "Nothing to add": "추가할 항목 없음",
@@ -1374,6 +1379,9 @@
   "Calculated with {metric}.": "{metric}와 함께 계산됩니다."
  },
  "plurals": {
+  "Click Remove all again to remove {count} video. Saved results are kept.": ["'모두 제거'를 한 번 더 클릭하면 영상 {count}개를 제거합니다. 저장된 결과는 유지됩니다."],
+  "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["'새로 시작'을 한 번 더 클릭하면 참조 영상을 비우고 영상 {count}개를 제거합니다. 저장된 결과는 유지됩니다."],
+  "{count} test video does not last as long as the reference ({length}).": ["테스트 동영상 {count}개의 길이가 참조 동영상({length})과 다릅니다."],
   "{count} shown": ["{count}개 표시"],
   "{count} ticked": ["{count}개 체크됨"],
   "{shown} of {count} shown": ["{count}개 중 {shown}개 표시"],
@@ -1408,9 +1416,6 @@
   ],
   "Reading {count} video...": [
    "영상 {count}개 읽는 중..."
-  ],
-  "Remove {count} video from the list?\n\nSaved results are kept -- re-adding a video shows its scores again.": [
-   "영상 {count}개를 모두 목록에서 제거할까요?\n\n저장된 결과는 유지됩니다. 영상을 다시 추가하면 점수가 다시 표시됩니다."
   ],
   "{count} scored frame; metrics: ": [
    "채점한 프레임 {count}개, 지표: "

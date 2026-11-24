@@ -4,7 +4,6 @@
 #include <QClipboard>
 #include <QComboBox>
 #include <QDialog>
-#include <QDialogButtonBox>
 #include <QFile>
 #include <QFileInfo>
 #include <QGroupBox>
@@ -26,6 +25,7 @@
 #include <exception>
 #include <set>
 
+#include "app_dialog.h"
 #include "i18n.h"
 #include "rate_curve_chart.h"
 #include "theme.h"
@@ -98,9 +98,8 @@ QTableWidgetItem* text_item(const QString& text) {
 
 // The real dialog for BdRatePanel::choose_videos: a tick list.
 std::vector<int> choose_from_list(QWidget* parent, const QStringList& items) {
-    QDialog dialog(parent);
-    dialog.setWindowTitle(app::tr("Add scored videos"));
-    auto* layout = new QVBoxLayout(&dialog);
+    AppDialog dialog(parent, app::tr("Add scored videos"));
+    auto* layout = new QVBoxLayout(dialog.body());
     layout->addWidget(new QLabel(app::tr("Tick the videos to add.")));
     auto* list = new QListWidget;
     for (const QString& text : items) {
@@ -110,10 +109,7 @@ std::vector<int> choose_from_list(QWidget* parent, const QStringList& items) {
     }
     list->setMinimumWidth(560);
     layout->addWidget(list);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    layout->addWidget(buttons);
+    add_dialog_buttons(dialog, layout);
     std::vector<int> chosen;
     if (dialog.exec() == QDialog::Accepted) {
         for (int row = 0; row < list->count(); ++row) {

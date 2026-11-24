@@ -5,10 +5,8 @@
 
 #include <QDropEvent>
 #include <QEvent>
-#include <QFileDialog>
 #include <QFileInfo>
 #include <QLineEdit>
-#include <QMessageBox>
 #include <QMouseEvent>
 #include <QTimer>
 
@@ -39,7 +37,7 @@ const app_log::Logger logger("vml.main_window");
 
 void MainWindow::on_browse_source() {
     const QString path =
-        QFileDialog::getOpenFileName(this, app::tr("Select reference video"), video_dialog_dir("reference"));
+        dialogs_.open_file_at(app::tr("Select reference video"), video_dialog_dir("reference"), QString());
     if (path.isEmpty()) {
         return;
     }
@@ -89,8 +87,7 @@ void MainWindow::on_source_path_entered() {
         // copy the rest of the path, keeps what was typed.
         if (source_edit_->hasFocus()) {
             source_edit_->setText(shown_source_path());
-            QMessageBox::warning(this, app::tr("No such video"),
-                                 app::tr("There is no file at {path}.", {{"path", text}}));
+            dialogs_.warn(app::tr("No such video"), app::tr("There is no file at {path}.", {{"path", text}}));
         }
         return;
     }
@@ -198,7 +195,7 @@ void MainWindow::on_source_probed(int generation, const Probed& probed) {
     if (!probed.info) {
         source_edit_->setText(shown_source_path());  // a path typed in that would not read
         show_source_label();
-        QMessageBox::critical(this, app::tr("Could not read video"), tr_message(probed.error));
+        dialogs_.alert(app::tr("Could not read video"), tr_message(probed.error));
         return;
     }
     apply_source_info(path_of(probed.path), *probed.info);
@@ -229,7 +226,6 @@ void MainWindow::apply_source_info(const std::filesystem::path& path, const Vide
         if (row_data->options.resample_test && row_data->video_info) {
             take_film_grain(*row_data->video_info, *source_info_);  // its copy of the reference
         }
-        row_data->length_checked = false;  // compared with this reference's length next
     }
     source_edit_->setText(text_of(path));
     show_source_label();
@@ -237,6 +233,26 @@ void MainWindow::apply_source_info(const std::filesystem::path& path, const Vide
     // Video Compare lists unscored rows only once there is a reference: with
     // the tab open while the reference was read, they stayed missing.
     sync_frame_compare();
+}
+
+void MainWindow::clear_reference() {
+    // As the window starts: no reference. A reading under way is dropped as
+    // it ends (its generation is no longer the latest).
+    ++source_probe_generation_;
+    if (source_probe_worker_ != nullptr && source_probe_worker_->isRunning()) {
+        source_probe_worker_->cancel();
+    }
+    source_reading_.reset();
+    source_info_.reset();
+    reference_frame_rate_asked_ = false;
+    source_edit_->clear();
+    show_source_label();
+    show_ready();
+    follow_reference_cvvdp();
+    open_videos_changed();  // the reference remembered for the next start goes too
+    on_table_selection_changed();
+    sync_frame_compare();
+    refresh_length_note();
 }
 
 void MainWindow::show_source_label() {
@@ -355,6 +371,7 @@ void MainWindow::invalidate_completed_results(const std::vector<int>& rows) {
         graph_panel_->remove_by_identities(lines, paths);
         sync_frame_compare();
     }
+    refresh_length_note();  // a row without scores is compared with the reference's length again
 }
 
 void MainWindow::show_reading(const QString& text) {

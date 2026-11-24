@@ -4,7 +4,6 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QMenu>
-#include <QMessageBox>
 #include <QPushButton>
 #include <QtConcurrent/QtConcurrentRun>
 
@@ -326,6 +325,7 @@ void MainWindow::on_panel_field_edited(const QString& field) {
         set_row_black_bars(row);
     }
     reload_saved_scores(changed);
+    refresh_length_note();  // a range set or cleared
 }
 
 void MainWindow::on_model_changed(int index) {
@@ -417,7 +417,7 @@ void MainWindow::add_opposite_scale_direction_rows(const std::vector<int>& rows)
     // and compared side by side, rather than one picked and the other run
     // again later.
     if (!source_info_) {
-        QMessageBox::warning(this, app::tr("No reference"), app::tr("Please select a reference video first."));
+        dialogs_.warn(app::tr("No reference"), app::tr("Please select a reference video first."));
         return;
     }
     int added = 0;
@@ -638,7 +638,7 @@ void MainWindow::save_cvvdp_preset(const CvvdpDisplayDialog& dialog, const Cvvdp
     try {
         settings_.cvvdp_presets_json = with_user_preset(presets, name, saved);
     } catch (const std::invalid_argument& error) {
-        QMessageBox::warning(this, app::tr("CVVDP preset"), tr_message(QString::fromStdString(error.what())));
+        dialogs_.alert(app::tr("CVVDP preset"), tr_message(QString::fromStdString(error.what())));
         return;
     }
     if (!replacing || settings_.cvvdp_default_preset == *replacing) {
@@ -658,16 +658,15 @@ void MainWindow::save_cvvdp_preset(const CvvdpDisplayDialog& dialog, const Cvvdp
         if (saved.identity() == settings.display.identity()) {
             // Renamed only: the videos keep their values, and the name.
             apply_cvvdp([](const CvvdpSettings& old) { return old; }, others, name);
-        } else if (QMessageBox::question(
-                       this, app::tr("CVVDP preset"),
+        } else if (dialogs_.ask(
+                       app::tr("CVVDP preset"),
                        ntr("{count} other video uses your preset \"{name}\". Update it to the saved values too?\n\n"
                            "A CVVDP score made for the old values is cleared; one already saved for the new values "
                            "is shown instead. Choose No to keep the old values (shown as Custom).",
                            "{count} other videos use your preset \"{name}\". Update them to the saved values too?\n\n"
                            "A CVVDP score made for the old values is cleared; one already saved for the new values "
                            "is shown instead. Choose No to keep the old values (shown as Custom).",
-                           static_cast<long long>(others.size()), {{"name", QString::fromStdString(*replacing)}})) ==
-                   QMessageBox::Yes) {
+                           static_cast<long long>(others.size()), {{"name", QString::fromStdString(*replacing)}}))) {
             apply_cvvdp(with_saved_display, others, name);
         }
     }
@@ -703,10 +702,9 @@ void MainWindow::on_cvvdp_delete_preset() {
         return;
     }
     const QString quoted = QString::fromStdString(name);
-    if (QMessageBox::question(
-            this, app::tr("Delete CVVDP preset"),
-            app::tr("Delete your preset \"{name}\"?\n\nVideos using it keep their settings.", {{"name", quoted}})) !=
-        QMessageBox::Yes) {
+    if (!dialogs_.ask_no_default(
+            app::tr("Delete CVVDP preset"),
+            app::tr("Delete your preset \"{name}\"?\n\nVideos using it keep their settings.", {{"name", quoted}}))) {
         return;
     }
     settings_.cvvdp_presets_json = without_user_preset(settings_.cvvdp_presets_json, name);

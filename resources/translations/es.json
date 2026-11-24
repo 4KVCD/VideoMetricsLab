@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Start over": "Empezar de nuevo",
+  "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Vacía la referencia y quita todos los videos de prueba, para una comparación nueva. Los resultados guardados se conservan.",
+  "Click Start over again to clear the reference.": "Haz clic otra vez en «Empezar de nuevo» para vaciar la referencia.",
+  "Every saved score in this folder is deleted. This can't be undone.": "Se eliminan todas las puntuaciones guardadas en esta carpeta. No se puede deshacer.",
+  "Show details": "Mostrar detalles",
+  "Hide details": "Ocultar detalles",
+  "OK": "Aceptar",
   "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM, as SSIM YUV weighs them. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 del MS-SSIM de los tres planos, como lo pondera SSIM YUV. Hasta 1, más alto es mejor.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' PSNR, as JVET's common test conditions weigh it. In dB, higher is better.": "(6 × Y + Cb + Cr) / 8 del PSNR de los tres planos, como lo ponderan las condiciones de prueba comunes de JVET. En dB, más alto es mejor.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' SSIM, as MSU's codec comparisons weigh YUV-SSIM. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 del SSIM de los tres planos, como las comparativas de códecs de MSU ponderan YUV-SSIM. Hasta 1, más alto es mejor.",
@@ -470,7 +477,6 @@
   "Reading reference video...": "Leyendo el video de referencia...",
   "Could not read video": "No se pudo leer el video",
   "Resolution tests removed": "Pruebas de resolución quitadas",
-  "Videos of a different length": "Vídeos de distinta duración",
   "\n\nAdd them again to test the new source.": "\n\nVuelve a agregarlas para probar el nuevo original.",
   "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nCalcular las métricas requiere un rango dentro de ambos vídeos (Rango, en Preparación del video). Comparar videos muestra la parte que comparten.",
   "Ready.": "Listo.",
@@ -531,7 +537,6 @@
   "Select test videos": "Seleccionar videos de prueba",
   "Reading...": "Leyendo...",
   "Complete (cached)": "Completo (guardado)",
-  "Remove all videos": "Quitar todos los videos",
   "\nLoaded from a previous run (matching files and calculation settings) -- right-click to recompute.": "\nCargado de una ejecución anterior (mismos archivos y configuración de cálculo); haz clic derecho para recalcular.",
   "Recalculate selected metrics (ignore cached/previous results)": "Recalcular las métricas seleccionadas (ignorar resultados guardados/anteriores)",
   "Nothing to add": "Nada que agregar",
@@ -1374,6 +1379,9 @@
   "Calculated with {metric}.": "Calculado con {metric}."
  },
  "plurals": {
+  "Click Remove all again to remove {count} video. Saved results are kept.": ["Haz clic otra vez en «Quitar todos» para quitar {count} video. Los resultados guardados se conservan.", "Haz clic otra vez en «Quitar todos» para quitar los {count} videos. Los resultados guardados se conservan."],
+  "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["Haz clic otra vez en «Empezar de nuevo» para vaciar la referencia y quitar {count} video. Los resultados guardados se conservan.", "Haz clic otra vez en «Empezar de nuevo» para vaciar la referencia y quitar los {count} videos. Los resultados guardados se conservan."],
+  "{count} test video does not last as long as the reference ({length}).": ["{count} vídeo de prueba no dura lo mismo que la referencia ({length}).", "{count} vídeos de prueba no duran lo mismo que la referencia ({length})."],
   "{count} shown": ["{count} mostrada", "{count} mostradas"],
   "{count} ticked": ["{count} marcada", "{count} marcadas"],
   "{shown} of {count} shown": ["{shown} de {count} mostrada", "{shown} de {count} mostradas"],
@@ -1417,10 +1425,6 @@
   "Reading {count} video...": [
    "Leyendo {count} video...",
    "Leyendo {count} videos..."
-  ],
-  "Remove {count} video from the list?\n\nSaved results are kept -- re-adding a video shows its scores again.": [
-   "¿Quitar {count} video de la lista?\n\nLos resultados guardados se conservan: al volver a agregar un video se muestran de nuevo sus puntuaciones.",
-   "¿Quitar los {count} videos de la lista?\n\nLos resultados guardados se conservan: al volver a agregar un video se muestran de nuevo sus puntuaciones."
   ],
   "{count} scored frame; metrics: ": [
    "{count} fotograma puntuado; métricas: ",

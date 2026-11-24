@@ -12,13 +12,13 @@
 #include <filesystem>
 #include <string>
 
+#include "app_dialog.h"
 #include "vml/cancel.h"
 #include "vml/ffmpeg_download.h"
 #include "vml/sha256.h"
 
 class QNetworkAccessManager;
 class QNetworkReply;
-class QProgressDialog;
 class QThread;
 class QWidget;
 
@@ -63,7 +63,7 @@ private:
     std::filesystem::path folder_;
     QWidget* parent_;
     QNetworkAccessManager* network_ = nullptr;
-    QProgressDialog* progress_ = nullptr;
+    ProgressDialog* progress_ = nullptr;
     QNetworkReply* reply_ = nullptr;
     FfmpegBuild build_;
     QFile zip_;

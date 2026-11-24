@@ -319,7 +319,7 @@ bool TitleBar::wanted() {
     return true;
 }
 
-TitleBar::TitleBar(QMainWindow* window) : QWidget(window), window_(window) {
+TitleBar::TitleBar(QWidget* window, bool dialog) : QWidget(window), window_(window), dialog_(dialog) {
     setFixedHeight(bar_height);
     setAutoFillBackground(false);
     auto* row = new QHBoxLayout(this);
@@ -336,30 +336,31 @@ TitleBar::TitleBar(QMainWindow* window) : QWidget(window), window_(window) {
     row->addWidget(title_);
     row->addStretch(1);
 
-    buttons_ = new TitleButtons;
-    row->addWidget(buttons_);
-    row->addSpacing(6);
-
     auto* captions = new QHBoxLayout;
     captions->setSpacing(0);
-    minimize_ = new CaptionButton(minimize_glyph, false, this);
-    minimize_->setToolTip(app::tr("Minimize"));
-    minimize_->setAccessibleName(app::tr("Minimize"));
-    connect(minimize_, &QAbstractButton::clicked, window_, &QWidget::showMinimized);
-    maximize_ = new CaptionButton(maximize_glyph, false, this);
-    // A click on it with the pointer comes as the window's non-client
-    // messages (native_event: it is HTMAXBUTTON to Windows) and never reaches
-    // Qt as a click; this is for everything else that presses it: Narrator,
-    // Voice Access and other UI Automation clients (InvokePattern), which
-    // click it as they do Minimize and Close.
-    connect(maximize_, &QAbstractButton::clicked, window_,
-            [this] { window_->isMaximized() ? window_->showNormal() : window_->showMaximized(); });
+    if (!dialog_) {  // a dialog's bar: its title and close alone
+        buttons_ = new TitleButtons;
+        row->addWidget(buttons_);
+        row->addSpacing(6);
+        minimize_ = new CaptionButton(minimize_glyph, false, this);
+        minimize_->setToolTip(app::tr("Minimize"));
+        minimize_->setAccessibleName(app::tr("Minimize"));
+        connect(minimize_, &QAbstractButton::clicked, window_, &QWidget::showMinimized);
+        maximize_ = new CaptionButton(maximize_glyph, false, this);
+        // A click on it with the pointer comes as the window's non-client
+        // messages (native_event: it is HTMAXBUTTON to Windows) and never
+        // reaches Qt as a click; this is for everything else that presses it:
+        // Narrator, Voice Access and other UI Automation clients
+        // (InvokePattern), which click it as they do Minimize and Close.
+        connect(maximize_, &QAbstractButton::clicked, window_,
+                [this] { window_->isMaximized() ? window_->showNormal() : window_->showMaximized(); });
+        captions->addWidget(minimize_);
+        captions->addWidget(maximize_);
+    }
     close_ = new CaptionButton(close_glyph, true, this);
     close_->setToolTip(app::tr("Close"));
     close_->setAccessibleName(app::tr("Close"));
     connect(close_, &QAbstractButton::clicked, window_, &QWidget::close);
-    captions->addWidget(minimize_);
-    captions->addWidget(maximize_);
     captions->addWidget(close_);
     row->addLayout(captions);
 
@@ -372,8 +373,8 @@ TitleBar::TitleBar(QMainWindow* window) : QWidget(window), window_(window) {
 void TitleBar::prepare() {
     // No title, icon or buttons of Qt's own: the bar is the app's. Asked for
     // before the native window is made, which these choose the kind of.
-    window_->setWindowFlags(Qt::Window | Qt::CustomizeWindowHint | Qt::ExpandedClientAreaHint |
-                            Qt::NoTitleBarBackgroundHint);
+    window_->setWindowFlags((dialog_ ? Qt::Dialog : Qt::Window) | Qt::CustomizeWindowHint |
+                            Qt::ExpandedClientAreaHint | Qt::NoTitleBarBackgroundHint);
     // The bar goes where Qt's own would have been: the window's contents
     // are not kept below it (Qt's safe area, for a bar of its own).
     window_->setAttribute(Qt::WA_ContentsMarginsRespectsSafeArea, false);
@@ -391,7 +392,8 @@ void TitleBar::attach() {
     // draws nothing for them: its own bar is not asked for.
     const HWND hwnd = hwnd_of(window_);
     const LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
-    SetWindowLongPtrW(hwnd, GWL_STYLE, style | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
+    SetWindowLongPtrW(hwnd, GWL_STYLE,
+                      style | WS_CAPTION | WS_SYSMENU | (dialog_ ? 0 : WS_MINIMIZEBOX | WS_MAXIMIZEBOX));
     SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
                  SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
 }
@@ -428,8 +430,9 @@ int TitleBar::hit_test(QPoint native) const {
     ScreenToClient(hwnd, &point);
     RECT client;
     GetClientRect(hwnd, &client);
-    // The edges resize, unless maximized or full screen (resize_edge).
-    if (!window_->isMaximized() && !window_->isFullScreen()) {
+    // The edges resize, unless maximized or full screen (resize_edge), or a
+    // dialog, which keeps its size.
+    if (!dialog_ && !window_->isMaximized() && !window_->isFullScreen()) {
         const UINT dpi = GetDpiForWindow(hwnd);
         const int padding = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
         const int edge = resize_edge(QPoint(point.x, point.y), QSize(client.right, client.bottom),
@@ -445,7 +448,7 @@ int TitleBar::hit_test(QPoint native) const {
         return HTCLIENT;  // the window's contents, below the bar
     }
     const QWidget* child = childAt(local);
-    if (child == maximize_) {
+    if (child != nullptr && child == maximize_) {
         return HTMAXBUTTON;
     }
     for (const QWidget* widget = child; widget != nullptr && widget != this; widget = widget->parentWidget()) {
@@ -466,9 +469,9 @@ void TitleBar::show_system_menu(QPoint at) {
     const auto enable = [menu](UINT item, bool on) { EnableMenuItem(menu, item, MF_BYCOMMAND | (on ? MF_ENABLED : MF_GRAYED)); };
     enable(SC_RESTORE, maximized);
     enable(SC_MOVE, !maximized);
-    enable(SC_SIZE, !maximized);
-    enable(SC_MINIMIZE, true);
-    enable(SC_MAXIMIZE, !maximized);
+    enable(SC_SIZE, !maximized && !dialog_);
+    enable(SC_MINIMIZE, !dialog_);
+    enable(SC_MAXIMIZE, !maximized && !dialog_);
     enable(SC_CLOSE, true);
     SetMenuDefaultItem(menu, SC_CLOSE, FALSE);
     const UINT flags = TPM_RETURNCMD | TPM_RIGHTBUTTON | (QApplication::isRightToLeft() ? TPM_LAYOUTRTL : 0);
@@ -490,6 +493,9 @@ bool TitleBar::native_event(void* message, qintptr* result) {
     case WM_NCMOUSEMOVE:
         // The maximize button's pointer, which Windows has while it is a
         // maximize button to it.
+        if (maximize_ == nullptr) {
+            return false;
+        }
         maximize_->set_hot(msg->wParam == HTMAXBUTTON);
         if (msg->wParam == HTMAXBUTTON) {
             TRACKMOUSEEVENT track{sizeof(TRACKMOUSEEVENT), TME_LEAVE | TME_NONCLIENT, msg->hwnd, 0};
@@ -499,6 +505,9 @@ bool TitleBar::native_event(void* message, qintptr* result) {
         }
         return false;
     case WM_NCMOUSELEAVE:
+        if (maximize_ == nullptr) {
+            return false;
+        }
         maximize_->set_hot(false);
         maximize_->set_pressed(false);
         return false;
@@ -561,7 +570,9 @@ bool TitleBar::eventFilter(QObject* watched, QEvent* event) {
             show_active();
             for (QWidget* button : {static_cast<QWidget*>(minimize_), static_cast<QWidget*>(maximize_),
                                     static_cast<QWidget*>(close_)}) {
-                button->update();
+                if (button != nullptr) {
+                    button->update();
+                }
             }
             break;
         default:
@@ -579,6 +590,9 @@ bool TitleBar::eventFilter(QObject* watched, QEvent* event) {
 }
 
 void TitleBar::show_window_state() {
+    if (maximize_ == nullptr) {
+        return;
+    }
     const bool maximized = window_->isMaximized();
     maximize_->setText(maximized ? restore_glyph : maximize_glyph);
     maximize_->setToolTip(maximized ? app::tr("Restore Down") : app::tr("Maximize"));

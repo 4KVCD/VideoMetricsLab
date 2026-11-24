@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Start over": "Zacznij od nowa",
+  "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Czyści wideo referencyjne i usuwa wszystkie wideo testowe, aby rozpocząć nowe porównanie. Zapisane wyniki zostają.",
+  "Click Start over again to clear the reference.": "Kliknij ponownie „Zacznij od nowa”, aby wyczyścić wideo referencyjne.",
+  "Every saved score in this folder is deleted. This can't be undone.": "Wszystkie zapisane wyniki w tym folderze zostaną usunięte. Tej operacji nie można cofnąć.",
+  "Show details": "Pokaż szczegóły",
+  "Hide details": "Ukryj szczegóły",
+  "OK": "OK",
   "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM, as SSIM YUV weighs them. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 MS-SSIM trzech płaszczyzn, z wagami jak w SSIM YUV. Do 1, im wyżej, tym lepiej.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' PSNR, as JVET's common test conditions weigh it. In dB, higher is better.": "(6 × Y + Cb + Cr) / 8 PSNR trzech płaszczyzn, z wagami jak we wspólnych warunkach testowych JVET. W dB, im wyżej, tym lepiej.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' SSIM, as MSU's codec comparisons weigh YUV-SSIM. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 SSIM trzech płaszczyzn, tak jak porównania kodeków MSU ważą YUV-SSIM. Do 1, im wyżej, tym lepiej.",
@@ -470,7 +477,6 @@
   "Reading reference video...": "Wczytywanie wideo referencyjnego...",
   "Could not read video": "Nie można odczytać wideo",
   "Resolution tests removed": "Usunięto testy rozdzielczości",
-  "Videos of a different length": "Wideo o innej długości",
   "\n\nAdd them again to test the new source.": "\n\nDodaj je ponownie, aby przetestować nowe źródło.",
   "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nObliczenie metryk wymaga zakresu mieszczącego się w obu wideo (Zakres, w sekcji Przygotowanie wideo). Porównanie wideo pokazuje część wspólną.",
   "Ready.": "Gotowe.",
@@ -531,7 +537,6 @@
   "Select test videos": "Wybierz wideo testowe",
   "Reading...": "Wczytywanie...",
   "Complete (cached)": "Gotowe (zapisane)",
-  "Remove all videos": "Usuń wszystkie wideo",
   "\nLoaded from a previous run (matching files and calculation settings) -- right-click to recompute.": "\nWczytano z poprzedniego przebiegu (zgodne pliki i ustawienia obliczeń) — kliknij prawym przyciskiem, aby przeliczyć.",
   "Recalculate selected metrics (ignore cached/previous results)": "Przelicz wybrane metryki (ignoruj zapisane/wcześniejsze wyniki)",
   "Nothing to add": "Nie ma czego dodać",
@@ -1374,6 +1379,9 @@
   "Calculated with {metric}.": "Obliczane z {metric}."
  },
  "plurals": {
+  "Click Remove all again to remove {count} video. Saved results are kept.": ["Kliknij ponownie „Usuń wszystkie”, aby usunąć {count} wideo. Zapisane wyniki zostają.", "Kliknij ponownie „Usuń wszystkie”, aby usunąć wszystkie {count} wideo. Zapisane wyniki zostają.", "Kliknij ponownie „Usuń wszystkie”, aby usunąć wszystkie {count} wideo. Zapisane wyniki zostają."],
+  "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["Kliknij ponownie „Zacznij od nowa”, aby wyczyścić wideo referencyjne i usunąć {count} wideo. Zapisane wyniki zostają.", "Kliknij ponownie „Zacznij od nowa”, aby wyczyścić wideo referencyjne i usunąć wszystkie {count} wideo. Zapisane wyniki zostają.", "Kliknij ponownie „Zacznij od nowa”, aby wyczyścić wideo referencyjne i usunąć wszystkie {count} wideo. Zapisane wyniki zostają."],
+  "{count} test video does not last as long as the reference ({length}).": ["{count} wideo testowe nie trwa tyle co wideo referencyjne ({length}).", "{count} wideo testowe nie trwają tyle co wideo referencyjne ({length}).", "{count} wideo testowych nie trwa tyle co wideo referencyjne ({length})."],
   "{count} shown": ["{count} pokazana", "{count} pokazane", "{count} pokazanych"],
   "{count} ticked": ["{count} zaznaczona", "{count} zaznaczone", "{count} zaznaczonych"],
   "{shown} of {count} shown": ["Pokazane: {shown} z {count}", "Pokazane: {shown} z {count}", "Pokazane: {shown} z {count}"],
@@ -1426,11 +1434,6 @@
    "Wczytywanie {count} wideo...",
    "Wczytywanie {count} wideo...",
    "Wczytywanie {count} wideo..."
-  ],
-  "Remove {count} video from the list?\n\nSaved results are kept -- re-adding a video shows its scores again.": [
-   "Usunąć {count} wideo z listy?\n\nZapisane wyniki zostają — po ponownym dodaniu wideo jego wyniki znów się pojawią.",
-   "Usunąć wszystkie {count} wideo z listy?\n\nZapisane wyniki zostają — po ponownym dodaniu wideo jego wyniki znów się pojawią.",
-   "Usunąć wszystkie {count} wideo z listy?\n\nZapisane wyniki zostają — po ponownym dodaniu wideo jego wyniki znów się pojawią."
   ],
   "{count} scored frame; metrics: ": [
    "{count} oceniona klatka; metryki: ",

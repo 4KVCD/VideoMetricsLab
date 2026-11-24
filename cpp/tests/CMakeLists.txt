@@ -15,6 +15,7 @@ add_executable(vml_tests
     unit/cpu_pair_scorer_test.cpp
     unit/cvvdp_test.cpp
     unit/decisions_test.cpp
+    unit/dialog_rules_test.cpp
     unit/difference_test.cpp
     unit/ffmpeg_download_test.cpp
     unit/ffmpeg_run_test.cpp
@@ -68,7 +69,7 @@ target_link_libraries(vml_tests PRIVATE vml_cli vml_core vml_compile_options vml
 target_include_directories(vml_tests PRIVATE ../../native)  # the decoders' headers the app shares (av2/display_order.h, av2/splot_api.h)
 target_include_directories(vml_tests PRIVATE ../core/src)  # core's parts its tests reach (temp_files_parts.h)
 target_compile_definitions(vml_tests PRIVATE
-    VML_SOURCE_DIR="${PROJECT_SOURCE_DIR}"  # the sources, for source_limits_test.cpp
+    VML_SOURCE_DIR="${PROJECT_SOURCE_DIR}"  # the sources, for source_limits_test.cpp and dialog_rules_test.cpp
     VML_REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/reference"
     VML_SCHEMA_DIR="${PROJECT_SOURCE_DIR}/../docs/schemas"  # the JSON Schemas (schemas_test.cpp)
     VML_TEST_CHILD="$<TARGET_FILE:vml_test_child>"
@@ -131,6 +132,7 @@ if(TARGET vml_app)
         app/bitrate_panel_test.cpp
         app/graph_bundle_test.cpp
         app/chart_test.cpp
+        app/click_twice_test.cpp
         app/film_grain_control_test.cpp
         app/frame_drag_test.cpp
         app/resample_target_dialog_test.cpp
@@ -150,6 +152,7 @@ if(TARGET vml_app)
         app/tab_focus_test.cpp
         app/table_selection_test.cpp
         app/theme_test.cpp
+        app/theme_colours_test.cpp
         app/tool_tips_test.cpp
         app/video_names_test.cpp
         app/vship_names_test.cpp
@@ -159,6 +162,7 @@ if(TARGET vml_app)
     target_include_directories(vml_app_tests PRIVATE unit)
     target_link_libraries(vml_app_tests PRIVATE vml_app Qt6::Test vml_compile_options nlohmann_json gtest)
     target_compile_definitions(vml_app_tests PRIVATE
+        VML_SOURCE_DIR="${PROJECT_SOURCE_DIR}"  # the sources, for theme_colours_test.cpp
         VML_REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/reference"
         VML_TEST_MEDIA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/media"  # small crafted streams (media/README.md)
         VML_TEST_CHILD="$<TARGET_FILE:vml_test_child>"

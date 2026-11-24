@@ -3,11 +3,11 @@
 // algorithm of both steps.
 #pragma once
 
-#include <QDialog>
 
 #include <string>
 #include <vector>
 
+#include "app_dialog.h"
 #include "vml/geometry.h"
 #include "vml/options.h"
 
@@ -16,7 +16,7 @@ class QSpinBox;
 
 namespace vml::app {
 
-class ResampleTargetDialog : public QDialog {
+class ResampleTargetDialog : public AppDialog {
 public:
     // `reference` is the reference's size, which has widths to test
     // (resample_smallest_width), and `scaler` the algorithm shown first.

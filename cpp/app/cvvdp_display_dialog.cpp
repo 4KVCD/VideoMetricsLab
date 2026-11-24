@@ -7,7 +7,6 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
-#include <QMessageBox>
 #include <QPushButton>
 #include <QSpinBox>
 
@@ -48,9 +47,11 @@ QDoubleSpinBox* spin(double low, double high, double value, int decimals, const 
 CvvdpDisplayDialog::CvvdpDisplayDialog(const CvvdpDisplay& display, QWidget* parent,
                                        std::optional<std::string> own_preset, bool new_preset,
                                        std::set<std::string> taken_names)
-    : QDialog(parent), original_(display), own_preset_(std::move(own_preset)), taken_names_(std::move(taken_names)) {
-    setWindowTitle(new_preset ? app::tr("New CVVDP preset") : app::tr("CVVDP display"));
-    auto* form = new QFormLayout(this);
+    : AppDialog(parent, new_preset ? app::tr("New CVVDP preset") : app::tr("CVVDP display")),
+      original_(display),
+      own_preset_(std::move(own_preset)),
+      taken_names_(std::move(taken_names)) {
+    auto* form = new QFormLayout(body());
     auto* intro = new QLabel(
         app::tr("CVVDP predicts how visible the differences are to someone watching this display, from this "
                 "distance, in this light. Each value below changes the score, so compare videos scored for the "
@@ -207,7 +208,11 @@ void CvvdpDisplayDialog::finish(const QString& wanted) {
         }
     }
     if (problem) {
-        QMessageBox::warning(this, windowTitle(), *problem);
+        Message message;
+        message.kind = MessageKind::warning;
+        message.title = windowTitle();
+        message.text = *problem;
+        show_message(this, message);
         return;
     }
     action = wanted;

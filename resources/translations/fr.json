@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Start over": "Recommencer",
+  "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Vide la référence et retire toutes les vidéos de test, pour une nouvelle comparaison. Les résultats enregistrés sont conservés.",
+  "Click Start over again to clear the reference.": "Cliquez de nouveau sur « Recommencer » pour vider la référence.",
+  "Every saved score in this folder is deleted. This can't be undone.": "Tous les scores enregistrés dans ce dossier sont supprimés. Cette action est irréversible.",
+  "Show details": "Afficher les détails",
+  "Hide details": "Masquer les détails",
+  "OK": "OK",
   "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM, as SSIM YUV weighs them. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 du MS-SSIM des trois plans, tel que SSIM YUV les pondère. Jusqu'à 1, plus c'est élevé, mieux c'est.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' PSNR, as JVET's common test conditions weigh it. In dB, higher is better.": "(6 × Y + Cb + Cr) / 8 du PSNR des trois plans, tel que les conditions de test communes de JVET le pondèrent. En dB, plus c'est élevé, mieux c'est.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' SSIM, as MSU's codec comparisons weigh YUV-SSIM. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 du SSIM des trois plans, tel que les comparaisons de codecs de MSU pondèrent le YUV-SSIM. Jusqu'à 1, plus c'est élevé, mieux c'est.",
@@ -470,7 +477,6 @@
   "Reading reference video...": "Lecture de la vidéo de référence...",
   "Could not read video": "Impossible de lire la vidéo",
   "Resolution tests removed": "Tests de résolution retirés",
-  "Videos of a different length": "Vidéos de durée différente",
   "\n\nAdd them again to test the new source.": "\n\nAjoutez-les à nouveau pour tester la nouvelle source.",
   "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nLe calcul des métriques demande une plage comprise dans les deux vidéos (Plage, sous Préparation de la vidéo). Comparaison vidéo montre la partie qu'elles ont en commun.",
   "Ready.": "Prêt.",
@@ -531,7 +537,6 @@
   "Select test videos": "Sélectionner des vidéos de test",
   "Reading...": "Lecture...",
   "Complete (cached)": "Terminé (enregistré)",
-  "Remove all videos": "Retirer toutes les vidéos",
   "\nLoaded from a previous run (matching files and calculation settings) -- right-click to recompute.": "\nChargé depuis une exécution précédente (fichiers et paramètres de calcul identiques) ; clic droit pour recalculer.",
   "Recalculate selected metrics (ignore cached/previous results)": "Recalculer les métriques sélectionnées (ignorer les résultats enregistrés/précédents)",
   "Nothing to add": "Rien à ajouter",
@@ -1374,6 +1379,9 @@
   "Calculated with {metric}.": "Calculé avec {metric}."
  },
  "plurals": {
+  "Click Remove all again to remove {count} video. Saved results are kept.": ["Cliquez de nouveau sur « Tout retirer » pour retirer {count} vidéo. Les résultats enregistrés sont conservés.", "Cliquez de nouveau sur « Tout retirer » pour retirer les {count} vidéos. Les résultats enregistrés sont conservés."],
+  "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["Cliquez de nouveau sur « Recommencer » pour vider la référence et retirer {count} vidéo. Les résultats enregistrés sont conservés.", "Cliquez de nouveau sur « Recommencer » pour vider la référence et retirer les {count} vidéos. Les résultats enregistrés sont conservés."],
+  "{count} test video does not last as long as the reference ({length}).": ["{count} vidéo de test ne dure pas aussi longtemps que la référence ({length}).", "{count} vidéos de test ne durent pas aussi longtemps que la référence ({length})."],
   "{count} shown": ["{count} affichée", "{count} affichées"],
   "{count} ticked": ["{count} cochée", "{count} cochées"],
   "{shown} of {count} shown": ["{shown} sur {count} affichée", "{shown} sur {count} affichées"],
@@ -1417,10 +1425,6 @@
   "Reading {count} video...": [
    "Lecture de {count} vidéo...",
    "Lecture de {count} vidéos..."
-  ],
-  "Remove {count} video from the list?\n\nSaved results are kept -- re-adding a video shows its scores again.": [
-   "Retirer {count} vidéo de la liste ?\n\nLes résultats enregistrés sont conservés : ajouter à nouveau une vidéo réaffiche ses scores.",
-   "Retirer les {count} vidéos de la liste ?\n\nLes résultats enregistrés sont conservés : ajouter à nouveau une vidéo réaffiche ses scores."
   ],
   "{count} scored frame; metrics: ": [
    "{count} image notée ; métriques : ",

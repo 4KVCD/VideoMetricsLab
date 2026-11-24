@@ -10,9 +10,11 @@ if(NOT Qt6_FOUND)
 endif()
 
 add_library(vml_app STATIC
+    app_dialog.cpp
     bd_rate_panel.cpp
     bitrate_panel.cpp
     chart.cpp
+    click_twice.cpp
     frame_types.cpp
     cvvdp_display_dialog.cpp
     frame_drag.cpp
