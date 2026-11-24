@@ -7,7 +7,7 @@
   "All": "الكل",
   "Butteraugli, from the JPEG XL project: how visible the differences are, by a model of the eye. The app shows its 3-norm, a mean of the frame's differences that weighs the larger ones more, not their maximum. 0 is identical, lower is better.": "Butteraugli من مشروع JPEG XL: مدى وضوح الفروق للعين، وفق نموذج للعين. يعرض التطبيق معياره الثالث (3-norm)، وهو متوسط لفروق الإطار يعطي الفروق الأكبر وزنًا أكبر، لا أقصاها. 0 متطابق، والأقل أفضل.",
   "CIEDE2000's scale: 0 is identical, and about 1 is just noticeable.": "مقياس CIEDE2000: 0 متطابق، ونحو 1 بالكاد يُلاحظ.",
-  "Codec-comparison weightings, color, banding and HDR: for comparing with published results, or a specific check.": "أوزان مقارنات الترميز، واللون، والتشرّط، وHDR: للمقارنة بنتائج منشورة، أو لفحص محدد.",
+  "Codec-comparison weightings, color and banding: for comparing with published results, or a specific check.": "أوزان مقارنات الترميز، واللون، والتشرّط: للمقارنة بنتائج منشورة، أو لفحص محدد.",
   "ColorVideoVDP: how visible the difference is to a viewer of the display chosen (CVVDP display), over the whole video. One score per video, in JOD (just-objectionable differences), higher is better.": "ColorVideoVDP: مدى وضوح الفرق لمشاهد الشاشة المختارة (شاشة CVVDP)، على الفيديو كله. درجة واحدة لكل فيديو، بوحدة JOD (just-objectionable differences)، والأعلى أفضل.",
   "Extended perceptually weighted PSNR (XPSNR) of the luma (Y) plane: each block's error weighted by how visible it is. In dB, higher is better.": "PSNR الموسّع الموزون إدراكيًا (XPSNR) لمستوى السطوع (Y): خطأ كل كتلة موزونًا بمدى وضوحه. بوحدة dB، والأعلى أفضل.",
   "General purpose ({count})": "للاستخدام العام ({count})",

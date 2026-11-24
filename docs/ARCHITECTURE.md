@@ -89,7 +89,9 @@ is written twice.
 Specialized unless the maintainer agrees it is general purpose. Specialized
 means in `metrics_hidden_at_first`, which makes it start ticked but hidden,
 in new settings and in saved ones (`hide_new_metrics`, by `listed_metrics`),
-so showing it is enough to calculate it.
+so showing it is enough to calculate it. A general-purpose metric starts
+shown, ticked by its `default_compute_<key>`: unticked where most videos
+would fail it, as HDR VMAF is (PQ videos only).
 
 **Ranges only with a source:** the app's own calibrated bands (its
 thresholds) or the metric's authors' published scale, with the source named

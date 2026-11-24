@@ -7,7 +7,7 @@
   "All": "모두",
   "Butteraugli, from the JPEG XL project: how visible the differences are, by a model of the eye. The app shows its 3-norm, a mean of the frame's differences that weighs the larger ones more, not their maximum. 0 is identical, lower is better.": "Butteraugli(JPEG XL 프로젝트): 눈 모델로 본 차이가 얼마나 보이는지. 앱은 최댓값이 아니라 3-노름, 즉 큰 차이에 더 큰 가중을 두는 프레임 차이의 평균을 표시합니다. 0은 동일, 낮을수록 좋습니다.",
   "CIEDE2000's scale: 0 is identical, and about 1 is just noticeable.": "CIEDE2000의 척도: 0은 동일, 약 1은 겨우 알아챌 정도입니다.",
-  "Codec-comparison weightings, color, banding and HDR: for comparing with published results, or a specific check.": "코덱 비교 가중치, 색, 밴딩, HDR: 발표된 결과와 비교하거나 특정 확인을 위한 지표입니다.",
+  "Codec-comparison weightings, color and banding: for comparing with published results, or a specific check.": "코덱 비교 가중치, 색, 밴딩: 발표된 결과와 비교하거나 특정 확인을 위한 지표입니다.",
   "ColorVideoVDP: how visible the difference is to a viewer of the display chosen (CVVDP display), over the whole video. One score per video, in JOD (just-objectionable differences), higher is better.": "ColorVideoVDP: 선택한 디스플레이(CVVDP 디스플레이)의 시청자에게 영상 전체에서 차이가 얼마나 보이는지. 영상당 점수 하나이며 단위는 JOD(just-objectionable differences), 높을수록 좋습니다.",
   "Extended perceptually weighted PSNR (XPSNR) of the luma (Y) plane: each block's error weighted by how visible it is. In dB, higher is better.": "휘도(Y) 평면의 확장 지각 가중 PSNR(XPSNR): 각 블록의 오차를 얼마나 보이는지에 따라 가중합니다. 단위는 dB이며 높을수록 좋습니다.",
   "General purpose ({count})": "범용({count})",

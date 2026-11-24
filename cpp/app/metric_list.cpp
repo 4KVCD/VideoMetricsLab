@@ -181,7 +181,7 @@ QWidget* MetricList::build_section(MetricSection section) {
     layout->addLayout(head);
 
     if (specialized) {
-        auto* about = muted_line(app::tr("Codec-comparison weightings, color, banding and HDR: for comparing with "
+        auto* about = muted_line(app::tr("Codec-comparison weightings, color and banding: for comparing with "
                                          "published results, or a specific check."));
         layout->addWidget(about);
     }

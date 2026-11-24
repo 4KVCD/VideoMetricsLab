@@ -78,9 +78,9 @@ struct Settings {
     bool default_compute_psnr = true;
     bool default_compute_ssim = true;
     bool default_compute_xpsnr = true;
-    // The Specialized metrics (metrics_hidden_at_first: these, HDR VMAF,
-    // and those below) are ticked, but hidden at first: calculated once
-    // shown in Add/remove metrics. Settings saved before keep their ticks.
+    // The Specialized metrics (metrics_hidden_at_first: these and those
+    // below) are ticked, but hidden at first: calculated once shown in
+    // Add/remove metrics. Settings saved before keep their ticks.
     bool default_compute_psnr_yuv = true;
     bool default_compute_ssim_yuv = true;
     bool default_compute_ms_ssim = true;
@@ -91,9 +91,9 @@ struct Settings {
     bool default_compute_vmaf = true;
     bool default_compute_vmaf_neg = true;
     bool default_compute_vmaf_v1 = true;
-    // Ticked but hidden at first, as the Specialized metrics are; it scores
-    // PQ (HDR10) videos only.
-    bool default_compute_vmaf_hdr = true;
+    // Shown but unticked at first: it scores PQ (HDR10) videos only, and
+    // ticked, every SDR video's run would fail it.
+    bool default_compute_vmaf_hdr = false;
     bool default_compute_ssimulacra2 = true;
     bool default_compute_butteraugli = true;
     bool default_compute_cvvdp = true;

@@ -129,7 +129,8 @@ TEST(Metrics, TooSmallPicturesNameTheMetricsAndTheSizeEachNeeds) {
 TEST(Metrics, SectionsComeFromTheListHiddenAtFirst) {
     using Keys = std::vector<std::string_view>;
     EXPECT_EQ(metrics_in(MetricSection::general_purpose),
-              (Keys{"vmaf", "vmaf_neg", "vmaf_v1", "psnr", "ssim", "xpsnr", "ssimulacra2", "butteraugli", "cvvdp"}));
+              (Keys{"vmaf", "vmaf_neg", "vmaf_v1", "vmaf_hdr", "psnr", "ssim", "xpsnr", "ssimulacra2", "butteraugli",
+                    "cvvdp"}));
     EXPECT_EQ(metrics_in(MetricSection::specialized), Keys(metrics_hidden_at_first.begin(), metrics_hidden_at_first.end()));
     EXPECT_EQ(section_of("psnr_yuv_u"), MetricSection::specialized);
     EXPECT_EQ(metric_guide("ssim_yuv_v").measures, metric_guide("ssim_yuv").measures);

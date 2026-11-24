@@ -7,7 +7,7 @@
   "All": "全部",
   "Butteraugli, from the JPEG XL project: how visible the differences are, by a model of the eye. The app shows its 3-norm, a mean of the frame's differences that weighs the larger ones more, not their maximum. 0 is identical, lower is better.": "Butteraugli，來自 JPEG XL 專案：依人眼模型衡量差異有多明顯。本應用程式顯示其 3-範數，即對較大差異加權較重的影格差異平均值，而非最大值。0 表示相同，越低越好。",
   "CIEDE2000's scale: 0 is identical, and about 1 is just noticeable.": "CIEDE2000 的標度：0 表示相同，約 1 為剛可察覺。",
-  "Codec-comparison weightings, color, banding and HDR: for comparing with published results, or a specific check.": "編解碼器比較加權、色彩、色帶和 HDR：用於與已發表的結果比較，或進行特定檢查。",
+  "Codec-comparison weightings, color and banding: for comparing with published results, or a specific check.": "編解碼器比較加權、色彩和色帶：用於與已發表的結果比較，或進行特定檢查。",
   "ColorVideoVDP: how visible the difference is to a viewer of the display chosen (CVVDP display), over the whole video. One score per video, in JOD (just-objectionable differences), higher is better.": "ColorVideoVDP：對所選顯示器（CVVDP 顯示器）的觀看者而言，差異在整部影片中有多明顯。每部影片一個分數，單位為 JOD（just-objectionable differences），越高越好。",
   "Extended perceptually weighted PSNR (XPSNR) of the luma (Y) plane: each block's error weighted by how visible it is. In dB, higher is better.": "亮度（Y）平面的延伸感知加權 PSNR（XPSNR）：每個區塊的誤差依其可見程度加權。單位 dB，越高越好。",
   "General purpose ({count})": "通用（{count}）",

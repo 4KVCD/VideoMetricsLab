@@ -39,8 +39,8 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
 
 **HDR VMAF** scores PQ (HDR10) videos with Netflix's HDR VMAF models (1080p,
 phone, 4K, and high-frame-rate variants), chosen in **HDR VMAF model**. It is
-among the Specialized metrics: hidden at first, show it in **Add/remove
-metrics** to score it (its tick only matters for HDR10 videos). Both videos are converted to the
+shown but unticked at first, as an SDR video fails it: tick its column to
+score it (its tick only matters for HDR10 videos). Both videos are converted to the
 model's ICtCp form and its features calculated on the GPU when VMAF runs on the
 GPU (else on the CPU), with the same scores. The GPU's conversion is checked
 against the CPU's on the first frame; where the GPU cannot convert the
@@ -484,9 +484,10 @@ metric columns' headings), lists the 17 metrics in two sections, each with a
 few words on what it measures, and on hover what its scores mean: its unit,
 which way is better, and its broad ranges where they have a source (the
 app's own bands, or the metric's authors' scale). *General purpose* (VMAF
-v0.6.1, VMAF NEG, VMAF v1, PSNR, SSIM, XPSNR, SSIMULACRA2, Butteraugli and
-CVVDP) is what a new install shows. *Specialized* (HDR VMAF, PSNR YUV, SSIM
-YUV, MS-SSIM, MS-SSIM YUV, PSNR-HVS-M, CAMBI and CIEDE2000) is folded away
+v0.6.1, VMAF NEG, VMAF v1, HDR VMAF, PSNR, SSIM, XPSNR, SSIMULACRA2,
+Butteraugli and CVVDP) is what a new install shows, HDR VMAF unticked.
+*Specialized* (PSNR YUV, SSIM YUV, MS-SSIM, MS-SSIM YUV, PSNR-HVS-M, CAMBI
+and CIEDE2000) is folded away
 until one of them is shown. A tick there shows or hides a metric's column,
 nothing more; the tick in a column says whether that row calculates it, and a
 run calculates what is ticked and shown. The Specialized metrics start

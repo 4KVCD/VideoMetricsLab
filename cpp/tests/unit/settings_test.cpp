@@ -243,12 +243,12 @@ TEST(Settings, MetricsAddedSinceTheSaveAreHiddenAtFirst) {
     };
     using Keys = std::vector<std::string>;
     Settings settings = load(R"({"hidden_metrics": ["xpsnr"], "default_compute_cambi": false})");
-    EXPECT_EQ(settings.hidden_metrics, (Keys{"xpsnr", "vmaf_hdr", "psnr_yuv", "ssim_yuv", "ms_ssim", "ms_ssim_yuv",
-                                             "psnr_hvs", "cambi", "ciede2000"}));
+    EXPECT_EQ(settings.hidden_metrics, (Keys{"xpsnr", "psnr_yuv", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs",
+                                             "cambi", "ciede2000"}));
     EXPECT_TRUE(settings.default_compute_cambi);
     settings = load(R"({"hidden_metrics": [], "listed_metrics": ["vmaf", "cambi"], "default_compute_cambi": false})");
     EXPECT_EQ(settings.hidden_metrics,
-              (Keys{"vmaf_hdr", "psnr_yuv", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "ciede2000"}));
+              (Keys{"psnr_yuv", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "ciede2000"}));
     EXPECT_FALSE(settings.default_compute_cambi);
     // Saved, every metric is listed: shown ones stay shown when read again.
     settings.hidden_metrics.clear();
@@ -258,9 +258,10 @@ TEST(Settings, MetricsAddedSinceTheSaveAreHiddenAtFirst) {
 }
 
 // New settings start with every Specialized metric (metrics_hidden_at_first)
-// ticked but hidden, so showing one is enough to calculate it; settings
-// saved before the three older ones (HDR VMAF, PSNR YUV and SSIM YUV) were
-// ticked keep them as saved: shown and unticked.
+// ticked but hidden, so showing one is enough to calculate it, and HDR VMAF
+// shown but unticked (General purpose: ticked, every SDR video would fail
+// it); settings saved before PSNR YUV and SSIM YUV were ticked keep them as
+// saved: shown and unticked.
 TEST(Settings, SpecializedMetricsStartTickedButHiddenInNewSettingsOnly) {
     using Keys = std::vector<std::string>;
     const Settings fresh;
@@ -268,6 +269,7 @@ TEST(Settings, SpecializedMetricsStartTickedButHiddenInNewSettingsOnly) {
     for (const std::string_view key : metrics_hidden_at_first) {
         EXPECT_TRUE(*fresh.default_compute(key)) << key;
     }
+    EXPECT_FALSE(fresh.default_compute_vmaf_hdr);
     const test::Folder folder;
     std::ofstream(folder / "settings.json", std::ios::binary)
         << R"({"default_compute_psnr_yuv": false, "default_compute_ssim_yuv": false, "default_compute_vmaf_hdr": false,)"

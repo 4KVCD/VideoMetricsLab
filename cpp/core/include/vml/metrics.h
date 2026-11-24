@@ -113,15 +113,16 @@ std::optional<std::string> too_small_problem(const std::vector<std::string>& key
 // The metrics' labels with `separator` between them: "VMAF v0.6.1, PSNR".
 std::string metric_labels(const std::vector<std::string>& keys, std::string_view separator = ", ");
 
-// The metrics most users do not need at first, in the registry's order: HDR
-// VMAF (HDR10 videos only), and the weightings, color and banding metrics
-// that codec comparisons such as JVET's, MSU's and Xiph's report. The one
-// list behind both their place and their first state: Add/remove metrics
-// and Settings > Metrics list them as Specialized, the rest as General
-// purpose; new settings start with them ticked but hidden
-// (Settings::hidden_metrics), so showing one is enough to calculate it.
-inline constexpr std::array<std::string_view, 8> metrics_hidden_at_first{
-    "vmaf_hdr", "psnr_yuv", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000"};
+// The metrics most users do not need at first, in the registry's order: the
+// weightings, color and banding metrics that codec comparisons such as
+// JVET's, MSU's and Xiph's report. The one list behind both their place and
+// their first state: Add/remove metrics and Settings > Metrics list them as
+// Specialized, the rest as General purpose; new settings start with them
+// ticked but hidden (Settings::hidden_metrics), so showing one is enough to
+// calculate it. HDR VMAF is General purpose, shown but unticked at first
+// (Settings::default_compute_vmaf_hdr).
+inline constexpr std::array<std::string_view, 7> metrics_hidden_at_first{
+    "psnr_yuv", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000"};
 
 // The two sections Add/remove metrics and Settings > Metrics list the
 // metrics in.
