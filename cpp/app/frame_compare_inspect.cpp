@@ -237,7 +237,10 @@ void FrameComparePanel::step_worst(int direction) {
         return;
     }
     worst_index_ = static_cast<std::size_t>(next);
-    open_at(worst_list_->identity, worst_list_->stops[worst_index_].frame);
+    const WorstFrameList::Stop& stop = worst_list_->stops[worst_index_];
+    if (open_at(worst_list_->identity, stop.frame) == OpenAt::shown) {
+        emit worst_stop_shown(worst_list_->identity, worst_list_->metric, static_cast<int>(stop.frame));
+    }
     update_worst_row();
 }
 

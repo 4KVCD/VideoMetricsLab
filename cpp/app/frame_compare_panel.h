@@ -333,6 +333,9 @@ signals:
     // Export frame as PNG wrote `files`, or could not.
     void still_saved(const QStringList& files);
     void still_failed(const QString& error);
+    // Previous / Next worst opened `frame`, a stop of the Worst frames list
+    // of `identity` and `metric`, so that the list shows that row on the way back.
+    void worst_stop_shown(const std::string& identity, const QString& metric, int frame);
 
 protected:
     void showEvent(QShowEvent* event) override;
