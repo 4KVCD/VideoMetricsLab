@@ -82,6 +82,9 @@ struct Reader {
     AVFrame* frame = nullptr;
     SwrContext* resampler = nullptr;
     int stream = -1;
+    // The video stream a seek goes by (its index, mkvmerge's cues, is the
+    // video's alone); -1 for a file without one.
+    int video = -1;
     AVRational time_base{};
     // The file's start on its timeline (ms): positions count from it.
     double file_start_ms = 0;
@@ -326,6 +329,11 @@ void FfmpegSoundtrack::set_failed(const QString& why) {
     clock_.set_playing(false);
 }
 
+void FfmpegSoundtrack::clear_failed() {
+    const std::lock_guard lock(mutex_);
+    failed_.reset();
+}
+
 void FfmpegSoundtrack::set_offset(int first_ms, int position_ms) {
     clock_.set_offset(first_ms);
     if (!failed()) {
@@ -416,6 +424,7 @@ private:
 
     FfmpegSoundtrack& soundtrack_;
     Reader reader_;
+    bool damaged_said_ = false;  // a damaged frame passed over was logged
 
 #ifdef _WIN32
     // The sound device: Windows' default, shared, in its own format.
@@ -538,6 +547,7 @@ bool FfmpegSoundtrack::Player::open_file() {
         fail(QStringLiteral("the reference has no audio track the app plays"));
         return false;
     }
+    reader_.video = av_find_best_stream(reader_.format, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
     for (unsigned index = 0; index < reader_.format->nb_streams; ++index) {
         if (static_cast<int>(index) != reader_.stream) {
             reader_.format->streams[index]->discard = AVDISCARD_ALL;
@@ -880,8 +890,25 @@ void FfmpegSoundtrack::Player::make_seek(double position_ms) {
     base_ms_ = position_ms;
     next_ms_.reset();
     ready_ = false;
-    const auto stamp = static_cast<std::int64_t>((position_ms + reader_.file_start_ms) / 1000 / av_q2d(reader_.time_base));
-    av_seek_frame(reader_.format, reader_.stream, stamp, AVSEEK_FLAG_BACKWARD);
+    // By the video's index, where there is a video: mkvmerge writes cues for
+    // the video track only, so a seek by the audio stream reads its way
+    // through the file to the time (minutes into a long film on a share:
+    // the preroll timed out, issue #204), and one by the video stream finds
+    // it at once, but only while that stream is read. It lands on the video's
+    // key frame before the time; the sound before target_ms_ is dropped.
+    const double seconds = (position_ms + reader_.file_start_ms) / 1000;
+    if (reader_.video >= 0) {
+        AVStream* video = reader_.format->streams[reader_.video];
+        video->discard = AVDISCARD_DEFAULT;
+        const auto stamp = static_cast<std::int64_t>(seconds * AV_TIME_BASE);
+        const int sought = avformat_seek_file(reader_.format, -1, INT64_MIN, stamp, stamp, 0);
+        video->discard = AVDISCARD_ALL;
+        if (sought >= 0) {
+            return;
+        }
+    }
+    av_seek_frame(reader_.format, reader_.stream, static_cast<std::int64_t>(seconds / av_q2d(reader_.time_base)),
+                  AVSEEK_FLAG_BACKWARD);
 }
 
 // Decodes until queued_ms of sound is queued, the soundtrack ends or another
@@ -925,9 +952,26 @@ bool FfmpegSoundtrack::Player::decode_some() {
         if (result == AVERROR(EAGAIN)) {
             return true;
         }
-        if (result < 0) {  // the end (or a broken stream: the sound ends there)
+        if (result == AVERROR_EOF) {
             reader_.ended = true;
             return true;
+        }
+        if (result == AVERROR_INVALIDDATA) {
+            // One damaged frame: passed over, the next decoded (said once).
+            if (!damaged_said_) {
+                damaged_said_ = true;
+                app_log::write(app_log::Level::info, "vml.playback",
+                               "Video Compare's sound (native): a damaged frame of the reference's audio passed over");
+            }
+            continue;
+        }
+        if (result < 0) {
+            // Said, not taken for the end: the sound stopped there with no
+            // reason in the log or the status line (issue #204).
+            if (!soundtrack_.stopping()) {
+                fail(QStringLiteral("the reference's audio could not be read: %1").arg(error_text(result)));
+            }
+            return false;
         }
         take_sound();
     }

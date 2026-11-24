@@ -36,6 +36,9 @@ public:
     virtual std::optional<QString> failed() const = 0;
     // It cannot play: it stops.
     virtual void set_failed(const QString& why) = 0;
+    // To be tried again after a failure that may pass (its preroll timed
+    // out): it plays once sought and ready.
+    virtual void clear_failed() = 0;
     virtual int offset_ms() const = 0;
     // Where the source's first frame is on the file's timeline, so that its
     // clock counts from it; it seeks to `position_ms` again with it.
@@ -60,6 +63,7 @@ public:
     bool ready() const override;
     std::optional<QString> failed() const override;
     void set_failed(const QString& why) override;
+    void clear_failed() override;
     int offset_ms() const override { return clock_.offset_ms(); }
     void set_offset(int first_ms, int position_ms) override;
     void set_playing(bool playing) override;

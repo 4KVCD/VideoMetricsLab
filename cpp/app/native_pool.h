@@ -180,6 +180,10 @@ private:
     double anchor_ = 0;
     long long anchor_frame_ = 0;
     bool audio_running_ = false;
+    // The soundtrack's preroll timed out: it is tried again at the next seek
+    // or Play (it failed for good before, until the video was opened again).
+    bool audio_timed_out_ = false;
+    void retry_audio();
     // The soundtrack's state, logged once per change (issue #204).
     std::string logged_sound_;
     void log_sound(const std::string& state);

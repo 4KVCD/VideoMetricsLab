@@ -36,6 +36,9 @@ namespace {
 constexpr double catch_up_seconds = 0.2;
 // How long the soundtrack may take to be ready to play.
 constexpr double audio_preroll_seconds = 15.0;
+// The failure a preroll that took longer is (Soundtrack::set_failed): the
+// one tried again (NativePool::retry_audio).
+const QString audio_preroll_timed_out = QStringLiteral("Audio preroll timed out");
 
 // Python's round(): halves to even.
 long long round_even(double value) { return static_cast<long long>(std::nearbyint(value)); }
@@ -395,6 +398,9 @@ void NativePool::seek(int position_ms) {
     }
     audio_->set_playing(false);
     audio_running_ = false;
+    if (std::exchange(audio_timed_out_, false) && audio_->failed() == audio_preroll_timed_out) {
+        audio_->clear_failed();  // tried again from here
+    }
     audio_->seek(static_cast<int>(round_even(static_cast<double>(target) * 1000 / fps_)));
     log_sound("sought: prerolling");
     const double now = view_.clock();
@@ -421,7 +427,24 @@ void NativePool::seek(int position_ms) {
     buffering_ = !shown_;
 }
 
+void NativePool::retry_audio() {
+    // A preroll that timed out: the soundtrack sought again where playback
+    // is, given the preroll's time again; not one that failed since for
+    // another reason (its file could not be read), which would not pass.
+    audio_timed_out_ = false;
+    if (audio_->failed() != audio_preroll_timed_out) {
+        return;
+    }
+    audio_->clear_failed();
+    audio_->seek(position_);
+    audio_deadline_ = view_.clock() + audio_preroll_seconds;
+    log_sound("sought again after the preroll timed out: prerolling");
+}
+
 void NativePool::set_playing(bool playing) {
+    if (playing && audio_timed_out_) {
+        retry_audio();
+    }
     playing_ = playing;
     anchor_ = view_.clock();
     anchor_frame_ = frame_;
@@ -441,8 +464,9 @@ int NativePool::poll() {
     std::optional<double> audio_ms = audio_->poll();
     double polled_at = view_.clock();
     if (!audio_->ready() && !audio_->failed() && view_.clock() > audio_deadline_) {
-        audio_->set_failed(QStringLiteral("Audio preroll timed out"));
-        log_sound("preroll timed out: no sound until the video is opened again");
+        audio_->set_failed(audio_preroll_timed_out);
+        audio_timed_out_ = true;
+        log_sound("preroll timed out: tried again at the next seek or Play");
     } else if (audio_->ready() && !audio_running_ && logged_sound_.starts_with("sought")) {
         log_sound("prerolled, ready");
     }

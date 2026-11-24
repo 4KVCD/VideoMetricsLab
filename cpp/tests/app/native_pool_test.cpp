@@ -102,6 +102,7 @@ public:
     bool ready() const override { return is_ready; }
     std::optional<QString> failed() const override { return failure; }
     void set_failed(const QString& why) override { failure = why; }
+    void clear_failed() override { failure.reset(); }
     int offset_ms() const override { return 0; }
     void set_offset(int /*first_ms*/, int /*position_ms*/) override {}
     void set_playing(bool playing) override { calls.emplace_back("playing", playing ? 1 : 0); }
@@ -459,6 +460,30 @@ TEST_F(NativePoolTest, AStalledDecoderStopsTheSoundAndWaitsBeforePlayingOn) {
     for (FakeVideo* video : videos_) {
         EXPECT_EQ(video->pulls, 0);
     }
+}
+
+// Issue #204: a preroll that timed out (a seek by the audio stream read its
+// way through a long film on a share) left the sound failed until the video
+// was opened again. Now the next seek, or Play, tries it again.
+TEST_F(NativePoolTest, ASoundWhosePrerollTimedOutIsTriedAgain) {
+    NativePool& pool = *make_pool(1);
+    pool.seek(2000);  // frame 50: the sound sought, not ready
+    ASSERT_FALSE(sound_->is_ready);
+    now_ += 16;  // past the preroll's 15 s
+    pool.poll();
+    ASSERT_EQ(sound_->failure, QStringLiteral("Audio preroll timed out"));
+    pool.seek(4000);
+    EXPECT_FALSE(sound_->failure);  // tried again from there
+    EXPECT_EQ(sound_->calls.back(), (std::pair<std::string, int>{"seek", 4000}));
+    // Timed out again, then Play: tried again where playback is.
+    now_ += 16;
+    pool.poll();
+    ASSERT_TRUE(sound_->failure);
+    sound_->calls.clear();
+    pool.set_playing(true);
+    EXPECT_FALSE(sound_->failure);
+    ASSERT_FALSE(sound_->calls.empty());
+    EXPECT_EQ(sound_->calls.front(), (std::pair<std::string, int>{"seek", 4000}));
 }
 
 }  // namespace vml::app
