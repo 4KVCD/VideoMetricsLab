@@ -1603,13 +1603,13 @@ void BitratePanel::save_graph() {
     for (QuickFile& file : data_files_of(quick_saves.data_formats())) {
         files.push_back(std::move(file));
     }
-    report_to(export_report, save_quick(quick_saves.export_folder(), files));
+    quick_saves.save(quick_saves.export_folder(), std::move(files), export_report);
 }
 
 void BitratePanel::on_export_data(const std::string& format) {
     const QString folder = dialogs.choose_folder(app::tr("Export bitrate data to"), quick_saves.export_folder());
     if (!folder.isEmpty()) {
-        report_to(export_report, save_quick(folder, data_files_of({format})));
+        quick_saves.save(folder, data_files_of({format}), export_report);
     }
 }
 

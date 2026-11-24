@@ -2312,11 +2312,10 @@ void GraphPanel::save_statistics() {
     if (export_table().second.empty()) {
         return;
     }
-    report_to(export_report, save_quick(quick_saves.export_folder(),
-                                        data_files(statistics_stem(), quick_saves.data_formats(),
-                                                   [this](const std::string& format) {
-                                                       return statistics_text(format == "json");
-                                                   })));
+    quick_saves.save(quick_saves.export_folder(),
+                     data_files(statistics_stem(), quick_saves.data_formats(),
+                                [this](const std::string& format) { return statistics_text(format == "json"); }),
+                     export_report);
 }
 
 bool GraphPanel::shown_graph() const {

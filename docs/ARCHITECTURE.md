@@ -352,7 +352,10 @@ control before the click. The after-run export says only where it fails.
 
 **A new tab or card that shows data** gets, in the same change:
 - a `SaveButton` in the card's top-right corner, its `why_not` and
-  `describe` saying what it saves or why it can't (grayed);
+  `describe` saying what it saves or why it can't (grayed), its `save`
+  going through `QuickSaves::save`: what it reads of the card is taken at
+  the click, and its files are made and written on the file writer, so the
+  window answers meanwhile;
 - its Save as... items on a right-click, "{What} as {FORMAT}...", JSON
   before CSV;
 - the Export panel's "On this tab" link, where it is the tab's main card

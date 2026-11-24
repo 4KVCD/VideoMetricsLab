@@ -762,7 +762,7 @@ void MainWindow::build_ui() {
     // and their save icons save in the export folder in Settings' Quick saves
     // formats, both read at each save.
     const auto report = [this](const ExportOutcome& outcome) { report_export(outcome); };
-    const QuickSaves quick_saves{dialogs_.export_folder, [this] { return quick_formats(settings_); }};
+    const QuickSaves quick_saves = window_quick_saves();
     graph_panel_->export_report = report;
     graph_panel_->quick_saves = quick_saves;
     worst_tab_->export_report = report;

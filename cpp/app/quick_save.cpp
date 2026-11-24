@@ -2,6 +2,7 @@
 
 #include <QContextMenuEvent>
 #include <QEvent>
+#include <QImage>
 #include <QMenu>
 #include <QPainter>
 #include <QPainterPath>
@@ -9,7 +10,9 @@
 #include <QStyleOptionButton>
 
 #include <algorithm>
+#include <memory>
 
+#include "file_writes.h"
 #include "i18n.h"
 #include "theme.h"
 #include "vml/export_csv.h"
@@ -55,13 +58,44 @@ std::vector<QuickFile> data_files(const QString& stem, const std::vector<std::st
     std::vector<QuickFile> files;
     for (const std::string& format : formats) {
         files.push_back({suggested_file_name(stem, "." + QString::fromStdString(format)),
-                         [text, format](const QString& path) { return write_text_file(path, text(format)); }});
+                         [made = text(format)](const QString& path) { return write_text_file(path, made); }});
     }
     return files;
 }
 
 QuickFile image_file(const QString& name, const std::function<QPixmap()>& image) {
-    return {name, [image](const QString& path) { return image().save(path) ? QString() : could_not_write(path); }};
+    // A QImage, which another thread may save; a QPixmap is the window's own.
+    return {name, [picture = image().toImage()](const QString& path) {
+                return picture.save(path) ? QString() : could_not_write(path);
+            }};
+}
+
+QuickSaveRunner written_by(FileWrites& writes) {
+    return [&writes](std::function<ExportOutcome()> save, ExportReport done) {
+        auto outcome = std::make_shared<ExportOutcome>();
+        writes.submit(
+            QStringLiteral("quick save"), [save = std::move(save), outcome] { *outcome = save(); },
+            [outcome, done = std::move(done)](const QString& error) {
+                if (!error.isEmpty()) {
+                    outcome->error = tr_message(error);
+                    outcome->details = outcome->error;
+                }
+                done(*outcome);
+            });
+    };
+}
+
+void QuickSaves::save(const QString& into, std::vector<QuickFile> files, const ExportReport& done) const {
+    if (files.empty()) {
+        return;
+    }
+    std::function<ExportOutcome()> write = [into, files = std::move(files)] { return save_quick(into, files); };
+    const ExportReport report = [done](const ExportOutcome& outcome) { report_to(done, outcome); };
+    if (background) {
+        background(std::move(write), report);
+    } else {
+        report(write());
+    }
 }
 
 QString quick_save_tooltip(const QString& what, const std::vector<std::string>& formats) {

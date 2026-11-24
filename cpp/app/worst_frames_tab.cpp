@@ -1550,8 +1550,8 @@ SaveButton* WorstFramesTab::save_button(Card card) {
         button->why_not = [this] { return graph_shown() ? QString() : nothing_shown_text(); };
         button->describe = [] { return quick_save_tooltip(app::tr("this graph as PNG"), {}); };
         button->save = [this] {
-            report_to(export_report,
-                      save_quick(quick_saves.export_folder(), {image_file(graph_name(), [this] { return graph_image(); })}));
+            quick_saves.save(quick_saves.export_folder(), {image_file(graph_name(), [this] { return graph_image(); })},
+                             export_report);
         };
         button->save_as = [this](QMenu& menu) { fill_graph_menu(&menu); };
         break;
@@ -1565,8 +1565,8 @@ SaveButton* WorstFramesTab::save_button(Card card) {
             return quick_save_tooltip(app::tr("the worst frames listed"), quick_saves.data_formats());
         };
         button->save = [this] {
-            report_to(export_report,
-                      save_quick(quick_saves.export_folder(), quick_texts(worst_stem(), &WorstFramesTab::worst_text)));
+            quick_saves.save(quick_saves.export_folder(), quick_texts(worst_stem(), &WorstFramesTab::worst_text),
+                             export_report);
         };
         button->save_as = [this](QMenu& menu) { fill_worst_menu(&menu); };
         break;
@@ -1580,8 +1580,8 @@ SaveButton* WorstFramesTab::save_button(Card card) {
             return quick_save_tooltip(app::tr("the weak segments listed"), quick_saves.data_formats());
         };
         button->save = [this] {
-            report_to(export_report, save_quick(quick_saves.export_folder(),
-                                                quick_texts(segments_stem(), &WorstFramesTab::segments_text)));
+            quick_saves.save(quick_saves.export_folder(), quick_texts(segments_stem(), &WorstFramesTab::segments_text),
+                             export_report);
         };
         button->save_as = [this](QMenu& menu) { fill_segments_menu(&menu); };
         break;

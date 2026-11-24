@@ -26,16 +26,36 @@ struct Settings;
 
 namespace vml::app {
 
+class FileWrites;
+struct QuickFile;
+
+// Runs a quick save's `save` off the window's thread, then `done` with how
+// it went, on the window's thread.
+using QuickSaveRunner = std::function<void(std::function<ExportOutcome()> save, ExportReport done)>;
+
 // What a tab's save icons need of the window: the export folder they save in
-// (Settings' Export folder, or Documents where it is blank), and the formats
-// a quick save writes data in (quick_formats). Unset: no folder, no format.
+// (Settings' Export folder, or Documents where it is blank), the formats a
+// quick save writes data in (quick_formats), and where its files are written
+// (`background`: the window's file writer, file_writes.h). Unset: no folder,
+// no format, written at once.
 struct QuickSaves {
     std::function<QString()> folder;
     std::function<std::vector<std::string>()> formats;
+    QuickSaveRunner background;
 
     QString export_folder() const { return folder ? folder() : QString(); }
     std::vector<std::string> data_formats() const { return formats ? formats() : std::vector<std::string>{}; }
+    // Writes `files` in `into` (save_quick) by `background`, then says how
+    // it went to `done` (report_to). A 2-hour film's bitrate data takes a few
+    // hundred ms to make and write, more on a slow export folder: the window
+    // answers meanwhile.
+    void save(const QString& into, std::vector<QuickFile> files, const ExportReport& done) const;
 };
+
+// QuickSaves' background on `writes` (the window's file writer), after the
+// writes queued before it. One that throws (out of memory, say) says so as
+// its error.
+QuickSaveRunner written_by(FileWrites& writes);
 
 // The formats quick saves write data in, Settings' Quick saves
 // (Settings::quick_save_formats), in Settings' order: JSON, then CSV.
@@ -62,7 +82,9 @@ void not_exported(QWidget* view);
 bool is_not_exported(const QWidget* view);
 
 // One file of a quick save: its name, and what writes it at the path given
-// (the error, empty when written).
+// (the error, empty when written). `write` runs off the window's thread
+// (QuickSaves::save): it must not touch a widget, so it holds plain data,
+// taken when the save icon was clicked.
 struct QuickFile {
     QString name;
     std::function<QString(const QString& path)> write;
@@ -70,10 +92,10 @@ struct QuickFile {
 
 // A data file for each format (quick_formats' keys) of a quick save, named
 // `stem` with the format's extension, its text made by `text` for that
-// format as it is written.
+// format now: `text` may read the card.
 std::vector<QuickFile> data_files(const QString& stem, const std::vector<std::string>& formats,
                                   const std::function<std::string(const std::string& format)>& text);
-// An image's file, `name`, drawn by `image` as it is written.
+// An image's file, `name`, drawn by `image` now, on the window's thread.
 QuickFile image_file(const QString& name, const std::function<QPixmap()>& image);
 
 // Where the files named go in `folder`: each name as it is, or all numbered

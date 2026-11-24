@@ -355,6 +355,14 @@ void MainWindow::submit_export(const QString& description, std::function<QString
         });
 }
 
+QuickSaves MainWindow::window_quick_saves() {
+    return {dialogs_.export_folder, [this] { return quick_formats(settings_); },
+            [this, written = written_by(*file_writes_)](std::function<ExportOutcome()> save, ExportReport done) {
+                export_indicator_->show_saving();
+                written(std::move(save), std::move(done));
+            }};
+}
+
 std::optional<BundleVideo> MainWindow::scored_video(const RowData& row_data) const {
     const std::shared_ptr<CompletedRun>& run = row_data.completed_run;
     if (!source_info_ || !run || run->partial || row_data.cvvdp_display_of ||
@@ -447,17 +455,21 @@ void MainWindow::fill_videos_quick_menu(QMenu& menu) {
         videos_refused());
 }
 
-void MainWindow::quick_save_results(const nlohmann::ordered_json& document, const QString& name) {
-    // Named as Export results names it; JSON and CSV numbered alike.
+void MainWindow::quick_save_results(nlohmann::ordered_json document, const QString& name) {
+    // Named as Export results names it; JSON and CSV numbered alike. Their
+    // text is made as they are written, off the window's thread: a 2-hour
+    // film's frames, each video's.
+    const auto shared = std::make_shared<const nlohmann::ordered_json>(std::move(document));
     std::vector<QuickFile> files;
     for (const std::string& format : quick_formats(settings_)) {
         const bool csv = format == "csv";
         files.push_back({file_safe(name + QStringLiteral(" - results")) + (csv ? ".csv" : ".json"),
-                         [text = csv ? results_csv(document) : python_json_dumps(document) + "\n"](const QString& path) {
-                             return write_text_file(path, text);
+                         [shared, csv](const QString& path) {
+                             return write_text_file(path, csv ? results_csv(*shared) : python_json_dumps(*shared) + "\n");
                          }});
     }
-    report_export(save_quick(dialogs_.export_folder(), files));
+    window_quick_saves().save(dialogs_.export_folder(), std::move(files),
+                              [this](const ExportOutcome& outcome) { report_export(outcome); });
 }
 
 QString MainWindow::rows_save_text() const {

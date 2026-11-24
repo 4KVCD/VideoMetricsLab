@@ -853,17 +853,17 @@ void BdRatePanel::on_export_chart() {
 
 void BdRatePanel::save_table() {
     if (report_) {
-        report_to(export_report,
-                  save_quick(quick_saves.export_folder(),
-                             data_files(table_stem(), quick_saves.data_formats(),
-                                        [this](const std::string& format) { return table_text(format); })));
+        quick_saves.save(quick_saves.export_folder(),
+                         data_files(table_stem(), quick_saves.data_formats(),
+                                    [this](const std::string& format) { return table_text(format); }),
+                         export_report);
     }
 }
 
 void BdRatePanel::save_chart() {
     if (chart->plot()) {
-        report_to(export_report, save_quick(quick_saves.export_folder(),
-                                            {image_file(chart_name(), [this] { return chart->grab(); })}));
+        quick_saves.save(quick_saves.export_folder(), {image_file(chart_name(), [this] { return chart->grab(); })},
+                         export_report);
     }
 }
 

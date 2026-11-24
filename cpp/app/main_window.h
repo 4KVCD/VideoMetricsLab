@@ -42,6 +42,7 @@
 #include "export_panel.h"
 #include "graph_bundle.h"
 #include "probe_worker.h"
+#include "quick_save.h"
 #include "results_export.h"
 #include "saved_results_panel.h"
 #include "row_state.h"
@@ -639,6 +640,11 @@ private:
     // why it failed. `quiet` (the after-run export): only a failure is said.
     // No export opens a window, for success or failure.
     void submit_export(const QString& description, std::function<QStringList()> write, bool quiet = false);
+    // What every tab's save icons save by: the export folder and Settings'
+    // Quick saves formats, read at each save; their files made and written
+    // on file_writes_ (written_by), the indicator saying "Saving..." until
+    // they are.
+    QuickSaves window_quick_saves();
     // Graphs to save as one .zip file (graph_bundle.h) once the bitrate they
     // need is read: of `videos`, compared with `reference`, with `extra`
     // files (a video's results); `together`: the videos' graphs together as
@@ -718,7 +724,7 @@ private:
     void export_rows_as(SavedResultsPanel::Export kind);
     // Saves `document` (Export results') in Settings' Quick saves formats,
     // into the export folder, named after `name`: a save icon's results.
-    void quick_save_results(const nlohmann::ordered_json& document, const QString& name);
+    void quick_save_results(nlohmann::ordered_json document, const QString& name);
     // The Videos card's save icon: the selected rows' results (else every
     // scored row's), what it would save, and why it cannot.
     void save_rows_results();
