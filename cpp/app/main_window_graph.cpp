@@ -39,8 +39,10 @@ void MainWindow::on_tab_changed(int index) {
     // it without the pointer crossing its tab, so those tabs prepare its
     // playback as the pointer over its tab does (released again if it is not
     // opened within FrameComparePanel's release_after_ms): its first pair
-    // then comes about 125 ms after it opens rather than about 285 ms.
-    if (index == tab_graph || index == tab_bitrate) {
+    // then comes about 125 ms after it opens rather than about 285 ms. Worst
+    // Frames is beside it since it became a tab, and its double-click opens
+    // a frame there; Metric Graphs, one tab further, opens frames there too.
+    if (index == tab_graph || index == tab_worst_frames || index == tab_bitrate) {
         frame_compare_panel_->prepare_playback();
     }
 }

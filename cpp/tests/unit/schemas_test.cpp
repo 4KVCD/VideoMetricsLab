@@ -158,6 +158,28 @@ TestVideo scored_video() {
     return video;
 }
 
+// A condition on a metric a video has no scores of is left out of its
+// segments in the --json and the text as in its --segments-dir file, and
+// said so there, not counted as holding on no frame.
+TEST(Schemas, ConditionsAVideoHasNoScoresOfAreSaidLeftOut) {
+    std::vector<TestVideo> videos{scored_video()};
+    const SegmentRules rules{{WeakCondition{"vmaf", '<', 85.0}, WeakCondition{"ssimulacra2", '<', 70.0}}};
+    nlohmann::ordered_json results = results_document(VideoInfo{}, videos, summarize(videos), false);
+    add_segments_json(results, videos, rules);
+    const nlohmann::ordered_json& weak = results["videos"][0]["weak_segments"];
+    EXPECT_EQ(weak["conditions"], nlohmann::ordered_json::array({"vmaf<85"}));
+    EXPECT_EQ(weak["left_out"], nlohmann::ordered_json::array({"ssimulacra2<70"}));
+    EXPECT_EQ(schema_errors("results", results), std::vector<std::string>{});
+    const std::string text = segments_text(videos, rules, 10);
+    EXPECT_NE(text.find("where vmaf<85"), std::string::npos) << text;
+    EXPECT_EQ(text.find("ssimulacra2<70: no frame"), std::string::npos) << text;
+    EXPECT_NE(text.find("ssimulacra2<70: left out, as it has no scores of its metric"), std::string::npos) << text;
+    // None of its conditions: no segments, and said why.
+    const SegmentRules none{{WeakCondition{"ssimulacra2", '<', 70.0}}};
+    EXPECT_NE(segments_text(videos, none, 10).find("no weak segments: it has no scores of the conditions' metrics"),
+              std::string::npos);
+}
+
 TEST(Schemas, HoldEveryDocument) {
     std::vector<TestVideo> videos{scored_video()};
     TestVideo& unread = videos.emplace_back();
@@ -190,6 +212,9 @@ TEST(Schemas, HoldEveryDocument) {
     const nlohmann::ordered_json worst = worst_frames_json(scores, "vmaf", dips, 10, {});
     EXPECT_EQ(worst["format"], "worst-frames-1");
     EXPECT_EQ(schema_errors("worst-frames", worst), std::vector<std::string>{});
+    const nlohmann::ordered_json every = worst_frames_report_json(scores, 10);
+    EXPECT_EQ(every["format"], "worst-frames-report-1");
+    EXPECT_EQ(schema_errors("worst-frames-report", every), std::vector<std::string>{});
 
     const nlohmann::ordered_json frames = nlohmann::ordered_json::parse(per_frame_json(result));
     EXPECT_EQ(frames["rows"][0][4], "inf");  // PSNR of the identical frame: JSON, not Python's Infinity
@@ -255,6 +280,15 @@ TEST(Schemas, SavedComparisonsAreNamedAndListed) {
     EXPECT_EQ(listed["comparisons"][1]["id"], all[1].folder.filename().string());
     EXPECT_EQ(listed["comparisons"][0]["metrics"], nlohmann::ordered_json::array({"vmaf"}));
     EXPECT_EQ(schema_errors("saved-list", listed), std::vector<std::string>{});
+
+    // A score file of a metric this build doesn't know (saved by a newer
+    // version sharing the folder, say) is listed by its key, as the Saved
+    // Results tab lists it, rather than ending the list with an error.
+    SavedComparison newer = comparison(std::string(64, 'e'), "Y:/clips/e.mkv");
+    newer.scores.push_back(SavedScoreFile{newer.folder / "futuremetric_1.npz", "futuremetric", {}, 4096});
+    std::string text;
+    EXPECT_NO_THROW(text = saved_list_text({&all[0], &newer}));
+    EXPECT_NE(text.find("futuremetric"), std::string::npos) << text;
 }
 
 // saved show and report take --segments saved as compare does: a wrong
@@ -441,7 +475,7 @@ TEST(Schemas, DiffTakesSavedSegmentsAsSavedShowDoes) {
     arguments.output.segments_saved = true;
     arguments.output.segments_preset = "no-such-preset";
     arguments.output.quiet = true;
-    EXPECT_THROW(diff(arguments), UsageError);
+    EXPECT_THROW(diff(arguments, Settings{}), UsageError);
     std::filesystem::remove_all(folder);
 }
 

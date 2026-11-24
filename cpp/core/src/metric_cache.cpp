@@ -1826,8 +1826,17 @@ void cache_parts::record_identity(const std::filesystem::path& directory, const 
     if (only_if_missing && std::filesystem::exists(directory / "identity.json", error)) {
         return;
     }
-    nlohmann::json source_side = {{"path", file_identity(source)}, {"sampled", sampled_of(source).value_or("")}};
-    if (const std::optional<std::string> video = video_of(source)) {
+    // What this folder recorded before (a metric added since): the
+    // reference's picture fingerprint is taken from it where it is of this
+    // same file, rather than decoded again by each process's first save.
+    const std::optional<nlohmann::json> before = read_json(directory / "identity.json");
+    const std::string source_identity = file_identity(source);
+    nlohmann::json source_side = {{"path", source_identity}, {"sampled", sampled_of(source).value_or("")}};
+    const bool recorded_video = before && before->is_object() && text_at(*before, "source", "path") == source_identity &&
+                                !text_at(*before, "source", "video").empty();
+    if (recorded_video) {
+        source_side["video"] = text_at(*before, "source", "video");
+    } else if (const std::optional<std::string> video = video_of(source)) {
         source_side["video"] = *video;
     }
     nlohmann::json distorted_side = {{"path", file_identity(distorted)},
@@ -1842,7 +1851,6 @@ void cache_parts::record_identity(const std::filesystem::path& directory, const 
     std::optional<std::string> stream = stream_of(distorted, 0, false);
     if (!head || !stream) {
         // Or as recorded before for this same file (a metric added since).
-        const std::optional<nlohmann::json> before = read_json(directory / "identity.json");
         if (before && before->is_object() && text_at(*before, "distorted", "path") == file_identity(distorted) &&
             !text_at(*before, "distorted", "stream").empty() && stream_of_this_format(*before)) {
             head = text_at(*before, "distorted", "stream_head");
@@ -2154,7 +2162,15 @@ bool reference_where_saved(const std::filesystem::path& folder) {
     const std::optional<nlohmann::json> identity = read_json(folder / "identity.json");
     const std::string recorded =
         identity && identity->is_object() ? text_at(*identity, "source", "path") : std::string();
-    return recorded.empty() || recorded == file_identity(source);
+    if (recorded.empty() || recorded == file_identity(source)) {
+        return true;
+    }
+    // Touched, or copied back, since (another time, the same bytes): known
+    // by its content, as the saved scores' lookup knows it (sampled_of,
+    // read once for each of the file's times). Else the Videos tab would use
+    // these scores while Saved Results called their reference gone.
+    const std::string sampled = text_at(*identity, "source", "sampled");
+    return !sampled.empty() && sampled_of(source) == sampled;
 }
 
 namespace {
@@ -2203,11 +2219,16 @@ ClearedResults clear_saved_results(const std::filesystem::path& base, bool keep_
     }
     std::vector<std::filesystem::path> kept;
     std::vector<std::filesystem::path> deleted;
+    // What is no comparison (a folder half-written, or left by a delete cut
+    // short) is deleted too, as it was with everything when nothing is kept:
+    // no list shows it, nothing else deletes it.
+    std::vector<std::filesystem::path> strays;
     // increment(error), not a range-for: its ++ throws if reading fails.
     for (std::filesystem::directory_iterator entry(root, error);
          !error && entry != std::filesystem::directory_iterator(); entry.increment(error)) {
         std::error_code ignored;
         if (!std::filesystem::is_regular_file(entry->path() / "context.json", ignored)) {
+            strays.push_back(entry->path());
             continue;
         }
         if (keep_without_reference && !reference_where_saved(entry->path())) {
@@ -2229,6 +2250,10 @@ ClearedResults clear_saved_results(const std::filesystem::path& base, bool keep_
         std::error_code not_removed;
         std::filesystem::remove_all(folder, not_removed);
         all = all && !not_removed;
+    }
+    for (const std::filesystem::path& stray : strays) {
+        std::error_code not_removed;
+        std::filesystem::remove_all(stray, not_removed);  // counted as no comparison either way
     }
     recorded_forgotten(base);
     cleared.removed = all ? static_cast<int>(deleted.size()) : 0;

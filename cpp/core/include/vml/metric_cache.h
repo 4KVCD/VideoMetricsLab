@@ -286,9 +286,10 @@ CacheSummary cache_summary(const std::filesystem::path& base);
 
 // Whether the reference of the comparison saved in `folder` is still where
 // its scores were saved from: a file at its path, and the same file, as its
-// identity.json recorded it (path, size and time; where the comparison has
-// one). Without it, nothing saved there can be calculated again: the scores
-// saved are the only ones there are.
+// identity.json recorded it (path, size and time, or else its sampled hash:
+// touched or copied back since; where the comparison has one). Without it,
+// nothing saved there can be calculated again: the scores saved are the
+// only ones there are.
 bool reference_where_saved(const std::filesystem::path& folder);
 
 // What clear_saved_results did: how many comparisons it deleted (0 when not

@@ -33,7 +33,8 @@ inline constexpr int exit_timeout = 124;
 inline constexpr int exit_cancelled = 130;
 
 // Which settings a command takes and where its saved scores are: options of
-// compare, bitrate and devices (the cache ones not of devices).
+// compare, bitrate, devices, saved and report (--cache-dir of compare,
+// bitrate and saved; --no-save and --no-cache of compare and bitrate).
 struct ProfileArguments {
     // --settings: the settings file read in place of the profile's, never written.
     std::optional<std::string> settings_file;
@@ -187,6 +188,7 @@ struct SavedArguments {
     std::vector<std::string> items;
     std::optional<std::string> filter;  // list --filter: part of a test video's or reference's name
     CompareArguments output;
+    ProfileArguments profile;  // --settings, --no-settings; saved's --cache-dir
 };
 
 // The target command's arguments: where encodes reach a score.

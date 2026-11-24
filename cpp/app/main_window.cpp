@@ -44,6 +44,7 @@
 #include "graph_panel.h"
 #include "worst_frames_tab.h"
 #include "i18n.h"
+#include "notifier.h"
 #include "options_panel.h"
 #include "run_worker.h"
 #include "series_colors.h"
@@ -370,6 +371,7 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     // itself once it has.
     if (!closing_) {
         closing_ = true;
+        close_clock_.start();
         if (gpu_check_watcher_ != nullptr) {
             stop_waiting_for_gpu_checks();  // a run asked for is not started now
         }
@@ -378,6 +380,11 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         }
         frame_compare_panel_->cancel();
         bitrate_panel_->cancel();
+        // An export waiting for the bitrate the Bitrate tab was reading is
+        // written now, without the bitrate not read, rather than lost: the
+        // user was told it would be written (queue_bundle), and the writes
+        // are waited for below.
+        write_ready_bundles(true);
         stream_records_->set_reporting({}, {});  // nothing more for the window
         stream_records_->stop();                 // a test stream being read is recorded at its next save
         cancel_stream_check();
@@ -393,10 +400,26 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     // writes of its own.
     const bool written = file_writes_->wait_until_idle(std::chrono::milliseconds(500)) &&
                          graph_panel_->wait_until_file_writes_idle(std::chrono::milliseconds(500));
-    if (!live_workers().empty() || !written) {
+    // Nor, for a few seconds, while a run-end notification is being sent:
+    // the run a close cancels ends with one, and quitting would cut it off.
+    // Only with notifications set up is one ever sent. The run is busy until
+    // its thread is let go (on_run_thread_finished), which comes after
+    // on_all_finished has queued the notification: its thread ends as it
+    // says all_finished, so it no longer running did not mean the
+    // notification was queued. The seconds count from the end of the busy
+    // time, when the notification is sent: a cancel that took longer than
+    // them left none (#221's review).
+    const bool busy = !live_workers().empty() || worker_ != nullptr || !written;
+    if (busy) {
+        close_clock_.restart();
+    }
+    const bool notifying = notifier_ != nullptr && notifier_->pending() > 0 &&
+                           close_clock_.elapsed() < notification_close_wait_ms;
+    if (busy || notifying) {
         // Held on the status line, where the run would put its counts.
         run_hold_ = RunHold::message;
-        run_hold_message_ = app::tr("Finishing up; the window will close on its own.");
+        run_hold_message_ = busy ? app::tr("Finishing up; the window will close on its own.")
+                                 : app::tr("Sending the run's notification; the window will close on its own.");
         show_status(run_hold_message_);
         QTimer::singleShot(200, this, [this] { close_when_idle(); });
         event->ignore();

@@ -275,7 +275,9 @@ private:
                           const std::vector<std::pair<QString, QWidget*>>& rows, const QString& hint);
     // A field for a key: hidden as typed until Show keys, its stored value
     // shown (show_secret).
-    QLineEdit* secret_edit(const std::string& stored);
+    // A key's field, for the secret setting `stored` (secret_settings), kept
+    // with it in secret_edits_: stored from it as it changes.
+    QLineEdit* secret_edit(std::string& stored);
     QGroupBox* build_keys_box();
     QGroupBox* build_message_box();
     // A secret's field: its stored value as it reads back, or empty with a
@@ -334,7 +336,8 @@ private:
     // Send test's sender; the templates' edits saved a moment after typing
     // stops; the template a field is inserted into.
     Notifier* test_notifier_ = nullptr;
-    std::vector<QLineEdit*> secret_edits_;  // hidden until Show keys
+    // Each key's field and its setting in settings_: hidden until Show keys.
+    std::vector<std::pair<std::string*, QLineEdit*>> secret_edits_;
     QTimer* template_typing_ = nullptr;
     QWidget* last_template_ = nullptr;
 };

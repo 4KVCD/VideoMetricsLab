@@ -233,12 +233,48 @@ SegmentRules saved_segment_rules(const std::vector<std::string>& conditions, boo
     return rules;
 }
 
+SegmentEnd segment_end(const SegmentRules& rules, const MetricDefinition& metric) {
+    bool above = false;
+    bool below = false;
+    for (const WeakCondition& condition : rules.conditions) {
+        if (condition.key == metric.key) {
+            (condition.comparison == '>' ? above : below) = true;
+        }
+    }
+    if (above != below) {
+        return above ? SegmentEnd::highest : SegmentEnd::lowest;
+    }
+    return metric.direction == MetricDirection::lower_is_better ? SegmentEnd::highest : SegmentEnd::lowest;
+}
+
+std::optional<double> segment_end_value(const SegmentMetric& metric, SegmentEnd end) {
+    return end == SegmentEnd::highest ? metric.max : metric.min;
+}
+
+bool is_worst_end(SegmentEnd end, const MetricDefinition& metric) {
+    return (end == SegmentEnd::highest) == (metric.direction == MetricDirection::lower_is_better);
+}
+
 std::vector<std::string> condition_texts(const std::vector<WeakCondition>& conditions) {
     std::vector<std::string> texts;
     for (const WeakCondition& condition : conditions) {
         texts.push_back(condition.text());
     }
     return texts;
+}
+
+const MetricDefinition* starting_metric(const std::vector<std::string>& keys, std::string_view preferred) {
+    if (std::find(keys.begin(), keys.end(), preferred) != keys.end()) {
+        if (const MetricDefinition* metric = find_metric(preferred)) {
+            return metric;
+        }
+    }
+    for (const std::string& key : keys) {
+        if (const MetricDefinition* metric = find_metric(key)) {
+            return metric;
+        }
+    }
+    return nullptr;
 }
 
 WeakCondition default_weak_condition(const MetricDefinition& metric) {
@@ -564,7 +600,10 @@ Json report_json(const MetricResultSet& results, const EveryMetricsWorst& every,
         Json one = worst_frames_json(results, key, worst, dips, {});
         list.push_back(Json{{"metric", key}, {"worst_frames", std::move(one["worst_frames"])}});
     }
-    return Json{{"dips", dips}, {"metrics", std::move(list)}};
+    Json report = document_head(worst_frames_report_format);
+    report["dips"] = dips;
+    report["metrics"] = std::move(list);
+    return report;
 }
 
 std::string report_csv(const MetricResultSet& results, const EveryMetricsWorst& every) {

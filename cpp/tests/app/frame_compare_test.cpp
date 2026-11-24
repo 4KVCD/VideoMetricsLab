@@ -49,9 +49,37 @@
 
 namespace vml::app {
 
+namespace {
+
+// A decoder that gives no frames and ends at once: playback with FFmpeg,
+// without FFmpeg.
+class IdleDecoder : public PlaybackDecoder {
+public:
+    explicit IdleDecoder(QObject* parent) : PlaybackDecoder(parent) {}
+    ~IdleDecoder() override { wait(); }
+    void cancel() override {}
+    std::vector<PlaybackFrame> drain_through(long long /*frame*/) override { return {}; }
+    void recycle(FramePixels /*pixels*/) override {}
+    std::optional<long long> latest_frame_number() const override { return std::nullopt; }
+
+protected:
+    void run() override {}
+};
+
+}  // namespace
+
 // The panel's parts, for its tests.
 class FramePanelTest : public ::testing::Test {
 protected:
+    // The panel's playback view, made now, its decoders stand-ins.
+    static VideoCompareView& idle_view(FrameComparePanel& panel) {
+        VideoCompareView& view = panel.ensure_video_view();
+        view.make_decoder = [](const FrameComparison&, FrameSide, long long, const PreviewColorSettings&,
+                               std::optional<Size>, QObject* parent) -> PlaybackDecoder* {
+            return new IdleDecoder(parent);
+        };
+        return view;
+    }
     static bool showing_source(const FrameComparePanel& panel) { return panel.showing_source_; }
     static Zoom& zoom(FrameComparePanel& panel) { return panel.zoom_; }
     static void cache_frame(FrameComparePanel& panel, FrameSide side, const QImage& image) {
@@ -277,8 +305,8 @@ TEST_F(FramePanelTest, WholeNamesWhereTheyFit) {
     EXPECT_TRUE(panel->showing_label->text().endsWith("v1")) << panel->showing_label->text().toStdString();
 }
 
-// The row under the playback controls (the worst frames when shown, the
-// loop and Export frame as PNG) is centred, as the rows above and below it are.
+// The rows under the playback controls (the worst frames' when shown, and
+// the loop's) are centred, as the rows above and below them are.
 TEST_F(FramePanelTest, TheLoopRowIsCentred) {
     const auto panel = make_panel();
     panel->set_runs({scored("first"), scored("second")});
@@ -291,12 +319,16 @@ TEST_F(FramePanelTest, TheLoopRowIsCentred) {
         const int right = last->mapTo(panel.get(), QPoint(last->width(), 0)).x();
         return std::abs((left + right) / 2 - panel->width() / 2);
     };
-    EXPECT_LE(centre_offset(panel->loop_checkbox, panel->save_still_button), 2);
+    EXPECT_LE(centre_offset(panel->loop_checkbox, panel->loop_range_label), 2);
     ASSERT_EQ(panel->open_at("run:first", 10), FrameComparePanel::OpenAt::shown);
     panel->set_worst_list({"run:first", "VMAF", {{10, "40.00"}, {70, "50.00"}}}, 0);
-    EXPECT_LE(centre_offset(panel->previous_worst_button, panel->save_still_button), 2);
+    // The worst frames' line, and the loop's under it, each centred.
+    EXPECT_LE(centre_offset(panel->previous_worst_button, panel->next_worst_button), 2);
+    EXPECT_LE(centre_offset(panel->loop_checkbox, panel->loop_range_label), 2);
+    EXPECT_LT(panel->next_worst_button->mapTo(panel.get(), QPoint(0, 0)).y(),
+              panel->loop_checkbox->mapTo(panel.get(), QPoint(0, 0)).y());
     panel->cycle_distorted(1);  // the list's video no longer shown: the loop alone, centred again
-    EXPECT_LE(centre_offset(panel->loop_checkbox, panel->save_still_button), 2);
+    EXPECT_LE(centre_offset(panel->loop_checkbox, panel->loop_range_label), 2);
     // VML Modern: the rows above the view a toolbar, the controls under it a card.
     EXPECT_EQ(panel->video_combo->parentWidget()->property("vmlRole").toString(), "toolbar");
     EXPECT_EQ(panel->color_mode_combo->parentWidget()->property("vmlRole").toString(), "toolbar");
@@ -312,7 +344,7 @@ TEST_F(FramePanelTest, TheWorstFramesListIsSteppedThroughOnItsVideo) {
     panel->set_runs({scored("first"), scored("second")});
     ASSERT_EQ(panel->open_at("run:first", 10), FrameComparePanel::OpenAt::shown);
     panel->set_worst_list({"run:first", "VMAF", {{10, "40.00"}, {70, "50.00"}}}, 0);
-    EXPECT_FALSE(panel->worst_label->isHidden());
+    EXPECT_TRUE(panel->worst_label->isVisibleTo(panel.get()));
     EXPECT_EQ(panel->worst_label->text().toStdString(), "Worst 1 of 2: VMAF 40.00");
     EXPECT_FALSE(panel->previous_worst_button->isEnabled());
     EXPECT_TRUE(panel->next_worst_button->isEnabled());
@@ -325,8 +357,8 @@ TEST_F(FramePanelTest, TheWorstFramesListIsSteppedThroughOnItsVideo) {
 
     panel->cycle_distorted(1);
     EXPECT_EQ(panel->video_combo->currentText().toStdString(), "second");
-    EXPECT_TRUE(panel->worst_label->isHidden());
-    EXPECT_TRUE(panel->next_worst_button->isHidden());
+    EXPECT_FALSE(panel->worst_label->isVisibleTo(panel.get()));
+    EXPECT_FALSE(panel->next_worst_button->isVisibleTo(panel.get()));
 
     QString failure;
     QObject::connect(panel.get(), &FrameComparePanel::still_failed, [&failure](const QString& error) { failure = error; });
@@ -358,6 +390,28 @@ TEST_F(FramePanelTest, LoopIsKeptAsItWasLeft) {
     ASSERT_EQ(settings.save_to(folder / "settings.json"), std::nullopt);
     EXPECT_TRUE(Settings::load_from(folder / "settings.json").compare_loop);
     EXPECT_FALSE(Settings{}.compare_loop);  // off until ticked
+}
+
+// Loop ticked at the video's last frame, shown: playback stopped there
+// plays the loop again (restart_loop_at_end), and its jump back, played with
+// FFmpeg as here, says at once that playback is stopped, which called it
+// again, and again, until the stack ran out (the window closed). Now the
+// loop starts again once.
+TEST_F(FramePanelTest, LoopingAtTheLastFrameStartsTheLoopOnce) {
+    // Played with FFmpeg (the unmanaged preview), its decoders stand-ins.
+    const auto panel = std::make_unique<FrameComparePanel>([] { return std::string("ffmpeg"); },
+                                                           PreviewColorMode::unmanaged, 3);
+    idle_view(*panel);
+    const test::Folder folder;
+    panel->set_runs({tagged(folder, "bt709", "bt709")});  // a pair that plays, frames 0 to 119
+    panel->set_loop_seconds(1.0, 1.0);
+    panel->set_loop_on(true);
+    panel->set_frame(119);
+    panel->resize(1400, 900);
+    panel->show();  // stopped at the last frame: the loop plays again, once
+    QCoreApplication::processEvents();
+    EXPECT_TRUE(panel->loop_checkbox->isChecked());
+    EXPECT_TRUE(panel->video_view->playback_requested());  // the loop playing
 }
 
 // The loop's seconds are to the millisecond, and beside each its frames at
@@ -412,6 +466,76 @@ TEST_F(FramePanelTest, NoSoundIsSaidWithWhyWhileAudioIsTicked) {
     panel->audio_checkbox->setChecked(true);
     EXPECT_EQ(playback_status(*panel, "Playing" + dot + "source soundtrack" + dot + "Direct3D 11").toStdString(),
               "Playing");
+}
+
+// Issue #201: the loop's row says what it loops, as a sentence: the frame
+// it loops around, each side's seconds and frames, and the frames it plays,
+// which the timeline shades while Loop is ticked. Unticked, the row stays,
+// greyed. Export frame as PNG is with the frame controls, not in this row.
+TEST_F(FramePanelTest, TheLoopRowSaysWhatItLoops) {
+    // Played with FFmpeg (the Unmanaged preview), its decoders stand-ins:
+    // the row alone is looked at.
+    const auto panel = std::make_unique<FrameComparePanel>([] { return std::string("no-ffmpeg-here"); },
+                                                           PreviewColorMode::unmanaged, 3);
+    idle_view(*panel);
+    const test::Folder folder;
+    panel->set_runs({tagged(folder, "bt709", "bt709")});  // a pair that plays, 24 fps, frames 0 to 119
+    panel->set_loop_seconds(1.0, 1.0);
+    panel->set_frame(10);
+    EXPECT_EQ(panel->loop_checkbox->text().toStdString(), "Loop around frame 10:");
+    const std::string dash = "\xE2\x80\x93";
+    EXPECT_EQ(panel->loop_range_label->text().toStdString(), "(looping frames 0" + dash + "34)");  // cut short at 0
+    EXPECT_TRUE(panel->loop_before_spin->toolTip().contains("before frame 10 "));
+    EXPECT_FALSE(panel->loop_before_spin->isEnabled());  // unticked: greyed, no band
+    EXPECT_FALSE(panel->timeline->band());
+    panel->loop_checkbox->setChecked(true);
+    EXPECT_TRUE(panel->loop_before_spin->isEnabled());
+    EXPECT_TRUE(panel->loop_after_frames_spin->isEnabled());
+    EXPECT_EQ(panel->timeline->band(), (std::optional<std::pair<int, int>>{{0, 34}}));
+    const int box_width = panel->loop_checkbox->minimumSizeHint().width();
+    const int range_width = panel->loop_range_label->minimumSizeHint().width();
+    panel->set_frame(60);  // another frame gone to: the loop around it
+    // The row keeps its width, so the centred row doesn't move.
+    EXPECT_EQ(panel->loop_checkbox->minimumSizeHint().width(), box_width);
+    EXPECT_EQ(panel->loop_range_label->minimumSizeHint().width(), range_width);
+    EXPECT_EQ(panel->loop_checkbox->text().toStdString(), "Loop around frame 60:");
+    EXPECT_EQ(panel->loop_range_label->text().toStdString(), "(looping frames 36" + dash + "84)");
+    EXPECT_EQ(panel->timeline->band(), (std::optional<std::pair<int, int>>{{36, 84}}));
+    EXPECT_EQ(loop_frames(60, 1.0, 1.0, 24.0, 119), (std::pair<long long, long long>{36, 84}));
+    // The videos shorter now (runs replaced): the loop's centre comes down
+    // with the frame, so the row names no frame past the end.
+    FrameComparisonEntry shorter = tagged(folder, "bt709", "bt709");
+    shorter.comparison.frame_count = 50;
+    panel->set_runs({shorter});
+    EXPECT_EQ(panel->loop_checkbox->text().toStdString(), "Loop around frame 49:");
+    EXPECT_EQ(panel->loop_range_label->text().toStdString(), "(looping frames 25" + dash + "48)");
+    // At the end: a frame before the last, where playback stops.
+    EXPECT_EQ(loop_frames(119, 1.0, 1.0, 24.0, 119), (std::pair<long long, long long>{95, 118}));
+    // A band is drawn at least a few pixels wide: a frame of a long video's.
+    BandSlider slider(Qt::Horizontal);
+    slider.setRange(0, 172'000);
+    slider.resize(800, 24);
+    slider.set_band(std::pair(86'000, 86'001));
+    EXPECT_GE(slider.band_rect().width(), BandSlider::min_band_px);
+    slider.set_band(std::nullopt);
+    EXPECT_TRUE(slider.band_rect().isEmpty());
+    // The still's button beside the frame's controls.
+    EXPECT_EQ(panel->save_still_button->parentWidget(), panel->next_frame_button->parentWidget());
+}
+
+// A way of decoding that failed before the one playing ("retry: " and
+// FFmpeg's error, said in Advanced info) is not an error of the playback:
+// taken for one, the whole status, FFmpeg's error text and all, filled the
+// status line while the video played. An error still shows whole.
+TEST_F(FramePanelTest, ARetriedWayIsNotShownAsAnError) {
+    const auto panel = make_panel();
+    panel->set_runs({scored("encode")});
+    const QString dot = QString::fromUtf8(" \xC2\xB7 ");
+    const QString played = "Playing" + dot + "hardware decode + GPU tone mapping/RGB (host transfer)" + dot +
+                           "retry: [CUDA @ 0x1] cuExternalMemoryGetMappedMipmappedArray failed -> invalid argument";
+    EXPECT_EQ(playback_status(*panel, played).toStdString(), "Playing");
+    const QString failed = "Video 1 could not play: no such file";
+    EXPECT_EQ(playback_status(*panel, failed).toStdString(), failed.toStdString());
 }
 
 // Holding S shows the source, letting go the test video again.

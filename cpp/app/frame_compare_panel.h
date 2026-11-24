@@ -51,6 +51,7 @@ class QVBoxLayout;
 
 namespace vml::app {
 
+class BandSlider;
 class ElidedLabel;
 class KeyGuide;
 class PlayPauseButton;
@@ -83,6 +84,10 @@ long long loop_start(long long centre, double before, double fps);
 // its end; nothing while inside it.
 std::optional<long long> loop_restart(long long frame, long long centre, double before, double after, double fps,
                                       long long last);
+// The frames that loop plays, its first and last (loop_restart's): what
+// the loop row says and the timeline shades.
+std::pair<long long, long long> loop_frames(long long centre, double before, double after, double fps,
+                                            long long last);
 
 // The file name of a still Export frame as PNG writes: the video, the frame (six
 // digits at least, as the encoder counts it), its time, the metric and
@@ -302,7 +307,7 @@ public:
     QSpinBox* frame_spin = nullptr;
     QLineEdit* timestamp_edit = nullptr;
     QPushButton* next_frame_button = nullptr;
-    QSlider* timeline = nullptr;
+    BandSlider* timeline = nullptr;
     // Issue #24: the worst frames handed over, the loop, the stills.
     QPushButton* previous_worst_button = nullptr;
     QLabel* worst_label = nullptr;
@@ -313,11 +318,15 @@ public:
     // The loop's seconds in frames of the pair shown (refresh_loop_frames).
     QSpinBox* loop_before_frames_spin = nullptr;
     QSpinBox* loop_after_frames_spin = nullptr;
+    // The sentence's words, and the frames the loop plays (refresh_loop_text).
+    QLabel* loop_from_label = nullptr;
+    QLabel* loop_before_to_label = nullptr;
+    QLabel* loop_after_label = nullptr;
+    QLabel* loop_range_label = nullptr;
     QPushButton* save_still_button = nullptr;
-    // The row of the worst frames, the loop and the still, centred, and the
-    // room between the worst frames and the loop, there while they show.
-    QHBoxLayout* inspect_row_ = nullptr;
-    QSpacerItem* worst_spacer_ = nullptr;
+    // Previous / Next worst and where the list is: shown while the list's
+    // video is (update_worst_row).
+    QWidget* worst_row_ = nullptr;
     ElidedLabel* detail_label = nullptr;
     QLabel* guide_label = nullptr;
     // The playback view, made when a pair first plays.
@@ -387,6 +396,10 @@ private:
     // The loop's frame boxes from its seconds, at the pair shown's frame
     // rate; empty and unusable where it has none.
     void refresh_loop_frames();
+    // The row's frame numbers and tooltips, the range it plays and its band
+    // on the timeline, for the loop's centre now; its boxes usable only while
+    // Loop is ticked.
+    void refresh_loop_text();
     void on_loop_toggled(bool on);
     void loop_jump_to(long long frame);
     void follow_loop(long long frame);
@@ -500,6 +513,8 @@ private:
     // pause was the user's (not playback's own stop at the end).
     long long loop_centre_ = 0;
     bool loop_jump_pending_ = false;
+    // restart_loop_at_end is under way (it is not entered again).
+    bool restarting_loop_ = false;
     bool user_paused_ = false;
     StillSaveWorker* still_worker_ = nullptr;
 };

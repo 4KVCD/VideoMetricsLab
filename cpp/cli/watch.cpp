@@ -13,6 +13,18 @@ std::vector<CancelToken> separate_tokens(std::size_t count) {
     return tokens;
 }
 
+TimeoutAction on_run_timeout(RunStage stage, bool cancelled) {
+    switch (stage) {
+    case RunStage::outside:
+        return TimeoutAction::end_command;
+    case RunStage::running:
+        return cancelled ? TimeoutAction::nothing : TimeoutAction::cancel_run;
+    case RunStage::results_given:
+        break;
+    }
+    return TimeoutAction::nothing;
+}
+
 Deadlines::Deadlines(double start, std::optional<double> run, std::optional<double> video)
     : run_ends_(run ? start + *run : std::numeric_limits<double>::infinity()), video_(video) {}
 

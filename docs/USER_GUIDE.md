@@ -545,13 +545,14 @@ optional. Use still mode for frame inspection or playback mode for motion.
   100% is the video's own pixels. Drag a zoomed frame to move it.
 - Opened from the Worst Frames tab's **Worst frames** list, **Previous worst** and
   **Next worst** step through that list's frames while its video is shown.
-- **Loop** plays the seconds around the frame you went to (**before** and
-  **after** it, 1 s each unless changed) again and again; Play starts them
-  from the beginning. Each side is set in seconds, to the millisecond, or
-  in frames of the video shown, in the box beside: either one sets the
-  other. The seconds are kept, so a video of another frame rate loops as
-  long, in its own frames.
-- **Export frame as PNG** saves the frame of the reference and of the test video as
+- **Loop around frame N** plays the seconds around the frame you went to
+  (from 1 s before to 1 s after it unless changed) again and again; Play
+  starts them from the beginning. The row names that frame and, after it,
+  the frames that repeat; while Loop is ticked the timeline shades them.
+  Each side is one value, in seconds to the millisecond or in frames of the
+  video shown: typing either one sets the other. The seconds are kept, so a
+  video of another frame rate loops as long, in its own frames.
+- **Export frame as PNG**, beside the frame controls, saves the frame of the reference and of the test video as
   two PNG files in Settings' Export folder (Documents unless set), named
   after the video, the frame, its time, the Worst frames score when it is
   one, and the side. They are cropped and scaled as compared, HDR mapped to
@@ -734,9 +735,9 @@ $run.videos[0].metrics.vmaf.score
 | `-q`, `--quiet` | No progress, only the results. |
 | `-v`, `--verbose` | The app's log as well. |
 | `--progress text\|jsonl` | `text`: progress lines for a person (the default). `jsonl`: a JSON object a line on the error stream, for a program to read, `-q` or not (below). |
-| `--timeout SECONDS` | Cancel the run after SECONDS (whole seconds, or H:MM:SS) from the command's start, as Ctrl+C does: what finished is given and saved, the JSON says `"cancelled": true, "timed_out": true`, and the exit code is 124. Reached while the videos are read or the results written, it ends the command at once (exit code 124, no results), as Ctrl+C does then. |
+| `--timeout SECONDS` | Cancel the run after SECONDS (whole seconds, or H:MM:SS) from the command's start, as Ctrl+C does: what finished is given and saved, the JSON says `"cancelled": true, "timed_out": true`, and the exit code is 124. Counting the frames of videos answered by their saved scores (`--frame-counts check`) is part of the run. Reached while the videos are read or the results written, it ends the command at once (exit code 124, no results), as Ctrl+C does then; once the results are given (a notification sent, test streams recorded), or once Ctrl+C has cancelled the run, it does nothing. |
 | `--video-timeout SECONDS` | Stop a video whose run takes more than SECONDS from its start (a further `--cvvdp-display`'s run counts as its own); the other videos go on. What it had not finished fails with the code `timed_out`, and the exit code is 124. |
-| `--cancel-on-stdin-eof` | Cancel the run, as Ctrl+C does, when the standard input ends. For a program that starts this one and cannot send it Ctrl+C: it keeps the input open, and closes it to cancel. Not with an input that is empty from the start (`< NUL`), which would cancel at once. |
+| `--cancel-on-stdin-eof` | Cancel the run, as Ctrl+C does, when the standard input ends. For a program that starts this one and cannot send it Ctrl+C: it keeps the input open, and closes it to cancel. Not with an input that is empty from the start (`< NUL`), which would cancel at once. Once the results are given, its end cancels nothing: the command ends as the run did. |
 | `--settings FILE` | Read the settings from FILE (a `settings.json`, such as a copy of the app's, kept with a script) in place of the app's. Every option left out takes its value from it, as it would from the app's. It is never written; a FILE that is not there or is not JSON is an input not read (exit code 4). |
 | `--no-settings` | Take every setting at its default, as a new install has them, whatever the app's settings say: the same command gives the same run on any PC. |
 | `--cache-dir FOLDER` | Read and save the saved scores (and the black bars found) in FOLDER, in place of the folder Settings > Storage names. |
@@ -788,7 +789,8 @@ started, then what the event says:
 | `video_started` | A job starts: its `job` (from 0) and its video's `path` (and `cvvdp_display` for a further display). |
 | `progress` | A job's figures, at most once a second: `job`, `path` and its `tasks`, each with its `metrics`, `state` (`starting`, `waiting`, `running`, `done`, `failed`), the frames `done` of `total` and `fps`. |
 | `video_done` | A job ended: `job`, `path`, `status` (`done`, `partial`, `failed`, `cancelled` or `timed_out`) and its line as `text`. |
-| `message`, `problem` | Any other progress line, as `text`; a `problem` is one `-q` would still show. |
+| `message`, `problem` | Any other progress line, as `text`; a `problem` is one `-q` would still show, and every error the command says is one. |
+| `log` | A line of the app's log (its failures, and everything with `-v`): its `level` (`ERROR`, `WARNING`, `INFO`), the `logger` it is from, and its `text`. |
 | `run_done` | Last, once the command got as far as reading its videos: its `exit_code`, and whether it was `cancelled` and `timed_out`. |
 
 A reader should skip events and keys it does not know: later versions may
@@ -848,6 +850,8 @@ be gone:
 # Run files (.metrics.json: compare --run-dir, the window's Export > Run file), reported the same way
 .\VideoMetricsLab-cli.exe report runs\*.metrics.json --segments saved
 ```
+
+`saved` and `report` take the settings as compare does: the app's, `--settings FILE`'s or, with `--no-settings`, the defaults. They give the saved results' folder and the weak segment profiles. `saved --cache-dir FOLDER` reads and deletes the saved results in FOLDER, as `compare --cache-dir FOLDER` saved them.
 
 `saved show` and `report` take compare's outputs: `--json`, `--csv`,
 `--frames-json`, `--run-dir`, `--worst`, `--segments` (with `saved`,
@@ -1054,7 +1058,9 @@ is of `--sequence` (`error_code` `rates_unreadable`, `no_metric_scores` or
 `no_sequence`).
 
 `diff OLD NEW` takes two runs, each a run file or a saved comparison's ID
-(at least 6 of its hex digits, as `saved list` gives them). It shows each
+(at least 6 of its hex digits, as `saved list` gives them), looked for in
+the settings' saved results folder (`--settings` and `--no-settings` choose
+the settings, `--cache-dir FOLDER` another folder, as `saved` takes them). It shows each
 metric both runs have, old, new and the change, for the score and the worst
 1%; its JSON (format `diff-1`) has every statistic, and the metrics only
 one run has. With `--segments` (and its options, as compare takes them), it
@@ -1315,7 +1321,9 @@ when every condition must hold; the JSON lists it under `left_out`.
   `<video>.<metrics>.segments.json` and `.csv` once its run ends, with the
   rest that Exports include (see [Exporting from the right-click
   menus](#exporting-from-the-right-click-menus)). Nothing is saved while no
-  condition is set.
+  condition is set. A profile with no condition on the video's metrics
+  takes one on the metric shown, as the Worst Frames tab starts, and its
+  own are listed as left out.
 
 Every weak segments JSON tells, as the Worst Frames tab shows them:
 

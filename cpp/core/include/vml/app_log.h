@@ -64,6 +64,13 @@ void forward_lines(Forward forward);
 // --verbose.
 void log_to_console(Level level);
 
+// Hands each line log_to_console writes to standard error to `console`
+// instead, as its level's name ("ERROR"), its part's name and its text: how
+// the command line's --progress jsonl writes them as events. An empty
+// function writes them again.
+using ConsoleLine = std::function<void(std::string_view level, std::string_view name, std::string_view text)>;
+void console_lines_to(ConsoleLine console);
+
 // Whether a line at `level` goes anywhere, for a caller to skip putting
 // together a line no one keeps.
 bool enabled(Level level);

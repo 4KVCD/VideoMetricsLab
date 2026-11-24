@@ -12,8 +12,13 @@
 
 #include <gtest/gtest.h>
 
+#ifdef _WIN32
+#include <share.h>
+#endif
+
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -695,13 +700,15 @@ TEST(MetricCache, StoresAResultAsThePythonApp) {
 // A comparison whose reference is no longer where its scores were saved from
 // (gone, or another file there now) has the only scores there are: listed as
 // such, and kept by Clear saved results unless it is asked to take them too.
+// One touched since (the same bytes, another time) is still there, known by
+// its sampled hash as the lookup knows it.
 TEST(MetricCache, ClearingKeepsTheComparisonsWhoseReferenceIsGone) {
     const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
     const test::Folder folder;
     const AnalysisRequest request = request_from(stored);
     const std::filesystem::path cache = folder / "cache";
     std::map<std::string, std::filesystem::path> saved;
-    for (const char* name : {"here", "gone", "replaced"}) {
+    for (const char* name : {"here", "gone", "touched", "replaced"}) {
         const std::filesystem::path reference = folder / (std::string(name) + ".mp4");
         touch(reference, name);
         touch(folder / "t.mp4", "t");
@@ -712,7 +719,10 @@ TEST(MetricCache, ClearingKeepsTheComparisonsWhoseReferenceIsGone) {
     }
     std::filesystem::remove(folder / "gone.mp4");
     touch(folder / "replaced.mp4", "another file, of another size");
+    const std::filesystem::path touched = folder / "touched.mp4";
+    std::filesystem::last_write_time(touched, std::filesystem::last_write_time(touched) - std::chrono::hours(1));
     EXPECT_TRUE(reference_where_saved(saved["here"]));
+    EXPECT_TRUE(reference_where_saved(saved["touched"]));
     EXPECT_FALSE(reference_where_saved(saved["gone"]));
     EXPECT_FALSE(reference_where_saved(saved["replaced"]));
     // The file at a path is the one saved for (#134): not where another is
@@ -723,7 +733,7 @@ TEST(MetricCache, ClearingKeepsTheComparisonsWhoseReferenceIsGone) {
     EXPECT_FALSE(saved_file_at(saved["gone"], true, folder / "gone.mp4"));
     EXPECT_FALSE(saved_file_at(saved["replaced"], true, folder / "replaced.mp4"));
     for (const SavedComparison& listed : list_saved_comparisons(cache)) {
-        EXPECT_EQ(listed.reference_found, listed.label == "here") << listed.label;
+        EXPECT_EQ(listed.reference_found, listed.label == "here" || listed.label == "touched") << listed.label;
     }
 
     // Issue #134: the bitrate of the kept ones' files is kept too, the only
@@ -732,16 +742,24 @@ TEST(MetricCache, ClearingKeepsTheComparisonsWhoseReferenceIsGone) {
     bitrate.data = bitrate_data(folder / "t.mp4", {0.0}, {1 / 24.0}, {1000}, {true});
     save_bitrate(cache, saved_content_hash(saved["here"], true), bitrate);
     save_bitrate(cache, saved_content_hash(saved["gone"], true), bitrate);
-    save_bitrate(cache, saved_content_hash(saved["gone"], false), bitrate);  // t.mp4, of all three
+    save_bitrate(cache, saved_content_hash(saved["gone"], false), bitrate);  // t.mp4, of all four
     save_bitrate(cache, "of no comparison", bitrate);
+    // A folder that is no comparison (half-written, or left by a delete cut
+    // short): no scores anyone can list or delete, so cleared with the rest,
+    // as everything was when nothing was kept.
+    const std::filesystem::path stray = cache / "v2" / "no comparison";
+    std::filesystem::create_directories(stray);
+    touch(stray / "psnr_1.npz", "scores of no comparison");
     const ClearedResults cleared = clear_saved_results(cache, true);
+    EXPECT_FALSE(std::filesystem::exists(stray));
     EXPECT_FALSE(load_saved_bitrate(cache, saved_content_hash(saved["here"], true), folder / "here.mp4"));
     EXPECT_TRUE(load_saved_bitrate(cache, saved_content_hash(saved["gone"], true), folder / "gone.mp4"));
     EXPECT_TRUE(load_saved_bitrate(cache, saved_content_hash(saved["gone"], false), folder / "t.mp4"));
     EXPECT_FALSE(load_saved_bitrate(cache, "of no comparison", folder / "t.mp4"));
-    EXPECT_EQ(cleared.removed, 1);
+    EXPECT_EQ(cleared.removed, 2);  // here and touched
     EXPECT_EQ(cleared.kept, 2);
     EXPECT_FALSE(std::filesystem::exists(saved["here"]));
+    EXPECT_FALSE(std::filesystem::exists(saved["touched"]));
     EXPECT_TRUE(std::filesystem::exists(saved["gone"] / "context.json"));
     EXPECT_TRUE(std::filesystem::exists(saved["replaced"] / "context.json"));
     EXPECT_EQ(list_saved_comparisons(cache).size(), 2U);
@@ -822,11 +840,61 @@ TEST(MetricCache, SavedComparisonsAreListedReadAndDeleted) {
     elsewhere.folder = folder / "s.mp4";  // not a folder under v2
     EXPECT_FALSE(delete_saved_comparison(cache, elsewhere));
     EXPECT_TRUE(std::filesystem::exists(folder / "s.mp4"));
+#ifdef _WIN32
+    // A comparison one of whose files is open, without leave to delete it
+    // (the tab's details reader, a lookup, an antivirus): nothing of it is
+    // deleted, and it is still listed, to be deleted again. Deleted file by
+    // file, its context.json went first, and the half left was listed by
+    // nothing and deletable by nothing.
+    {
+        const std::filesystem::path held = list[1].scores.front().file;
+        std::FILE* open = _wfsopen(held.c_str(), L"rb", _SH_DENYNO);
+        ASSERT_NE(open, nullptr);
+        EXPECT_FALSE(delete_saved_comparison(cache, list[1]));
+        EXPECT_TRUE(std::filesystem::exists(second / "context.json"));
+        EXPECT_EQ(list_saved_comparisons(cache).size(), 2U);
+        std::fclose(open);
+    }
+    // A leftover of the same comparison in .deleted, one of its files still
+    // open, does not block deleting it (#221's review: its name was taken).
+    const std::filesystem::path leftover = cache / "v2" / ".deleted" / second.filename();
+    std::filesystem::create_directories(leftover);
+    touch(leftover / "vmaf_0.npz", "held");
+    std::FILE* still_open = _wfsopen((leftover / "vmaf_0.npz").c_str(), L"rb", _SH_DENYNO);
+    ASSERT_NE(still_open, nullptr);
+#endif
     EXPECT_TRUE(delete_saved_comparison(cache, list[1]));
     EXPECT_FALSE(std::filesystem::exists(second));
+#ifdef _WIN32
+    std::fclose(still_open);
+#endif
     list = list_saved_comparisons(cache);
     ASSERT_EQ(list.size(), 1U);
     EXPECT_EQ(list[0].label, "t");
+}
+
+// #205: the Saved Results tab lists the saved comparisons each time it is
+// shown; a listing nobody waited for any more (a newer one, or the window
+// closing, which waited for it) still read every folder, minutes on a slow
+// share. Asked to stop, it ends at the next folder.
+TEST(MetricCache, AListingOfSavedComparisonsStopsWhenAsked) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    const AnalysisRequest request = request_from(stored);
+    const std::filesystem::path cache = folder / "cache";
+    touch(folder / "s.mp4", "s");
+    for (const char* name : {"a.mp4", "b.mp4", "c.mp4"}) {
+        touch(folder / name, name);
+        ComparisonResult result = test::result_from(stored.at("result"));
+        result.source = folder / "s.mp4";
+        result.distorted = folder / name;
+        store_result(cache, result.source, result.distorted, request.recipe, result, name, request.metrics);
+    }
+    EXPECT_EQ(list_saved_comparisons(cache).size(), 3U);
+    int asked = 0;
+    const std::vector<SavedComparison> stopped = list_saved_comparisons(cache, [&asked] { return ++asked > 1; });
+    EXPECT_EQ(stopped.size(), 1U);
+    EXPECT_EQ(asked, 2);
 }
 
 // A file is known by its content where its path changed: the sampled hash
@@ -948,6 +1016,47 @@ TEST(MetricCache, ScoresFollowRenamedAndRemuxedFiles) {
     EXPECT_EQ(recipe_directory(cache, folder / "s copy.mkv", folder / "t renamed.mkv", request.recipe), saved);
     std::filesystem::remove_all(saved);
     EXPECT_NE(recipe_directory(cache, folder / "s copy.mkv", folder / "t renamed.mkv", request.recipe), saved);
+    set_video_fingerprinter(nullptr);
+}
+
+// #205: every process's first save into a comparison (vml-cli adding a
+// metric, the app's first run of the day) decoded the reference again for
+// its picture fingerprint (five decodes, which a 2-hour film on a share takes
+// a while for), though the folder's identity.json recorded it for this same
+// file. It is taken from there.
+TEST(MetricCache, ASaveTakesTheReferencesRecordedFingerprint) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mkv", std::string(5000, 's'));
+    touch(folder / "t.mkv", std::string(4000, 't'));
+    const AnalysisRequest request = request_from(stored);
+    ComparisonResult result = test::result_from(stored.at("result"));
+    result.source = folder / "s.mkv";
+    result.distorted = folder / "t.mkv";
+    const std::filesystem::path cache = folder / "cache";
+    set_video_fingerprinter(nullptr);  // none worked out in this process
+    const std::filesystem::path saved =
+        store_result(cache, folder / "s.mkv", folder / "t.mkv", request.recipe, result, "t", request.metrics);
+    // As another process recorded it.
+    nlohmann::json identity = nlohmann::json::parse(*platform::read_file(saved / "identity.json"));
+    ASSERT_EQ(identity["source"]["path"], file_identity(folder / "s.mkv"));
+    identity["source"]["video"] = "recorded";
+    std::ofstream(saved / "identity.json") << identity.dump();
+
+    int decoded = 0;
+    set_video_fingerprinter([&decoded](const std::filesystem::path&) -> std::optional<std::string> {
+        ++decoded;
+        return std::string("decoded");
+    });
+    store_result(cache, folder / "s.mkv", folder / "t.mkv", request.recipe, result, "t", request.metrics);
+    EXPECT_EQ(decoded, 0);
+    identity = nlohmann::json::parse(*platform::read_file(saved / "identity.json"));
+    EXPECT_EQ(identity["source"]["video"], "recorded");
+
+    // Another reference at that path since: worked out again.
+    touch(folder / "s.mkv", std::string(6000, 'S'));
+    store_result(cache, folder / "s.mkv", folder / "t.mkv", request.recipe, result, "t", request.metrics);
+    EXPECT_EQ(decoded, 1);
     set_video_fingerprinter(nullptr);
 }
 
@@ -1314,6 +1423,28 @@ TEST(MetricCache, AStreamReadWithOtherColourIsAnotherStream) {
     EXPECT_EQ(stream_fingerprint_of(digest, bt709, 0), stream_fingerprint_of(digest, bt709, 0));
 }
 
+// A remux that changes only the parameter sets' crop (h264_metadata's
+// crop_right) or the pixel aspect ratio has the same coded pictures, but is
+// decoded to another size or shape: another stream. A ratio not stated is
+// square.
+TEST(MetricCache, AStreamReadAtAnotherSizeOrShapeIsAnotherStream) {
+    VideoInfo full;
+    full.codec_name = "h264";
+    full.pix_fmt = "yuv420p";
+    full.width = 1920;
+    full.height = 1080;
+    VideoInfo cropped = full;
+    cropped.width = 1904;
+    VideoInfo anamorphic = full;
+    anamorphic.sar = "4:3";
+    VideoInfo unstated = full;
+    unstated.sar = "0:1";
+    const std::string digest(64, 'a');
+    EXPECT_NE(stream_fingerprint_of(digest, cropped, 0), stream_fingerprint_of(digest, full, 0));
+    EXPECT_NE(stream_fingerprint_of(digest, anamorphic, 0), stream_fingerprint_of(digest, full, 0));
+    EXPECT_EQ(stream_fingerprint_of(digest, unstated, 0), stream_fingerprint_of(digest, full, 0));
+}
+
 // A file's bitrate is saved by its content and read back as it was, under
 // the path the file has now; frame types the command line did not read are
 // told apart from types read and unknown. Settings counts and clears it with
@@ -1350,6 +1481,18 @@ TEST(MetricCache, BitrateIsSavedByContent) {
     save_bitrate(cache, "unknown", bitrate);
     EXPECT_FALSE(load_saved_bitrate(cache, "unread", folder / "a.mkv")->frame_types);
     EXPECT_EQ(load_saved_bitrate(cache, "unknown", folder / "a.mkv")->frame_types, std::vector<std::uint8_t>{});
+    // #205: saved as "read, not known" before a reading cut short was told
+    // apart from one read whole (no frame_types_whole): read again.
+    std::map<std::string, NpyArray> earlier = *read_npz(bitrate_store_folder(cache) / "unknown.npz");
+    nlohmann::json metadata = nlohmann::json::parse(*npy_text_value(earlier.at("metadata")));
+    metadata.erase("frame_types_whole");
+    earlier["metadata"] = npy_text(metadata.dump());
+    const std::string bytes = npz_bytes({earlier.begin(), earlier.end()});
+    std::ofstream(bitrate_store_folder(cache) / "earlier.npz", std::ios::binary) << bytes;
+    const std::optional<SavedBitrate> unsure = load_saved_bitrate(cache, "earlier", folder / "a.mkv");
+    ASSERT_TRUE(unsure);
+    EXPECT_FALSE(unsure->frame_types);
+    EXPECT_EQ(unsure->data.sizes, bitrate.data.sizes);  // its packets still taken
 
     EXPECT_GT(cache_summary(cache).bytes, 0U);
     clear_saved_results(cache, true);  // as Settings clears: the bitrate too

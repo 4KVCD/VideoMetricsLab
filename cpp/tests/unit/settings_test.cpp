@@ -298,5 +298,28 @@ TEST(Settings, UnreadableFileLoggedWithoutItsText) {
     EXPECT_NE(logged[0].find("it isn't JSON at line 3, column "), std::string::npos) << logged[0];
 }
 
+// A key typed in as something else (a number, a list of webhook URLs) is
+// logged by its type, never its value; another setting by its value.
+TEST(Settings, AKeyOfTheWrongTypeLoggedWithoutIt) {
+    const test::Folder folder;
+    std::ofstream(folder / "settings.json", std::ios::binary)
+        << R"({"pushover_user": 123456789, "slack_webhook": ["https://hooks.slack.com/services/T0/B0/made-up"],)"
+        << R"( "parallel_jobs": "four"})";
+    std::vector<std::string> logged;
+    app_log::forward_lines([&logged](int, std::string_view, std::string_view text) { logged.emplace_back(text); });
+    Settings::load_from(folder / "settings.json");
+    app_log::forward_lines({});
+    std::string all;
+    for (const std::string& line : logged) {
+        all += line + "\n";
+    }
+    EXPECT_EQ(logged.size(), 3u) << all;
+    EXPECT_EQ(all.find("123456789"), std::string::npos) << all;
+    EXPECT_EQ(all.find("made-up"), std::string::npos) << all;
+    EXPECT_NE(all.find("pushover_user is a JSON number, not a <class 'str'>"), std::string::npos) << all;
+    EXPECT_NE(all.find("slack_webhook is a JSON array, not a <class 'str'>"), std::string::npos) << all;
+    EXPECT_NE(all.find("parallel_jobs is 'four'"), std::string::npos) << all;
+}
+
 }  // namespace
 }  // namespace vml

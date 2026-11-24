@@ -53,6 +53,7 @@ FrameControls::FrameControls(QWidget* parent) : QWidget(parent) {
         box->setKeyboardTracking(false);
         box->setToolTip(range_tip);
         connect(box, &QSpinBox::valueChanged, this, [this] { on_range_box_changed(); });
+        frame_range_tip_ = range_tip;
         return box;
     };
     grid->addWidget(new QLabel(app::tr("Highlight range from frame:")), 0, 4, Qt::AlignRight);
@@ -171,11 +172,18 @@ void FrameControls::on_time_requested() {
 }
 
 void FrameControls::on_range_time_edited() {
+    const std::optional<double> from = parse_time(range_start_time->text());
+    const std::optional<double> to = parse_time(range_end_time->text());
+    if (in_seconds_) {
+        // The times as typed: each line's own frames between them.
+        seconds_ = from && to ? std::optional(std::pair(std::min(*from, *to), std::max(*from, *to))) : std::nullopt;
+        clear_range_button->setEnabled(!range_start_time->text().isEmpty() || !range_end_time->text().isEmpty());
+        emit range_changed(true);
+        return;
+    }
     if (!timeline_) {
         return;
     }
-    const std::optional<double> from = parse_time(range_start_time->text());
-    const std::optional<double> to = parse_time(range_end_time->text());
     std::optional<int> first;
     std::optional<int> last;
     if (from && to) {
@@ -193,6 +201,16 @@ void FrameControls::on_range_time_edited() {
 }
 
 void FrameControls::refresh_range_times() {
+    if (in_seconds_) {
+        if (seconds_) {
+            for (const auto& [box, at] : {std::pair(range_start_time, seconds_->first),
+                                          std::pair(range_end_time, seconds_->second)}) {
+                box->setText(time_text(at));
+                box->setModified(false);
+            }
+        }
+        return;
+    }
     if (!timeline_) {
         return;
     }
@@ -216,8 +234,36 @@ void FrameControls::show_frame_time(int frame) {
     }
 }
 
+void FrameControls::set_range_in_seconds(bool on, const QString& why) {
+    if (on == in_seconds_) {
+        if (on) {
+            range_start_spin->setToolTip(why);
+            range_end_spin->setToolTip(why);
+        }
+        return;
+    }
+    forget_range();  // frames and seconds don't carry over
+    seconds_.reset();
+    in_seconds_ = on;
+    for (QSpinBox* box : {range_start_spin, range_end_spin}) {
+        box->setEnabled(!on);
+        box->setToolTip(on ? why : frame_range_tip_);
+    }
+}
+
+std::optional<std::pair<double, double>> FrameControls::selected_seconds() const {
+    return in_seconds_ ? seconds_ : std::nullopt;
+}
+
+void FrameControls::set_dragged_seconds(double first, double last, bool finished) {
+    seconds_ = std::pair(std::min(first, last), std::max(first, last));
+    refresh_range_times();
+    clear_range_button->setEnabled(true);
+    emit range_changed(finished);
+}
+
 std::optional<std::pair<int, int>> FrameControls::selected_frames() const {
-    if (!range_) {
+    if (!range_ || in_seconds_) {
         return std::nullopt;
     }
     return std::pair(std::min(range_->first, range_->second), std::max(range_->first, range_->second));
@@ -247,6 +293,7 @@ void FrameControls::clear() {
 
 void FrameControls::forget_range() {
     range_.reset();
+    seconds_.reset();
     reset_range_boxes();
     clear_range_button->setEnabled(false);
     for (QLineEdit* box : {range_start_time, range_end_time}) {

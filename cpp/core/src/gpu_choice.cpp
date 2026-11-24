@@ -108,15 +108,19 @@ void resolve_chosen_gpu() {
         app_log::write(app_log::Level::warning, "vml.gpu_choice",
                        "The GPU chosen, " + *chosen +
                            ", is part of more than one GPU's name: no GPU is used for the GPU metrics");
+    } else if (!names.empty()) {
+        app_log::write(app_log::Level::warning, "vml.gpu_choice",
+                       "The GPU chosen, " + *chosen + ", is not one here: no GPU is used for the GPU metrics");
     }
 }
 
 std::optional<int> chosen_cuda_device_among(const std::optional<std::string>& chosen,
                                             const std::vector<platform::GpuAdapter>& adapters,
-                                            const std::function<std::vector<std::string>()>& cuda_names) {
+                                            const std::function<std::vector<CudaGpu>()>& cuda_gpus) {
     if (!chosen) {
         return 0;
     }
+    std::uint64_t luid = 0;
     if (!adapters.empty()) {
         std::vector<std::string> names;
         std::size_t nvidia = 0;
@@ -128,8 +132,20 @@ std::optional<int> chosen_cuda_device_among(const std::optional<std::string>& ch
         if (!index || adapters[*index].vendor_id != platform::nvidia_pci_vendor || nvidia < 2) {
             return 0;
         }
+        luid = adapters[*index].luid;
     }
-    if (const std::optional<std::size_t> found = chosen_among(cuda_names(), *chosen)) {
+    const std::vector<CudaGpu> gpus = cuda_gpus();
+    if (luid != 0 && std::any_of(gpus.begin(), gpus.end(), [](const CudaGpu& gpu) { return gpu.luid != 0; })) {
+        // By the card itself; none of CUDA's with its LUID: hidden from CUDA.
+        const auto same =
+            std::find_if(gpus.begin(), gpus.end(), [luid](const CudaGpu& gpu) { return gpu.luid == luid; });
+        return same != gpus.end() ? std::optional(static_cast<int>(same - gpus.begin())) : std::nullopt;
+    }
+    std::vector<std::string> names;
+    for (const CudaGpu& gpu : gpus) {
+        names.push_back(gpu.name);
+    }
+    if (const std::optional<std::size_t> found = chosen_among(names, *chosen)) {
         return static_cast<int>(*found);
     }
     return adapters.empty() ? std::optional(0) : std::nullopt;

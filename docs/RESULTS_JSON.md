@@ -31,6 +31,7 @@ tests hold the app's output to.
 | `"segments-report-1"` | Every video's weak segments in one file | `compare --segments-report`, the window's exports | `segments-report.schema.json` |
 | `"frames-1"` | A video's per-frame scores ([below](#per-frame-scores-as-json)) | `compare --frames-json`, the window's exports | `frames.schema.json` |
 | `"worst-frames-1"` | A metric's worst dips ([below](#worst-frames-as-json-and-csv)) | the Worst Frames tab's **Worst frames as JSON...** | `worst-frames.schema.json` |
+| `"worst-frames-report-1"` | Every metric's worst dips of a video, `<video> - worst frames.json` ([below](#worst-frames-as-json-and-csv)) | the window's exports | `worst-frames-report.schema.json` |
 | `"bitrate-1"` | Each video's bitrate | `bitrate --json` | `bitrate.schema.json` |
 | `"bdrate-1"` | BD-rates | `bdrate --json` | `bdrate.schema.json` |
 | `"devices-1"` | Where each metric would be calculated | `devices --json` | `devices.schema.json` |
@@ -328,6 +329,7 @@ a column per scored metric (blank where it has no score).
 In an export of what Settings > Storage > Exports include ticks (**Worst
 frames**), each video's `<video> - worst frames.json` holds every scored
 metric's worst frames, as many dips as the Worst Frames tab lists, over the
-whole video: `dips`, then `metrics`, one object a metric (in the app's order
+whole video: the head (`format` is `"worst-frames-report-1"`), `dips`, then
+`metrics`, one object a metric (in the app's order
 of metrics) with its `metric` and `worst_frames` as above. Its CSV is the
 rows above, each led by a `metric` column, one metric after another.

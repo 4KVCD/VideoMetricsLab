@@ -700,12 +700,12 @@ class RunWatch {
 
 public:
     RunWatch(const CompareArguments& arguments, CancelToken cancel, std::shared_ptr<Progress> progress,
-             std::shared_ptr<std::atomic<bool>> running)
+             std::shared_ptr<std::atomic<RunStage>> stage)
         : timeout_(arguments.timeout),
           video_timeout_(arguments.video_timeout),
           cancel_(std::move(cancel)),
           progress_(std::move(progress)),
-          running_(std::move(running)),
+          stage_(std::move(stage)),
           began_(Clock::now()),
           deadlines_(0.0, timeout_ ? std::optional<double>(static_cast<double>(*timeout_)) : std::nullopt,
                      video_timeout_ ? std::optional<double>(static_cast<double>(*video_timeout_)) : std::nullopt) {
@@ -751,6 +751,14 @@ public:
         deadlines_.ended(index);
     }
 
+    // The run is over: the stage is outside it from now, set under the lock
+    // the watch decides under, so that a --timeout due as the run ends has
+    // either cancelled it already or ends the command.
+    void run_ended() {
+        const std::lock_guard lock(mutex_);
+        *stage_ = RunStage::outside;
+    }
+
     // Whether --timeout cancelled the run; whether --video-timeout stopped job `index`.
     bool timed_out() const { return timed_out_; }
     bool timed_out(std::size_t index) const {
@@ -771,13 +779,15 @@ private:
         bool run_cancel_passed_on = false;
         while (!woken_.wait_for(lock, std::chrono::milliseconds(100), [this] { return stopping_; })) {
             const Deadlines::Due due = deadlines_.due(seconds());
-            if (due.run) {
+            const TimeoutAction action =
+                due.run ? on_run_timeout(*stage_, cancel_.cancelled()) : TimeoutAction::nothing;
+            if (action == TimeoutAction::end_command) {
+                // Before the run, or while the results are written, as Ctrl+C then: the command ends at once.
+                progress_->problem("Timed out after --timeout's " + std::to_string(*timeout_) + " s");
+                platform::end_process_now(exit_timeout);
+            }
+            if (action == TimeoutAction::cancel_run) {
                 timed_out_ = true;
-                if (!*running_) {
-                    // Before or after the run, as Ctrl+C then: the command ends at once.
-                    progress_->problem("Timed out after --timeout's " + std::to_string(*timeout_) + " s");
-                    platform::end_process_now(exit_timeout);
-                }
                 progress_->message("Timed out after --timeout's " + std::to_string(*timeout_) + " s: cancelling...");
                 app_log::write(app_log::Level::info, "vml.job_runner", "Run: cancel requested (--timeout)");
                 cancel_.cancel();
@@ -804,7 +814,7 @@ private:
     const std::optional<long long> video_timeout_;
     CancelToken cancel_;
     const std::shared_ptr<Progress> progress_;
-    const std::shared_ptr<std::atomic<bool>> running_;
+    const std::shared_ptr<std::atomic<RunStage>> stage_;
     const Clock::time_point began_;
     mutable std::mutex mutex_;
     std::condition_variable woken_;
@@ -929,7 +939,9 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
                 who["cvvdp_display"] = video(index).display;
             }
             progress.name_job(index, who);
-            progress.event({{"event", "video_started"}, {"job", index}, {"path", who["path"]}});
+            nlohmann::ordered_json started{{"event", "video_started"}, {"job", index}};
+            started.update(who);  // its path, and its display (a further one)
+            progress.event(std::move(started));
             return;
         }
         progress.message(video(index).label() + ": started");
@@ -981,7 +993,8 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
         append(video(index).facts->metrics, video(index).not_applicable);
     };
     // The counts files state, always (they cost nothing); whole files read only when asked
-    events.count_frames = container_frame_counter(environment.ffprobe, cancel, read_whole_files);
+    events.count_frames =
+        counting_each_file_once(container_frame_counter(environment.ffprobe, cancel, read_whole_files));
     events.job_failed = [&](std::size_t index, const std::string& message, const std::string& /*stderr_tail*/) {
         video(index).error = message;
         video(index).error_code = codes::run_failed;
@@ -1195,16 +1208,17 @@ std::vector<std::filesystem::path> expand_tests(const std::vector<std::string>& 
     return expand_videos(patterns, reference);
 }
 
-std::optional<std::string> gpu_refusal(const std::optional<std::string>& gpu,
-                                       const std::vector<platform::GpuAdapter>& adapters) {
-    if (!gpu || *gpu == "auto" || adapters.empty()) {
-        return std::nullopt;
-    }
+namespace {
+
+// Why `gpu` names no one GPU of `adapters` (more than one, or none), or
+// nothing where it names one: the reason both --gpu's refusal and a chosen
+// GPU's problem give, after what chose it.
+std::optional<std::string> gpu_name_problem(const std::string& gpu, const std::vector<platform::GpuAdapter>& adapters) {
     std::vector<std::string> names;
     for (const platform::GpuAdapter& adapter : adapters) {
         names.push_back(adapter.name);
     }
-    const std::vector<std::size_t> found = gpus_named(names, *gpu);
+    const std::vector<std::size_t> found = gpus_named(names, gpu);
     if (found.size() == 1) {
         return std::nullopt;
     }
@@ -1213,13 +1227,37 @@ std::optional<std::string> gpu_refusal(const std::optional<std::string>& gpu,
         listed += (listed.empty() ? "" : ", ") + names[index];
     }
     if (!found.empty()) {
-        return "--gpu " + *gpu + ": more than one GPU here has that in its name: " + listed +
-               ". Give more of the name.";
+        return "more than one GPU here has that in its name: " + listed + ". Give more of the name.";
     }
     for (const std::string& name : names) {
         listed += (listed.empty() ? "" : ", ") + name;
     }
-    return "--gpu " + *gpu + ": no GPU here has that name. The GPUs here: " + listed + "; or auto.";
+    return "no GPU here has that name. The GPUs here: " + listed + "; or auto.";
+}
+
+}  // namespace
+
+std::optional<std::string> gpu_refusal(const std::optional<std::string>& gpu,
+                                       const std::vector<platform::GpuAdapter>& adapters) {
+    if (!gpu || *gpu == "auto" || adapters.empty()) {
+        return std::nullopt;
+    }
+    if (const std::optional<std::string> why = gpu_name_problem(*gpu, adapters)) {
+        return "--gpu " + *gpu + ": " + *why;
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string> chosen_gpu_problem(const std::optional<std::string>& gpu, bool from_settings,
+                                              const std::vector<platform::GpuAdapter>& adapters) {
+    if (!gpu || *gpu == "auto" || adapters.empty()) {
+        return std::nullopt;
+    }
+    if (const std::optional<std::string> why = gpu_name_problem(*gpu, adapters)) {
+        return std::string(from_settings ? "The GPU the settings choose, " : "The GPU VML_GPU chooses, ") + *gpu +
+               ": " + *why + " No GPU is used for the GPU metrics: choose one with --gpu.";
+    }
+    return std::nullopt;
 }
 
 std::optional<std::string> difference_refusal(std::size_t test_count) {
@@ -1283,7 +1321,7 @@ namespace {
 // Ctrl+C: outside the run, the command ends at once with exit code 130 and
 // nothing more, as the Python app's KeyboardInterrupt ends it. An FFmpeg
 // check or ffprobe under way ends with it, as this process's job ends.
-// During the run (`running`), the run is cancelled and what finished is
+// During the run (RunStage::running), the run is cancelled and what finished is
 // reported, and the GPU checks started with the command are ended (a task
 // of the run may be waiting for one: nothing after the run asks for one);
 // a second Ctrl+C (or SIGTERM) ends the command at once, for a
@@ -1296,11 +1334,11 @@ namespace {
 // taking what to say ("Cancelling..." for Ctrl+C).
 std::function<void(const std::string&)> cancel_on_interrupt(CancelToken cancel,
                                                             const std::shared_ptr<Progress>& progress,
-                                                            const std::shared_ptr<std::atomic<bool>>& running) {
+                                                            const std::shared_ptr<std::atomic<RunStage>>& stage) {
     auto asked = std::make_shared<std::atomic<bool>>(false);
-    const std::function<void(const std::string&)> interrupt = [cancel, progress, running,
+    const std::function<void(const std::string&)> interrupt = [cancel, progress, stage,
                                                                asked](const std::string& saying) mutable {
-        if (!*running || asked->exchange(true)) {
+        if (*stage != RunStage::running || asked->exchange(true)) {
             platform::end_process_now(exit_cancelled);
         }
         progress->message(saying);
@@ -1313,14 +1351,19 @@ std::function<void(const std::string&)> cancel_on_interrupt(CancelToken cancel,
 }
 
 // --cancel-on-stdin-eof: standard input read to its end on a thread of its
-// own, which then cancels the run as Ctrl+C does (`interrupt`). Whatever is
-// written to it is read and dropped.
-void cancel_at_end_of_input(const std::function<void(const std::string&)>& interrupt) {
-    std::thread([interrupt] {
+// own, which then cancels the run as Ctrl+C does (`interrupt`): unless the
+// results are given already (`stage`), when a program that has read them
+// closes it and the command ends as the run did. Whatever is written to it
+// is read and dropped.
+void cancel_at_end_of_input(const std::function<void(const std::string&)>& interrupt,
+                            const std::shared_ptr<std::atomic<RunStage>>& stage) {
+    std::thread([interrupt, stage] {
         char buffer[4096];
         while (std::fread(buffer, 1, sizeof buffer, stdin) > 0) {
         }
-        interrupt("Standard input ended: cancelling...");
+        if (*stage != RunStage::results_given) {
+            interrupt("Standard input ended: cancelling...");
+        }
     }).detach();
 }
 
@@ -2495,12 +2538,31 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
     const Clock::time_point began = Clock::now();
     CancelToken cancel;
     const auto progress = std::make_shared<Progress>(given.quiet, given.progress == "jsonl");
-    const auto running = std::make_shared<std::atomic<bool>>(false);
-    const std::function<void(const std::string&)> interrupt = cancel_on_interrupt(cancel, progress, running);
-    if (given.cancel_on_stdin_eof) {
-        cancel_at_end_of_input(interrupt);
+    // --progress jsonl: every line on standard error an event, the app's log
+    // (its failures, everything with -v) and the errors said as well, until
+    // the command returns.
+    const struct LinesAsEvents {
+        bool on;
+        ~LinesAsEvents() {
+            if (on) {
+                app_log::console_lines_to({});
+                print_errors_to({});
+            }
+        }
+    } lines_as_events{progress->jsonl()};
+    if (progress->jsonl()) {
+        app_log::console_lines_to([progress](std::string_view level, std::string_view name, std::string_view text) {
+            progress->event(
+                {{"event", "log"}, {"level", std::string(level)}, {"logger", std::string(name)}, {"text", std::string(text)}});
+        });
+        print_errors_to([progress](const std::string& text) { progress->problem(text); });
     }
-    RunWatch watch(given, cancel, progress, running);  // --timeout, --video-timeout
+    const auto stage = std::make_shared<std::atomic<RunStage>>(RunStage::outside);
+    const std::function<void(const std::string&)> interrupt = cancel_on_interrupt(cancel, progress, stage);
+    if (given.cancel_on_stdin_eof) {
+        cancel_at_end_of_input(interrupt, stage);
+    }
+    RunWatch watch(given, cancel, progress, stage);  // --timeout, --video-timeout
     // The test videos, found first (it reads only the file system), so that
     // a wrong command is said before any work.
     std::vector<BatchGroup> groups;  // --batch's rows, which the comparisons point to
@@ -2531,6 +2593,12 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
     if (const std::optional<std::string> refused = gpu_refusal(arguments.gpu, platform::gpu_adapters())) {
         print_error(*refused);
         return exit_usage;
+    }
+    if (!arguments.gpu) {
+        if (const std::optional<std::string> problem =
+                chosen_gpu_problem(chosen_gpu(), gpu_from_settings, platform::gpu_adapters())) {
+            progress->problem(*problem);
+        }
     }
     if (arguments.black_bars_given && (arguments.source_crop || arguments.test_crop)) {
         print_error("--black-bars cannot be given with --source-crop or --test-crop: the crops given are cut, and no "
@@ -2666,7 +2734,7 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
     bool cancelled = false;
     if (!jobs.empty()) {
         const Clock::time_point started = Clock::now();
-        *running = true;
+        *stage = RunStage::running;
         // What runs ended outright (End task, a crash) left in the temporary
         // folder goes while this one runs; waited for as the block ends.
         const std::future<void> leftovers = std::async(std::launch::async, [] {
@@ -2687,7 +2755,6 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
         }
         cancelled = cancel.cancelled();
         say_timed_out_videos(targets, watch);
-        *running = false;
         const double seconds = std::chrono::duration<double>(Clock::now() - started).count();
         progress->message(std::string(cancelled ? "Cancelled" : "Finished") + " after " + format_hms(seconds));
     } else {
@@ -2698,12 +2765,18 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
 
     // A video answered by its saved scores alone had no job to count its
     // frames in (frame_pairing.h): counted here, and saved with its scores.
+    // Part of the run: reading whole files can take minutes, and Ctrl+C or
+    // --timeout then cancels the counting, and the results are still given.
+    *stage = RunStage::running;
     const bool read_whole_files =
         arguments.frame_counts ? *arguments.frame_counts == "check" : settings.check_frame_counts;
+    // Each file once: every saved test video's pairing asks for the reference's.
+    const FrameCounter count_saved_frames =
+        counting_each_file_once(container_frame_counter(tools.ffprobe.path, cancel, read_whole_files));
     const auto count_saved = [&](TestVideo& video) {
         std::optional<FramesShort>& frames_short = video.result->frames_short;
         frames_short = count_frames_short(*frames_short, video.result->source_info, video.result->distorted_info,
-                                          container_frame_counter(tools.ffprobe.path, cancel, read_whole_files));
+                                          count_saved_frames);
         if (video.save_scores && scores.save && frames_short->counted()) {
             try {
                 store_result(cache_folder, video.result->source, video.path, video.request.recipe, *video.result,
@@ -2743,6 +2816,8 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
             every_ok = every_ok && video_status(video, false) == "ok";
         }
     }
+    watch.run_ended();
+    cancelled = cancelled || cancel.cancelled();  // as the frames were counted, or right after
     // The command line cannot pause: no paused time
     RunRecord record{"cli",
                      arguments.command_line,
@@ -2759,6 +2834,7 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
                                        record,
                                        profile_json(chosen, scores, options_from_settings(arguments, gpu_from_settings)),
                                        fields, *progress);
+    *stage = RunStage::results_given;
     // A video below a --require bar, or with a weak segment (--fail-on-segments): its checks are made as the
     // results are written.
     bool gate_failed = false;

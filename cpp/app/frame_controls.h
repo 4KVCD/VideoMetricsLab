@@ -48,8 +48,21 @@ public:
     static QString time_text(double seconds);
 
     // The frames chosen, in order (the boxes' two ends either way round), or
-    // nothing until both boxes hold a frame: the whole video.
+    // nothing until both boxes hold a frame: the whole video. Nothing while
+    // the range is in seconds.
     std::optional<std::pair<int, int>> selected_frames() const;
+    // The range in seconds instead of frames, for lines whose frames are not
+    // the same times (videos of different frame rates, where frame 1000 is a
+    // moment of its own in each): the frame range boxes greyed with `why` as
+    // their tooltip, the time boxes and a drag (set_dragged_seconds) giving
+    // the range. A change of mode clears the range.
+    void set_range_in_seconds(bool on, const QString& why = {});
+    bool range_in_seconds() const { return in_seconds_; }
+    // The range in seconds chosen, in order, while range_in_seconds; nothing
+    // until both time boxes hold a time.
+    std::optional<std::pair<double, double>> selected_seconds() const;
+    // A range dragged across the graph, in seconds (range_in_seconds).
+    void set_dragged_seconds(double first, double last, bool finished);
     // The frames the graph shows, lowest and highest: Go to frame cannot ask
     // for one outside them, and the range boxes go as far, or to their own
     // ends where those lie further out.
@@ -106,6 +119,10 @@ private:
     // Nothing (no range, the whole video) until both boxes hold a frame.
     // Each box's lowest value, shown as "—", is no end.
     std::optional<std::pair<int, int>> range_;
+    // The range while range_in_seconds, as range_ is otherwise.
+    bool in_seconds_ = false;
+    std::optional<std::pair<double, double>> seconds_;
+    QString frame_range_tip_;  // the frame range boxes' own tooltip, given back after seconds
     int lo_ = 0;
     int hi_ = 0;
     std::optional<Timeline> timeline_;

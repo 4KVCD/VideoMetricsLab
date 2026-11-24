@@ -244,10 +244,6 @@ TEST(ResultsExport, FilesAreWrittenInTheFormatsTicked) {
     EXPECT_EQ(exported_items(settings), Names{"graphs"});
 }
 
-// Issue #131: the after-run export names its files after the test video's
-// file name, which another test video's may share (x265\movie.mkv and
-// svt\movie.mkv, or clip.mkv and clip.mp4): the second replaced the first's
-// files. Now an export replaces none, and its files are numbered alike.
 // A video whose run scored VMAF and PSNR while HDR VMAF, ticked too, failed
 // is exported with the scores it has (the Export menu, and Settings'
 // after-run export); one with a metric ticked since the run, never
@@ -263,6 +259,55 @@ TEST(ResultsExport, AMetricThatFailedHoldsNoExportBack) {
     EXPECT_FALSE(settled_for_export({}, scored, {}));
 }
 
+// A profile with no condition on the video's metrics (HDR's cvvdp<9 on an
+// SDR video scored with VMAF only): its weak segments by one condition on
+// the metric Metric Graphs shows, as the Worst Frames tab and the command
+// line's --segments saved find them, the profile's said left out; not an
+// empty file named after the profile's metric.
+TEST(ResultsExport, WeakSegmentsOfAProfileOnNoneOfTheVideosMetrics) {
+    auto result = std::make_shared<ComparisonResult>();
+    result->fps = 24.0;
+    FrameMetricResult vmaf;
+    vmaf.key = "vmaf";
+    vmaf.frame = {0, 1, 2, 3};
+    vmaf.time = {0.0, 1 / 24.0, 2 / 24.0, 3 / 24.0};
+    vmaf.values = {95.0F, 40.0F, 40.0F, 95.0F};
+    result->metric_results.add(vmaf);
+    Settings settings;
+    settings.export_items = {"weak_segments"};
+    settings.export_formats = {"json"};
+    SegmentRules rules;
+    rules.conditions = {*parse_weak_condition("cvvdp<9")};
+    rules.min_frames = 1;
+    std::vector<FrameFiles> frames;
+    bool skipped = true;
+    const nlohmann::ordered_json document;
+    const std::vector<BundleFile> files =
+        export_files(settings, {{result, QStringLiteral("a"), "a.mkv"}}, "r.mkv", [&document] { return document; },
+                     rules, false, QStringLiteral("a"), frames, skipped);
+    ASSERT_EQ(files.size(), 1U);
+    EXPECT_EQ(files[0].first, "a.vmaf.segments.json");
+    const nlohmann::json json = nlohmann::json::parse(files[0].second);
+    ASSERT_EQ(json["segments"].size(), 1U);
+    EXPECT_EQ(json["segments"][0]["first_frame"], 1);
+    EXPECT_EQ(json["left_out"], nlohmann::json::array({"cvvdp<9"}));
+
+    // Several videos' report: one starting condition for them all, as the
+    // command line's report takes it, not a report of no segments (#221's
+    // review).
+    const std::vector<BundleFile> report =
+        export_files(settings, {{result, QStringLiteral("a"), "a.mkv"}, {result, QStringLiteral("b"), "b.mkv"}},
+                     "r.mkv", [&document] { return document; }, rules, true, QStringLiteral("both"), frames, skipped);
+    ASSERT_EQ(report.size(), 1U);
+    EXPECT_EQ(report[0].first, "both - weak segments.vmaf.segments.json");
+    const nlohmann::json reported = nlohmann::json::parse(report[0].second);
+    EXPECT_NE(reported.dump().find("\"first_frame\":1"), std::string::npos) << reported.dump();
+}
+
+// Issue #131: the after-run export names its files after the test video's
+// file name, which another test video's may share (x265\movie.mkv and
+// svt\movie.mkv, or clip.mkv and clip.mp4): the second replaced the first's
+// files. Now an export replaces none, and its files are numbered alike.
 TEST(ResultsExport, AnExportIntoAFolderReplacesNoneOfAnothersFiles) {
     QTemporaryDir temporary;
     ASSERT_TRUE(temporary.isValid());

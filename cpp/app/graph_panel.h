@@ -242,6 +242,11 @@ private:
 };
 
 // The tab: one page per metric, and the table of lines and statistics.
+// The line of a run file on Metric Graphs, by the file it was read from:
+// one line for it however it is imported, on Metric Graphs or the Videos
+// tab, and however often.
+std::string saved_run_identity(const std::filesystem::path& file);
+
 class GraphPanel : public QWidget {
     Q_OBJECT
 

@@ -13,6 +13,7 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QItemSelection>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
@@ -296,6 +297,9 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
 }
 
 SavedResultsPanel::~SavedResultsPanel() {
+    if (listing_stopped_) {
+        *listing_stopped_ = true;
+    }
     reading_->waitForFinished();
     stop_details_read();
     details_reading_->waitForFinished();
@@ -307,7 +311,14 @@ std::filesystem::path SavedResultsPanel::base() const {
 
 void SavedResultsPanel::refresh() {
     folder_label_->setText(app::tr("Reading {directory}...", {{"directory", text_of(base())}}));
-    reading_->setFuture(QtConcurrent::run([folder = base()] { return list_saved_comparisons(folder); }));
+    // A listing still running is stopped: this one takes its place.
+    if (listing_stopped_) {
+        *listing_stopped_ = true;
+    }
+    listing_stopped_ = std::make_shared<std::atomic<bool>>(false);
+    reading_->setFuture(QtConcurrent::run([folder = base(), stopped = listing_stopped_] {
+        return list_saved_comparisons(folder, [&stopped] { return stopped->load(); });
+    }));
 }
 
 void SavedResultsPanel::show_list(std::vector<SavedComparison> list) {
@@ -472,11 +483,25 @@ void SavedResultsPanel::fill_column_menu(QMenu& menu) {
 void SavedResultsPanel::apply_filter() {
     const QString wanted = filter_->text().trimmed();
     for (int row = 0; row < table_->rowCount(); ++row) {
-        const bool shown = wanted.isEmpty() ||
-                           table_->item(row, col_test)->text().contains(wanted, Qt::CaseInsensitive) ||
-                           table_->item(row, col_test)->toolTip().contains(wanted, Qt::CaseInsensitive) ||
-                           table_->item(row, col_reference)->toolTip().contains(wanted, Qt::CaseInsensitive);
+        // By the files' names and paths, not the cells' tooltips: a reference
+        // not found has a sentence there ("Not found there: ...").
+        const int place = table_->item(row, col_test)->data(Qt::UserRole).toInt();
+        const SavedComparison& saved = list_[static_cast<std::size_t>(place)];
+        const bool shown = wanted.isEmpty() || qt_text(saved.label).contains(wanted, Qt::CaseInsensitive) ||
+                           text_of(saved.distorted).contains(wanted, Qt::CaseInsensitive) ||
+                           text_of(saved.source).contains(wanted, Qt::CaseInsensitive);
         table_->setRowHidden(row, !shown);
+    }
+    // A row hidden is no longer selected: what is chosen is what is seen, and
+    // the box and the buttons follow (itemSelectionChanged), as for a click.
+    QItemSelection hidden;
+    for (const QModelIndex& index : table_->selectionModel()->selectedRows()) {
+        if (table_->isRowHidden(index.row())) {
+            hidden.select(index, index.siblingAtColumn(table_->columnCount() - 1));
+        }
+    }
+    if (!hidden.isEmpty()) {
+        table_->selectionModel()->select(hidden, QItemSelectionModel::Deselect | QItemSelectionModel::Rows);
     }
 }
 

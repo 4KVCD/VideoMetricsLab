@@ -1,5 +1,7 @@
 #include "vml/temp_files.h"
+#include "temp_files_parts.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <charconv>
 #include <chrono>
@@ -8,6 +10,7 @@
 #include <random>
 #include <stdexcept>
 #include <system_error>
+#include <thread>
 
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
@@ -22,6 +25,38 @@ constexpr std::chrono::hours kept_without_owner{7 * 24};
 // How many random names are tried before making a temporary file or folder
 // is given up.
 constexpr int name_attempts = 100;
+
+// A file open for reading elsewhere (std::ifstream's, here or in another
+// process: vml-cli, a lookup, the Saved Results tab) cannot be replaced on
+// Windows until it is closed. A read takes moments: the rename is tried
+// again, waiting a little longer each time, about 3 seconds in all.
+constexpr int replace_attempts = 12;
+
+// Whether replacing `path` was refused because the file is open elsewhere
+// (and so may be replaced once it is closed), not for good.
+bool refused_while_open([[maybe_unused]] const std::error_code& error,
+                        [[maybe_unused]] const std::filesystem::path& path) {
+#ifdef _WIN32
+    if (error.category() != std::system_category()) {
+        return false;
+    }
+    constexpr int access_denied = 5;
+    constexpr int sharing_violation = 32;
+    constexpr int lock_violation = 33;
+    // Access denied is what a file open for reading elsewhere gives (opened
+    // without leave to delete it, as std::ifstream opens it), and also a
+    // file read-only or not the user's to change, which waiting would not
+    // help: told apart by the file (#221's review).
+    return error.value() == sharing_violation || error.value() == lock_violation ||
+           (error.value() == access_denied && platform::open_elsewhere(path));
+#else
+    return false;
+#endif
+}
+
+void sleep_to_replace(int attempt) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(std::min(10 << attempt, 500)));
+}
 
 // What a temporary file or folder's name says of its owner.
 enum class Owner { none, unknown, process };
@@ -91,6 +126,11 @@ int remove_leftovers(const std::filesystem::path& folder) {
 }
 
 void write_file_whole(const std::filesystem::path& path, const std::function<void(std::ostream&)>& write) {
+    write_file_whole(path, write, sleep_to_replace);
+}
+
+void write_file_whole(const std::filesystem::path& path, const std::function<void(std::ostream&)>& write,
+                      const std::function<void(int attempt)>& wait) {
     std::random_device random;
     const std::filesystem::path temp =
         path.parent_path() /
@@ -112,7 +152,14 @@ void write_file_whole(const std::filesystem::path& path, const std::function<voi
         throw failed(std::error_code(code, std::generic_category()));
     }
     std::error_code renamed;
-    std::filesystem::rename(temp, path, renamed);
+    for (int attempt = 0;; ++attempt) {
+        renamed.clear();
+        std::filesystem::rename(temp, path, renamed);
+        if (!renamed || !refused_while_open(renamed, path) || attempt + 1 == replace_attempts) {
+            break;
+        }
+        wait(attempt);
+    }
     if (renamed) {
         throw failed(renamed);
     }

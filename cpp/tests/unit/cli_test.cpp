@@ -282,6 +282,29 @@ TEST(CommandLine, SegmentsSavedTakesTheWindowsRulesAndReportsEveryVideo) {
 
 }
 
+// A segment's worst score under the heading that names it: a metric whose
+// lower scores are better (Butteraugli) has its highest, under "max".
+TEST(CommandLine, SegmentsTableNamesEachMetricsWorstEnd) {
+    std::vector<TestVideo> videos(1);
+    videos[0].path = "a.mkv";
+    ComparisonResult& result = videos[0].result.emplace();
+    result.fps = 25.0;
+    result.metric_results.add(
+        FrameMetricResult{"butteraugli", {0, 1, 2, 3}, {0.0, 0.04, 0.08, 0.12}, {1.0F, 2.5F, 3.0F, 1.0F}, {}});
+    result.metric_results.add(
+        FrameMetricResult{"vmaf", {0, 1, 2, 3}, {0.0, 0.04, 0.08, 0.12}, {96.0F, 70.0F, 60.0F, 96.0F}, {}});
+    SegmentRules rules;
+    rules.conditions = {*parse_weak_condition("butteraugli>2"), *parse_weak_condition("vmaf<90")};
+    rules.all = true;
+    rules.min_frames = 1;
+    rules.merge_frames = 0;
+    const std::string text = segments_text(videos, rules, 10);
+    EXPECT_NE(text.find("Butteraugli max"), std::string::npos) << text;
+    EXPECT_EQ(text.find("Butteraugli min"), std::string::npos) << text;
+    EXPECT_NE(text.find("VMAF v0.6.1 min"), std::string::npos) << text;
+    EXPECT_NE(text.find("3.0000"), std::string::npos) << text;
+}
+
 TEST(CommandLine, FindsTestVideosAsThePythonApp) {
     const Json reference = test::load_reference("cli.json")["patterns"];
     const std::filesystem::path folder =
@@ -958,6 +981,13 @@ TEST(CommandLine, GpuNamesAGpuThePcHas) {
               "--gpu radeon: more than one GPU here has that in its name: AMD Radeon RX 7900 XTX, AMD Radeon(TM) "
               "Graphics. Give more of the name.");
     EXPECT_EQ(gpu_refusal(std::string("radeon(tm)"), radeons), std::nullopt);
+    // Chosen by the settings or VML_GPU, one not here is said, not refused.
+    EXPECT_EQ(chosen_gpu_problem(std::string("titan"), true, adapters),
+              "The GPU the settings choose, titan: no GPU here has that name. The GPUs here: NVIDIA GeForce RTX 5090, "
+              "AMD Radeon(TM) Graphics; or auto. No GPU is used for the GPU metrics: choose one with --gpu.");
+    EXPECT_NE(chosen_gpu_problem(std::string("radeon"), false, radeons), std::nullopt);
+    EXPECT_EQ(chosen_gpu_problem(std::string("AMD Radeon(TM) Graphics"), true, adapters), std::nullopt);
+    EXPECT_EQ(chosen_gpu_problem(std::nullopt, true, adapters), std::nullopt);
 }
 
 // A run can be held apart from the app's profile: VML_HOME names the folder
@@ -1018,6 +1048,23 @@ TEST(CommandLine, SettingsAndSavedScoresCanBeChosen) {
     missing.settings_file = platform::path_text(temporary / "broken.json");
     EXPECT_THROW(choose_settings(missing), SettingsUnreadable);
     EXPECT_FALSE(std::filesystem::exists(temporary / "broken.json.unreadable"));  // the file named is not touched
+
+    // saved and report take the settings too, and saved --cache-dir finds
+    // what compare --cache-dir saved; report has no saved results' folder.
+    const Arguments listed = parse_arguments(
+        {"saved", "list", "--settings", platform::path_text(temporary / "mine.json"), "--cache-dir", "x"});
+    EXPECT_EQ(listed.saved.profile.settings_file, platform::path_text(temporary / "mine.json"));
+    EXPECT_EQ(saved_scores_use(listed.saved.profile, chosen.settings).folder, std::filesystem::absolute("x"));
+    EXPECT_TRUE(parse_arguments({"report", "a.metrics.json", "--no-settings"}).saved.profile.no_settings);
+    EXPECT_THROW(parse_arguments({"report", "a.metrics.json", "--cache-dir", "x"}), UsageError);
+    EXPECT_THROW(parse_arguments({"saved", "list", "--no-cache"}), UsageError);
+    // diff finds a saved comparison's ID where saved does: the settings'
+    // folder, or --cache-dir's (it read only the default folder).
+    const Arguments differed = parse_arguments(
+        {"diff", "abc123", "def456", "--settings", platform::path_text(temporary / "mine.json"), "--cache-dir", "x"});
+    EXPECT_EQ(differed.saved.profile.settings_file, platform::path_text(temporary / "mine.json"));
+    EXPECT_EQ(saved_scores_use(differed.saved.profile, chosen.settings).folder, std::filesystem::absolute("x"));
+    EXPECT_TRUE(parse_arguments({"diff", "abc123", "def456", "--no-settings"}).saved.profile.no_settings);
     std::filesystem::remove_all(temporary);
 }
 
@@ -1119,6 +1166,16 @@ TEST(CommandLine, TimeoutsStopTheRunOrOneVideo) {
     EXPECT_FALSE(tokens[0].cancelled());
     EXPECT_TRUE(tokens[1].cancelled());
     EXPECT_FALSE(tokens[2].cancelled());
+}
+
+// --timeout ends the command at once outside the run, cancels the run, and
+// does nothing once the results are given (which say it did not time out)
+// or once Ctrl+C has cancelled the run (whose 130 it does not change).
+TEST(CommandLine, TimeoutActsByTheRunsStage) {
+    EXPECT_EQ(on_run_timeout(RunStage::outside, false), TimeoutAction::end_command);
+    EXPECT_EQ(on_run_timeout(RunStage::running, false), TimeoutAction::cancel_run);
+    EXPECT_EQ(on_run_timeout(RunStage::running, true), TimeoutAction::nothing);
+    EXPECT_EQ(on_run_timeout(RunStage::results_given, false), TimeoutAction::nothing);
 }
 
 // The automation contract: every error, failure, note and why in the JSON has

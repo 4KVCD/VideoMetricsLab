@@ -120,6 +120,12 @@ int bdrate(const BdrateArguments& arguments) {
         print_error(error.what());  // --group-by naming no column of the anchor's
         return exit_usage;
     }
+    // As the BD-rate tab warns of them
+    for (const RateTable* table : {&*anchor, &*test}) {
+        for (std::string& warning : whole_file_rate_warnings(*table)) {
+            report.warnings.push_back(std::move(warning));
+        }
+    }
     if (!arguments.quiet) {
         for (const std::string& warning : report.warnings) {
             print_error("warning: " + warning);

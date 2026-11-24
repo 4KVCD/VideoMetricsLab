@@ -47,8 +47,12 @@ struct SavedComparison {
 };
 
 // Every comparison saved under `base` (its v2 folder), newest first; a
-// folder without a context.json this app can read is left out.
-std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path& base);
+// folder without a context.json this app can read is left out. `stopped`,
+// where given, is asked before each folder: once it says so, the listing
+// ends with what it has (a listing nobody waits for any more, on a slow
+// share, stops rather than reading every folder).
+std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path& base,
+                                                    const std::function<bool()>& stopped = {});
 
 // The comparison's result and label with one score per metric: the file
 // `chosen` gives for it, else its newest. A file that cannot be read, or
@@ -61,7 +65,10 @@ std::optional<std::pair<ComparisonResult, std::string>> load_saved_comparison(
     const std::function<std::optional<SavedScore>(const std::filesystem::path&)>& read = read_saved_score);
 
 // Deletes the comparison's folder, which must be one under `base`'s v2
-// folder: whether it is gone.
+// folder: whether it is gone. Whole or not at all: where one of its files
+// is in use, either nothing of it is deleted (it is still listed), or it is
+// moved out of the comparisons (v2/.deleted) and what was in use is deleted
+// at the next delete.
 bool delete_saved_comparison(const std::filesystem::path& base, const SavedComparison& comparison);
 
 }  // namespace vml

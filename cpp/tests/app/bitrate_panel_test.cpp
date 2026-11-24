@@ -260,6 +260,45 @@ TEST_F(BitratePanelTest, AFrameRangesFiguresAndGoToFrame) {
     EXPECT_EQ(controls.range_start_time->text().toStdString(), "0:00:01.000");
 }
 
+// Videos of other frame rates: frame 2 is 1 s into one and 0.5 s into the
+// other, so the range is in seconds. The frame boxes are greyed, and a range
+// of times gives each video its own frames' figures, shading those seconds.
+TEST_F(BitratePanelTest, ARangeAcrossOtherFrameRatesIsInSeconds) {
+    VideoColors colors;
+    const auto panel = make_panel(colors);
+    const test::Folder folder;
+    const std::filesystem::path first = folder / "first.mkv";  // 2 frames a second
+    const std::filesystem::path faster = folder / "faster.mkv";
+    panel->add_files({first, faster});
+    analyzed(*panel, first, two_seconds(first));
+    analyzed(*panel, faster,
+             std::make_shared<const BitrateData>(bitrate_data(
+                 faster, {0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75}, std::vector<double>(8, 0.25),
+                 std::vector<long long>(8, 500), {true, false, false, false, true, false, false, false})));
+    FrameControls& controls = *panel->frame_controls;
+    EXPECT_TRUE(controls.range_in_seconds());
+    EXPECT_FALSE(controls.range_start_spin->isEnabled());
+    EXPECT_TRUE(controls.range_start_spin->toolTip().contains("different frame rates"));
+    const auto type_time = [](QLineEdit& box, const QString& text) {
+        box.setText(text);
+        box.setModified(true);
+        emit box.editingFinished();
+    };
+    type_time(*controls.range_start_time, "0.5");
+    type_time(*controls.range_end_time, "1");
+    EXPECT_FALSE(controls.selected_frames());
+    EXPECT_EQ(controls.selected_seconds(), (std::optional<std::pair<double, double>>{{0.5, 1.0}}));
+    EXPECT_EQ(cell(*panel, 0, col_average).toStdString(), "20 kb/s");  // its frames 1 and 2: 2,500 bytes in 1 s
+    EXPECT_EQ(cell(*panel, 1, col_average).toStdString(), "16 kb/s");  // its frames 2 to 4: 1,500 bytes in 0.75 s
+    EXPECT_EQ(panel->range_label->text().toStdString(),
+              "Statistics of 0:00:00.500 to 0:00:01.000, each video's own frames.");
+    EXPECT_EQ(panel->chart->highlight(), (std::optional<std::pair<double, double>>{{0.5, 1.0}}));
+    controls.clear_range_button->click();
+    EXPECT_FALSE(controls.selected_seconds());
+    EXPECT_FALSE(panel->chart->highlight());
+    EXPECT_TRUE(panel->range_label->text().isEmpty());
+}
+
 // Issue #140: with a shorter video drawn first, a time past its end went to
 // its last frame, and a range of such times was cleared: only the first
 // line's times were looked at, while the frame boxes reach the longest
@@ -428,6 +467,35 @@ TEST_F(BitratePanelTest, AFileChangedSinceItWasReadIsNotShownAsItWas) {
     failed(*panel, path, "gone");
     EXPECT_FALSE(entry(*panel, 0).data);
     EXPECT_EQ(cell(*panel, 0, col_average).toStdString(), "");
+}
+
+// #205: a graph export asks the tab to read only the files it wants read. A
+// file read before and encoded again under its name since counted as read
+// (state_of: complete), so the export drew the old encode's bitrate beside
+// the new one's scores. It is wanted again; one that failed is not.
+TEST_F(BitratePanelTest, AnExportWantsAFileReplacedSinceItWasReadReadAgain) {
+    VideoColors colors;
+    const auto panel = make_panel(colors, "no-such-ffprobe");
+    const test::Folder folder;
+    const std::filesystem::path path = folder / "encode.mkv";
+    const std::filesystem::path broken = folder / "broken.mkv";
+    EXPECT_TRUE(panel->wants_reading(path));  // not listed
+    std::ofstream(path) << "first encode";
+    std::ofstream(broken) << "not a video";
+    panel->add_files({path, broken});
+    EXPECT_TRUE(panel->wants_reading(path));  // listed, not read
+    analyzed(*panel, path, two_seconds(path));
+    failed(*panel, broken, "unreadable");
+    EXPECT_FALSE(panel->wants_reading(path));
+    EXPECT_FALSE(panel->wants_reading(broken));
+
+    std::ofstream(path) << "the second encode, of another size";
+    EXPECT_EQ(panel->state_of(path), BitrateState::complete);  // what the export went by
+    EXPECT_TRUE(panel->wants_reading(path));
+    VideoInfo info;
+    info.path = path;
+    panel->add_and_analyze({info});
+    EXPECT_FALSE(entry(*panel, 0).data);  // the old encode's reading gone
 }
 
 // Issue #134: a saved comparison's graph export drew whatever the tab had

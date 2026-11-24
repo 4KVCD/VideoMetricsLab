@@ -143,7 +143,8 @@ std::vector<std::string> shown_metrics(const RateTable& anchor, const RateTable&
 // A sequence's BD-rates, with a warning for each metric that has none.
 BdRateSequence sequence_rates(const std::string& name, const std::vector<const RateTable::Encode*>& anchor,
                               const std::vector<const RateTable::Encode*>& test, const BdRateReport& report,
-                              const std::set<std::string>& unscored, std::vector<std::string>& warnings) {
+                              const std::set<std::string>& unscored, std::vector<std::string>& warnings,
+                              bool copies_once) {
     BdRateSequence sequence{name, {}, anchor.size(), test.size(), {}, {}};
     if (anchor.size() < enough_encodes || test.size() < enough_encodes) {
         warnings.push_back(name + ": " + std::to_string(anchor.size()) + " encodes in the anchor and " +
@@ -158,7 +159,8 @@ BdRateSequence sequence_rates(const std::string& name, const std::vector<const R
             why = N_("not scored at every encode");
         } else {
             const bool lower_is_better = find_metric(metric)->direction == MetricDirection::lower_is_better;
-            const BdRateResult result = bd_rate(*anchor_points, *test_points, lower_is_better);
+            const BdRateResult result =
+                bd_rate(*anchor_points, *test_points, lower_is_better, copies_once);
             sequence.row.percent[metric] = result.percent;
             why = bd_rate_gap_text(result.gap);
         }
@@ -319,6 +321,12 @@ std::optional<RateTable::Encode> document_encode(const nlohmann::json& video, co
     encode.reference = reference->get<std::string>();
     encode.sequence = platform::path_text(platform::path_from_text(encode.reference).stem());
     encode.kbps = rate->get<double>() / 1000;
+    if (video.value("bit_rate_of", nlohmann::json()) == "file") {
+        const auto path = video.find("path");
+        encode.whole_file_video = path != video.end() && path->is_string()
+                                      ? platform::path_text(platform::path_from_text(path->get<std::string>()).filename())
+                                      : encode.sequence;
+    }
     if (const auto scores = video.find("metrics"); scores != video.end() && scores->is_object()) {
         for (const MetricDefinition& metric : metrics()) {
             const auto found = scores->find(std::string(metric.key));
@@ -463,6 +471,9 @@ std::optional<RateTable::Encode> rate_encode(const ComparisonResult& result) {
     encode.sequence = platform::path_text(result.source.stem());
     encode.reference = platform::path_text(result.source);
     encode.kbps = static_cast<double>(bits_per_second) / 1000;
+    if (result.distorted_info.bit_rate_whole_file) {
+        encode.whole_file_video = platform::path_text(result.distorted.filename());
+    }
     for (const MetricDefinition& metric : metrics()) {
         const std::string key(metric.key);
         if (const FrameMetricResult* frames = result.metric_results.frame(key)) {
@@ -472,6 +483,16 @@ std::optional<RateTable::Encode> rate_encode(const ComparisonResult& result) {
         }
     }
     return encode;
+}
+
+std::vector<std::string> whole_file_rate_warnings(const RateTable& table) {
+    std::vector<std::string> warnings;
+    for (const RateTable::Encode& encode : table.encodes) {
+        if (!encode.whole_file_video.empty()) {
+            warnings.push_back(encode.whole_file_video + ": its bitrate is the whole file's, soundtrack included");
+        }
+    }
+    return warnings;
 }
 
 std::vector<std::string> group_columns(const RateTable& table) {
@@ -522,10 +543,13 @@ BdRateReport bd_rate_report(const RateTable& anchor, const RateTable& test, cons
     // A metric a table has no scores of: said once, not for every sequence
     std::set<std::string> unscored;
     for (const std::string& metric : report.metrics) {
+        const bool neither = !has_scores(anchor, metric) && !has_scores(test, metric);
         for (const auto& [table, whose] : {std::pair{&anchor, "anchor"}, std::pair{&test, "test"}}) {
             if (!has_scores(*table, metric)) {
                 unscored.insert(metric);
-                report.warnings.push_back(metric + ": the " + whose + " has no scores of it, n/a");
+                if (!neither || options.warn_of_metrics_neither_has) {
+                    report.warnings.push_back(metric + ": the " + whose + " has no scores of it, n/a");
+                }
             }
         }
     }
@@ -539,7 +563,7 @@ BdRateReport bd_rate_report(const RateTable& anchor, const RateTable& test, cons
             continue;
         }
         report.sequences.push_back(
-            sequence_rates(name, encodes, theirs->second, report, unscored, report.warnings));
+            sequence_rates(name, encodes, theirs->second, report, unscored, report.warnings, options.copies_once));
     }
     for (const auto& [name, encodes] : test_sequences) {
         if (!anchor_sequences.contains(name)) {

@@ -53,16 +53,18 @@ void take_saved_segments_of_scores(CompareArguments& output, const Settings& set
 // The comparison `item` names: a run file's (.metrics.json), or the saved
 // one whose ID begins with it (at least 6 hex digits). Throws
 // std::runtime_error saying why there is none, or more than one.
-ComparisonResult read_comparison(const std::string& item);
+ComparisonResult read_comparison(const std::string& item, const std::filesystem::path& folder);
 
 // Runs the saved command; returns the exit code: 0; 1 when a file asked for
 // could not be written, or a comparison could not be read or deleted; 2 for
 // a wrong command; 4 when an item names no saved comparison.
-int saved(const SavedArguments& arguments);
+// `settings`: as --settings or --no-settings choose them (the saved
+// results' folder, unless --cache-dir gives one; the weak segment profiles).
+int saved(const SavedArguments& arguments, const Settings& settings);
 
 // Runs the report command: the run files as compare reports their scores.
 // Returns the exit code: 0; 1 when a file could not be written; 4 when a run
 // file could not be read (the others are still reported).
-int report(const SavedArguments& arguments);
+int report(const SavedArguments& arguments, const Settings& settings);
 
 }  // namespace vml::cli

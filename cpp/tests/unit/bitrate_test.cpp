@@ -145,6 +145,23 @@ TEST(Bitrate, SummarizesAFrameRangeAsAStreamOfItsFrames) {
 // 120 fps HEVC stream as 25 frames a second (its packets 0.04 s long, the
 // bitrate 4.8 times too low). A video scaled to one size reads as any other:
 // ffprobe has no -reinit_filter.
+// The frames a range of seconds holds, each stream's own; and whether two
+// streams' frame rates differ (more than 1%).
+TEST(Bitrate, FramesBetweenTimesAndOtherFrameRates) {
+    const BitrateData two = bitrate_data("a", {0.0, 0.5, 1.0, 1.5}, std::vector<double>(4, 0.5),
+                                         std::vector<long long>(4, 100), std::vector<bool>(4, false));
+    const BitrateData four = bitrate_data("b", {0.0, 0.25, 0.5, 0.75, 1.0}, std::vector<double>(5, 0.25),
+                                          std::vector<long long>(5, 100), std::vector<bool>(5, false));
+    EXPECT_EQ(frames_between(two, 0.5, 1.0), (std::optional<std::pair<long long, long long>>{{1, 2}}));
+    EXPECT_EQ(frames_between(four, 0.5, 1.0), (std::optional<std::pair<long long, long long>>{{2, 4}}));
+    EXPECT_EQ(frames_between(two, 0.6, 0.9), std::nullopt);  // no frame starts in it
+    EXPECT_EQ(frames_between(two, 0.4996, 0.5), (std::optional<std::pair<long long, long long>>{{1, 1}}));
+    EXPECT_TRUE(other_frame_rates(two, four));
+    EXPECT_FALSE(other_frame_rates(two, two));
+    const BitrateData one = bitrate_data("c", {0.0}, {0.5}, {100}, {true});
+    EXPECT_FALSE(other_frame_rates(two, one));  // one frame has no rate to differ by
+}
+
 TEST(Bitrate, ReadsARawStreamAtItsFrameRate) {
     VideoInfo raw;
     raw.path = "clip.hevc";

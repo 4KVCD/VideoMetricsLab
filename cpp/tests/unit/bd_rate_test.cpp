@@ -75,6 +75,26 @@ TEST(BdRate, SaysWhyThereIsNone) {
     EXPECT_FALSE(bd_rate(anchor, curve({1000, 2000, 4000}, {30, 33, 33})).percent);
 }
 
+// The same encode twice (one encode's run file added twice on the BD-rate
+// tab): there, one point, not a tie, so the BD-rate is the one without the
+// copy (copies_once). Two points alike only in score still tie. The command
+// line's default ties a copy too, as fasteval does (#221's review).
+TEST(BdRate, CountsTheSameEncodeOnceWhereAsked) {
+    const std::vector<RatePoint> anchor = curve({1000, 2000, 4000}, {30, 33, 36});
+    const std::vector<RatePoint> test = curve({900, 1800, 3600}, {30, 33, 36});
+    const std::vector<RatePoint> copied = curve({900, 1800, 1800, 3600}, {30, 33, 33, 36});
+    const BdRateResult once = bd_rate(anchor, test);
+    const BdRateResult twice = bd_rate(anchor, copied, false, true);
+    ASSERT_TRUE(once.percent);
+    ASSERT_TRUE(twice.percent) << bd_rate_gap_text(twice.gap);
+    EXPECT_DOUBLE_EQ(*twice.percent, *once.percent);
+    EXPECT_EQ(bd_rate(anchor, copied).gap, BdRateGap::tied_scores);  // fasteval's answer
+    EXPECT_FALSE(pchip_curve(copied, false, 8, true).empty());
+    EXPECT_TRUE(pchip_curve(copied, false, 8).empty());
+    EXPECT_EQ(bd_rate(anchor, curve({1000, 1000}, {30, 30}), false, true).gap, BdRateGap::too_few_points);
+    EXPECT_EQ(bd_rate(anchor, curve({1000, 1800, 1900}, {30, 33, 33}), false, true).gap, BdRateGap::tied_scores);
+}
+
 // The drawn curve: through the points at its ends and scipy's value between
 // them (printed by PchipInterpolator, as above); for lower is better, its
 // scores the real ones, highest first; none where there is no curve.
@@ -176,6 +196,24 @@ TEST(BdRate, ReadsEncodesFromJson) {
     EXPECT_FALSE(read_rate_file(document.dump(), "results.json", "min").encodes[0].scores.at("vmaf"));
     EXPECT_THROW(read_rate_file("sequence,kbps,vmaf\nclip,100,90\n", "a.csv", "min"), std::runtime_error);
 
+    // A bitrate that is the whole file's, soundtrack included, is warned of
+    // as for a scored video: a document's "bit_rate_of": "file", a run
+    // file's video info.
+    nlohmann::json whole_file = video;
+    whole_file["bit_rate_of"] = "file";
+    const RateTable files =
+        read_rate_file(nlohmann::json{{"format", 2}, {"videos", {video, whole_file}}}.dump(), "results.json");
+    ASSERT_EQ(files.encodes.size(), 2U);
+    EXPECT_EQ(files.encodes[0].whole_file_video, "");
+    EXPECT_EQ(files.encodes[1].whole_file_video, "park_q27.mkv");
+    EXPECT_EQ(whole_file_rate_warnings(files),
+              std::vector<std::string>{"park_q27.mkv: its bitrate is the whole file's, soundtrack included"});
+    result.distorted_info.bit_rate_whole_file = true;
+    EXPECT_EQ(read_rate_file(run_file_text(result, "baseball_q27"), "baseball_q27.metrics.json")
+                  .encodes[0]
+                  .whole_file_video,
+              "baseball_q27.mkv");
+
     // CSV as ever; and a file with nothing to go by says so, by its name.
     EXPECT_EQ(read_rate_file("sequence,kbps,vmaf\nclip,100,90\n", "a.csv").encodes.size(), 1U);
     try {
@@ -222,6 +260,28 @@ TEST(BdRate, FindsTheSettingForAScore) {
               BdRateGap::tied_scores);
     EXPECT_EQ(setting_for_score(std::vector<SettingPoint>{{0, 90}, {2000, 94}}, 92, true).gap, BdRateGap::bad_number);
     EXPECT_TRUE(setting_for_score(std::vector<SettingPoint>{{0, 90}, {2000, 94}}, 92, false).setting);  // CRF 0
+}
+
+// A metric a side has no scores of is warned of; one neither side has is
+// warned of only where asked (the command line's -m), not on the BD-rate tab,
+// whose n/a column says it.
+TEST(BdRate, WarnsOfAMetricOneSideLacks) {
+    const RateTable anchor = read_rate_table(
+        "sequence,kbps,psnr,vmaf\nclip,1000,35,80\nclip,2000,37,85\nclip,3000,38.5,88\nclip,4000,39.5,90\n",
+        "anchor.csv");
+    const RateTable test = read_rate_table(
+        "sequence,kbps,psnr\nclip,900,35\nclip,1800,37\nclip,2700,38.5\nclip,3600,39.5\n", "test.csv");
+    BdRateOptions options;
+    options.metrics = std::vector<std::string>{"vmaf", "psnr", "ssim"};
+    EXPECT_EQ(bd_rate_report(anchor, test, options).warnings,
+              (std::vector<std::string>{"vmaf: the test has no scores of it, n/a",
+                                        "ssim: the anchor has no scores of it, n/a",
+                                        "ssim: the test has no scores of it, n/a"}));
+    options.warn_of_metrics_neither_has = false;
+    const BdRateReport tab = bd_rate_report(anchor, test, options);
+    EXPECT_EQ(tab.warnings, std::vector<std::string>{"vmaf: the test has no scores of it, n/a"});
+    ASSERT_EQ(tab.sequences.size(), 1U);
+    EXPECT_NEAR(*tab.sequences[0].row.percent.at("psnr"), -10.0, 1e-6);
 }
 
 // numpy's nanmean and nanmedian.

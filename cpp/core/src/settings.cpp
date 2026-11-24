@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <fstream>
 #include <random>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <unordered_map>
@@ -182,13 +183,32 @@ std::optional<std::string> set_if_it_fits(Settings& settings, const Field& field
     return std::nullopt;
 }
 
-// A setting the file holds in a type of its own, in the log.
+// A setting of secret_settings: never written to the log.
+bool holds_a_key(const std::string& name) {
+    const auto& secrets = secret_settings();
+    return std::any_of(secrets.begin(), secrets.end(), [&name](const auto& secret) { return secret.first == name; });
+}
+
+// A setting the file holds in a type of its own, in the log: a key's by
+// its type alone (a key typed in as a number, or a list of webhook URLs).
 void log_unfit(const std::string& name, const Json& value, const std::string& kind) {
+    const std::string held = holds_a_key(name) ? std::string("a JSON ") + value.type_name() : python_repr_of(value);
     app_log::write(app_log::Level::warning, "vml.settings",
-                   "Settings: " + name + " is " + python_repr_of(value) + ", not a " + kind + "; using its default");
+                   "Settings: " + name + " is " + held + ", not a " + kind + "; using its default");
 }
 
 }  // namespace
+
+const std::vector<std::pair<std::string_view, std::string Settings::*>>& secret_settings() {
+    static const std::vector<std::pair<std::string_view, std::string Settings::*>> secrets{
+        {"pushover_user", &Settings::pushover_user},       {"pushover_token", &Settings::pushover_token},
+        {"discord_webhook", &Settings::discord_webhook},   {"gotify_token", &Settings::gotify_token},
+        {"ntfy_topic", &Settings::ntfy_topic},             {"ntfy_token", &Settings::ntfy_token},
+        {"pushbullet_token", &Settings::pushbullet_token}, {"slack_webhook", &Settings::slack_webhook},
+        {"telegram_token", &Settings::telegram_token},     {"webhook_url", &Settings::webhook_url},
+        {"webhook_header", &Settings::webhook_header}};
+    return secrets;
+}
 
 const std::vector<std::string>& export_item_keys() {
     static const std::vector<std::string> items{"results", "frames", "graphs", "worst_frames", "weak_segments"};

@@ -26,6 +26,20 @@ namespace {
 
 using Json = nlohmann::ordered_json;
 
+// The metrics any of `results` has scores of, in the app's order.
+std::vector<std::string> scored_keys(const std::vector<const ComparisonResult*>& results) {
+    std::vector<std::string> keys;
+    for (const MetricDefinition& metric : metrics()) {
+        const std::string key(metric.key);
+        if (std::any_of(results.begin(), results.end(), [&key](const ComparisonResult* result) {
+                return score_samples(result->metric_results, key).has_value();
+            })) {
+            keys.push_back(key);
+        }
+    }
+    return keys;
+}
+
 // A run's entry, as the command line's --json writes a video's.
 Json run_entry(const ExportedRun& run) {
     const ComparisonResult& result = *run.result;
@@ -341,25 +355,49 @@ std::vector<BundleFile> export_files(const Settings& settings, const std::vector
     } else if (several) {
         // One report of every video, as Export weak segments report saves it.
         std::vector<SegmentsReportVideo> report;
+        std::vector<const ComparisonResult*> results;
         for (const BundleVideo& video : videos) {
             report.push_back({video.label.toStdString(), platform::path_text(video.path),
                               platform::path_text(reference), video.result.get()});
+            results.push_back(video.result.get());
+        }
+        // None of the profile's conditions on a metric any of them has: one
+        // starting condition for them all, as the command line's report
+        // takes it (#221's review: the several videos' report had none).
+        SegmentRules used = rules;
+        const std::vector<std::string> keys = scored_keys(results);
+        if (std::none_of(rules.conditions.begin(), rules.conditions.end(), [&keys](const WeakCondition& condition) {
+                return std::find(keys.begin(), keys.end(), condition.key) != keys.end();
+            })) {
+            if (const MetricDefinition* fallback = starting_metric(keys, settings.graph_metric)) {
+                used.conditions = {default_weak_condition(*fallback)};
+            }
         }
         const std::string stem =
-            (file_safe(name + QStringLiteral(" - weak segments")) + "." + qt_text(segments_file_suffix(rules)))
+            (file_safe(name + QStringLiteral(" - weak segments")) + "." + qt_text(segments_file_suffix(used)))
                 .toStdString();
         if (json) {
-            files.push_back({stem + ".json", python_json_dumps(segments_report_json(report, rules)) + "\n"});
+            files.push_back({stem + ".json", python_json_dumps(segments_report_json(report, used)) + "\n"});
         }
         if (csv) {
-            files.push_back({stem + ".csv", text_lines(segments_report_csv(report, rules))});
+            files.push_back({stem + ".csv", text_lines(segments_report_csv(report, used))});
         }
     } else {
         // By the conditions on the video's metrics, as the Weak segments
         // dialog and the command line take them; the rest are said.
         const BundleVideo& video = videos.front();
         std::vector<WeakCondition> left_out;
-        const SegmentRules used = scored_rules(video.result->metric_results, rules, &left_out);
+        SegmentRules used = scored_rules(video.result->metric_results, rules, &left_out);
+        if (used.conditions.empty()) {
+            // None of the profile's on this video's metrics: one on the metric
+            // Metric Graphs shows where it is scored, else on its first, as
+            // the Worst Frames tab and the command line's --segments saved
+            // start (default_weak_condition).
+            if (const MetricDefinition* fallback =
+                    starting_metric(scored_keys({video.result.get()}), settings.graph_metric)) {
+                used.conditions = {default_weak_condition(*fallback)};
+            }
+        }
         const std::vector<WeakSegment> segments = weak_segments(*video.result, used);
         // Named after the metrics used; after the profile's where it has none.
         const std::string stem =

@@ -567,6 +567,25 @@ TEST_F(GraphPanelTest, TheReadoutFollowsTheLinesShown) {
     EXPECT_TRUE(lines_fit()) << readout(vmaf).toStdString();
 }
 
+// A line added or given new scores while a readout is shown (a run's next
+// result, a run file imported): the readout tells it, as it does a line
+// ticked on, rather than the numbers before.
+TEST_F(GraphPanelTest, TheReadoutTellsALineAddedOrRescored) {
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(10, 90.0F))), "a", "row a", false});
+    MetricPage& vmaf = page(panel, "vmaf");
+    vmaf.chart().resize(800, 400);
+    vmaf.show_frame(3, entries(panel));
+    ASSERT_TRUE(readout(vmaf).contains(QStringLiteral("[a]"))) << readout(vmaf).toStdString();
+    panel.add_run({shared(vmaf_result("b.mkv", std::vector<float>(10, 80.0F))), "b", "row b", false});
+    EXPECT_TRUE(readout(vmaf).contains(QStringLiteral("[b]"))) << readout(vmaf).toStdString();
+    EXPECT_TRUE(readout(vmaf).contains(QStringLiteral("80.00"))) << readout(vmaf).toStdString();
+    panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(10, 70.0F))), "a", "row a", false});
+    EXPECT_TRUE(readout(vmaf).contains(QStringLiteral("70.00"))) << readout(vmaf).toStdString();
+    EXPECT_FALSE(readout(vmaf).contains(QStringLiteral("90.00"))) << readout(vmaf).toStdString();
+}
+
 // A readout over a long-named video: its line is cut at the edge, not made
 // the chart's least width. It was, which widened the tab past the window
 // (the tab scrolled sideways) and left Worst frames' divider nowhere to go.
@@ -838,6 +857,33 @@ std::shared_ptr<const ComparisonResult> range_run(const std::string& name, const
     result.metric_results.add(SequenceMetricResult{"cvvdp", 8.75, current_ffmpeg_provenance("vmaf", "9.0.1"),
                                                    {0, 3, 6}, {0.0, 0.1, 0.2}, {8.5F, 9.0F, 8.0F}});
     return std::make_shared<const ComparisonResult>(std::move(result));
+}
+
+// Times reach every line, not only the first: the frame boxes reach the
+// longest line's last frame, and so do the time boxes and the range shaded
+// (as issue #140 had it in the Bitrate Viewer).
+TEST_F(GraphPanelTest, TimesAndTheRangeReachTheLongestLine) {
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    FrameControls& controls = frame_controls(panel);
+    // 30 fps: the first line 100 frames long (to 3.3 s), the second 200.
+    panel.add_run({shared(vmaf_result("short.mkv", std::vector<float>(100, 90.0F))), "short", "row short", false});
+    panel.add_run({shared(vmaf_result("long.mkv", std::vector<float>(200, 80.0F))), "long", "row long", false});
+    MetricPage& vmaf = page(panel, "vmaf");
+    type_time(*controls.time_edit, "0:00:05.000");
+    EXPECT_EQ(frame_spin(panel).value(), 150);
+
+    type_time(*controls.range_start_time, "0:00:04.000");
+    type_time(*controls.range_end_time, "0:00:06.000");
+    EXPECT_EQ(range_start_spin(panel).value(), 120);
+    EXPECT_EQ(range_end_spin(panel).value(), 180);
+
+    range_start_spin(panel).setValue(50);
+    range_end_spin(panel).setValue(150);
+    ASSERT_TRUE(vmaf.chart().highlight());
+    EXPECT_NEAR(vmaf.chart().highlight()->first, 49.5 / 30, 1e-9);
+    EXPECT_NEAR(vmaf.chart().highlight()->second, 150.5 / 30, 1e-9);
+    EXPECT_EQ(controls.range_end_time->text(), "0:00:05.000");
 }
 
 // Go to time and a range in times, to the millisecond, as complements of the

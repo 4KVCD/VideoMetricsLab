@@ -562,11 +562,15 @@ std::vector<GpuAdapter> gpu_adapters() {
         }
         IDXGIAdapter1* adapter = nullptr;
         DXGI_ADAPTER_DESC1 description{};
+        std::uint64_t luid = 0;
         if (SUCCEEDED(factory->EnumAdapters1(index, &adapter))) {
-            adapter->GetDesc1(&description);
+            if (SUCCEEDED(adapter->GetDesc1(&description))) {
+                static_assert(sizeof(description.AdapterLuid) == sizeof(luid));
+                std::memcpy(&luid, &description.AdapterLuid, sizeof(luid));
+            }
             adapter->Release();
         }
-        adapters.push_back({index, vendor, narrow(description.Description)});
+        adapters.push_back({index, vendor, narrow(description.Description), luid});
     }
     factory->Release();
     return adapters;
@@ -778,6 +782,22 @@ bool process_running(int pid) {
     const bool running = WaitForSingleObject(process, 0) == WAIT_TIMEOUT;
     CloseHandle(process);
     return running;
+}
+
+bool open_elsewhere(const std::filesystem::path& path) {
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_READONLY) != 0) {
+        return false;
+    }
+    // Opened for deleting, letting others do all: only a handle open
+    // elsewhere without leave to delete refuses that, as a sharing violation.
+    const HANDLE probe = CreateFileW(path.c_str(), DELETE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                     nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (probe != INVALID_HANDLE_VALUE) {
+        CloseHandle(probe);
+        return false;
+    }
+    return GetLastError() == ERROR_SHARING_VIOLATION;
 }
 
 void close_native_handle(void* handle) {

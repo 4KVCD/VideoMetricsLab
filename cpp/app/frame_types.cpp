@@ -148,8 +148,10 @@ double packet_time(const AVPacket& packet, double seconds_per_tick, double next_
     return packet.dts != AV_NOPTS_VALUE ? static_cast<double>(packet.dts) * seconds_per_tick : next_time;
 }
 
-// Every packet of the video, with its type.
-std::vector<ReadFrame> read_frames(AVFormatContext& format) {
+// Every packet of the video, with its type; `whole` says whether the read
+// got to the file's end (not stopped, nor cut short by a read error).
+std::vector<ReadFrame> read_frames(AVFormatContext& format, bool& whole) {
+    whole = false;
     const std::unique_ptr<AVPacket, PacketFreer> packet(av_packet_alloc());
     if (!packet) {
         return {};
@@ -158,7 +160,8 @@ std::vector<ReadFrame> read_frames(AVFormatContext& format) {
     const AVStream* video = nullptr;
     std::optional<PictureTypeParser> parser;
     double next_time = 0;
-    while (av_read_frame(&format, packet.get()) >= 0) {
+    int read = 0;
+    while ((read = av_read_frame(&format, packet.get())) >= 0) {
         if (video == nullptr) {
             // Here, not on opening: an MPEG program stream makes its streams
             // as their first packets come.
@@ -176,6 +179,7 @@ std::vector<ReadFrame> read_frames(AVFormatContext& format) {
         }
         av_packet_unref(packet.get());
     }
+    whole = read == AVERROR_EOF;
     return frames;
 }
 
@@ -186,19 +190,20 @@ FrameTypeReader::FrameTypeReader(VideoInfo info, const CancelToken& cancel)
           try {
               if (!load_ffmpeg_libraries().has_value()) {
                   if (const auto format = open_file(info_, *this)) {
-                      frames_ = read_frames(*format);
+                      frames_ = read_frames(*format, read_whole_);
                   }
               }
           } catch (const std::exception& error) {  // out of memory: the graph goes without the types
               frames_.clear();
+              read_whole_ = false;
               app_log::write(app_log::Level::warning, "vml.bitrate", error.what());
           }
       }) {}
 
-std::vector<std::uint8_t> FrameTypeReader::types_of(const BitrateData& data) {
+std::optional<std::vector<std::uint8_t>> FrameTypeReader::types_of(const BitrateData& data) {
     thread_.join();
-    if (cancel_.cancelled()) {
-        return {};
+    if (cancel_.cancelled() || !read_whole_) {
+        return std::nullopt;
     }
     std::vector<std::uint8_t> types = types_matching_frames(std::move(frames_), info_.is_raw_stream(), data.sizes);
     if (types.empty()) {
@@ -213,7 +218,9 @@ std::vector<std::uint8_t> FrameTypeReader::types_of(const BitrateData& data) {
 
 FrameTypeReader::FrameTypeReader(VideoInfo info, const CancelToken& cancel) : info_(std::move(info)), cancel_(cancel) {}
 
-std::vector<std::uint8_t> FrameTypeReader::types_of(const BitrateData& /*data*/) { return {}; }
+std::optional<std::vector<std::uint8_t>> FrameTypeReader::types_of(const BitrateData& /*data*/) {
+    return std::nullopt;
+}
 
 #endif
 

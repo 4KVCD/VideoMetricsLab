@@ -1,6 +1,7 @@
 #include "vml/saved_results.h"
 
 #include <algorithm>
+#include <random>
 #include <system_error>
 #include <variant>
 
@@ -39,11 +40,15 @@ std::vector<std::string> SavedComparison::keys() const {
     return found;
 }
 
-std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path& base) {
+std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path& base,
+                                                    const std::function<bool()>& stopped) {
     std::vector<SavedComparison> list;
     std::error_code error;
     std::filesystem::directory_iterator folder(base / "v2", error);
     for (; !error && folder != std::filesystem::directory_iterator(); folder.increment(error)) {
+        if (stopped && stopped()) {
+            break;
+        }
         std::error_code ignored;
         if (!folder->is_directory(ignored)) {
             continue;
@@ -121,9 +126,41 @@ bool delete_saved_comparison(const std::filesystem::path& base, const SavedCompa
     if (error || folder.parent_path() != v2 || !std::filesystem::exists(folder / "context.json", error)) {
         return false;
     }
-    std::filesystem::remove_all(folder, error);
-    saved_comparison_deleted(folder);  // gone, or in part
-    return !error && !std::filesystem::exists(folder, error);
+    // Moved aside first, whole or not at all, then deleted: deleted where it
+    // is, file by file, a file open without leave to delete it (a details
+    // reader, a lookup, an antivirus) stopped it half-way, its context.json
+    // already gone, and what was left was listed by nothing and deletable by
+    // nothing. Moved, it is no comparison of v2's any more (none is listed
+    // two folders down); whatever of it cannot be deleted now is at the next
+    // delete.
+    //
+    // Each delete moves its folder under a name of its own: a leftover of the
+    // same comparison (one of its files still open then) does not block it,
+    // and a delete from vml-cli and one from the app at once do not take
+    // each other's .deleted folder away (#221's review). Only what is in it
+    // is cleared, never the folder itself, which another delete may be
+    // moving into.
+    const std::filesystem::path aside = v2 / ".deleted";
+    std::error_code ignored;
+    std::filesystem::directory_iterator left(aside, ignored);
+    for (; !ignored && left != std::filesystem::directory_iterator(); left.increment(ignored)) {
+        std::error_code still_open;
+        std::filesystem::remove_all(left->path(), still_open);  // what deletes before left
+    }
+    ignored.clear();
+    std::filesystem::create_directories(aside, error);
+    std::random_device random;
+    const std::filesystem::path moved =
+        aside / platform::path_from_text(platform::path_text(folder.filename()) + "." + std::to_string(random()));
+    if (!error) {
+        std::filesystem::rename(folder, moved, error);
+    }
+    if (error) {
+        return false;  // refused (one of its files in use): nothing of it deleted
+    }
+    saved_comparison_deleted(folder);  // gone from v2: the kept listing reads it again
+    std::filesystem::remove_all(moved, ignored);
+    return true;
 }
 
 }  // namespace vml

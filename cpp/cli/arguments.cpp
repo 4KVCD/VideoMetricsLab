@@ -96,6 +96,8 @@ const char* const saved_usage = R"(usage: VideoMetricsLab-cli saved [-h] [--filt
                                  [--segments-report FILE] [--stills FOLDER]
                                  [--stills-from {worst,segments}]
                                  [--stills-count N] [-q]
+                                 [--settings FILE | --no-settings]
+                                 [--cache-dir FOLDER]
                                  {list,show,delete} [ITEM ...]
 )";
 
@@ -109,6 +111,7 @@ const char* const report_usage = R"(usage: VideoMetricsLab-cli report [-h] [--js
                                   [--segments-report FILE] [--stills FOLDER]
                                   [--stills-from {worst,segments}]
                                   [--stills-count N] [-q]
+                                  [--settings FILE | --no-settings]
                                   RUNFILE [RUNFILE ...]
 )";
 
@@ -121,6 +124,8 @@ const char* const diff_usage = R"(usage: VideoMetricsLab-cli diff [-h] [--segmen
                                 [--segments-all | --segments-any]
                                 [--segment-min-frames N]
                                 [--segment-merge-frames N] [--json FILE] [-q]
+                                [--settings FILE | --no-settings]
+                                [--cache-dir FOLDER]
                                 OLD NEW
 )";
 
@@ -591,6 +596,11 @@ options:
                         the worst frame of each weak segment
   --stills-count N      how many dips of each metric, or segments (default 5)
   -q, --quiet           only the results
+  --settings FILE       read the settings (the saved results' folder, the
+                        weak segment profiles) from FILE in place of the app's
+  --no-settings         every setting at its default, whatever the app's say
+  --cache-dir FOLDER    the saved results in FOLDER, in place of the
+                        settings' folder (compare --cache-dir's)
 )";
 
 const char* const report_sections = R"(
@@ -691,6 +701,11 @@ options:
   --json FILE           also write the differences as JSON to FILE; - prints
                         the JSON instead of the table
   -q, --quiet           no warnings, only the results
+  --settings FILE       read the settings (the saved results' folder, the
+                        weak segment profiles) from FILE in place of the app's
+  --no-settings         every setting at its default, whatever the app's say
+  --cache-dir FOLDER    a saved comparison's ID is looked for in FOLDER, in
+                        place of the settings' folder (compare --cache-dir's)
 
 )";
 
@@ -1657,6 +1672,10 @@ Parser saved_parser(SavedArguments& parsed) {
         parser.actions.push_back(std::move(action));
     }
     parser.exclusive = {{"--segments-all", "--segments-any"}};
+    add_profile_options(parser, parsed.profile, false);
+    parser.actions.push_back(option({"--cache-dir"}, [&parsed](const std::string& value) {
+        parsed.profile.cache_dir = value;
+    }));
     return parser;
 }
 
@@ -1672,6 +1691,7 @@ Parser report_parser(SavedArguments& parsed) {
         parser.actions.push_back(std::move(action));
     }
     parser.exclusive = {{"--segments-all", "--segments-any"}};
+    add_profile_options(parser, parsed.profile, false);
     return parser;
 }
 
@@ -1765,6 +1785,12 @@ Parser diff_parser(SavedArguments& parsed) {
         flag({"-q", "--quiet"}, output.quiet),
     };
     parser.exclusive = {{"--segments-all", "--segments-any"}};
+    // A saved comparison's ID is looked for where saved finds it: the
+    // settings' folder, or --cache-dir's.
+    add_profile_options(parser, parsed.profile, false);
+    parser.actions.push_back(option({"--cache-dir"}, [&parsed](const std::string& value) {
+        parsed.profile.cache_dir = value;
+    }));
     return parser;
 }
 

@@ -57,6 +57,13 @@ int process_id();
 // one that runs but may not be looked at counts, and so does 0.
 bool process_running(int pid);
 
+// Whether the file `path` is open elsewhere in a way that keeps it from
+// being replaced (Windows: opened without leave to delete it, as
+// std::ifstream opens a file), so that it may be once closed. False for a
+// file read-only, one not the user's to change, or none there; and on other
+// systems, which replace a file open elsewhere.
+bool open_elsewhere(const std::filesystem::path& path);
+
 // Closes a handle a library gave this process to pass on, such as the Vulkan
 // engine's GPU memory exported for a decoder to import: a HANDLE on Windows,
 // a file descriptor elsewhere.
@@ -195,6 +202,10 @@ struct GpuAdapter {
     unsigned index = 0;
     unsigned vendor_id = 0;
     std::string name;
+    // Windows' locally unique identifier of the adapter (its LUID's 8 bytes
+    // as they are in memory), which CUDA also reports for its GPUs; 0 where
+    // it is not known.
+    std::uint64_t luid = 0;
 };
 // The hardware GPUs DirectX lists, in its order, as gpu_vendor_ids lists them
 // (only VML_GPU_VENDOR's maker's when it is set), but for Windows' Basic

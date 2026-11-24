@@ -4,6 +4,7 @@
 #include <QAction>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QHeaderView>
 #include <QLabel>
 #include <QMenu>
 #include <QPushButton>
@@ -12,6 +13,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <memory>
 #include <optional>
@@ -122,6 +124,15 @@ TEST(WorstFramesTab, ListsTheDipsAndTheSegmentsAndOpensThemInVideoCompare) {
     for (int column = 0; column < tab.segments_table()->columnCount(); ++column) {
         EXPECT_NE(header(*tab.segments_table(), column), "Weak by");
     }
+    // The two lists, of up to 1000 rows, are sized once a fill ends
+    // (fit_list), not measured again for each cell set: a long video's
+    // segments took over a minute on the window's thread each time the tab
+    // was shown again. Their columns still fit what they hold.
+    for (QTableWidget* table : {tab.worst_table(), tab.segments_table()}) {
+        EXPECT_EQ(table->horizontalHeader()->sectionResizeMode(0), QHeaderView::Interactive);
+        EXPECT_GE(table->horizontalHeader()->sectionSize(0),
+                  table->fontMetrics().horizontalAdvance(table->horizontalHeaderItem(0)->text()));
+    }
     // The graph: the segments shaded.
     ASSERT_NE(tab.chart(), nullptr);
     EXPECT_EQ(tab.chart()->shaded().size(), 2U);
@@ -223,6 +234,25 @@ TEST(WorstFramesTab, DetailsTellsTheFrameUnderThePointerElseTheRowSelected) {
     EXPECT_TRUE(tab.details()->text().contains("Worst frame 1 of 2"));
     tab.segments_table()->selectRow(1);  // 40 to 40
     EXPECT_TRUE(tab.details()->text().startsWith("Segment 40 to 40")) << tab.details()->text().toStdString();
+
+    // Another number of dips lists them again, the row selected gone: Details
+    // no longer tells it.
+    tab.segments_table()->clearSelection();
+    tab.worst_table()->selectRow(0);
+    ASSERT_TRUE(tab.details()->text().startsWith("Frame 10 "));
+    QComboBox* dips = nullptr;
+    for (QComboBox* combo : tab.findChildren<QComboBox*>()) {
+        if (combo->count() > 0 && combo->itemData(0).toInt() == worst_frame_counts.front()) {
+            dips = combo;
+        }
+    }
+    ASSERT_NE(dips, nullptr);
+    dips->setCurrentIndex(1);
+    EXPECT_TRUE(tab.details()->text().isEmpty()) << tab.details()->text().toStdString();
+    tab.set_worst_count(worst_frame_counts.front());
+    tab.worst_table()->selectRow(0);
+    tab.set_worst_count(worst_frame_counts.back());
+    EXPECT_TRUE(tab.details()->text().isEmpty()) << tab.details()->text().toStdString();
 }
 
 TEST(WorstFramesTab, StartsFromAProfileAndSavesOnlyWhenAsked) {
@@ -417,6 +447,41 @@ TEST(WorstFramesTab, SavesTheHiddenConditionsSettingsHasNow) {
               (std::vector<std::string>{"vmaf<85", "ssimulacra2<55"}));
 }
 
+TEST(WorstFramesTab, TakesTheProfilesConditionsOnTheMetricsOfTheVideoPicked) {
+    // The profile's condition on a metric the first video lacks is set
+    // aside for it; picked next, a video that has the metric is judged by
+    // it too, as the exports and the command line judge it, and saving
+    // keeps it once.
+    Settings settings;
+    settings.weak_segment_conditions = {"vmaf<90", "ssimulacra2<65"};
+    Bench bench(settings);
+    WorstFramesTab& tab = bench.tab;
+    auto b = std::make_shared<ComparisonResult>(*vmaf_result("b.mkv", std::vector<float>(30, 95.0F)));
+    FrameMetricResult ssimulacra2{"ssimulacra2", {}, {}, {}, current_ffmpeg_provenance("ssimulacra2", "9.0.1")};
+    for (int i = 0; i < 30; ++i) {
+        ssimulacra2.frame.push_back(i);
+        ssimulacra2.time.push_back(i / 30.0);
+        ssimulacra2.values.push_back(i >= 10 && i < 15 ? 50.0F : 80.0F);
+    }
+    b->metric_results.add(ssimulacra2);
+    tab.set_videos({{"row:a", "a", vmaf_result("a.mkv", std::vector<float>(30, 95.0F))}, {"row:b", "b", b}});
+    EXPECT_EQ(condition_texts(tab.rules().conditions), (std::vector<std::string>{"vmaf<90"}));
+
+    tab.videos_table()->setCurrentCell(1, 0);
+    std::vector<std::string> shown = condition_texts(tab.rules().conditions);
+    std::ranges::sort(shown);
+    EXPECT_EQ(shown, (std::vector<std::string>{"ssimulacra2<65", "vmaf<90"}));
+    ASSERT_EQ(tab.segments().size(), 1U);
+    EXPECT_EQ(tab.segments()[0].first_frame, 10);
+    EXPECT_FALSE(tab.save_button()->isEnabled());  // as saved
+
+    bench.threshold()->setValue(bench.threshold()->value() - 1);  // a change, then saved
+    ASSERT_TRUE(tab.save_button()->isEnabled());
+    tab.save_button()->click();
+    ASSERT_EQ(bench.saved.size(), 1U);
+    EXPECT_EQ(bench.saved[0].second.conditions.size(), 2U);  // each condition once
+}
+
 TEST(WorstFramesTab, KeepsTheChosenVideoWhileItIsRecalculated) {
     // Recalculating a video takes its line away until its new scores come;
     // the tab shows another video meanwhile, then the chosen one again.
@@ -433,6 +498,54 @@ TEST(WorstFramesTab, KeepsTheChosenVideoWhileItIsRecalculated) {
     tab.set_videos({a, {"row:b", "b", vmaf_result("b.mkv", {95, 55, 95})}});
     EXPECT_EQ(tab.chosen_video()->identity, "row:b");
     EXPECT_EQ(tab.worst_table()->item(0, 2)->text(), "55.00");
+}
+
+TEST(WorstFramesTab, KeepsTheChosenVideoWhenItIsScoredAgain) {
+    // A video scored again comes back as a new line (a new identity, its
+    // file the same): it stays chosen, and the metrics it now has are in
+    // the bar. So does a run arriving in pieces, which keeps its identity.
+    Settings settings;
+    Bench bench(settings);
+    WorstFramesTab& tab = bench.tab;
+    const WeakFramesVideo a{"run:1", "a", vmaf_result("a.mkv", {95, 40, 95})};
+    tab.set_videos({a, {"run:2", "b", vmaf_result("b.mkv", {95, 50, 95})}});
+    tab.videos_table()->setCurrentCell(1, 0);
+    ASSERT_EQ(tab.chosen_video()->identity, "run:2");
+
+    // Scored again with SSIMULACRA2 too: a new line of the same file.
+    auto again = std::make_shared<ComparisonResult>(*vmaf_result("b.mkv", {95, 55, 95}));
+    FrameMetricResult ssimulacra2{"ssimulacra2", {0, 1, 2}, {0.0, 1.0 / 30, 2.0 / 30}, {80, 30, 80},
+                                  current_ffmpeg_provenance("ssimulacra2", "9.0.1")};
+    again->metric_results.add(ssimulacra2);
+    tab.set_videos({a, {"run:3", "b", again}});
+    ASSERT_NE(tab.chosen_video(), nullptr);
+    EXPECT_EQ(tab.chosen_video()->identity, "run:3");
+    EXPECT_EQ(tab.videos_table()->currentRow(), 1);
+    EXPECT_EQ(tab.metric_bar()->count(), 2);
+    EXPECT_EQ(tab.worst_table()->item(0, 2)->text(), "55.00");
+
+    // The same line with a metric dropped: the bar loses it.
+    tab.metric_bar()->setCurrentIndex(1);  // SSIMULACRA2
+    ASSERT_EQ(std::string(tab.metric()->key), "ssimulacra2");
+    tab.set_videos({a, {"run:3", "b", vmaf_result("b.mkv", {95, 55, 95})}});
+    EXPECT_EQ(tab.metric_bar()->count(), 1);
+    ASSERT_NE(tab.metric(), nullptr);
+    EXPECT_EQ(std::string(tab.metric()->key), "vmaf");
+    EXPECT_EQ(tab.worst_table()->item(0, 2)->text(), "55.00");
+
+    // A line of the same file and reference beside it (a CVVDP display row
+    // of its) is not taken for it: not while its line is away being scored
+    // again, and not once it is back (#221's review: the sibling was).
+    const WeakFramesVideo sibling{"run:5", "b (display)", vmaf_result("b.mkv", {95, 70, 95})};
+    tab.set_videos({a, {"run:3", "b", vmaf_result("b.mkv", {95, 55, 95})}, sibling});
+    tab.videos_table()->setCurrentCell(1, 0);
+    ASSERT_EQ(tab.chosen_video()->identity, "run:3");
+    tab.set_videos({a, sibling});  // being scored again
+    ASSERT_NE(tab.chosen_video(), nullptr);
+    EXPECT_NE(tab.chosen_video()->identity, "run:5");
+    tab.set_videos({a, {"run:6", "b", vmaf_result("b.mkv", {95, 65, 95})}, sibling});
+    ASSERT_NE(tab.chosen_video(), nullptr);
+    EXPECT_EQ(tab.chosen_video()->identity, "run:6");
 }
 
 TEST(WorstFramesTab, NamesTheVideosAsMetricGraphsDoes) {

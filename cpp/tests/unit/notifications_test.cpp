@@ -53,6 +53,11 @@ TEST(Notifications, AnErrorLosesTheWebhooksURLAndPath) {
     EXPECT_EQ(without_secret_url("path /api/webhooks/1/secret: refused", url, "Discord"), "path Discord: refused");
     EXPECT_EQ(without_secret_url("Host discord.com not found", url, "Discord"), "Host discord.com not found");
     EXPECT_EQ(without_secret_url("timed out", "https://api.pushover.net", "Pushover"), "timed out");
+    // A key in the query alone: the URL's path, "/", is no secret.
+    EXPECT_EQ(without_secret_url("HTTP 404: Cannot POST / (a/b)", "https://hook.example/?token=secret1", "Webhook"),
+              "HTTP 404: Cannot POST / (a/b)");
+    EXPECT_EQ(without_secret_url("POST /?token=secret1 failed", "https://hook.example/?token=secret1", "Webhook"),
+              "POST Webhook failed");
 }
 
 // The Standard message, and fields of every kind: the run's, each video's,

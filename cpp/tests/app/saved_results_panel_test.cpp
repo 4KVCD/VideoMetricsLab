@@ -4,6 +4,7 @@
 // rules picked, and Delete (locked during a run).
 #include <QAction>
 #include <QComboBox>
+#include <QGroupBox>
 #include <QCoreApplication>
 #include <QLabel>
 #include <QLayout>
@@ -372,6 +373,91 @@ TEST(SavedResultsPanel, ScoresAreReadOffTheWindowsThreadAndKept) {
     ASSERT_EQ(read.size(), 1U);
     ASSERT_TRUE(read[0].result->metric_results.frame("vmaf"));
     EXPECT_EQ(read[0].result->metric_results.frame("vmaf")->values, (std::vector<float>{95.0F, 60.0F, 95.0F}));
+}
+
+// #205: the filter hid a selected row and left it selected: the box kept its
+// scores and Open, Export and Delete stayed enabled, acting on nothing (or on
+// the rows still shown only). A row the filter hides is no longer selected.
+TEST(SavedResultsPanel, ARowTheFilterHidesIsNoLongerSelected) {
+    const test::Folder folder;
+    std::ofstream(folder / "s.mkv") << "s";
+    Settings settings;
+    settings.cache_dir = (folder / "cache").string();
+    const AnalysisRequest request =
+        analysis_request(VmafOptions{}, {"vmaf"}, {}, CvvdpSettings{}, VideoInfo{}, VideoInfo{});
+    for (const char* name : {"first.mkv", "second.mkv"}) {
+        std::ofstream(folder / name) << name;
+        ComparisonResult result;
+        result.source = folder / "s.mkv";
+        result.distorted = folder / name;
+        result.fps = 24.0;
+        result.metric_results.add(frame_metric("vmaf", {95.0F, 60.0F}));
+        store_result(folder / "cache", result.source, result.distorted, request.recipe, result, name,
+                     request.metrics);
+    }
+    const Dialogs dialogs = standard_dialogs(nullptr);
+    FileWrites writes;
+    SavedResultsPanel panel(settings, dialogs, writes);
+    panel.show_list(list_saved_comparisons(folder / "cache"));
+    QTableWidget& table = *panel.table();
+    ASSERT_EQ(table.rowCount(), 2);
+    const auto row_of = [&table](const QString& name) {
+        for (int row = 0; row < table.rowCount(); ++row) {
+            if (table.item(row, 0)->text() == name) {
+                return row;
+            }
+        }
+        return -1;
+    };
+    const auto button = [&panel](const QString& text) {
+        for (QPushButton* found : panel.findChildren<QPushButton*>()) {
+            if (found->text() == text) {
+                return found;
+            }
+        }
+        return static_cast<QPushButton*>(nullptr);
+    };
+    const auto title = [&panel] {
+        QStringList titles;
+        for (const QGroupBox* box : panel.findChildren<QGroupBox*>()) {
+            titles << box->title();
+        }
+        return titles.join(QStringLiteral(" | "));
+    };
+    ASSERT_NE(button("Open in Metric Graphs"), nullptr);
+
+    table.selectRow(row_of("first.mkv"));
+    panel.wait_for_details();
+    EXPECT_TRUE(title().contains("Saved scores of first.mkv"));
+    EXPECT_TRUE(button("Open in Metric Graphs")->isEnabled());
+    panel.filter()->setText("second");
+    EXPECT_FALSE(title().contains("Saved scores of first.mkv"));
+    EXPECT_FALSE(button("Open in Metric Graphs")->isEnabled());
+    EXPECT_FALSE(button("Delete...")->isEnabled());
+    EXPECT_TRUE(panel.selected_results().empty());
+    // Shown again, it comes back unselected: nothing chosen that isn't seen.
+    panel.filter()->clear();
+    EXPECT_TRUE(table.selectionModel()->selectedRows().empty());
+
+    // Both selected, one hidden: the one left is the selection, shown in the box.
+    table.selectAll();
+    panel.filter()->setText("second");
+    panel.wait_for_details();
+    EXPECT_EQ(table.selectionModel()->selectedRows().size(), 1);
+    EXPECT_TRUE(title().contains("Saved scores of second.mkv"));
+
+    // A reference not found: the filter takes its path, not its cell's
+    // tooltip, whose sentence ("Not found there: ...") every such row shares.
+    std::vector<SavedComparison> list = list_saved_comparisons(folder / "cache");
+    for (SavedComparison& saved : list) {
+        saved.reference_found = false;
+    }
+    panel.show_list(list);
+    panel.filter()->setText("found");
+    EXPECT_TRUE(table.isRowHidden(0));
+    EXPECT_TRUE(table.isRowHidden(1));
+    panel.filter()->setText("S.MKV");
+    EXPECT_FALSE(table.isRowHidden(0));
 }
 
 // Issue #133: Delete kept pointers into the list across its question, whose

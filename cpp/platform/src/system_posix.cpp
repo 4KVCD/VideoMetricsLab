@@ -350,6 +350,8 @@ bool process_running(int pid) {
     return kill(pid, 0) == 0 || errno == EPERM;  // EPERM: it runs, but is not ours to signal
 }
 
+bool open_elsewhere(const std::filesystem::path& /*path*/) { return false; }
+
 void close_native_handle(void* handle) { close(static_cast<int>(reinterpret_cast<std::intptr_t>(handle))); }
 
 std::filesystem::path executable_path() {

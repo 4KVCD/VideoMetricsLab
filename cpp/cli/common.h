@@ -7,6 +7,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <set>
@@ -68,6 +69,11 @@ std::string name_of(const std::filesystem::path& path);
 
 // Writes `text` and a line end to stderr.
 void print_error(const std::string& text);
+
+// Has print_error hand its text to `problem` instead (an empty function:
+// standard error again): with --progress jsonl, where every line on
+// standard error is an event (Progress::problem).
+void print_errors_to(std::function<void(const std::string&)> problem);
 
 // The results to standard output; false, having said so, when they could not
 // all be written there.

@@ -191,7 +191,10 @@ void BitrateWorker::run() {
             const std::string content =
                 store_.empty() || raw ? std::string() : sampled_file_hash(path).value_or("");
             std::optional<SavedBitrate> saved = load_saved_bitrate(store_, content, path);
-            if (saved && saved->frame_types && !saved->info.is_raw_stream()) {
+            if (saved && saved->info.is_raw_stream()) {
+                saved.reset();
+            }
+            if (saved && saved->frame_types) {
                 VideoInfo info = known ? *known : saved->info;
                 info.path = path;
                 emit analyzed({name, std::move(info), std::make_shared<const BitrateData>(std::move(saved->data)),
@@ -199,8 +202,12 @@ void BitrateWorker::run() {
                                std::move(read_as)});
                 continue;
             }
-            VideoInfo info = known ? *known : probe_video(path, ffprobe_, cancel_);
-            if (!known && info.is_raw_stream()) {
+            // Saved without its frame types (their reading did not get to the
+            // file's end, or vml-cli saved it): its packets are taken, and
+            // only the types read.
+            VideoInfo info = known ? *known : saved ? saved->info : probe_video(path, ffprobe_, cancel_);
+            info.path = path;
+            if (!known && !saved && info.is_raw_stream()) {
                 info = raw_stream_as_found(std::move(info), ffprobe_, cancel_);
             }
             if (cancel_.cancelled()) {
@@ -213,20 +220,28 @@ void BitrateWorker::run() {
             }
             FrameTypeReader type_reader(info, cancel_);
             // Here, off the window's thread: the summary walks every packet.
-            auto data = std::make_shared<const BitrateData>(analyze_video_bitrate(
-                ffprobe_, info, cancel_, [this, &name](long long done, long long total) {
-                    emit progress(name, done, total);
-                }));
-            auto types = std::make_shared<const std::vector<std::uint8_t>>(type_reader.types_of(*data));
-            if (!content.empty() && !info.is_raw_stream() && !cancel_.cancelled()) {
+            auto data = saved ? std::make_shared<const BitrateData>(std::move(saved->data))
+                              : std::make_shared<const BitrateData>(analyze_video_bitrate(
+                                    ffprobe_, info, cancel_, [this, &name](long long done, long long total) {
+                                        emit progress(name, done, total);
+                                    }));
+            std::optional<std::vector<std::uint8_t>> types = type_reader.types_of(*data);
+            // Saved as read: the types only where read to the file's end (a
+            // read cut short would leave them out for good), and nothing of a
+            // file replaced while it was read, whose hash is the old file's.
+            const bool unchanged = !cancel_.cancelled() && file_identity(path) == read_as;
+            if (!content.empty() && !info.is_raw_stream() && unchanged && (!saved || types)) {
                 try {
-                    save_bitrate(store_, content, {info, *data, *types});
+                    save_bitrate(store_, content, {info, *data, types});
                 } catch (const std::exception&) {
                     // Not saved: read again next time.
                 }
             }
             if (!cancel_.cancelled()) {
-                emit analyzed({name, info, std::move(data), std::move(types), std::move(read_as)});
+                emit analyzed({name, info, std::move(data),
+                               std::make_shared<const std::vector<std::uint8_t>>(
+                                   std::move(types).value_or(std::vector<std::uint8_t>())),
+                               std::move(read_as)});
             }
         } catch (const Cancelled&) {
             return;
@@ -922,7 +937,7 @@ std::optional<BitrateSummary> BitratePanel::shown_summary(const BitrateEntry& en
     // The frame range's figures while one is chosen (none for a video with
     // none of its frames), else the whole video's.
     return !entry.data                          ? std::nullopt
-           : frame_controls->selected_frames() ? entry.range_summary
+           : range_chosen()                    ? entry.range_summary
                                                 : std::optional<BitrateSummary>(entry.data->summary);
 }
 
@@ -1068,6 +1083,21 @@ void BitratePanel::refresh_plot() {
         frames = std::max(frames, drawn.data->frame_count());
     }
     frame_controls->set_bounds(0, static_cast<int>(std::max(0LL, frames - 1)));
+    // Videos of other frame rates: a frame number is a moment of its own in
+    // each, so the range is in seconds.
+    bool other_rates = false;
+    for (std::size_t i = 1; i < current_plots_.size(); ++i) {
+        other_rates = other_rates || other_frame_rates(*current_plots_.front().data, *current_plots_[i].data);
+    }
+    const bool was_in_seconds = frame_controls->range_in_seconds();
+    frame_controls->set_range_in_seconds(
+        other_rates, app::tr("These videos have different frame rates, so a frame number is a different moment in "
+                             "each: give the range in time, below, or drag across the graph."));
+    if (was_in_seconds != other_rates || frame_controls->selected_seconds()) {
+        // The range cleared (the whole videos' figures again), or in seconds,
+        // whose frames move with Adjust start and the lines drawn.
+        on_range_changed(true);
+    }
     refresh_highlight();
     refresh_difference();
     on_hover_left();
@@ -1247,6 +1277,10 @@ std::optional<int> BitratePanel::frame_at(double time) const {
 }
 
 void BitratePanel::on_range_dragged(double start, double now, bool finished) {
+    if (frame_controls->range_in_seconds()) {
+        frame_controls->set_dragged_seconds(start, now, finished);  // the graph's seconds, as dragged
+        return;
+    }
     const std::optional<int> first = frame_at(start);
     const std::optional<int> last = frame_at(now);
     if (first && last) {
@@ -1267,14 +1301,26 @@ void BitratePanel::on_range_changed(bool finished) {
     }
 }
 
+bool BitratePanel::range_chosen() const {
+    return frame_controls->selected_frames() || frame_controls->selected_seconds();
+}
+
 void BitratePanel::update_range_summary(BitrateEntry& entry) const {
-    const std::optional<std::pair<int, int>> frames = frame_controls->selected_frames();
+    std::optional<std::pair<long long, long long>> frames;
+    if (const std::optional<std::pair<int, int>> chosen = frame_controls->selected_frames()) {
+        frames = *chosen;
+    } else if (const std::optional<std::pair<double, double>> seconds = frame_controls->selected_seconds();
+               seconds && entry.data) {
+        // Its own frames in those seconds, on the graph's time (Adjust start).
+        const double start = adjust_start_checkbox->isChecked() ? entry.data->start_time() : 0;
+        frames = frames_between(*entry.data, seconds->first + start, seconds->second + start);
+    }
     entry.range_summary =
         frames && entry.data ? frames_summary(*entry.data, frames->first, frames->second) : std::nullopt;
 }
 
 void BitratePanel::refresh_highlight() {
-    std::optional<std::pair<double, double>> seconds;
+    std::optional<std::pair<double, double>> seconds = frame_controls->selected_seconds();
     if (const std::optional<std::pair<int, int>> frames = frame_controls->selected_frames()) {
         // Each end from the first line with that frame, as time_of_frame
         // has it: a range past a shorter first video's end reaches the
@@ -1313,9 +1359,13 @@ void BitratePanel::refresh_highlight() {
 
 void BitratePanel::refresh_range_label() {
     const std::optional<std::pair<int, int>> frames = frame_controls->selected_frames();
-    range_label->setText(frames ? app::tr("Statistics of frames {first} to {last}.",
-                                          {{"first", frames->first}, {"last", frames->second}})
-                                : QString());
+    const std::optional<std::pair<double, double>> seconds = frame_controls->selected_seconds();
+    range_label->setText(frames    ? app::tr("Statistics of frames {first} to {last}.",
+                                             {{"first", frames->first}, {"last", frames->second}})
+                         : seconds ? app::tr("Statistics of {start} to {end}, each video's own frames.",
+                                             {{"start", FrameControls::time_text(seconds->first)},
+                                              {"end", FrameControls::time_text(seconds->second)}})
+                                   : QString());
 }
 
 void BitratePanel::on_hover_left() {
@@ -1331,6 +1381,9 @@ QString BitratePanel::export_title() const {
                     view->text();
     if (const std::optional<std::pair<int, int>> frames = frame_controls->selected_frames()) {
         title += app::tr(" — frames {first} to {last}", {{"first", frames->first}, {"last", frames->second}});
+    } else if (const std::optional<std::pair<double, double>> seconds = frame_controls->selected_seconds()) {
+        title += app::tr(" — {start} to {end}", {{"start", FrameControls::time_text(seconds->first)},
+                                                 {"end", FrameControls::time_text(seconds->second)}});
     }
     return title;
 }
@@ -1389,6 +1442,19 @@ std::optional<BitrateState> BitratePanel::state_of(const std::filesystem::path& 
         }
     }
     return std::nullopt;
+}
+
+bool BitratePanel::wants_reading(const std::filesystem::path& path) const {
+    const QString key = path_key(path);
+    for (const auto& [listed, entry] : entries_) {
+        if (listed == key) {
+            if (entry.data) {
+                return file_identity(path) != entry.read_as;
+            }
+            return entry.state == BitrateState::ready || entry.state == BitrateState::stopped;
+        }
+    }
+    return true;
 }
 
 void BitratePanel::adopt_read(const BitratePanel& from, const std::vector<std::filesystem::path>& paths,

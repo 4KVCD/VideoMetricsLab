@@ -10,6 +10,7 @@
 #include <QPushButton>
 #include <QMap>
 #include <QScrollArea>
+#include <QSlider>
 #include <QSize>
 #include <QStringList>
 #include <QStyledItemDelegate>
@@ -105,7 +106,8 @@ public:
     void keep_a_row_selected();
 
 signals:
-    // Files dropped on the table from outside it: their paths.
+    // Files dropped on the table from outside it: their paths, once the
+    // drop has returned (issue #202).
     void filesDropped(const QStringList& paths);
     // Rows dragged within the table: the rows moved, in order, and the row
     // they go before (rowCount() for the end).
@@ -143,6 +145,29 @@ private:
     // A manual drag of the fill column past the width that just fills the
     // space: without it, any later resize would set the column straight back.
     std::optional<int> fill_column_user_width_;
+};
+
+// A slider that shades a band of its values, under its handle: Video
+// Compare's timeline, the frames a loop repeats (issue #201). The band is
+// drawn at least min_band_px wide, so that a short one still shows on a
+// long range.
+class BandSlider : public QSlider {
+    Q_OBJECT
+
+public:
+    static constexpr int min_band_px = 6;
+    explicit BandSlider(Qt::Orientation orientation, QWidget* parent = nullptr);
+    // The values shaded, first and last included; none for no band.
+    void set_band(std::optional<std::pair<int, int>> band);
+    std::optional<std::pair<int, int>> band() const { return band_; }
+    // Where the band is drawn, in the slider's pixels; empty for none.
+    QRect band_rect() const;
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+
+private:
+    std::optional<std::pair<int, int>> band_;
 };
 
 // One line of text cut to the width it is given, ending in "…", with the

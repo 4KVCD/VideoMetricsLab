@@ -81,6 +81,13 @@ std::optional<WeakCondition> parse_weak_condition(std::string_view text);
 // no bands, Butteraugli above 2 and CVVDP below 9 JOD.
 WeakCondition default_weak_condition(const MetricDefinition& metric);
 
+// The metric a starting condition (default_weak_condition) is on, where no
+// condition is on a video's metrics: `preferred` (the one Metric Graphs, or
+// Worst Frames' bar, shows) where `keys` (the metrics scored) has it, else
+// the first of `keys`; nothing where none is a known metric. The one choice
+// of the Worst Frames tab, exports and the command line's --segments saved.
+const MetricDefinition* starting_metric(const std::vector<std::string>& keys, std::string_view preferred);
+
 // Every member after `conditions` has a default, so SegmentRules{{...}}
 // leaves none uninitialized (GCC's and Clang's -Wextra warn otherwise).
 struct SegmentRules {
@@ -127,6 +134,18 @@ struct ConditionCount {
 // have; a shortest segment below 1 frame taken as 1, a gap below 0 as 0.
 SegmentRules saved_segment_rules(const std::vector<std::string>& conditions, bool all, int min_frames,
                                  int merge_frames);
+// Which end of a segment's scores of a metric is shown beside its mean: the
+// one its conditions look for. The highest where every condition on the
+// metric is ">" (vmaf>98: better than it need be), the lowest where every
+// one is "<"; with none, or both, the metric's worst (Butteraugli's
+// highest, the others' lowest).
+enum class SegmentEnd { lowest, highest };
+SegmentEnd segment_end(const SegmentRules& rules, const MetricDefinition& metric);
+std::optional<double> segment_end_value(const SegmentMetric& metric, SegmentEnd end);
+// Whether `end` is the metric's worst, as it is unless its conditions look
+// the other way.
+bool is_worst_end(SegmentEnd end, const MetricDefinition& metric);
+
 // The conditions' texts, for Settings.
 std::vector<std::string> condition_texts(const std::vector<WeakCondition>& conditions);
 
@@ -214,8 +233,8 @@ nlohmann::ordered_json worst_frames_json(const MetricResultSet& results, const s
 std::string worst_frames_csv(const MetricResultSet& results, const std::vector<WorstFrame>& worst);
 
 // Every metric `results` has scores of, its worst frames of `dips` dips
-// (worst_frames, over the whole video), as one document: "dips", then
-// "metrics", one object a metric in the registry's order: "metric" and
+// (worst_frames, over the whole video), as one document: document_head's
+// keys ("worst-frames-report-1"), "dips", then "metrics", one object a metric in the registry's order: "metric" and
 // "worst_frames" (worst_frames_json's). For the archive Settings' Exports
 // include makes (Worst frames).
 nlohmann::ordered_json worst_frames_report_json(const MetricResultSet& results, std::size_t dips);

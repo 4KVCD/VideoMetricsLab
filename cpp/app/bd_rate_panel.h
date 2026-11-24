@@ -10,6 +10,7 @@
 #include <QStringList>
 #include <QWidget>
 
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -75,6 +76,9 @@ public:
         // Its scored videos whose bitrate is the whole file's, soundtrack
         // included (VideoInfo::bit_rate_whole_file), by source key.
         std::map<QString, QString> whole_file_rates;
+        // Its scored videos' files, by source key: a line scored again has
+        // another identity, and the video follows it (update_videos_of).
+        std::map<QString, std::filesystem::path> video_files;
     };
     Side anchor;
     Side test;

@@ -128,12 +128,12 @@ QGroupBox* SettingsPanel::build_notify_when_box() {
     return box;
 }
 
-QLineEdit* SettingsPanel::secret_edit(const std::string& stored) {
+QLineEdit* SettingsPanel::secret_edit(std::string& stored) {
     auto* edit = new QLineEdit;
     edit->setEchoMode(show_keys != nullptr && show_keys->isChecked() ? QLineEdit::Normal : QLineEdit::Password);
     connect(edit, &QLineEdit::editingFinished, this, [this] { on_edited(); });
     show_secret(edit, stored);
-    secret_edits_.push_back(edit);
+    secret_edits_.emplace_back(&stored, edit);
     return edit;
 }
 
@@ -373,7 +373,7 @@ QGroupBox* SettingsPanel::build_keys_box() {
     });
     show_keys = new QCheckBox(app::tr("Show keys"));
     connect(show_keys, &QCheckBox::toggled, this, [this](bool shown) {
-        for (QLineEdit* edit : secret_edits_) {
+        for (const auto& [stored, edit] : secret_edits_) {
             edit->setEchoMode(shown ? QLineEdit::Normal : QLineEdit::Password);
         }
     });
@@ -525,17 +525,9 @@ void SettingsPanel::read_notification_controls() {
             stored = stored_secret(typed, encrypted);
         }
     };
-    store(settings_.pushover_user, pushover_user);
-    store(settings_.pushover_token, pushover_token);
-    store(settings_.discord_webhook, discord_webhook);
-    store(settings_.gotify_token, gotify_token);
-    store(settings_.ntfy_topic, ntfy_topic);
-    store(settings_.ntfy_token, ntfy_token);
-    store(settings_.pushbullet_token, pushbullet_token);
-    store(settings_.slack_webhook, slack_webhook);
-    store(settings_.telegram_token, telegram_token);
-    store(settings_.webhook_url, webhook_url);
-    store(settings_.webhook_header, webhook_header);
+    for (const auto& [stored, edit] : secret_edits_) {
+        store(*stored, edit);
+    }
 }
 
 void SettingsPanel::show_notification_preview() {

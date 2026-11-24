@@ -149,10 +149,7 @@ std::vector<std::string> take_saved_segments(CompareArguments& arguments, const 
         // A profile with no condition on the metrics compared: one on the
         // metric shown, as the Worst Frames tab starts (default_weak_condition):
         // the one Metric Graphs shows where it is compared, else the first.
-        const std::string& shown =
-            std::find(asked.begin(), asked.end(), settings.graph_metric) != asked.end() ? settings.graph_metric
-                                                                                         : asked.front();
-        if (const MetricDefinition* metric = find_metric(shown)) {
+        if (const MetricDefinition* metric = starting_metric(asked, settings.graph_metric)) {
             arguments.segments.push_back(default_weak_condition(*metric));
             if (fallback != nullptr) {
                 *fallback = arguments.segments.back();
@@ -204,15 +201,29 @@ std::string worst_text(const std::vector<TestVideo>& videos, std::size_t count) 
     return joined(lines);
 }
 
-std::string segments_text(const std::vector<TestVideo>& videos, const SegmentRules& rules, std::size_t shown) {
-    std::string conditions;
-    for (const WeakCondition& condition : rules.conditions) {
-        conditions += (conditions.empty() ? "" : rules.all ? " and " : " or ") + condition.text();
-    }
+std::string segments_text(const std::vector<TestVideo>& videos, const SegmentRules& given, std::size_t shown) {
     std::vector<std::string> lines;
     for (const TestVideo& video : videos) {
         if (!video.result) {
             continue;
+        }
+        // By the conditions on metrics it has scores of, as its
+        // --segments-dir file and the JSON: the others are said left out.
+        std::vector<WeakCondition> unscored;
+        const SegmentRules rules = scored_rules(video.result->metric_results, given, &unscored);
+        std::string said_left_out;
+        for (const WeakCondition& condition : unscored) {
+            said_left_out += (said_left_out.empty() ? "" : ", ") + condition.text();
+        }
+        if (rules.conditions.empty()) {
+            lines.push_back("");
+            lines.push_back(video.name() + ": no weak segments: it has no scores of the conditions' metrics (" +
+                            said_left_out + ", left out)");
+            continue;
+        }
+        std::string conditions;
+        for (const WeakCondition& condition : rules.conditions) {
+            conditions += (conditions.empty() ? "" : rules.all ? " and " : " or ") + condition.text();
         }
         const std::vector<WeakSegment> segments = weak_segments(*video.result, rules);
         const Json summary = segments_summary_json(*video.result, rules, segments);
@@ -242,6 +253,10 @@ std::string segments_text(const std::vector<TestVideo>& videos, const SegmentRul
                                             : frames + ", " + with_thousands(in) + " of them in segments"));
             left_out = left_out || in < holds;
         }
+        if (!said_left_out.empty()) {
+            lines.push_back("  " + said_left_out + ": left out, as it has no scores of " +
+                            (unscored.size() == 1 ? "its metric" : "their metrics"));
+        }
         if (left_out && rules.min_frames > 1) {
             lines.push_back("  Runs shorter than " + std::to_string(rules.min_frames) + " frames are left out.");
         }
@@ -257,8 +272,11 @@ std::string segments_text(const std::vector<TestVideo>& videos, const SegmentRul
         std::vector<std::vector<std::string>> rows;
         std::vector<std::string> header{"First", "Last", "Frames", "Start", "End"};
         for (const SegmentMetric& metric : segments.front().metrics) {
-            const std::string label(metric_definition(metric.key).short_label);
-            header.push_back(label + " min");
+            // The end the metric's conditions look for (segment_end):
+            // VMAF's lowest, or its highest for vmaf>98; Butteraugli's highest.
+            const MetricDefinition& definition = metric_definition(metric.key);
+            const std::string label(definition.short_label);
+            header.push_back(label + (segment_end(rules, definition) == SegmentEnd::highest ? " max" : " min"));
             header.push_back(label + " mean");
         }
         if (weak_by) {
@@ -272,9 +290,7 @@ std::string segments_text(const std::vector<TestVideo>& videos, const SegmentRul
                                          format_hms(segment.end_time, 3)};
             for (const SegmentMetric& metric : segment.metrics) {
                 const MetricDefinition& definition = metric_definition(metric.key);
-                // The worst end: Butteraugli's highest.
-                row.push_back(definition.format_value(
-                    definition.direction == MetricDirection::lower_is_better ? metric.max : metric.min));
+                row.push_back(definition.format_value(segment_end_value(metric, segment_end(rules, definition))));
                 row.push_back(definition.format_value(metric.mean));
             }
             if (weak_by) {
@@ -301,8 +317,12 @@ void add_segments_json(Json& document, const std::vector<TestVideo>& videos, con
     Json& entries = document.at("videos");
     for (std::size_t v = 0; v < videos.size() && v < entries.size(); ++v) {
         if (videos[v].result) {
-            entries[v]["weak_segments"] =
-                video_segments_json(*videos[v].result, weak_segments(*videos[v].result, rules), rules);
+            // As its --segments-dir file: by the conditions on metrics it
+            // has scores of, the others in "left_out".
+            std::vector<WeakCondition> left_out;
+            const SegmentRules used = scored_rules(videos[v].result->metric_results, rules, &left_out);
+            entries[v]["weak_segments"] = video_segments_json(*videos[v].result, weak_segments(*videos[v].result, used),
+                                                              used, left_out);
         }
     }
 }

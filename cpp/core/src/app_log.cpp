@@ -48,6 +48,7 @@ struct State {
     std::uintmax_t next_rotation = 0;  // the length to try again at, after a rotation that failed
     Forward forward;
     std::optional<int> console;  // the lowest level written to standard error
+    ConsoleLine console_line;    // where those go instead (console_lines_to)
 };
 
 State& state() {
@@ -203,7 +204,11 @@ void write_line(int level, std::string_view name, std::string_view text) {
         return;
     }
     if (log.console && level >= *log.console) {
-        platform::write_text(platform::Stream::error, console_line(level, name, text));
+        if (log.console_line) {
+            log.console_line(level_name(level), name, text);
+        } else {
+            platform::write_text(platform::Stream::error, console_line(level, name, text));
+        }
     }
     if (!log.file.is_open() || level < info) {
         return;
@@ -281,6 +286,12 @@ void log_to_console(Level level) {
     const std::lock_guard lock(log.mutex);
     log.console = static_cast<int>(level);
     update_threshold(log);
+}
+
+void console_lines_to(ConsoleLine console) {
+    State& log = state();
+    const std::lock_guard lock(log.mutex);
+    log.console_line = std::move(console);
 }
 
 bool enabled(Level level) { return static_cast<int>(level) >= threshold; }

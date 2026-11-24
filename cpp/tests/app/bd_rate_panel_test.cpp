@@ -191,6 +191,41 @@ TEST(BdRatePanel, ScoredVideosFollowTheirLines) {
     EXPECT_EQ(informed, QStringList{"Bitrate unknown"});
 }
 
+// #205: a video scored again gets a line of another identity; the side kept
+// the old line's scores, as for a video taken out of the session, and Add
+// videos then added the file a second time (two points at one bitrate). The
+// video added follows the one new line of its file.
+TEST(BdRatePanel, AVideoScoredAgainKeepsItsPlace) {
+    const auto run_of = [](const std::string& identity, long long bits_per_second) {
+        GraphPanel::Run run = scored_run("refs/clip.y4m", bits_per_second, false, identity);
+        std::const_pointer_cast<ComparisonResult>(run.result)->distorted = "encodes/q27.mkv";
+        return run;
+    };
+    std::vector<GraphPanel::Run> runs{run_of("run:1", 2000000)};
+    BdRatePanel panel([&runs] { return runs; });
+    panel.choose_videos = [](const QStringList& items) {
+        std::vector<int> all(static_cast<std::size_t>(items.size()));
+        std::iota(all.begin(), all.end(), 0);
+        return all;
+    };
+    panel.anchor.add_videos_button->click();
+    ASSERT_EQ(panel.anchor.sources.size(), 1u);
+
+    runs[0] = run_of("run:2", 3000000);  // scored again
+    panel.bring_videos_up_to_date();
+    ASSERT_EQ(panel.anchor.sources.size(), 1u);
+    EXPECT_EQ(panel.anchor.sources.front().second.encodes.front().kbps, 3000);
+    panel.anchor.add_videos_button->click();
+    EXPECT_EQ(panel.anchor.sources.size(), 1u);
+
+    // Two new lines of its file (scored again with other settings, as two
+    // rows): which one it was is not known, and it stays as it was.
+    runs = {run_of("run:3", 4000000), run_of("run:4", 5000000)};
+    panel.bring_videos_up_to_date();
+    ASSERT_EQ(panel.anchor.sources.size(), 1u);
+    EXPECT_EQ(panel.anchor.sources.front().second.encodes.front().kbps, 3000);
+}
+
 // Sequences go by the reference's file name: two files of one name are said.
 TEST(BdRatePanel, WarnsOfTwoReferencesOfOneName) {
     std::vector<GraphPanel::Run> runs{scored_run("one/clip.y4m", 2000000, false, "a"),

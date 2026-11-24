@@ -42,6 +42,10 @@ public:
     // Sends each request; `sent` follows for each.
     void send(const std::vector<NotificationRequest>& requests);
 
+    // The requests sent and not answered yet, a retry waiting for its turn
+    // included: the window's close waits a moment for them.
+    int pending() const { return pending_; }
+
 signals:
     // How one request went: `error` empty when the service took it, else
     // why not (the service's own answer where it gave one), in the window's
@@ -53,7 +57,11 @@ private:
     // to wait gets.
     void post(const NotificationRequest& item, bool again);
 
+    // Ends one of the pending requests, saying how it went.
+    void finish(const QString& service, const QString& error);
+
     QNetworkAccessManager* network_;
+    int pending_ = 0;
 };
 
 }  // namespace vml::app

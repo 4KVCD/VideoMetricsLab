@@ -66,6 +66,7 @@ add_executable(vml_tests
 )
 target_link_libraries(vml_tests PRIVATE vml_cli vml_core vml_compile_options vml_miniz nlohmann_json gtest)  # its own main (unit/main.cpp)
 target_include_directories(vml_tests PRIVATE ../../native)  # the decoders' headers the app shares (av2/display_order.h, av2/splot_api.h)
+target_include_directories(vml_tests PRIVATE ../core/src)  # core's parts its tests reach (temp_files_parts.h)
 target_compile_definitions(vml_tests PRIVATE
     VML_SOURCE_DIR="${PROJECT_SOURCE_DIR}"  # the sources, for source_limits_test.cpp
     VML_REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/reference"
@@ -139,6 +140,7 @@ if(TARGET vml_app)
         app/title_bar_test.cpp
         app/i18n_test.cpp
         app/main.cpp
+        app/notifier_test.cpp
         app/options_panel_test.cpp
         app/playback_test.cpp
         app/results_export_test.cpp

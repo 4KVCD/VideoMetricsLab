@@ -347,6 +347,7 @@ void BdRatePanel::on_add_videos(Side& side) {
         const QString key = video_source_key(run);
         std::erase_if(side.sources, [&key](const auto& source) { return source.first == key; });
         side.sources.emplace_back(key, table_of(*encode));
+        side.video_files[key] = run.result->distorted;
         side.whole_file_rates.erase(key);
         if (run.result->distorted_info.bit_rate_whole_file) {
             side.whole_file_rates[key] = name;
@@ -389,6 +390,43 @@ void BdRatePanel::bring_videos_up_to_date() {
 
 bool BdRatePanel::update_videos_of(Side& side, const std::vector<GraphPanel::Run>& runs, QStringList& without_rate) {
     bool changed = false;
+    // A video scored again: its line has another identity. Where its old one
+    // is no longer listed and one line alone, not added, is of its file and
+    // reference, the video follows that line; otherwise it stays as it was
+    // (a video taken out of the session keeps its scores here).
+    const auto listed = [&runs](const QString& key) {
+        return std::ranges::any_of(runs, [&key](const GraphPanel::Run& run) { return video_source_key(run) == key; });
+    };
+    const auto added = [&side](const QString& key) {
+        return std::ranges::any_of(side.sources, [&key](const auto& source) { return source.first == key; });
+    };
+    for (auto& [key, table] : side.sources) {
+        const auto file = side.video_files.find(key);
+        if (file == side.video_files.end() || listed(key) || table.encodes.empty()) {
+            continue;
+        }
+        const GraphPanel::Run* follows = nullptr;
+        int lines = 0;
+        for (const GraphPanel::Run& run : runs) {
+            if (run.result->distorted == file->second &&
+                platform::path_text(run.result->source) == table.encodes.front().reference &&
+                !added(video_source_key(run))) {
+                follows = &run;
+                ++lines;
+            }
+        }
+        if (lines != 1) {
+            continue;
+        }
+        const QString now = video_source_key(*follows);
+        side.video_files.erase(file);
+        side.video_files[now] = follows->result->distorted;
+        if (const auto whole = side.whole_file_rates.find(key); whole != side.whole_file_rates.end()) {
+            side.whole_file_rates[now] = whole->second;
+            side.whole_file_rates.erase(key);
+        }
+        key = now;  // brought up to date below
+    }
     for (const GraphPanel::Run& run : runs) {
         const QString key = video_source_key(run);
         const auto source =
@@ -401,6 +439,7 @@ bool BdRatePanel::update_videos_of(Side& side, const std::vector<GraphPanel::Run
         if (!encode) {
             side.sources.erase(source);
             side.whole_file_rates.erase(key);
+            side.video_files.erase(key);
             without_rate.append(name);
             changed = true;
         } else if (source->second.encodes.front() != *encode) {
@@ -440,6 +479,15 @@ void BdRatePanel::import_file(Side& side, const QString& path) {
     }
     const QString key = QStringLiteral("file:") + QFileInfo(path).absoluteFilePath();
     std::erase_if(side.sources, [&key](const auto& source) { return source.first == key; });
+    // Its encodes whose bitrate is the whole file's, warned of as a scored
+    // video's is: keyed by the file and the encode's place in it.
+    std::erase_if(side.whole_file_rates,
+                  [&key](const auto& item) { return item.first.startsWith(key + QLatin1Char('\n')); });
+    for (std::size_t index = 0; index < table.encodes.size(); ++index) {
+        if (const std::string& video = table.encodes[index].whole_file_video; !video.empty()) {
+            side.whole_file_rates[key + QLatin1Char('\n') + QString::number(index)] = qt_text(video);
+        }
+    }
     side.sources.emplace_back(key, std::move(table));
     if (side.name_edit->text().trimmed().isEmpty()) {
         side.name_edit->setText(QFileInfo(path).completeBaseName());
@@ -450,6 +498,7 @@ void BdRatePanel::import_file(Side& side, const QString& path) {
 void BdRatePanel::on_clear(Side& side) {
     side.sources.clear();
     side.whole_file_rates.clear();
+    side.video_files.clear();
     side.name_edit->clear();  // it named what was cleared
     side_changed(side);
 }
@@ -538,6 +587,8 @@ void BdRatePanel::recalculate() {
     } else {
         BdRateOptions options;
         options.metrics = all_metric_keys();
+        options.warn_of_metrics_neither_has = false;  // their columns' n/a says it
+        options.copies_once = true;                   // one encode's run file added twice: one point
         if (const QString column = group_combo->currentData().toString(); !column.isEmpty()) {
             options.group_by = column.toStdString();
         }
@@ -699,7 +750,7 @@ void BdRatePanel::refresh_chart() {
         }
         // The curve the BD-rate integrates, only where it took every encode
         if (curve.points.size() == encodes) {
-            curve.line = pchip_curve(curve.points, lower_is_better, curve_samples);
+            curve.line = pchip_curve(curve.points, lower_is_better, curve_samples, true);  // as its BD-rate counts them
         }
         return curve;
     };

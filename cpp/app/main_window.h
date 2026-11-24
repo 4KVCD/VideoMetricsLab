@@ -15,6 +15,7 @@
 // glue (main_window_graph.cpp, main_window_compare.cpp).
 #pragma once
 
+#include <QElapsedTimer>
 #include <QFutureWatcher>
 #include <QMainWindow>
 #include <QPointer>
@@ -671,11 +672,19 @@ private:
     // Settings > Storage > After each run, for a video just scored: what
     // Exports include, next to it or in the export folder.
     void export_automatically(const RowData& row_data);
+    // The same once `row_data`'s entry is whole: a video's own row, or the
+    // row a CVVDP display row scores for (its entry lists the display's
+    // scores), exported once it and each display row of its in the run have
+    // ended. Until then it waits in auto_export_waiting_, which the run's
+    // end exports as they are (a display that failed or was cancelled).
+    void export_when_whole(const RowData& row_data);
     // The document Export results makes with `row_data`'s video alone.
     std::optional<nlohmann::ordered_json> row_document(const RowData& row_data) const;
     // Saves `bundle` when its bitrate is read, starting to read what is not.
     void queue_bundle(PendingBundle bundle);
-    void write_ready_bundles();
+    // Writes the exports whose bitrate is read; with `now`, every one,
+    // without the bitrate of a file not read (the window closing).
+    void write_ready_bundles(bool now = false);
 
     // ------------------------------------------------------------ the scores
     std::vector<std::string> reusable_metric_keys(const RowData& row_data) const;
@@ -796,6 +805,10 @@ private:
     int run_number_ = 0;  // counts runs: a run's saved-scores folders, told later, are its own (set_run_ui_active)
     bool defaults_changed_in_run_ = false;  // Settings' defaults changed during a run: applied as it ends
     bool closing_ = false;
+    // Since the window was first asked to close: a notification still being
+    // sent holds the close this long at most (notification_close_wait_ms).
+    QElapsedTimer close_clock_;
+    static constexpr qint64 notification_close_wait_ms = 3000;
     bool asking_frame_rates_ = false;           // a frame rate question is open
     bool reference_frame_rate_asked_ = false;   // RowData::frame_rate_asked, for the reference
     // Whether Vship-fast's metrics were last found to run on 5.1.2 here
@@ -872,6 +885,8 @@ private:
     // display each job started with.
     RunWorker* worker_ = nullptr;
     std::vector<std::shared_ptr<RowData>> job_rows_;
+    // Rows whose after-run export waits for their CVVDP display rows (export_when_whole).
+    std::vector<std::shared_ptr<RowData>> auto_export_waiting_;
     std::vector<VmafOptions> job_options_;
     std::vector<CvvdpSettings> job_cvvdp_;
     std::vector<int> running_jobs_;  // in the order they started

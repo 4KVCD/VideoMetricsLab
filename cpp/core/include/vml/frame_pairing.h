@@ -81,4 +81,10 @@ nlohmann::ordered_json frame_pairing_json(const ComparisonResult& result);
 // drive). Nothing where it has none; Cancelled once `cancel` is.
 FrameCounter container_frame_counter(std::string ffprobe, CancelToken cancel, bool read_whole_files);
 
+// `count` asked once per file, the answer kept for every later question:
+// for a run's counts, where every test video's pairing asks for the
+// reference's (count_frames_short), which may read a whole film. Questions
+// asked at once for one file wait for the one count. Thread-safe.
+FrameCounter counting_each_file_once(FrameCounter count);
+
 }  // namespace vml

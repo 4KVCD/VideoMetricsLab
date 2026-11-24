@@ -20,6 +20,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <set>
 #include <cmath>
 #include <fstream>
 #include <iterator>
@@ -55,7 +56,11 @@ QTableWidgetItem* cell(const QString& text, bool number = true) {
     return item;
 }
 
-QTableWidget* make_table() {
+// `measured`: the columns sized to their contents as they change, for a
+// short table; else sized once a fill ends (fit_list). A list of up to 1000
+// rows measured as it fills is measured again for each cell set: minutes
+// for a long video's segments, on the window's thread.
+QTableWidget* make_table(bool measured = true) {
     auto* table = new QTableWidget;
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -64,7 +69,8 @@ QTableWidget* make_table() {
     // its end whatever the elide mode.
     table->setWordWrap(false);
     table->verticalHeader()->hide();
-    table->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(measured ? QHeaderView::ResizeToContents
+                                                             : QHeaderView::Interactive);
     return table;
 }
 
@@ -88,6 +94,17 @@ QStringList aligned(const std::vector<std::pair<QString, QString>>& rows) {
     return lines;
 }
 
+// The metrics `result` has scores of that the tab lists, in the app's order.
+std::vector<std::string> metric_keys(const ComparisonResult& result) {
+    std::vector<std::string> keys;
+    for (const MetricDefinition& definition : metrics()) {
+        if (score_samples(result.metric_results, std::string(definition.key))) {
+            keys.emplace_back(definition.key);
+        }
+    }
+    return keys;
+}
+
 // The conditions on none of the metrics `keys`.
 std::vector<WeakCondition> conditions_not_on(const std::vector<WeakCondition>& conditions,
                                              const std::vector<std::string>& keys) {
@@ -103,6 +120,15 @@ std::vector<WeakCondition> conditions_not_on(const std::vector<WeakCondition>& c
 // A table's width with all its columns: what it needs not to scroll sideways.
 int natural_width(const QTableWidget* table) {
     return table->horizontalHeader()->length() + 2 * table->frameWidth() + table->verticalScrollBar()->sizeHint().width();
+}
+
+// The heading of a segment's score beside its mean: its worst, as for most
+// conditions, else the end its conditions look for (vmaf>98: the highest).
+QString end_heading(const MetricDefinition& metric, SegmentEnd end) {
+    const QString label = qt_text(metric.short_label);
+    return is_worst_end(end, metric)       ? app::tr("{metric} worst", {{"metric", label}})
+           : end == SegmentEnd::highest ? app::tr("{metric} highest", {{"metric", label}})
+                                        : app::tr("{metric} lowest", {{"metric", label}});
 }
 
 // `samples`' worst score within `ranges` (all: none given), by `direction`.
@@ -152,6 +178,8 @@ WorstFramesTab::WorstFramesTab(Dialogs dialogs, QWidget* parent) : QWidget(paren
     connect(videos_table_, &QTableWidget::currentCellChanged, this, [this](int row, int, int, int) {
         if (!building_ && row >= 0 && static_cast<std::size_t>(row) < videos_.size()) {
             wanted_identity_ = videos_[static_cast<std::size_t>(row)].identity;
+            wanted_file_ = videos_[static_cast<std::size_t>(row)].result->distorted;
+            wanted_reference_ = videos_[static_cast<std::size_t>(row)].result->source;
             choose_video(row);
         }
     });
@@ -443,13 +471,14 @@ QWidget* WorstFramesTab::build_lists() {
             count_ = count_combo_->itemData(index).toInt();
             fill_worst();
             refresh_chart();
+            show_details();  // the list made again: a row selected is gone
             emit count_changed(count_);
         }
     });
     worst_head->addWidget(count_combo_);
     worst_head->addWidget(export_button([this](QMenu* menu) { fill_worst_menu(menu); }));
     worst->addLayout(worst_head);
-    worst_table_ = make_table();
+    worst_table_ = make_table(false);  // sized by fit_list
     offer_menu(worst_table_, [this](QMenu* menu) { fill_worst_menu(menu); });
     connect(worst_table_, &QTableWidget::itemSelectionChanged, this, [this] {
         const QList<QTableWidgetItem*> selected = worst_table_->selectedItems();
@@ -489,7 +518,7 @@ QWidget* WorstFramesTab::build_lists() {
     segments_head->addStretch(1);
     segments_head->addWidget(export_button([this](QMenu* menu) { fill_segments_menu(menu); }));
     segments->addLayout(segments_head);
-    segments_table_ = make_table();
+    segments_table_ = make_table(false);  // sized by fit_list
     offer_menu(segments_table_, [this](QMenu* menu) { fill_segments_menu(menu); });
     connect(segments_table_, &QTableWidget::itemSelectionChanged, this, [this] {
         const QList<QTableWidgetItem*> selected = segments_table_->selectedItems();
@@ -524,9 +553,33 @@ void WorstFramesTab::set_videos(std::vector<WeakFramesVideo> videos) {
                    return score_samples(video.result->metric_results, std::string(m.key)).has_value();
                });
     });
+    std::set<std::string> listed;  // the lines listed before
+    for (const WeakFramesVideo& video : videos_) {
+        listed.insert(video.identity);
+    }
     videos_ = std::move(videos);
-    const auto wanted = std::find_if(videos_.begin(), videos_.end(),
-                                     [this](const WeakFramesVideo& video) { return video.identity == wanted_identity_; });
+    // A video scored again is a new line, a new identity, of the same file:
+    // found by its test video and reference where its identity is gone, if
+    // one line alone, new since, has them. Its CVVDP display rows share both,
+    // as does the file scored against the same reference twice: lines listed
+    // before are not it, and with two new ones which it is is not known, so
+    // none is taken for it (#221's review: a sibling was).
+    const auto find = [this, &listed](const std::string& identity, const std::filesystem::path& file,
+                                      const std::filesystem::path& reference) {
+        const auto by_identity = std::find_if(videos_.begin(), videos_.end(),
+                                              [&](const WeakFramesVideo& video) { return video.identity == identity; });
+        if (by_identity != videos_.end() || file.empty()) {
+            return by_identity;
+        }
+        const auto alike = [&](const WeakFramesVideo& video) {
+            return video.result->distorted == file && video.result->source == reference &&
+                   !listed.contains(video.identity);
+        };
+        const auto first = std::find_if(videos_.begin(), videos_.end(), alike);
+        return first != videos_.end() && std::count_if(videos_.begin(), videos_.end(), alike) == 1 ? first
+                                                                                                    : videos_.end();
+    };
+    const auto wanted = find(wanted_identity_, wanted_file_, wanted_reference_);
     const int index = videos_.empty() ? -1 : wanted == videos_.end() ? 0 : static_cast<int>(wanted - videos_.begin());
     split_->setVisible(!videos_.empty());
     empty_note_->setVisible(videos_.empty());
@@ -543,12 +596,19 @@ void WorstFramesTab::set_videos(std::vector<WeakFramesVideo> videos) {
     }
     fit_videos_height();
     if (index >= 0) {
-        const bool same = videos_[static_cast<std::size_t>(index)].identity == chosen_identity_ && editor_ != nullptr;
+        const WeakFramesVideo& video = videos_[static_cast<std::size_t>(index)];
+        const bool same =
+            editor_ != nullptr && find(chosen_identity_, chosen_file_, chosen_reference_) - videos_.begin() == index;
         {
             const QSignalBlocker blocker(videos_table_);
             videos_table_->setCurrentCell(index, 0);
         }
-        if (same) {
+        if (same && video.identity != wanted_identity_ && wanted_file_ == video.result->distorted &&
+            wanted_reference_ == video.result->source) {
+            wanted_identity_ = video.identity;  // the chosen video, scored again
+        }
+        if (same && metric_keys(*video.result) == keys_) {
+            chosen_identity_ = video.identity;
             refresh();  // its scores may be new: the rules shown stay
         } else {
             choose_video(index);
@@ -621,6 +681,7 @@ void WorstFramesTab::set_worst_count(int count) {
     count_ = worst_frame_counts[static_cast<std::size_t>(index)];
     fill_worst();
     refresh_chart();
+    show_details();  // the list made again: a row selected is gone
 }
 
 // ---------------------------------------------------------------- choosing
@@ -631,15 +692,14 @@ void WorstFramesTab::choose_video(int index) {
     }
     const WeakFramesVideo& video = videos_[static_cast<std::size_t>(index)];
     chosen_identity_ = video.identity;
+    chosen_file_ = video.result->distorted;
+    chosen_reference_ = video.result->source;
     if (wanted_identity_.empty()) {
         wanted_identity_ = video.identity;
+        wanted_file_ = video.result->distorted;
+        wanted_reference_ = video.result->source;
     }
-    keys_.clear();
-    for (const MetricDefinition& definition : metrics()) {
-        if (score_samples(video.result->metric_results, std::string(definition.key))) {
-            keys_.emplace_back(definition.key);
-        }
-    }
+    keys_ = metric_keys(*video.result);
     // Room for a frame's lines (its time, its rank, why it is weak, a blank,
     // a score per metric), so that Details does not grow as the pointer
     // moves from one frame to another.
@@ -690,8 +750,21 @@ void WorstFramesTab::choose_video(int index) {
                           return std::find(keys_.begin(), keys_.end(), condition.key) != keys_.end();
                       });
     if (keep) {
+        // With the conditions set aside for the video before (on metrics it
+        // lacked) that are on this one's: judged by them as the exports and
+        // the command line judge it, and each saved once.
+        SegmentRules taken = shown;
+        std::vector<WeakCondition> still_unshown;
+        for (const WeakCondition& condition : unshown_) {
+            if (std::find(keys_.begin(), keys_.end(), condition.key) != keys_.end()) {
+                taken.conditions.push_back(condition);
+            } else {
+                still_unshown.push_back(condition);
+            }
+        }
+        unshown_ = std::move(still_unshown);
         editor_->set_remembered(saved_.conditions);
-        editor_->set_rules(shown);
+        editor_->set_rules(taken);
     } else {
         start_from_profile();
     }
@@ -729,10 +802,13 @@ void WorstFramesTab::start_from_profile() {
     editor_->set_remembered(saved_.conditions);
     editor_->set_rules(saved_);
     if (editor_->condition_count() == 0 && metric_ != nullptr) {
-        // None in the profile on this video's metrics: one on the metric shown.
-        SegmentRules start = saved_;
-        start.conditions = {default_weak_condition(*metric_)};
-        editor_->set_rules(start);
+        // None in the profile on this video's metrics: one on the metric shown
+        // (starting_metric, as exports and the command line choose it).
+        if (const MetricDefinition* metric = starting_metric(keys_, metric_->key)) {
+            SegmentRules start = saved_;
+            start.conditions = {default_weak_condition(*metric)};
+            editor_->set_rules(start);
+        }
     }
 }
 
@@ -985,9 +1061,9 @@ void WorstFramesTab::fill_segments() {
     for (const WeakCondition& condition : current.conditions) {
         if (std::find(keys.begin(), keys.end(), condition.key) == keys.end()) {
             keys.push_back(condition.key);
-            const QString label = qt_text(metric_definition(condition.key).short_label);
-            headers.append(app::tr("{metric} worst", {{"metric", label}}));
-            headers.append(app::tr("{metric} mean", {{"metric", label}}));
+            const MetricDefinition& definition = metric_definition(condition.key);
+            headers.append(end_heading(definition, segment_end(current, definition)));
+            headers.append(app::tr("{metric} mean", {{"metric", qt_text(definition.short_label)}}));
         }
     }
     segments_table_->clearContents();
@@ -1022,10 +1098,8 @@ void WorstFramesTab::fill_segments() {
         }
         for (const SegmentMetric& metric : segment.metrics) {
             const MetricDefinition& definition = metric_definition(metric.key);
-            // The worst end: Butteraugli's highest.
-            const std::optional<double> worst =
-                definition.direction == MetricDirection::lower_is_better ? metric.max : metric.min;
-            segments_table_->setItem(r, column++, cell(qt_text(definition.format_value(worst))));
+            const std::optional<double> end = segment_end_value(metric, segment_end(current, definition));
+            segments_table_->setItem(r, column++, cell(qt_text(definition.format_value(end))));
             segments_table_->setItem(r, column++, cell(qt_text(definition.format_value(metric.mean))));
         }
     }
@@ -1261,10 +1335,8 @@ QString WorstFramesTab::segment_details(const WeakSegment& segment) const {
     for (const SegmentMetric& metric : segment.metrics) {
         const MetricDefinition& definition = metric_definition(metric.key);
         const QString label = qt_text(definition.short_label);
-        // The worst end: Butteraugli's highest.
-        const std::optional<double> worst =
-            definition.direction == MetricDirection::lower_is_better ? metric.max : metric.min;
-        rows.emplace_back(app::tr("{metric} worst", {{"metric", label}}), qt_text(definition.format_value(worst)));
+        const SegmentEnd end = segment_end(current, definition);
+        rows.emplace_back(end_heading(definition, end), qt_text(definition.format_value(segment_end_value(metric, end))));
         rows.emplace_back(app::tr("{metric} mean", {{"metric", label}}), qt_text(definition.format_value(metric.mean)));
     }
     lines << QString() << aligned(rows);

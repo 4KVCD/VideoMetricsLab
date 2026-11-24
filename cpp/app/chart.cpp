@@ -641,10 +641,32 @@ void ChartWidget::draw(QPixmap& pixmap, const theme::ChartColours& colours) cons
     draw_axes(painter, colours);
     const QRect lines = lines_rect();
     const std::optional<QRect> band = band_rect();
+    // The shaded stretches as columns of pixels, those that touch or overlap
+    // drawn as one: thousands of weak segments (a long video's) are each a
+    // pixel or two at most, and one fill per stretch took 200 ms a paint.
+    std::vector<std::pair<int, int>> columns;
+    columns.reserve(shaded_.size());
     for (const auto& seconds : shaded_) {
-        draw_shade(painter, lines, colours.highlight, seconds);
+        const int left = std::max(lines.left(), pixel_for_time(seconds.first));
+        const int right = std::min(lines.right(), pixel_for_time(seconds.second));
+        if (right < lines.left() || left > lines.right()) {
+            continue;
+        }
+        columns.emplace_back(left, std::max(left, right));
+    }
+    std::ranges::sort(columns);
+    std::vector<std::pair<int, int>> merged;
+    for (const auto& column : columns) {
+        if (!merged.empty() && column.first <= merged.back().second + 1) {
+            merged.back().second = std::max(merged.back().second, column.second);
+        } else {
+            merged.push_back(column);
+        }
+    }
+    for (const auto& [left, right] : merged) {
+        painter.fillRect(QRect(QPoint(left, lines.top()), QPoint(right, lines.bottom())), colours.highlight);
         if (band) {
-            draw_shade(painter, *band, colours.highlight, seconds);
+            painter.fillRect(QRect(QPoint(left, band->top()), QPoint(right, band->bottom())), colours.highlight);
         }
     }
     draw_highlight(painter, lines, colours.highlight);

@@ -149,6 +149,11 @@ public:
 
     // How far `path` has got: complete once read; nothing when not listed.
     std::optional<BitrateState> state_of(const std::filesystem::path& path) const;
+    // Whether an export needs `path` read (add_and_analyze): not listed, not
+    // read yet or stopped, or read from a file another has replaced since
+    // (an encode made again under its name). A file that could not be read
+    // is not tried again.
+    bool wants_reading(const std::filesystem::path& path) const;
     // Lists `paths` as `from` has read them (their packets, details and
     // colours; the first as the reference), reading nothing: the panel an
     // export draws apart from the tab (graph_bundle.h). Those `from` has not
@@ -298,6 +303,8 @@ private:
         double start = 0;                         // the file's time at the graph's 0
     };
     std::vector<DrawnPlot> current_plots_;
+    // Whether a range is chosen, in frames or (other frame rates) in seconds.
+    bool range_chosen() const;
     // The graph's values are divided by this and shown in this unit (see
     // refresh_plot).
     double value_scale_ = 1;

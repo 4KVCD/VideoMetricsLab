@@ -192,12 +192,14 @@ void MainWindow::fill_videos_export_menu(QMenu& menu) {
                               : rows.size() == 1 ? ExportScope::this_video
                                                  : ExportScope::selected_videos;
     QAction* contents = menu.addAction(export_action_text(scope, items));
-    // As the right-click menu's: of videos whose ticked metrics are all
-    // scored, or failed on the run (scored_video).
-    const bool all_scored = std::all_of(rows.begin(), rows.end(), [this](int row) {
+    // As the right-click menu's: usable where one of the rows is a video
+    // whose ticked metrics are all scored, or failed on the run
+    // (scored_video); the export takes those
+    // (export_rows), leaving out a row still to be calculated.
+    const bool any_scored = std::any_of(rows.begin(), rows.end(), [this](int row) {
         return scored_video(*rows_[static_cast<std::size_t>(row)]).has_value();
     });
-    contents->setEnabled(any && all_scored && !export_contents(items).isEmpty());
+    contents->setEnabled(any_scored && !export_contents(items).isEmpty());
     // Each entry takes the rows as they are when it is clicked
     // (export_menu_rows), not as the menu opened: the menu's own event loop
     // delivers a run's results while it is open, and a row's run that turned
@@ -595,15 +597,56 @@ void MainWindow::export_automatically(const RowData& row_data) {
                 folder);
 }
 
+void MainWindow::export_when_whole(const RowData& row_data) {
+    if (!settings_.after_run_export) {
+        return;
+    }
+    // The row whose entry holds `row_data`'s scores: its own, or the video's
+    // it scores another display for.
+    std::shared_ptr<RowData> owner;
+    for (const std::shared_ptr<RowData>& candidate : rows_) {
+        if (row_data.cvvdp_display_of ? !candidate->cvvdp_display_of && candidate->path == *row_data.cvvdp_display_of
+                                      : candidate.get() == &row_data) {
+            owner = candidate;
+            break;
+        }
+    }
+    // Its own video run and finished in this run (not a result left from
+    // an earlier one): else its own end exports it, or nothing does.
+    const auto owner_job = std::find(job_rows_.begin(), job_rows_.end(), owner);
+    if (!owner || owner_job == job_rows_.end() ||
+        !finished_jobs_.contains(static_cast<int>(owner_job - job_rows_.begin())) || !owner->completed_run ||
+        owner->completed_run->partial || owner->completed_run->record != run_record_) {
+        return;
+    }
+    // Each display row of its in this run, still in the table, over:
+    // finished or failed (mark_job_over).
+    bool whole = true;
+    for (std::size_t job = 0; job < job_rows_.size(); ++job) {
+        const RowData& job_row = *job_rows_[job];
+        if (job_row.cvvdp_display_of && *job_row.cvvdp_display_of == owner->path && row_index_of(&job_row) &&
+            !finished_jobs_.contains(static_cast<int>(job))) {
+            whole = false;
+        }
+    }
+    std::erase(auto_export_waiting_, owner);
+    if (whole) {
+        export_automatically(*owner);
+    } else {
+        auto_export_waiting_.push_back(owner);
+    }
+}
+
 void MainWindow::queue_bundle(PendingBundle bundle) {
     // What the Bitrate tab has not read, nor is reading, is read now: a
-    // video loaded with saved scores, say. A file it could not read is not
-    // tried again. They are read where they are now, the paths the export
-    // looks their bitrate up by, not where saved scores say they were.
+    // video loaded with saved scores, say, or one encoded again under its
+    // name since the tab read it (add_files reads that again). A file it
+    // could not read is not tried again. They are read where they are now,
+    // the paths the export looks their bitrate up by, not where saved scores
+    // say they were.
     const std::vector<VideoInfo> files = bitrate_files(bundle.reference, bundle.videos, bundle.saved_bitrate);
     const bool unread = std::any_of(files.begin(), files.end(), [this](const VideoInfo& file) {
-        const std::optional<BitrateState> state = bitrate_panel_->state_of(file.path);
-        return !state || state == BitrateState::ready || state == BitrateState::stopped;
+        return bitrate_panel_->wants_reading(file.path);
     });
     if (unread) {
         bitrate_panel_->add_and_analyze(files);
@@ -625,7 +668,7 @@ void MainWindow::queue_bundle(PendingBundle bundle) {
     }
 }
 
-void MainWindow::write_ready_bundles() {
+void MainWindow::write_ready_bundles(bool now) {
     const BundleStyle style{video_colors_,
                             theme::export_chart_colours(settings_.export_graph_theme,
                                                         settings_.export_graph_background,
@@ -633,7 +676,7 @@ void MainWindow::write_ready_bundles() {
     for (auto bundle = pending_bundles_.begin(); bundle != pending_bundles_.end();) {
         const std::vector<std::filesystem::path> paths =
             bitrate_paths(bundle->reference, bundle->videos, bundle->saved_bitrate);
-        if (std::any_of(paths.begin(), paths.end(), [this](const auto& path) {
+        if (!now && std::any_of(paths.begin(), paths.end(), [this](const auto& path) {
                 return still_reading(*bitrate_panel_, path);
             })) {
             ++bundle;

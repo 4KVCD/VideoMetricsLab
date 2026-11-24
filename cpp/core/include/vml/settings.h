@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "vml/notifications.h"
@@ -318,5 +319,11 @@ struct Settings {
     bool* default_compute(std::string_view key);
     const bool* default_compute(std::string_view key) const;
 };
+
+// The settings that hold a notification service's key, or a URL or header
+// with one in it: kept as stored_secret keeps them, never written to the
+// log, entered in Settings > Notifications' key fields. Each one's name in
+// settings.json and its member. The one list of them.
+const std::vector<std::pair<std::string_view, std::string Settings::*>>& secret_settings();
 
 }  // namespace vml
