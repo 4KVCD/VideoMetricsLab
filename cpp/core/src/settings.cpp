@@ -75,6 +75,7 @@ const std::unordered_map<std::string, Field>& fields() {
         {"use_cache", &Settings::use_cache},
         {"check_frame_counts", &Settings::check_frame_counts},
         {"check_for_updates", &Settings::check_for_updates},
+        {"confirm_close_during_run", &Settings::confirm_close_during_run},
         {"skipped_update_version", &Settings::skipped_update_version},
         {"language", &Settings::language},
         {"theme", &Settings::theme},
@@ -533,6 +534,7 @@ std::string Settings::text() const {
     data["use_cache"] = use_cache;
     data["check_frame_counts"] = check_frame_counts;
     data["check_for_updates"] = check_for_updates;
+    data["confirm_close_during_run"] = confirm_close_during_run;
     data["skipped_update_version"] = skipped_update_version;
     data["language"] = language;
     data["theme"] = theme;

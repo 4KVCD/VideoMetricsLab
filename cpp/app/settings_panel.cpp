@@ -962,6 +962,11 @@ QGroupBox* SettingsPanel::build_window_box() {
     check_updates->setChecked(settings_.check_for_updates);
     connect(check_updates, &QCheckBox::toggled, this, [this] { on_edited(); });
     window_layout->addWidget(check_updates);
+    confirm_close = new QCheckBox(app::tr("Ask before closing the window during a run"));
+    confirm_close->setToolTip(app::tr("Closing the window stops a run in progress. Ticked, the window asks first."));
+    confirm_close->setChecked(settings_.confirm_close_during_run);
+    connect(confirm_close, &QCheckBox::toggled, this, [this] { on_edited(); });
+    window_layout->addWidget(confirm_close);
     return window_box;
 }
 
@@ -1009,6 +1014,11 @@ void SettingsPanel::show_film_grain_default() {
     const QSignalBlocker blocker(film_grain_default);
     const int index = film_grain_default->findData(QString::fromStdString(settings_.film_grain_default));
     film_grain_default->setCurrentIndex(index < 0 ? 0 : index);  // an unknown value asks
+}
+
+void SettingsPanel::show_confirm_close() {
+    const QSignalBlocker blocker(confirm_close);
+    confirm_close->setChecked(settings_.confirm_close_during_run);
 }
 
 void SettingsPanel::clear_saved_results() {
@@ -1170,6 +1180,7 @@ void SettingsPanel::read_controls() {
         settings_.remembered_tests.clear();
     }
     settings_.check_for_updates = check_updates->isChecked();
+    settings_.confirm_close_during_run = confirm_close->isChecked();
     settings_.language = language->currentData().toString().toStdString();
     settings_.theme = theme_buttons->checkedButton()->property("value").toString().toStdString();
     settings_.light_look = light_look_buttons->checkedButton()->property("value").toString().toStdString();

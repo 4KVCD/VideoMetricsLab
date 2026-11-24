@@ -149,6 +149,9 @@ struct Settings {
     bool check_frame_counts = false;
 
     bool check_for_updates = true;
+    // Whether closing the window during a run asks first (the run stops):
+    // off once "Don't ask again" was ticked, back on in Settings > General.
+    bool confirm_close_during_run = true;
     std::string skipped_update_version;
     std::string language;
     std::string theme;

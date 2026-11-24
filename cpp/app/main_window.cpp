@@ -365,6 +365,21 @@ std::vector<QThread*> MainWindow::live_workers() const {
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
+    // A run in progress, paused or not, stops when the window closes: asked
+    // first, unless told not to. Not while Windows ends the session, which
+    // a question would hold up.
+    if (!closing_ && run_active_ && settings_.confirm_close_during_run && !qApp->isSavingSession()) {
+        const std::optional<CloseAnswer> answer = dialogs_.ask_close_during_run();
+        if (!answer) {
+            event->ignore();  // Keep running
+            return;
+        }
+        if (answer->dont_ask_again) {
+            settings_.confirm_close_during_run = false;
+            save_settings();
+            settings_panel_->show_confirm_close();
+        }
+    }
     // Don't close while background work still writes into the widgets: it
     // would crash the app and leave the process running. The work is told
     // to stop (a run ends the programs it started), and the window closes

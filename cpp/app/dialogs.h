@@ -26,6 +26,11 @@ struct FrameRateAnswer {
     bool for_the_others = false;  // also for the other videos without one
 };
 
+// Closing the window during a run, answered Stop and close.
+struct CloseAnswer {
+    bool dont_ask_again = false;  // Settings' confirm_close_during_run turned off
+};
+
 struct Dialogs {
     // A message with an OK button: information, and a failure (critical).
     std::function<void(const QString& title, const QString& text)> inform;
@@ -48,6 +53,9 @@ struct Dialogs {
     // have none.
     std::function<std::optional<FrameRateAnswer>(const QString& video, double reference_fps, int others)>
         ask_frame_rate;
+    // Whether the window closes, stopping the run in progress: nothing for
+    // Keep running, the default.
+    std::function<std::optional<CloseAnswer>()> ask_close_during_run;
     // The folder exports start in (issue #19): Settings' Export folder, or
     // Documents where it is blank. save_file starts a bare file name there.
     std::function<QString()> export_folder;

@@ -97,6 +97,9 @@ public:
     // Shows the film grain default the window has already saved (answered
     // "Don't ask again"), without treating it as an edit.
     void show_film_grain_default();
+    // Settings' "Ask before closing the window during a run", after the
+    // window's question was told not to ask again.
+    void show_confirm_close();
     // Deletes the saved results, after asking.
     void clear_saved_results();
     // Shows the weak segment profiles the window has already saved (Weak
@@ -184,6 +187,7 @@ public:
     QCheckBox* remember_size = nullptr;
     QCheckBox* remember_videos = nullptr;
     QCheckBox* check_updates = nullptr;
+    QCheckBox* confirm_close = nullptr;
     // Notifications (settings_notifications.cpp): when, the services and
     // their keys, how the keys are stored, and the message's templates with
     // their preview.
