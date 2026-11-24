@@ -482,7 +482,9 @@ private:
     void apply_metric_visibility();
     // Add/remove metrics' panel (MetricsPanel), its top left at `top_left`,
     // or its top right at `top_right` (under the button).
-    void show_metrics_panel(const QPoint& top_left, std::optional<QPoint> top_right = std::nullopt);
+    // `anchor`: the button that opened it, whose next click closes it.
+    void show_metrics_panel(const QPoint& top_left, std::optional<QPoint> top_right = std::nullopt,
+                            QWidget* anchor = nullptr);
     // The panel's ticks changed: `shown` are the metrics whose columns show.
     void on_metrics_shown_changed(const std::set<std::string>& shown);
     // The panel's switch for the planes' columns: its own handling, as the

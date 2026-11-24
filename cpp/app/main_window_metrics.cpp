@@ -124,11 +124,12 @@ void MainWindow::apply_metric_visibility() {
     metrics_count_label_->setText(shown_count_text(shown, listed_metric_count()));
 }
 
-void MainWindow::show_metrics_panel(const QPoint& top_left, std::optional<QPoint> top_right) {
+void MainWindow::show_metrics_panel(const QPoint& top_left, std::optional<QPoint> top_right, QWidget* anchor) {
     if (run_active_) {
         return;
     }
     auto* panel = new MetricsPanel(this);
+    panel->set_anchor(anchor);
     MetricList* list = panel->list();
     std::set<std::string> shown;
     for (const MetricColumn& item : metric_columns()) {

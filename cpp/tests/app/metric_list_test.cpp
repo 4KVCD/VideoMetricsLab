@@ -5,9 +5,11 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QLabel>
+#include <QPointer>
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QTableWidget>
+#include <QTest>
 #include <QToolButton>
 
 #include <gtest/gtest.h>
@@ -15,6 +17,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 
 #include "main_window.h"
 #include "metric_list.h"
@@ -112,6 +115,39 @@ TEST(MetricList, PanelShrinksBackWhenSpecializedFolds) {
     EXPECT_EQ(panel->height(), folded);
     EXPECT_EQ(panel->list()->height(), panel->list()->sizeHint().height());
     panel->hide();
+}
+
+// The button that opened the panel closes it: a press on it while the panel
+// is open closes the panel and is not replayed to the button, whose click
+// would open it again at once (#237). A press elsewhere outside it closes
+// it and is still replayed, to reach what it lands on. (Qt's offscreen
+// platform, the tests', replays nothing, so what is asked of Qt is checked:
+// Qt::WA_NoMouseReplay.)
+TEST(MetricList, ASecondClickOnTheButtonClosesThePanel) {
+    QWidget window;
+    window.resize(500, 300);
+    auto* button = new QPushButton("Add/remove metrics", &window);
+    button->setGeometry(300, 10, 160, 30);
+    auto* other = new QPushButton("Other", &window);
+    other->setGeometry(20, 10, 100, 30);
+    window.show();
+    QApplication::processEvents();
+    // The panel's answer to a press on `target`: whether it closed, and
+    // whether the press may be replayed.
+    const auto press_on = [&](QWidget* target) {
+        QPointer<MetricsPanel> panel = new MetricsPanel(&window);
+        panel->set_anchor(button);
+        panel->show_at(button->mapToGlobal(button->rect().bottomLeft()));
+        QApplication::processEvents();
+        QTest::mousePress(panel, Qt::LeftButton, {}, panel->mapFromGlobal(target->mapToGlobal(target->rect().center())));
+        const bool closed = !panel->isVisible();
+        const bool replayed = !panel->testAttribute(Qt::WA_NoMouseReplay);
+        QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        EXPECT_TRUE(panel.isNull());  // deleted as it closed
+        return std::pair(closed, replayed);
+    };
+    EXPECT_EQ(press_on(button), std::pair(true, false));
+    EXPECT_EQ(press_on(other), std::pair(true, true));
 }
 
 // Settings: Specialized open, any number ticked, no switch for the planes.

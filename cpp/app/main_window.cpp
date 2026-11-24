@@ -983,7 +983,8 @@ QHBoxLayout* MainWindow::build_table_heading() {
     connect(metrics_button_, &QPushButton::clicked, this,
             [this] {
                 show_metrics_panel(metrics_button_->mapToGlobal(metrics_button_->rect().bottomLeft()),
-                                   metrics_button_->mapToGlobal(metrics_button_->rect().bottomRight()));
+                                   metrics_button_->mapToGlobal(metrics_button_->rect().bottomRight()),
+                                   metrics_button_);
             });
     auto* table_heading = new QHBoxLayout;
     auto* title = new QLabel(app::tr("Test videos"));  // VML Modern's: the card's title

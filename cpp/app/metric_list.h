@@ -8,6 +8,7 @@
 
 #include <QFrame>
 #include <QPoint>
+#include <QPointer>
 #include <QString>
 #include <QWidget>
 
@@ -108,12 +109,19 @@ public:
     // Shows the panel with its top-right corner at `top_right` (a button's
     // bottom right), or its top left at `top_left`, kept on the screen.
     void show_at(const QPoint& top_left, std::optional<QPoint> top_right = std::nullopt);
+    // The button that opens the panel: a press on it while the panel is open
+    // closes the panel, and is not passed on to the button, whose click would
+    // open it again at once. A press anywhere else outside the panel closes
+    // it and still reaches what it lands on.
+    void set_anchor(QWidget* anchor) { anchor_ = anchor; }
 
 protected:
     void keyPressEvent(QKeyEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
 
 private:
     MetricList* list_;
+    QPointer<QWidget> anchor_;
 };
 
 }  // namespace vml::app
