@@ -22,6 +22,12 @@ const app_log::Logger logger("vml.libvmaf_cpu");
 
 using Value = CpuFeature::Value;
 
+// `scorer`'s `error` after it started, as GpuMetricsFailed: score_plan then
+// calculates its metrics in libvmaf instead.
+GpuMetricsFailed gpu_failed(const GpuMetricsScorer& scorer, const std::exception& error) {
+    return GpuMetricsFailed(metric_labels(scorer.metrics(), " and ") + " on the GPU failed: " + error.what());
+}
+
 // libvmaf's CAMBI score without options; with them it is named from them
 // (cambi_feature).
 constexpr std::string_view cambi_default_feature = "Cambi_feature_cambi_score";
@@ -386,6 +392,9 @@ void CpuScorer::score(VmafPicture& reference, VmafPicture& distorted) {
     if (gpu_ && count_ % step_ == 0) {  // only the pairs scored go to the GPU
         try {
             gpu_->add(reference, distorted);  // copies the planes before it returns
+        } catch (const std::exception& error) {
+            give_back(reference, distorted);
+            throw gpu_failed(*gpu_, error);
         } catch (...) {
             give_back(reference, distorted);
             throw;
@@ -553,8 +562,14 @@ PairScores CpuScorer::finish() {
         check_libvmaf(library_.read_pictures(context_, nullptr, nullptr, 0), "Finishing");
     }
     // The GPU's values, one for each pair scored (every step_-th frame).
-    const std::map<std::string, std::vector<double>> on_gpu =
-        gpu_ ? gpu_->finish() : std::map<std::string, std::vector<double>>{};
+    std::map<std::string, std::vector<double>> on_gpu;
+    if (gpu_) {
+        try {
+            on_gpu = gpu_->finish();
+        } catch (const std::exception& error) {
+            throw gpu_failed(*gpu_, error);
+        }
+    }
     for (unsigned frame = 0; frame < count_; frame += step_) {
         result.frames.push_back(frame);
     }

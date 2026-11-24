@@ -197,8 +197,10 @@ void start_beside(std::optional<BesideScorer>& scorer, const GpuPlan& plan, int 
 // the same frames.
 void add_beside(PairScores& scores, std::optional<BesideScorer>& beside);
 
-// The GPU's turn: one GPU pass at a time in this process (the Python app's
-// gpu.GPU_PASS), so that no video's GPU metrics run beside another's.
+// The GPU's turn: one GPU pass (VMAF, NEG and VMAF v1 on the GPU, Vship's
+// metrics) at a time in this process (the Python app's gpu.GPU_PASS). The
+// lighter GPU work of a CPU task (HDR VMAF's features, CIEDE2000 and CAMBI
+// of the CPU's metrics) does not take it and runs beside a pass.
 std::timed_mutex& gpu_pass();
 
 // Takes the GPU's turn (gpu_pass), waiting while another pass has it:

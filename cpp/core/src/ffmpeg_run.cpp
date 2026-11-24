@@ -25,6 +25,7 @@
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
 #include "vml/gpu_checks.h"
+#include "vml/gpu_cpu_metrics.h"
 #include "vml/gpu_frames.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/grain_feed.h"
@@ -771,13 +772,24 @@ ParsedScores score_decoded_here(const RunEnvironment& environment, const VideoIn
 // copies and pipes behind it. Otherwise, or when that decoding fails after
 // it has started, FFmpeg decodes them. libvmaf's CUDA code takes only
 // NVIDIA's decoder's pictures and the software decoder's, so with it VMAF
-// and NEG without VMAF v1 are decoded here only by those.
+// and NEG without VMAF v1 are decoded here only by those. CIEDE2000 and
+// CAMBI on the GPU (extra_gpu) that fail partway make the pass again with
+// them in libvmaf on the CPU.
 ParsedScores score_plan(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
                         const VmafOptions& options, const std::optional<CropBox>& source_crop,
                         const std::optional<CropBox>& distorted_crop, const GpuPlan& plan, double fps,
                         long long total_frames, const HardwareDecoding& decoding,
                         const ProgressCallback& on_progress, const StatusCallback& on_status,
-                        const CancelToken& cancel) {
+                        const CancelToken& cancel);
+
+// score_plan, without making the pass again for CIEDE2000 and CAMBI.
+ParsedScores score_plan_as_planned(const RunEnvironment& environment, const VideoInfo& source,
+                                   const VideoInfo& distorted, const VmafOptions& options,
+                                   const std::optional<CropBox>& source_crop,
+                                   const std::optional<CropBox>& distorted_crop, const GpuPlan& plan, double fps,
+                                   long long total_frames, const HardwareDecoding& decoding,
+                                   const ProgressCallback& on_progress, const StatusCallback& on_status,
+                                   const CancelToken& cancel) {
     // A video whose size changes is decoded by FFmpeg, which scales each of
     // its frames (size_changes.h); the app's decoders read one size.
     const std::optional<std::pair<std::string, std::string>> decoders =
@@ -826,6 +838,29 @@ ParsedScores score_plan(const RunEnvironment& environment, const VideoInfo& sour
     }
     return execute_gpu_run(environment, source, distorted, options, source_crop, distorted_crop, plan, fps,
                            total_frames, decoding, on_progress, on_status, cancel);
+}
+
+ParsedScores score_plan(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
+                        const VmafOptions& options, const std::optional<CropBox>& source_crop,
+                        const std::optional<CropBox>& distorted_crop, const GpuPlan& plan, double fps,
+                        long long total_frames, const HardwareDecoding& decoding,
+                        const ProgressCallback& on_progress, const StatusCallback& on_status,
+                        const CancelToken& cancel) {
+    try {
+        return score_plan_as_planned(environment, source, distorted, options, source_crop, distorted_crop, plan, fps,
+                                     total_frames, decoding, on_progress, on_status, cancel);
+    } catch (const GpuMetricsFailed& error) {
+        // Here, in the process that scores, so that the caller's fallbacks (vvdec-vulkan turned off, FFmpeg's
+        // filters, which cannot score the app's own metrics) are not taken for a failure of these two alone.
+        logger.warning(std::string(error.what()) + "; the pass is made again with them on the CPU");
+        if (on_status) {
+            on_status({std::string(error.what()) + "; calculating them on the CPU\xE2\x80\xA6"});
+        }
+        GpuPlan on_cpu = plan;
+        on_cpu.extra_gpu.reset();
+        return score_plan_as_planned(environment, source, distorted, options, source_crop, distorted_crop, on_cpu,
+                                     fps, total_frames, decoding, on_progress, on_status, cancel);
+    }
 }
 
 // ----------------------------------------------- PSNR, SSIM and XPSNR in the app

@@ -23,6 +23,14 @@ namespace vml {
 std::vector<std::string> gpu_metrics_of(const std::vector<std::string>& metrics, bool odd_size,
                                         const std::vector<std::pair<std::string, std::string>>& cambi_options);
 
+// CIEDE2000 or CAMBI on the GPU failed after they started (a lost device, say),
+// as CpuScorer says it: the pass is made again with them in libvmaf on the
+// CPU (score_plan), its other metrics failing for this alone otherwise.
+class GpuMetricsFailed : public LibvmafError {
+public:
+    using LibvmafError::LibvmafError;
+};
+
 // Calculates CIEDE2000 and CAMBI of the pairs given, in a VMAF v1 context of
 // the engine without VMAF's own features.
 class GpuMetricsScorer {
