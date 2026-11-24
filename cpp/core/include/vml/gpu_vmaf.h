@@ -22,6 +22,7 @@
 
 #include "vml/cancel.h"
 #include "vml/libvmaf_cpu.h"
+#include "vml/threads.h"
 #include "vml/video.h"
 #include "vml/vmaf_hdr.h"
 #include "vml/vmaf_vulkan.h"
@@ -167,6 +168,12 @@ public:
     // (std::logic_error otherwise).
     void add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot,
                      const std::function<void(Plane, Plane)>& also);
+    // add_decoded beside `alongside`, the pass's GPU scorers taking the same
+    // pair: from NVIDIA's decoders at the same time, on a thread of its own,
+    // else one after the other. Returns once both are done; throws
+    // `alongside`'s failure, else add_decoded's.
+    void add_decoded_alongside(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot,
+                               const std::function<void()>& alongside);
 
     // The CPU extractors' scores, then HDR VMAF's. Throws LibvmafError when
     // the two were not scored for the same frames.
@@ -177,6 +184,7 @@ private:
 
     std::optional<CpuScorer> cpu_;
     std::unique_ptr<HdrScorer> hdr_;
+    std::unique_ptr<SideThread> side_;  // add_decoded_alongside's, made at its first; last, as its jobs use the scorers
 };
 
 // Whether a pass may ask for its pictures to stay on the GPU. Not with CPU metrics

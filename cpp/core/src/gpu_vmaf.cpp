@@ -382,6 +382,27 @@ void BesideScorer::add_decoded(GpuFrameStream& reference, int reference_slot, Gp
     cpu_alone().add_decoded(reference, reference_slot, test, test_slot, also);
 }
 
+void BesideScorer::add_decoded_alongside(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test,
+                                         int test_slot, const std::function<void()>& alongside) {
+    const auto add = [&] { add_decoded(reference, reference_slot, test, test_slot); };
+    // Only NVIDIA's library downloads on a CUDA stream of its own, apart from
+    // its copies on the GPU (native/nvdec_frames.cpp's download_stream). The
+    // other decoders' downloads and copies of one stream are not known to run
+    // at once (vvdec-vulkan's take turns under its decoder's lock).
+    if (!gpu_decoder(reference.backend()).cuda_copies || !gpu_decoder(test.backend()).cuda_copies) {
+        add();
+        alongside();
+        return;
+    }
+    // At the same time, the CPU's downloads wait on the PCIe bus while the
+    // GPU's scorers wait on the GPU (an RTX 5090's 4K pair with all seven
+    // metrics: 4.5 ms one after the other, 3.8 at once).
+    if (!side_) {
+        side_ = std::make_unique<SideThread>();
+    }
+    side_->both(add, alongside);
+}
+
 PairScores BesideScorer::finish() {
     if (!hdr_) {
         return cpu_->finish();
@@ -1028,23 +1049,29 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
                                     });
                 return;
             }
+            const auto add_to_scorer = [&] {
+                if (mixed) {
+                    scorer->add_shared_mixed(
+                        [&](std::uint8_t* plane) { reference.download(reference_slot, plane); },
+                        [&](std::uint64_t address, std::int64_t pitch) -> std::uint64_t {
+                            if (scorer->waits_on_decoder()) {
+                                return test.copy_luma_async(test_slot, address, pitch);
+                            }
+                            test.copy_luma(test_slot, address, pitch);
+                            return 0;
+                        });
+                } else if (shared) {
+                    scorer->add_shared(luma_copy(*scorer, reference, reference_slot),
+                                       luma_copy(*scorer, test, test_slot));
+                } else {
+                    scorer->add_decoded([&](std::uint8_t* plane) { reference.download(reference_slot, plane); },
+                                        [&](std::uint8_t* plane) { test.download(test_slot, plane); });
+                }
+            };
             if (beside) {
-                beside->add_decoded(reference, reference_slot, test, test_slot);
-            }
-            if (mixed) {
-                scorer->add_shared_mixed([&](std::uint8_t* plane) { reference.download(reference_slot, plane); },
-                                         [&](std::uint64_t address, std::int64_t pitch) -> std::uint64_t {
-                                             if (scorer->waits_on_decoder()) {
-                                                 return test.copy_luma_async(test_slot, address, pitch);
-                                             }
-                                             test.copy_luma(test_slot, address, pitch);
-                                             return 0;
-                                         });
-            } else if (shared) {
-                scorer->add_shared(luma_copy(*scorer, reference, reference_slot), luma_copy(*scorer, test, test_slot));
+                beside->add_decoded_alongside(reference, reference_slot, test, test_slot, add_to_scorer);
             } else {
-                scorer->add_decoded([&](std::uint8_t* plane) { reference.download(reference_slot, plane); },
-                                    [&](std::uint8_t* plane) { test.download(test_slot, plane); });
+                add_to_scorer();
             }
         },
         on_progress, cancel);

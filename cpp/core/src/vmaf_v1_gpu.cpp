@@ -1498,10 +1498,12 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
                 // The CPU's metrics read a download of the luma the GPU's
                 // scorers copy where it is; HDR VMAF's GPU copies the
                 // pictures too.
+                const auto add_to_scorer = [&] { scorer->add_decoded(reference, reference_slot, test, test_slot); };
                 if (beside) {
-                    beside->add_decoded(reference, reference_slot, test, test_slot);
+                    beside->add_decoded_alongside(reference, reference_slot, test, test_slot, add_to_scorer);
+                } else {
+                    add_to_scorer();
                 }
-                scorer->add_decoded(reference, reference_slot, test, test_slot);
                 return;
             }
             // The CPU's metrics copy out their luma while the GPU's scorers

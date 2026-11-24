@@ -833,10 +833,12 @@ PairScores score_decoded_hdr(const VideoInfo& source, const VideoInfo& distorted
                 return;
             }
             // The CPU's metrics read a download of the planes they need.
+            const auto add_to_scorer = [&] { scorer->add_decoded(reference, reference_slot, test, test_slot); };
             if (beside) {
-                beside->add_decoded(reference, reference_slot, test, test_slot);
+                beside->add_decoded_alongside(reference, reference_slot, test, test_slot, add_to_scorer);
+            } else {
+                add_to_scorer();
             }
-            scorer->add_decoded(reference, reference_slot, test, test_slot);
         },
         on_progress, cancel);
     PairScores scores = scorer->finish();
