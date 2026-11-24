@@ -1,8 +1,8 @@
 #!/bin/bash
 # Builds libvmaf-fast's Vulkan VMAF engine for macOS (arm64),
 # vmaf_vulkan.dylib, into resources/tools/vmaf_vulkan beside Windows'
-# vmaf_vulkan.dll: VMAF v0.6.1, VMAF NEG, VMAF v1's and HDR VMAF's features
-# on the GPU, on MoltenVK through the loader build_vship_macos.sh bundles in tools/vulkan
+# vmaf_vulkan.dll: VMAF v0.6.1, VMAF NEG, VMAF v1's and HDR VMAF's features,
+# CIEDE2000 and CAMBI on the GPU, on MoltenVK through the loader build_vship_macos.sh bundles in tools/vulkan
 # (the library's rpath, @loader_path/../vulkan). libvmaf-fast's own script,
 # from the commit pinned here (its macos-port branch), builds it.
 #
@@ -12,7 +12,7 @@
 # committed (.gitignore): the release script runs this.
 set -euo pipefail
 
-commit="3423dfd285e4eed2a7993e58d5092320c50fd621"  # libvmaf-fast macos-port with fast c3f7a430 merged, 2026-11-22
+commit="6d15aeec1ada49448ead3aa105d34cbd3c74c363"  # libvmaf-fast macos-port with fast 549223f0 merged, 2026-11-24
 
 project="$(cd "$(dirname "$0")/.." && pwd)"
 target="$project/resources/tools/vmaf_vulkan"
