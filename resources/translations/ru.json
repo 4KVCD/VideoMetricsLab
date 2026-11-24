@@ -109,7 +109,7 @@
   "Whole names": "Полные названия",
   "Characters from the start:": "Символов с начала:",
   "from the end:": "с конца:",
-  "Progress of the metrics being calculated": "Ход вычисления метрик",
+  "Progress of the metrics being calculated: {state}": "Ход вычисления метрик: {state}",
   "Click to open the Videos tab.": "Нажмите, чтобы открыть вкладку «Видео».",
   "Update to {version}": "Обновить до {version}",
   "{app} {version} is available. Click for what's new and the download.": "Доступна версия {app} {version}. Нажмите, чтобы узнать о новом и скачать.",
@@ -1371,7 +1371,12 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "Модель столбца HDR VMAF (входящие в комплект модели HDR VMAF от Netflix). «Авто» выбирает модель 1080p для трёх высот экрана или 4K-модель для полутора высот при сравнении 4K, как у VMAF v0.6.1. Только для видео PQ (HDR10).",
   "Y, U and V of the YUV metrics": "Y, U и V для метрик YUV",
   "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "Столбец для каждой из плоскостей Y, U и V рядом с PSNR YUV, SSIM YUV, MS-SSIM YUV и PSNR-HVS-M, вычисляемый вместе с ними без дополнительных затрат. Для уже оценённых видео нужно снова нажать «Вычислить», чтобы заполнить их.",
-  "Calculated with {metric}.": "Вычисляется вместе с {metric}."
+  "Calculated with {metric}.": "Вычисляется вместе с {metric}.",
+  "Done": "Завершено",
+  "Ready": "Готово к запуску",
+  "Ready: no test videos ticked.": "Готово к запуску: не отмечено ни одного тестового видео.",
+  "Ready: {videos}, {metrics}.": "Готово к запуску: {videos}, {metrics}.",
+  "{low} to {high} metrics": "от {low} до {high} метрик"
  },
  "plurals": {
   "{count} shown": ["{count} показана", "{count} показаны", "{count} показано"],
@@ -1536,6 +1541,10 @@
    "Сохранён {count} результат, эталонное видео которого пропало: удалите его на вкладке «Сохранённые результаты».",
    "Сохранено {count} результата, эталонные видео которых пропали: удалите их на вкладке «Сохранённые результаты».",
    "Сохранено {count} результатов, эталонные видео которых пропали: удалите их на вкладке «Сохранённые результаты»."
-  ]
+  ],
+  "Click to open the Videos tab: the failed video's row says more.": ["Нажмите, чтобы открыть вкладку «Видео»: в строке видео с ошибкой есть подробности.", "Нажмите, чтобы открыть вкладку «Видео»: в строках видео с ошибкой есть подробности.", "Нажмите, чтобы открыть вкладку «Видео»: в строках видео с ошибкой есть подробности."],
+  "{count} metric": ["{count} метрика", "{count} метрики", "{count} метрик"],
+  "{count} metric each": ["по {count} метрике", "по {count} метрики", "по {count} метрик"],
+  "{count} test video ticked": ["отмечено {count} тестовое видео", "отмечено {count} тестовых видео", "отмечено {count} тестовых видео"]
  }
 }

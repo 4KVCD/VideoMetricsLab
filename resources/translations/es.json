@@ -109,7 +109,7 @@
   "Whole names": "Nombres completos",
   "Characters from the start:": "Caracteres del inicio:",
   "from the end:": "del final:",
-  "Progress of the metrics being calculated": "Progreso de las métricas en cálculo",
+  "Progress of the metrics being calculated: {state}": "Progreso de las métricas en cálculo: {state}",
   "Click to open the Videos tab.": "Haz clic para abrir la pestaña Videos.",
   "Update to {version}": "Actualizar a {version}",
   "{app} {version} is available. Click for what's new and the download.": "{app} {version} está disponible. Haz clic para ver las novedades y la descarga.",
@@ -1371,7 +1371,12 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "El modelo de la columna HDR VMAF (los modelos HDR VMAF incluidos de Netflix). Automático elige el modelo 1080p a tres alturas de pantalla, o el 4K a una y media en comparaciones 4K, como con VMAF v0.6.1. Solo para vídeos PQ (HDR10).",
   "Y, U and V of the YUV metrics": "Y, U y V de las métricas YUV",
   "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "Una columna para cada uno de los planos Y, U y V junto a PSNR YUV, SSIM YUV, MS-SSIM YUV y PSNR-HVS-M, calculada con ellas sin coste adicional. Los vídeos ya puntuados necesitan volver a Calcular para rellenarlas.",
-  "Calculated with {metric}.": "Calculado con {metric}."
+  "Calculated with {metric}.": "Calculado con {metric}.",
+  "Done": "Terminado",
+  "Ready": "Listo",
+  "Ready: no test videos ticked.": "Listo: ningún video de prueba marcado.",
+  "Ready: {videos}, {metrics}.": "Listo: {videos}, {metrics}.",
+  "{low} to {high} metrics": "de {low} a {high} métricas"
  },
  "plurals": {
   "{count} shown": ["{count} mostrada", "{count} mostradas"],
@@ -1505,6 +1510,10 @@
   "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "Se conservó {count} resultado cuyo video de referencia falta: elimínelo en la pestaña Resultados guardados.",
    "Se conservaron {count} resultados cuyos videos de referencia faltan: elimínelos en la pestaña Resultados guardados."
-  ]
+  ],
+  "Click to open the Videos tab: the failed video's row says more.": ["Haz clic para abrir la pestaña Videos: la fila del video con error dice más.", "Haz clic para abrir la pestaña Videos: las filas de los videos con error dicen más."],
+  "{count} metric": ["{count} métrica", "{count} métricas"],
+  "{count} metric each": ["{count} métrica cada uno", "{count} métricas cada uno"],
+  "{count} test video ticked": ["{count} video de prueba marcado", "{count} videos de prueba marcados"]
  }
 }

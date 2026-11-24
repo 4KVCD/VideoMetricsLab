@@ -109,7 +109,7 @@
   "Whole names": "Tam adlar",
   "Characters from the start:": "Baştan karakter:",
   "from the end:": "sondan:",
-  "Progress of the metrics being calculated": "Hesaplanan ölçümlerin ilerlemesi",
+  "Progress of the metrics being calculated: {state}": "Hesaplanan ölçümlerin ilerlemesi: {state}",
   "Click to open the Videos tab.": "Videolar sekmesini açmak için tıklayın.",
   "Update to {version}": "{version} sürümüne güncelle",
   "{app} {version} is available. Click for what's new and the download.": "{app} {version} kullanılabilir. Yenilikler ve indirme için tıklayın.",
@@ -1371,7 +1371,12 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "HDR VMAF sütununun modeli (Netflix'in birlikte gelen HDR VMAF modelleri). Otomatik, VMAF v0.6.1'deki gibi, üç ekran yüksekliğinde 1080p modelini veya 4K karşılaştırmalarında bir buçuk yükseklikte 4K modelini seçer. Yalnızca PQ (HDR10) videolar için.",
   "Y, U and V of the YUV metrics": "YUV metriklerinin Y, U ve V'si",
   "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "PSNR YUV, SSIM YUV, MS-SSIM YUV ve PSNR-HVS-M'nin yanında Y, U ve V düzlemlerinin her biri için bir sütun; ek maliyet olmadan onlarla birlikte hesaplanır. Daha önce puanlanmış videoların bunları doldurmak için yeniden Hesapla gerektirir.",
-  "Calculated with {metric}.": "{metric} ile hesaplanır."
+  "Calculated with {metric}.": "{metric} ile hesaplanır.",
+  "Done": "Bitti",
+  "Ready": "Hazır",
+  "Ready: no test videos ticked.": "Hazır: işaretli test videosu yok.",
+  "Ready: {videos}, {metrics}.": "Hazır: {videos}, {metrics}.",
+  "{low} to {high} metrics": "{low} ile {high} arası metrik"
  },
  "plurals": {
   "{count} shown": ["{count} gösteriliyor", "{count} gösteriliyor"],
@@ -1505,6 +1510,10 @@
   "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "Referans videosu kaybolan {count} sonuç saklandı: Kaydedilen sonuçlar sekmesinde silin.",
    "Referans videoları kaybolan {count} sonuç saklandı: Kaydedilen sonuçlar sekmesinde silin."
-  ]
+  ],
+  "Click to open the Videos tab: the failed video's row says more.": ["Videolar sekmesini açmak için tıklayın: başarısız videonun satırında ayrıntılar var.", "Videolar sekmesini açmak için tıklayın: başarısız videoların satırlarında ayrıntılar var."],
+  "{count} metric": ["{count} metrik", "{count} metrik"],
+  "{count} metric each": ["her birinde {count} metrik", "her birinde {count} metrik"],
+  "{count} test video ticked": ["{count} test videosu işaretli", "{count} test videosu işaretli"]
  }
 }

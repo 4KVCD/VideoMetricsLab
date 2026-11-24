@@ -844,7 +844,12 @@ void MainWindow::show_theme_in_title() {
 }
 
 void MainWindow::make_title_buttons() {
-    if (title_buttons_ != nullptr || theme::current_interface() != theme::Interface::modern) {
+    if (tabs_ == nullptr) {
+        return;  // the window being built: made with its tabs
+    }
+    const bool modern = theme::current_interface() == theme::Interface::modern;
+    if (title_buttons_ != nullptr) {
+        title_buttons_->set_modern(modern);  // Modern chosen in Settings: its buttons too
         return;
     }
 #ifdef _WIN32
@@ -853,14 +858,18 @@ void MainWindow::make_title_buttons() {
     }
 #endif
     if (title_buttons_ == nullptr) {
-        // No bar of the app's own (another system, high contrast, or Modern
-        // chosen since the start): at the tab bar's right end.
+        // No bar of the app's own (VML Classic, another system, high
+        // contrast, or Modern chosen since the start): at the tab bar's
+        // right end.
         title_buttons_ = new TitleButtons;
         tabs_->setCornerWidget(title_buttons_, Qt::TopRightCorner);
         title_buttons_->show();
     }
+    title_buttons_->set_modern(modern);
     show_theme_in_title();
+    show_progress_badge();
     connect(title_buttons_, &TitleButtons::progress_clicked, this, [this] { tabs_->setCurrentIndex(0); });
+    connect(title_buttons_, &TitleButtons::progress_tooltip_wanted, this, [this] { show_progress_badge(); });
     connect(title_buttons_, &TitleButtons::theme_chosen, this, [this](const QString& value) {
         settings_panel_->choose_theme(value);
         show_theme_in_title();
@@ -1170,6 +1179,14 @@ std::vector<QWidget*> MainWindow::add_file_buttons(QBoxLayout* buttons) {
     best_worst_timer_->setInterval(0);
     connect(best_worst_timer_, &QTimer::timeout, this, [this] { apply_best_worst(); });
     connect(distorted_table_->model(), &QAbstractItemModel::rowsRemoved, this, [this] { schedule_best_worst(); });
+    // Any change to the table may be a change to what is ticked: a row's
+    // tick, a metric's, a row added, removed or moved.
+    QAbstractItemModel* model = distorted_table_->model();
+    connect(model, &QAbstractItemModel::rowsInserted, this, [this] { check_ticks_soon(); });
+    connect(model, &QAbstractItemModel::rowsRemoved, this, [this] { check_ticks_soon(); });
+    connect(model, &QAbstractItemModel::rowsMoved, this, [this] { check_ticks_soon(); });
+    connect(model, &QAbstractItemModel::dataChanged, this, [this] { check_ticks_soon(); });
+    connect(model, &QAbstractItemModel::modelReset, this, [this] { check_ticks_soon(); });
     return {add_button, add_resample_button, load_button_, remove_button, remove_all_button_};
 }
 

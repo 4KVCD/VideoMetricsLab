@@ -109,7 +109,7 @@
   "Whole names": "Teljes nevek",
   "Characters from the start:": "Karakter az elejéről:",
   "from the end:": "a végéről:",
-  "Progress of the metrics being calculated": "A számított metrikák állapota",
+  "Progress of the metrics being calculated: {state}": "A számított metrikák állapota: {state}",
   "Click to open the Videos tab.": "Kattintson a(z) Videók lap megnyitásához.",
   "Update to {version}": "Frissítés erre: {version}",
   "{app} {version} is available. Click for what's new and the download.": "Elérhető: {app} {version}. Kattintson az újdonságokért és a letöltésért.",
@@ -1371,7 +1371,12 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "A HDR VMAF oszlop modellje (a Netflix mellékelt HDR VMAF modelljei). Az Automatikus az 1080p modellt választja háromszoros képernyőmagasságnál, 4K összehasonlításnál pedig a 4K modellt másfélszeresnél, akárcsak a VMAF v0.6.1. Csak PQ (HDR10) videókhoz.",
   "Y, U and V of the YUV metrics": "A YUV-metrikák Y, U és V síkja",
   "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "Egy oszlop az Y, U és V síkok mindegyikéhez a PSNR YUV, SSIM YUV, MS-SSIM YUV és PSNR-HVS-M mellett, többletköltség nélkül velük együtt számolva. A korábban pontozott videókat újra ki kell számolni a kitöltésükhöz.",
-  "Calculated with {metric}.": "A(z) {metric} metrikával számolva."
+  "Calculated with {metric}.": "A(z) {metric} metrikával számolva.",
+  "Done": "Kész",
+  "Ready": "Készen áll",
+  "Ready: no test videos ticked.": "Készen áll: nincs bejelölt tesztvideó.",
+  "Ready: {videos}, {metrics}.": "Készen áll: {videos}, {metrics}.",
+  "{low} to {high} metrics": "{low}–{high} metrika"
  },
  "plurals": {
   "{count} shown": ["{count} látható", "{count} látható"],
@@ -1505,6 +1510,10 @@
   "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "{count} eredmény megmaradt, amelynek hiányzik a referenciavideója: törölje a Mentett eredmények lapon.",
    "{count} eredmény megmaradt, amelyeknek hiányzik a referenciavideója: törölje őket a Mentett eredmények lapon."
-  ]
+  ],
+  "Click to open the Videos tab: the failed video's row says more.": ["Kattintson a(z) Videók lap megnyitásához: a sikertelen videó sora többet mond.", "Kattintson a(z) Videók lap megnyitásához: a sikertelen videók sorai többet mondanak."],
+  "{count} metric": ["{count} metrika", "{count} metrika"],
+  "{count} metric each": ["videónként {count} metrika", "videónként {count} metrika"],
+  "{count} test video ticked": ["{count} bejelölt tesztvideó", "{count} bejelölt tesztvideó"]
  }
 }

@@ -109,7 +109,7 @@
   "Whole names": "Tên đầy đủ",
   "Characters from the start:": "Số ký tự từ đầu:",
   "from the end:": "từ cuối:",
-  "Progress of the metrics being calculated": "Tiến độ các chỉ số đang tính",
+  "Progress of the metrics being calculated: {state}": "Tiến độ các chỉ số đang tính: {state}",
   "Click to open the Videos tab.": "Nhấp để mở tab Video.",
   "Update to {version}": "Cập nhật lên {version}",
   "{app} {version} is available. Click for what's new and the download.": "{app} {version} đã có. Nhấp để xem điểm mới và tải xuống.",
@@ -1371,7 +1371,12 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "Mô hình cho cột HDR VMAF (các mô hình HDR VMAF đi kèm của Netflix). Tự động chọn mô hình 1080p ở khoảng cách ba lần chiều cao màn hình, hoặc mô hình 4K ở 1,5 lần cho so sánh 4K, giống VMAF v0.6.1. Chỉ dành cho video PQ (HDR10).",
   "Y, U and V of the YUV metrics": "Y, U và V của các chỉ số YUV",
   "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "Một cột cho mỗi mặt phẳng Y, U và V bên cạnh PSNR YUV, SSIM YUV, MS-SSIM YUV và PSNR-HVS-M, được tính cùng chúng mà không tốn thêm chi phí. Các video đã chấm điểm trước đó cần Tính lại để điền vào.",
-  "Calculated with {metric}.": "Được tính cùng {metric}."
+  "Calculated with {metric}.": "Được tính cùng {metric}.",
+  "Done": "Xong",
+  "Ready": "Sẵn sàng",
+  "Ready: no test videos ticked.": "Sẵn sàng: chưa đánh dấu video thử nào.",
+  "Ready: {videos}, {metrics}.": "Sẵn sàng: {videos}, {metrics}.",
+  "{low} to {high} metrics": "{low} đến {high} chỉ số"
  },
  "plurals": {
   "{count} shown": ["Đang hiện {count}"],
@@ -1474,6 +1479,10 @@
   ],
   "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "Đã giữ {count} kết quả có video tham chiếu bị mất: hãy xóa trong thẻ Kết quả đã lưu."
-  ]
+  ],
+  "Click to open the Videos tab: the failed video's row says more.": ["Nhấp để mở tab Video: hàng của video lỗi cho biết thêm."],
+  "{count} metric": ["{count} chỉ số"],
+  "{count} metric each": ["mỗi video {count} chỉ số"],
+  "{count} test video ticked": ["{count} video thử được đánh dấu"]
  }
 }

@@ -6,6 +6,7 @@
 #include <QAbstractButton>
 #include <QActionGroup>
 #include <QApplication>
+#include <QCursor>
 #include <QEvent>
 #include <QFontDatabase>
 #include <QHBoxLayout>
@@ -14,7 +15,10 @@
 #include <QMenu>
 #include <QPainter>
 #include <QPainterPath>
+#include <QStyleOptionToolButton>
+#include <QStylePainter>
 #include <QToolButton>
+#include <QToolTip>
 #include <QWindow>
 
 #ifdef _WIN32
@@ -22,6 +26,8 @@
 #endif
 
 #include <algorithm>
+#include <functional>
+#include <optional>
 
 namespace vml::app {
 
@@ -47,19 +53,50 @@ QColor faded(QColor colour, double alpha) {
 }
 
 // The progress button: its text, and under it a thin bar of how far the
-// run has got, in the accent.
+// run has got, in the accent, or both in the error colour or muted. Its
+// tooltip is asked for as it is about to show.
 class ProgressButton : public QToolButton {
 public:
     double fraction = 0.0;
+    TitleButtons::Progress::Tone tone = TitleButtons::Progress::Tone::normal;
+    std::function<void()> tooltip_wanted;
 
 protected:
-    void paintEvent(QPaintEvent* event) override {
-        QToolButton::paintEvent(event);
-        QPainter painter(this);
+    bool event(QEvent* event) override {
+        if (event->type() == QEvent::ToolTip && tooltip_wanted) {
+            tooltip_wanted();
+        }
+        return QToolButton::event(event);
+    }
+    void paintEvent(QPaintEvent*) override {
+        // QToolButton's own, its text in the tone's colour.
+        const std::optional<QColor> colour = tone_colour();
+        QStylePainter painter(this);
+        QStyleOptionToolButton option;
+        initStyleOption(&option);
+        if (colour) {
+            for (const QPalette::ColorRole role : {QPalette::ButtonText, QPalette::WindowText, QPalette::Text}) {
+                option.palette.setColor(role, *colour);
+            }
+        }
+        painter.drawComplexControl(QStyle::CC_ToolButton, option);
         const QRect track(6, height() - 4, width() - 12, 2);
         painter.fillRect(track, faded(palette().windowText().color(), 0.15));
         painter.fillRect(QRect(track.left(), track.top(), static_cast<int>(track.width() * fraction), 2),
-                         palette().highlight());
+                         colour ? QBrush(*colour) : palette().highlight());
+    }
+
+private:
+    std::optional<QColor> tone_colour() const {
+        switch (tone) {
+        case TitleButtons::Progress::Tone::error:
+            return theme::color("failed");
+        case TitleButtons::Progress::Tone::muted:
+            return theme::color("muted");
+        case TitleButtons::Progress::Tone::normal:
+            break;
+        }
+        return std::nullopt;
     }
 };
 
@@ -98,8 +135,7 @@ TitleButtons::TitleButtons(QWidget* parent) : QWidget(parent) {
     progress_ = progress;
     progress_->setAutoRaise(true);
     progress_->setCursor(Qt::PointingHandCursor);
-    progress_->setAccessibleName(app::tr("Progress of the metrics being calculated"));
-    progress_->setVisible(false);
+    progress->tooltip_wanted = [this] { emit progress_tooltip_wanted(); };
     connect(progress_, &QToolButton::clicked, this, &TitleButtons::progress_clicked);
     row->addWidget(progress_);
 
@@ -160,23 +196,44 @@ TitleButtons::TitleButtons(QWidget* parent) : QWidget(parent) {
     row->addWidget(theme_);
 }
 
-void TitleButtons::set_progress(const std::optional<Progress>& progress) {
-    progress_->setVisible(progress.has_value());
-    if (!progress) {
-        return;
-    }
-    progress_->setText(progress->text);
-    progress_->setToolTip(progress->tooltip + "\n\n" + app::tr("Click to open the Videos tab."));
+void TitleButtons::set_progress(const Progress& progress) {
     auto* button = static_cast<ProgressButton*>(progress_);
-    const double fraction = std::clamp(progress->fraction, 0.0, 1.0);
-    if (button->fraction != fraction) {
+    if (progress_->text() != progress.text) {
+        progress_->setText(progress.text);
+    }
+    const QString name = app::tr("Progress of the metrics being calculated: {state}", {{"state", progress.state}});
+    if (progress_->accessibleName() != name) {
+        progress_->setAccessibleName(name);  // a change is announced: only when there is one
+    }
+    // A tooltip shown is the one set when it showed: shown again in place,
+    // so that it follows the run while it is read.
+    if (progress_->toolTip() != progress.tooltip) {
+        const bool shown = QToolTip::isVisible() && progress_->underMouse() && QToolTip::text() == progress_->toolTip();
+        progress_->setToolTip(progress.tooltip);
+        if (shown) {
+            QToolTip::showText(QCursor::pos(), progress.tooltip, progress_);
+        }
+    }
+    const double fraction = std::clamp(progress.fraction, 0.0, 1.0);
+    if (button->fraction != fraction || button->tone != progress.tone) {
         button->fraction = fraction;
+        button->tone = progress.tone;
         button->update();
     }
 }
 
+void TitleButtons::set_modern(bool modern) {
+    modern_ = modern;
+    // Classic's tab bar draws its tabs to its edges: a little room at its
+    // right end and above the pane's frame.
+    layout()->setContentsMargins(0, 0, modern ? 0 : 6, modern ? 0 : 3);
+    theme_->setVisible(modern);
+    update_->setVisible(modern && !update_version_.isEmpty());
+}
+
 void TitleButtons::set_update(const QString& version) {
-    update_->setVisible(!version.isEmpty());
+    update_version_ = version;
+    update_->setVisible(modern_ && !version.isEmpty());
     if (version.isEmpty()) {
         return;
     }

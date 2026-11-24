@@ -109,7 +109,7 @@
   "Whole names": "完全な名前",
   "Characters from the start:": "先頭からの文字数：",
   "from the end:": "末尾から：",
-  "Progress of the metrics being calculated": "計算中の指標の進行状況",
+  "Progress of the metrics being calculated: {state}": "計算中の指標の進行状況：{state}",
   "Click to open the Videos tab.": "クリックすると動画タブを開きます。",
   "Update to {version}": "{version} に更新",
   "{app} {version} is available. Click for what's new and the download.": "{app} {version} が利用可能です。クリックすると新機能とダウンロードを表示します。",
@@ -1371,7 +1371,12 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "HDR VMAF 列のモデル（Netflix 同梱の HDR VMAF モデル）。［自動］は画面の高さ 3 倍の 1080p モデル、4K の比較では高さ 1.5 倍の 4K モデルを選びます（VMAF v0.6.1 と同じ）。PQ (HDR10) 動画専用です。",
   "Y, U and V of the YUV metrics": "YUV メトリクスの Y、U、V",
   "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "PSNR YUV、SSIM YUV、MS-SSIM YUV、PSNR-HVS-M の横に Y、U、V の各プレーンの列を表示します。追加コストなしで一緒に計算されます。以前に評価した動画では、埋めるために再度「計算」が必要です。",
-  "Calculated with {metric}.": "{metric} と一緒に計算されます。"
+  "Calculated with {metric}.": "{metric} と一緒に計算されます。",
+  "Done": "完了",
+  "Ready": "準備完了",
+  "Ready: no test videos ticked.": "準備完了：チェックされたテスト動画はありません。",
+  "Ready: {videos}, {metrics}.": "準備完了：{videos}、{metrics}。",
+  "{low} to {high} metrics": "{low}〜{high} 個の指標"
  },
  "plurals": {
   "{count} shown": ["{count} 個を表示"],
@@ -1474,6 +1479,10 @@
   ],
   "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "参照動画がない {count} 件の結果を残しました。「保存済みの結果」タブで削除してください。"
-  ]
+  ],
+  "Click to open the Videos tab: the failed video's row says more.": ["クリックすると動画タブを開きます。失敗した動画の行に詳細があります。"],
+  "{count} metric": ["指標 {count} 個"],
+  "{count} metric each": ["それぞれ指標 {count} 個"],
+  "{count} test video ticked": ["テスト動画 {count} 本にチェック"]
  }
 }

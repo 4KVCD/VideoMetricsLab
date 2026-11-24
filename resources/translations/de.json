@@ -109,7 +109,7 @@
   "Whole names": "Ganze Namen",
   "Characters from the start:": "Zeichen vom Anfang:",
   "from the end:": "vom Ende:",
-  "Progress of the metrics being calculated": "Fortschritt der berechneten Metriken",
+  "Progress of the metrics being calculated: {state}": "Fortschritt der berechneten Metriken: {state}",
   "Click to open the Videos tab.": "Klicken, um den Tab Videos zu öffnen.",
   "Update to {version}": "Auf {version} aktualisieren",
   "{app} {version} is available. Click for what's new and the download.": "{app} {version} ist verfügbar. Klicken für die Neuerungen und den Download.",
@@ -1371,7 +1371,12 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "Das Modell der Spalte HDR VMAF (Netflix' mitgelieferte HDR-VMAF-Modelle). „Automatisch“ wählt das 1080p-Modell bei drei Bildschirmhöhen oder bei 4K-Vergleichen das 4K-Modell bei eineinhalb, wie bei VMAF v0.6.1. Nur für PQ-Videos (HDR10).",
   "Y, U and V of the YUV metrics": "Y, U und V der YUV-Metriken",
   "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "Eine Spalte für jede der Ebenen Y, U und V neben PSNR YUV, SSIM YUV, MS-SSIM YUV und PSNR-HVS-M, ohne Mehraufwand mit ihnen berechnet. Bereits bewertete Videos brauchen erneut „Berechnen“, um sie zu füllen.",
-  "Calculated with {metric}.": "Mit {metric} berechnet."
+  "Calculated with {metric}.": "Mit {metric} berechnet.",
+  "Done": "Fertig",
+  "Ready": "Bereit",
+  "Ready: no test videos ticked.": "Bereit: keine Testvideos angehakt.",
+  "Ready: {videos}, {metrics}.": "Bereit: {videos}, {metrics}.",
+  "{low} to {high} metrics": "{low} bis {high} Metriken"
  },
  "plurals": {
   "{count} shown": ["{count} angezeigt", "{count} angezeigt"],
@@ -1505,6 +1510,10 @@
   "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "{count} Ergebnis behalten, dessen Referenzvideo fehlt: Löschen Sie es im Tab „Gespeicherte Ergebnisse“.",
    "{count} Ergebnisse behalten, deren Referenzvideos fehlen: Löschen Sie sie im Tab „Gespeicherte Ergebnisse“."
-  ]
+  ],
+  "Click to open the Videos tab: the failed video's row says more.": ["Klicken, um den Tab Videos zu öffnen: Die Zeile des fehlgeschlagenen Videos sagt mehr.", "Klicken, um den Tab Videos zu öffnen: Die Zeilen der fehlgeschlagenen Videos sagen mehr."],
+  "{count} metric": ["{count} Metrik", "{count} Metriken"],
+  "{count} metric each": ["je {count} Metrik", "je {count} Metriken"],
+  "{count} test video ticked": ["{count} Testvideo angehakt", "{count} Testvideos angehakt"]
  }
 }

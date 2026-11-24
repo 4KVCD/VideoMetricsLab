@@ -218,9 +218,14 @@ theme's colours, with Windows' minimize, maximize and close (hovering
 maximize shows Windows 11's snap layouts, and Alt+Space or a click on the
 icon opens the window menu). Three small buttons sit in it:
 
-- **Progress**, while metrics are calculated: how many videos are done and
-  about how far the run has got, with a thin bar. Its tooltip is the status
-  line; a click opens the Videos tab.
+- **Progress**, always there: **Ready** before a run, then how many videos are
+  done and about how far the run has got, with a thin bar (**Paused** while
+  paused), then how it ended: **Done**, **Done · 1 failed** in the error color,
+  or **Cancelled**. That stays until the next run, or until the ticked videos
+  or their metrics change, when it is **Ready** again. Its tooltip says more:
+  the ticked videos before a run; during it the status line, then each video
+  in progress with its lines from the Videos tab; after it, how the run ended
+  and each failed video's reason. A click opens the Videos tab.
 - **Theme**: a menu of the themes (Same as Windows, Light, Dark) and, below
   them, **Light look** and **Dark look** menus of the looks, as in Settings >
   Appearance.
@@ -230,7 +235,8 @@ icon opens the window menu). Three small buttons sit in it:
 
 On macOS and Linux, and on Windows in high-contrast mode or when VML Modern
 was chosen since the app started, the title bar stays the system's and the
-three buttons sit at the right end of the tab bar.
+three buttons sit at the right end of the tab bar. VML Classic has the
+**Progress** button alone, at the right end of the tab bar.
 
 While metrics are calculated, Settings stays open, but the ffmpeg folder, the
 saved results' folder and **Clear saved results** are locked until the run
