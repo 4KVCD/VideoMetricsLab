@@ -1325,7 +1325,10 @@
   "HDR VMAF HFR (4K / 1.5H)": "HDR VMAF HFR (4K / 1,5H)",
   "HDR VMAF HFR (4K / 3H, up to 110)": "HDR VMAF HFR (4K / 3H, bis 110)",
   "HDR VMAF model:": "Modell für HDR VMAF:",
-  "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "Das Modell der Spalte HDR VMAF (Netflix' mitgelieferte HDR-VMAF-Modelle). „Automatisch“ wählt das 1080p-Modell bei drei Bildschirmhöhen oder bei 4K-Vergleichen das 4K-Modell bei eineinhalb, wie bei VMAF v0.6.1. Nur für PQ-Videos (HDR10)."
+  "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "Das Modell der Spalte HDR VMAF (Netflix' mitgelieferte HDR-VMAF-Modelle). „Automatisch“ wählt das 1080p-Modell bei drei Bildschirmhöhen oder bei 4K-Vergleichen das 4K-Modell bei eineinhalb, wie bei VMAF v0.6.1. Nur für PQ-Videos (HDR10).",
+  "Y, U and V of the YUV metrics": "Y, U und V der YUV-Metriken",
+  "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "Eine Spalte für jede der Ebenen Y, U und V neben PSNR YUV, SSIM YUV, MS-SSIM YUV und PSNR-HVS-M, ohne Mehraufwand mit ihnen berechnet. Bereits bewertete Videos brauchen erneut „Berechnen“, um sie zu füllen.",
+  "Calculated with {metric}.": "Mit {metric} berechnet."
  },
  "plurals": {
   "{shown}/{count} metric selected": ["{shown}/{count} Metrik ausgewählt", "{shown}/{count} Metriken ausgewählt"],

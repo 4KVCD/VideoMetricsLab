@@ -127,6 +127,8 @@ private:
     void on_name_changed();
     void show_heading();  // of the report shown
     void fill_results();
+    // Hides the plane columns no sequence has a BD-rate for.
+    void hide_unscored_planes();
     void on_results_row(int row);
     void refresh_chart();
 

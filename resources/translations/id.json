@@ -1325,7 +1325,10 @@
   "HDR VMAF HFR (4K / 1.5H)": "HDR VMAF HFR (4K / 1.5H)",
   "HDR VMAF HFR (4K / 3H, up to 110)": "HDR VMAF HFR (4K / 3H, hingga 110)",
   "HDR VMAF model:": "Model HDR VMAF:",
-  "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "Model untuk kolom HDR VMAF (model HDR VMAF yang disertakan Netflix). Otomatis memilih model 1080p pada tiga kali tinggi layar, atau model 4K pada 1,5 kali untuk perbandingan 4K, sama seperti VMAF v0.6.1. Hanya untuk video PQ (HDR10)."
+  "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "Model untuk kolom HDR VMAF (model HDR VMAF yang disertakan Netflix). Otomatis memilih model 1080p pada tiga kali tinggi layar, atau model 4K pada 1,5 kali untuk perbandingan 4K, sama seperti VMAF v0.6.1. Hanya untuk video PQ (HDR10).",
+  "Y, U and V of the YUV metrics": "Y, U, dan V dari metrik YUV",
+  "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "Satu kolom untuk setiap bidang Y, U, dan V di samping PSNR YUV, SSIM YUV, MS-SSIM YUV, dan PSNR-HVS-M, dihitung bersamanya tanpa biaya tambahan. Video yang sudah dinilai perlu Hitung lagi untuk mengisinya.",
+  "Calculated with {metric}.": "Dihitung bersama {metric}."
  },
  "plurals": {
   "{shown}/{count} metric selected": ["{shown}/{count} metrik dipilih"],

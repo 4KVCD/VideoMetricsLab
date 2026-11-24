@@ -1325,7 +1325,10 @@
   "HDR VMAF HFR (4K / 1.5H)": "HDR VMAF HFR(4K / 1.5H)",
   "HDR VMAF HFR (4K / 3H, up to 110)": "HDR VMAF HFR(4K / 3H, 최대 110)",
   "HDR VMAF model:": "HDR VMAF 모델:",
-  "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "HDR VMAF 열의 모델입니다(Netflix가 제공하는 HDR VMAF 모델). [자동]은 화면 높이 3배의 1080p 모델을, 4K 비교에서는 화면 높이 1.5배의 4K 모델을 고릅니다(VMAF v0.6.1과 같음). PQ (HDR10) 동영상 전용입니다."
+  "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "HDR VMAF 열의 모델입니다(Netflix가 제공하는 HDR VMAF 모델). [자동]은 화면 높이 3배의 1080p 모델을, 4K 비교에서는 화면 높이 1.5배의 4K 모델을 고릅니다(VMAF v0.6.1과 같음). PQ (HDR10) 동영상 전용입니다.",
+  "Y, U and V of the YUV metrics": "YUV 메트릭의 Y, U, V",
+  "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "PSNR YUV, SSIM YUV, MS-SSIM YUV, PSNR-HVS-M 옆에 Y, U, V 각 평면의 열을 표시합니다. 추가 비용 없이 함께 계산됩니다. 이전에 점수를 매긴 동영상은 채우려면 다시 계산해야 합니다.",
+  "Calculated with {metric}.": "{metric}와 함께 계산됩니다."
  },
  "plurals": {
   "{shown}/{count} metric selected": ["선택된 지표: {shown}/{count}"],

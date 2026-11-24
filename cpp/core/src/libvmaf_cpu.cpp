@@ -32,17 +32,32 @@ GpuMetricsFailed gpu_failed(const GpuMetricsScorer& scorer, const std::exception
 // (cambi_feature).
 constexpr std::string_view cambi_default_feature = "Cambi_feature_cambi_score";
 
-constexpr std::array<CpuFeature, 10> cpu_features{{
+// A plane of a metric of the three planes (MetricDefinition::plane_of) is
+// the feature its metric's extractor gives for that plane, read in the same
+// pass (extractors_for starts the extractor for its metric).
+constexpr std::array<CpuFeature, 22> cpu_features{{
     {"psnr", "psnr", "psnr_y", 6},
     {"ssim", "float_ssim", "float_ssim", 6},
     {"xpsnr", "xpsnr", "xpsnr_y", 4},
     {"psnr_yuv", "psnr", "psnr_y", 6, true, Value::planes_611, "psnr_cb", "psnr_cr"},
+    {"psnr_yuv_y", "psnr", "psnr_y", 6, true},
+    {"psnr_yuv_u", "psnr", "psnr_cb", 6, true},
+    {"psnr_yuv_v", "psnr", "psnr_cr", 6, true},
     {"ssim_yuv", "float_ssim", "float_ssim", 6, true, Value::planes_611, "float_ssim_cb", "float_ssim_cr"},
+    {"ssim_yuv_y", "float_ssim", "float_ssim", 6, true},
+    {"ssim_yuv_u", "float_ssim", "float_ssim_cb", 6, true},
+    {"ssim_yuv_v", "float_ssim", "float_ssim_cr", 6, true},
     {"cambi", "cambi", cambi_default_feature, 6},
     {"ms_ssim", "float_ms_ssim", "float_ms_ssim", 6},
     {"ms_ssim_yuv", "float_ms_ssim", "float_ms_ssim", 6, true, Value::planes_611, "float_ms_ssim_cb",
      "float_ms_ssim_cr"},
+    {"ms_ssim_yuv_y", "float_ms_ssim", "float_ms_ssim", 6, true},
+    {"ms_ssim_yuv_u", "float_ms_ssim", "float_ms_ssim_cb", 6, true},
+    {"ms_ssim_yuv_v", "float_ms_ssim", "float_ms_ssim_cr", 6, true},
     {"psnr_hvs", "psnr_hvs", "psnr_hvs", 6, true},
+    {"psnr_hvs_y", "psnr_hvs", "psnr_hvs_y", 6, true},
+    {"psnr_hvs_u", "psnr_hvs", "psnr_hvs_cb", 6, true},
+    {"psnr_hvs_v", "psnr_hvs", "psnr_hvs_cr", 6, true},
     {"ciede2000", "ciede", "ciede2000", 6, true, Value::delta_e},
 }};
 
@@ -128,18 +143,21 @@ std::string cambi_feature(const ExtractorOptions& options) {
     return name;
 }
 
-// The extractors that score `metrics`, each started once. PSNR and SSIM read
+// The extractors that score `metrics`, each started once; a plane of a
+// metric (MetricDefinition::plane_of) starts its metric's. PSNR and SSIM read
 // the chroma planes only for their 6:1:1 metric. With XPSNR, the luma's PSNR
 // comes from the squared errors it sums anyway (its option "psnr"), not a
 // pass of its own over both pictures (4K PSNR + SSIM + XPSNR 6% faster with
 // Intel's decoder, 11% with NVIDIA's); PSNR then scores the chroma alone, for
 // PSNR YUV.
-std::vector<Extractor> extractors_for(const std::vector<std::string>& metrics, int frame_rate,
+std::vector<Extractor> extractors_for(const std::vector<std::string>& requested, int frame_rate,
                                       const ExtractorOptions& cambi) {
-    for (const std::string& metric : metrics) {
+    std::vector<std::string> metrics;
+    for (const std::string& metric : requested) {
         if (cpu_feature(metric) == nullptr) {
             throw std::invalid_argument(metric + " is not scored with libvmaf's CPU extractors");
         }
+        metrics.emplace_back(scored_by(metric));
     }
     const bool psnr_yuv = has(metrics, "psnr_yuv");
     const bool ssim_yuv = has(metrics, "ssim_yuv");
@@ -244,7 +262,8 @@ bool cpu_metrics_read_chroma(const std::vector<std::string>& metrics) {
 }
 
 bool cpu_metrics_slow(const std::vector<std::string>& metrics) {
-    return std::any_of(metrics.begin(), metrics.end(), [](const std::string& metric) {
+    return std::any_of(metrics.begin(), metrics.end(), [](const std::string& key) {
+        const std::string_view metric = scored_by(key);
         return metric == "ms_ssim" || metric == "ms_ssim_yuv" || metric == "cambi" || metric == "ciede2000";
     });
 }
@@ -254,31 +273,32 @@ std::map<std::string, std::string> cpu_metrics_unfit(const std::vector<std::stri
     const std::string size = std::to_string(width) + "x" + std::to_string(height);
     const auto square = [](int side) { return std::to_string(side) + "x" + std::to_string(side); };
     std::map<std::string, std::string> unfit;
-    for (const std::string& metric : metrics) {
+    for (const std::string& key : metrics) {
+        const std::string_view metric = scored_by(key);  // a plane is unfit where its metric is
         if ((metric == "ms_ssim" && std::min(width, height) < ms_ssim_smallest_plane) ||
             (metric == "ms_ssim_yuv" && std::min(width, height) < 2 * ms_ssim_smallest_plane)) {
             const int side = metric == "ms_ssim" ? ms_ssim_smallest_plane : 2 * ms_ssim_smallest_plane;
-            unfit[metric] = (metric == "ms_ssim" ? "MS-SSIM" : "MS-SSIM YUV") + std::string(" needs pictures of at least ") +
-                            square(side) + "; these are " + size + ".";
+            unfit[key] = (metric == "ms_ssim" ? "MS-SSIM" : "MS-SSIM YUV") + std::string(" needs pictures of at least ") +
+                         square(side) + "; these are " + size + ".";
         } else if (metric == "cambi") {
             const std::pair<int, int> scored = cambi_encode_size(cambi, width, height).value_or(std::pair(width, height));
             if (std::max(width, height) < cambi_smallest_side ||
                 std::max(scored.first, scored.second) < cambi_smallest_side) {
-                unfit[metric] = "CAMBI needs a video at least " + std::to_string(cambi_smallest_side) +
-                                " pixels wide or high.";
+                unfit[key] = "CAMBI needs a video at least " + std::to_string(cambi_smallest_side) +
+                             " pixels wide or high.";
             } else if (width + height > cambi_largest_width_plus_height) {
-                unfit[metric] = "CAMBI is calculated for pictures up to 3840x2160 (width plus height at most " +
-                                std::to_string(cambi_largest_width_plus_height) + "); these are " + size + ".";
+                unfit[key] = "CAMBI is calculated for pictures up to 3840x2160 (width plus height at most " +
+                             std::to_string(cambi_largest_width_plus_height) + "); these are " + size + ".";
             }
         } else if (metric == "psnr_hvs" && std::min(width, height) < psnr_hvs_smallest_side) {
-            unfit[metric] = "PSNR-HVS-M needs pictures of at least " + square(psnr_hvs_smallest_side) +
-                            "; these are " + size + ".";
+            unfit[key] = "PSNR-HVS-M needs pictures of at least " + square(psnr_hvs_smallest_side) +
+                         "; these are " + size + ".";
         } else if (metric == "psnr_hvs" && bit_depth > psnr_hvs_deepest) {
-            unfit[metric] = "PSNR-HVS-M is calculated up to " + std::to_string(psnr_hvs_deepest) +
-                            " bits; these videos are compared at " + std::to_string(bit_depth) + ".";
+            unfit[key] = "PSNR-HVS-M is calculated up to " + std::to_string(psnr_hvs_deepest) +
+                         " bits; these videos are compared at " + std::to_string(bit_depth) + ".";
         } else if (metric == "ciede2000" && bit_depth != 8 && bit_depth != 10 && bit_depth != 12 && bit_depth != 16) {
-            unfit[metric] = "CIEDE2000 is calculated at 8, 10, 12 or 16 bits; these videos are compared at " +
-                            std::to_string(bit_depth) + ".";
+            unfit[key] = "CIEDE2000 is calculated at 8, 10, 12 or 16 bits; these videos are compared at " +
+                         std::to_string(bit_depth) + ".";
         }
     }
     return unfit;

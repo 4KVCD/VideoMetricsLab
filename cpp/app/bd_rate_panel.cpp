@@ -268,6 +268,7 @@ void BdRatePanel::add_results(QVBoxLayout* root) {
         labels.append(qt_text(metric.short_label));
     }
     results->setHorizontalHeaderLabels(labels);
+    hide_unscored_planes();
     results->setEditTriggers(QAbstractItemView::NoEditTriggers);
     results->setSelectionBehavior(QAbstractItemView::SelectRows);
     results->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -654,6 +655,7 @@ void BdRatePanel::fill_results() {
     sequence_rows_.clear();
     results->setRowCount(0);
     if (!report_) {
+        hide_unscored_planes();
         fit_table_height(results, 0);
         filling_ = false;
         return;
@@ -706,8 +708,24 @@ void BdRatePanel::fill_results() {
             results->setCurrentCell(row, 0);
         }
     }
+    hide_unscored_planes();
     fit_table_height(results, visible_result_rows);
     filling_ = false;
+}
+
+void BdRatePanel::hide_unscored_planes() {
+    // A plane's column (MetricDefinition::plane_of) only where a sequence has
+    // its BD-rate: most results have no planes, and twelve empty columns
+    // would crowd the rest.
+    for (std::size_t index = 0; index < metrics().size(); ++index) {
+        const MetricDefinition& metric = metrics()[index];
+        bool scored = false;
+        if (report_ && metric.is_plane()) {
+            const auto found = report_->all.mean.percent.find(std::string(metric.key));
+            scored = found != report_->all.mean.percent.end() && found->second.has_value();
+        }
+        results->setColumnHidden(static_cast<int>(index) + 1, metric.is_plane() && !scored);
+    }
 }
 
 void BdRatePanel::on_results_row(int row) {

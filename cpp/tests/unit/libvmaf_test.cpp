@@ -195,6 +195,38 @@ TEST(Libvmaf, YuvMetricsLeaveTheLumaScoresAsTheyWere) {
     }
 }
 
+// A metric's planes (MetricDefinition::plane_of) are its own planes' scores,
+// read in its pass: they leave the metric as it was, Y is the luma's score,
+// and (6 Y + U + V) / 8 gives the 6:1:1 metric back. A plane is refused
+// where its metric is.
+TEST(Libvmaf, PlanesAreTheirMetricsPlanes) {
+    if (!std::filesystem::exists(libvmaf_folder() / platform::shared_library_name("libvmaf"))) {
+        GTEST_SKIP() << "the app ships no libvmaf-fast for this system yet";
+    }
+    const PairScores alone = score_yuv_pairs({"psnr", "ssim", "psnr_yuv", "ssim_yuv", "psnr_hvs"}, false);
+    const PairScores planes = score_yuv_pairs({"psnr", "ssim", "psnr_yuv", "psnr_yuv_y", "psnr_yuv_u", "psnr_yuv_v",
+                                               "ssim_yuv", "ssim_yuv_y", "ssim_yuv_u", "ssim_yuv_v", "psnr_hvs",
+                                               "psnr_hvs_y", "psnr_hvs_u", "psnr_hvs_v"},
+                                              false);
+    for (const char* key : {"psnr", "ssim", "psnr_yuv", "ssim_yuv", "psnr_hvs"}) {
+        EXPECT_EQ(scores_of(planes, key), scores_of(alone, key)) << key;
+    }
+    EXPECT_EQ(scores_of(planes, "psnr_yuv_y"), scores_of(alone, "psnr"));
+    EXPECT_EQ(scores_of(planes, "ssim_yuv_y"), scores_of(alone, "ssim"));
+    for (const std::string metric : {"psnr_yuv", "ssim_yuv"}) {
+        const std::vector<double>&y = scores_of(planes, metric + "_y"), &u = scores_of(planes, metric + "_u"),
+                            &v = scores_of(planes, metric + "_v"), &yuv = scores_of(planes, metric);
+        ASSERT_EQ(y.size(), yuv.size());
+        for (std::size_t i = 0; i < yuv.size(); ++i) {
+            // libvmaf gives each score to six decimals.
+            EXPECT_NEAR(yuv[i], (6 * y[i] + u[i] + v[i]) / 8, 1e-6) << metric << " frame " << i;
+            EXPECT_NE(u[i], y[i]) << metric << ": the chroma differs here, so its score must too";
+        }
+    }
+    EXPECT_EQ(scores_of(planes, "psnr_hvs_v").size(), 2U);
+    EXPECT_EQ(cpu_metrics_unfit({"ms_ssim_yuv", "ms_ssim_yuv_u"}, 320, 240, 8, {}).size(), 2U);
+}
+
 // The app's metrics a comparison cannot score are refused up front, each with
 // its reason, so they fail alone: libvmaf would fail every metric scored with
 // them. 160x90 is below MS-SSIM's 176 and CAMBI's 216; DCI 4K is past CAMBI's

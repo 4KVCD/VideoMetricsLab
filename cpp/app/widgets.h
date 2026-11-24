@@ -78,7 +78,8 @@ public:
 // Qt's own Stretch mode fills the space too, but stops the column being
 // dragged at all. It also takes files dropped from outside (filesDropped) and
 // its own rows dragged within it (rowsMoved), moving nothing itself: what a
-// row is lives with its owner.
+// row is lives with its owner. Its leading columns can stay in place while
+// the others scroll sideways (freeze_leading_columns).
 class FillColumnTable : public QTableWidget {
     Q_OBJECT
 
@@ -86,6 +87,20 @@ public:
     FillColumnTable(int rows, int columns, int fill_column, std::vector<int> other_columns, QWidget* parent = nullptr);
 
     void setHorizontalHeader(QHeaderView* header);
+
+    // The first `count` columns as shown stay in place while the others
+    // scroll sideways under them: a view of those columns alone (frozen_)
+    // lies over the table's leading edge, sharing its rows, selection and
+    // delegate. Called once the table is set up (header, delegate, drags).
+    void freeze_leading_columns(int count);
+
+    // The cell at a point, and where a cell is, as the user sees them: a
+    // frozen column's cells where frozen_ draws them.
+    QModelIndex indexAt(const QPoint& position) const override;
+    QRect visualRect(const QModelIndex& index) const override;
+    // A frozen cell scrolls only the rows; another one is brought out past
+    // the frozen columns, not left under them.
+    void scrollTo(const QModelIndex& index, ScrollHint hint = EnsureVisible) override;
 
     // The local files (not folders) a drag carries.
     static QStringList dropped_files(const QMimeData* mime);
@@ -121,17 +136,32 @@ protected:
     void dragLeaveEvent(QDragLeaveEvent* event) override;
     void dropEvent(QDropEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
+    void focusInEvent(QFocusEvent* event) override;
+    void focusOutEvent(QFocusEvent* event) override;
+    void updateGeometries() override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+    friend class FrozenColumnsView;  // paints the drop line
     enum class DropKind { none, rows, files };
 
     DropKind drop_kind(QDropEvent* event) const;
     int insertion_row(QDropEvent* event) const;
     void set_drop_line(std::optional<int> row);
+    // Draws the drop line across `port` (the table's viewport or frozen_'s).
+    void paint_drop_line(QWidget* port) const;
     void on_section_resized(int logical_index, int old_size, int new_size);
     void recalculate_fill_column();
+    bool is_frozen(int logical_column) const;
+    // Where frozen_'s columns are seen, in the viewport's coordinates.
+    QRect frozen_strip() const;
+    void place_frozen_view();
 
     std::optional<int> drop_line_;  // the row a dragged row would go before, while dragging
+    QTableView* frozen_ = nullptr;   // freeze_leading_columns' view, over the table's leading edge
+    int frozen_count_ = 0;
+    // The header's sort arrow as frozen_ last drew it: (shown, column, order).
+    std::tuple<bool, int, Qt::SortOrder> frozen_sort_{false, -1, Qt::AscendingOrder};
     bool keeps_a_row_ = false;      // keep_a_row_selected
     int last_selected_row_ = 0;     // the row selected last, for keep_a_row_selected
     bool reselect_pending_ = false; // keep_a_row_selected will select one

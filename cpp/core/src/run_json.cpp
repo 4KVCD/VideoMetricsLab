@@ -3,6 +3,7 @@
 #include <fstream>
 
 #include "vml/film_grain_detect.h"
+#include "vml/metrics.h"
 #include "vml/platform/system.h"
 
 namespace vml {
@@ -228,42 +229,51 @@ CropEdges edges_from(const nlohmann::json& text) {
 }  // namespace
 
 nlohmann::json options_json(const VmafOptions& options) {
-    return {{"model", options.model},
-            {"model_choice", options.model_choice},
-            {"custom_model_path", options.custom_model_path},
-            {"extra_features", options.extra_features},
-            {"n_threads", options.n_threads},
-            {"n_subsample", options.n_subsample},
-            {"scale_algorithm", options.scale_algorithm},
-            {"scale_direction", static_cast<int>(options.scale_direction)},
-            {"compute_xpsnr", options.compute_xpsnr},
-            {"compute_psnr_yuv", options.compute_psnr_yuv},
-            {"compute_ssim_yuv", options.compute_ssim_yuv},
-            {"compute_ms_ssim", options.compute_ms_ssim},
-            {"compute_ms_ssim_yuv", options.compute_ms_ssim_yuv},
-            {"compute_psnr_hvs", options.compute_psnr_hvs},
-            {"compute_cambi", options.compute_cambi},
-            {"compute_ciede2000", options.compute_ciede2000},
-            {"compute_vmaf", options.compute_vmaf},
-            {"compute_vmaf_neg", options.compute_vmaf_neg},
-            {"compute_vmaf_v1", options.compute_vmaf_v1},
-            {"model_choice_v1", options.model_choice_v1},
-            {"model_v1", options.model_v1},
-            {"compute_vmaf_hdr", options.compute_vmaf_hdr},
-            {"model_choice_hdr", options.model_choice_hdr},
-            {"model_hdr", options.model_hdr},
-            {"range_start", options.range_start},
-            {"range_end", options.range_end},
-            {"range_in_frames", options.range_in_frames},
-            {"range_in_milliseconds", options.range_in_milliseconds},
-            {"gpu_decode", options.gpu_decode},
-            {"vvc_on_gpu", options.vvc_on_gpu},
-            {"gpu_vendor", static_cast<int>(options.gpu_vendor)},
-            {"vmaf_on_gpu", options.vmaf_on_gpu},
-            {"vship_build", static_cast<int>(options.vship_build)},
-            {"crop_mode", static_cast<int>(options.crop_mode)},
-            {"manual_source_crop", edges_json(options.manual_source_crop)},
-            {"manual_test_crop", edges_json(options.manual_test_crop)}};
+    nlohmann::json text = {
+        {"model", options.model},
+        {"model_choice", options.model_choice},
+        {"custom_model_path", options.custom_model_path},
+        {"extra_features", options.extra_features},
+        {"n_threads", options.n_threads},
+        {"n_subsample", options.n_subsample},
+        {"scale_algorithm", options.scale_algorithm},
+        {"scale_direction", static_cast<int>(options.scale_direction)},
+        {"compute_xpsnr", options.compute_xpsnr},
+        {"compute_psnr_yuv", options.compute_psnr_yuv},
+        {"compute_ssim_yuv", options.compute_ssim_yuv},
+        {"compute_ms_ssim", options.compute_ms_ssim},
+        {"compute_ms_ssim_yuv", options.compute_ms_ssim_yuv},
+        {"compute_psnr_hvs", options.compute_psnr_hvs},
+        {"compute_cambi", options.compute_cambi},
+        {"compute_ciede2000", options.compute_ciede2000},
+        {"compute_vmaf", options.compute_vmaf},
+        {"compute_vmaf_neg", options.compute_vmaf_neg},
+        {"compute_vmaf_v1", options.compute_vmaf_v1},
+        {"model_choice_v1", options.model_choice_v1},
+        {"model_v1", options.model_v1},
+        {"compute_vmaf_hdr", options.compute_vmaf_hdr},
+        {"model_choice_hdr", options.model_choice_hdr},
+        {"model_hdr", options.model_hdr},
+        {"range_start", options.range_start},
+        {"range_end", options.range_end},
+        {"range_in_frames", options.range_in_frames},
+        {"range_in_milliseconds", options.range_in_milliseconds},
+        {"gpu_decode", options.gpu_decode},
+        {"vvc_on_gpu", options.vvc_on_gpu},
+        {"gpu_vendor", static_cast<int>(options.gpu_vendor)},
+        {"vmaf_on_gpu", options.vmaf_on_gpu},
+        {"vship_build", static_cast<int>(options.vship_build)},
+        {"crop_mode", static_cast<int>(options.crop_mode)},
+        {"manual_source_crop", edges_json(options.manual_source_crop)},
+        {"manual_test_crop", edges_json(options.manual_test_crop)}
+    };
+    for (const MetricDefinition& metric : metrics()) {
+        // Only those asked for: a run without the planes is written as before.
+        if (metric.is_plane() && options.metric_enabled(metric.key)) {
+            text["compute_" + std::string(metric.key)] = true;
+        }
+    }
+    return text;
 }
 
 VmafOptions options_from(const nlohmann::json& text) {
@@ -305,6 +315,11 @@ VmafOptions options_from(const nlohmann::json& text) {
     // Absent from runs saved before manual crops
     options.manual_source_crop = edges_from(text.value("manual_source_crop", nlohmann::json()));
     options.manual_test_crop = edges_from(text.value("manual_test_crop", nlohmann::json()));
+    for (const MetricDefinition& metric : metrics()) {
+        if (metric.is_plane()) {
+            options.set_metric_enabled(metric.key, text.value("compute_" + std::string(metric.key), false));
+        }
+    }
     return options;
 }
 

@@ -217,6 +217,10 @@ struct Settings {
     std::string export_graph_text;
     // The metrics left out of the test-video table (and not calculated).
     std::vector<std::string> hidden_metrics{metrics_hidden_at_first.begin(), metrics_hidden_at_first.end()};
+    // Add/remove metrics' "Y, U and V of the YUV metrics": the planes of
+    // PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M shown and calculated
+    // with their metric (MetricDefinition::plane_of).
+    bool show_yuv_planes = false;
     // Every metric the window had when the settings were saved: one added
     // since, if hidden at first, is hidden when they are read (load_from).
     std::vector<std::string> listed_metrics;

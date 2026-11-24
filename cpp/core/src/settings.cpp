@@ -107,6 +107,7 @@ const std::unordered_map<std::string, Field>& fields() {
         {"export_graph_text", &Settings::export_graph_text},
         {"hidden_metrics", &Settings::hidden_metrics},
         {"listed_metrics", &Settings::listed_metrics},
+        {"show_yuv_planes", &Settings::show_yuv_planes},
         {"cvvdp_default_preset", &Settings::cvvdp_default_preset},
         {"notify_finished", &Settings::notify_finished},
         {"notify_with_failures", &Settings::notify_with_failures},
@@ -587,11 +588,13 @@ std::string Settings::text() const {
     data["export_graph_background"] = export_graph_background;
     data["export_graph_text"] = export_graph_text;
     data["hidden_metrics"] = hidden_metrics;
+    data["show_yuv_planes"] = show_yuv_planes;
     // The metrics this window has, and those an earlier or later version's
     // file listed: a metric added later is then hidden at first there too.
     std::vector<std::string> listed = listed_metrics;
     for (const MetricDefinition& metric : metrics()) {
-        if (std::find(listed.begin(), listed.end(), metric.key) == listed.end()) {
+        // A plane is listed with its metric's switch, not as a metric.
+        if (!metric.is_plane() && std::find(listed.begin(), listed.end(), metric.key) == listed.end()) {
             listed.emplace_back(metric.key);
         }
     }

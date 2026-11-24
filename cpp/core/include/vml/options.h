@@ -130,6 +130,22 @@ struct VmafOptions {
     bool compute_ms_ssim = false;
     bool compute_ms_ssim_yuv = false;
     bool compute_psnr_hvs = false;
+    // The Y, U and V planes of PSNR YUV, SSIM YUV, MS-SSIM YUV and
+    // PSNR-HVS-M, as metrics of their own (MetricDefinition::plane_of):
+    // scored in their metric's pass, at no extra cost. Each named
+    // "compute_" and its key.
+    bool compute_psnr_yuv_y = false;
+    bool compute_psnr_yuv_u = false;
+    bool compute_psnr_yuv_v = false;
+    bool compute_ssim_yuv_y = false;
+    bool compute_ssim_yuv_u = false;
+    bool compute_ssim_yuv_v = false;
+    bool compute_ms_ssim_yuv_y = false;
+    bool compute_ms_ssim_yuv_u = false;
+    bool compute_ms_ssim_yuv_v = false;
+    bool compute_psnr_hvs_y = false;
+    bool compute_psnr_hvs_u = false;
+    bool compute_psnr_hvs_v = false;
     bool compute_cambi = false;
     bool compute_ciede2000 = false;
     bool compute_vmaf = true;

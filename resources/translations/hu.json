@@ -1325,7 +1325,10 @@
   "HDR VMAF HFR (4K / 1.5H)": "HDR VMAF HFR (4K / 1.5H)",
   "HDR VMAF HFR (4K / 3H, up to 110)": "HDR VMAF HFR (4K / 3H, 110-ig)",
   "HDR VMAF model:": "HDR VMAF modell:",
-  "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "A HDR VMAF oszlop modellje (a Netflix mellékelt HDR VMAF modelljei). Az Automatikus az 1080p modellt választja háromszoros képernyőmagasságnál, 4K összehasonlításnál pedig a 4K modellt másfélszeresnél, akárcsak a VMAF v0.6.1. Csak PQ (HDR10) videókhoz."
+  "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "A HDR VMAF oszlop modellje (a Netflix mellékelt HDR VMAF modelljei). Az Automatikus az 1080p modellt választja háromszoros képernyőmagasságnál, 4K összehasonlításnál pedig a 4K modellt másfélszeresnél, akárcsak a VMAF v0.6.1. Csak PQ (HDR10) videókhoz.",
+  "Y, U and V of the YUV metrics": "A YUV-metrikák Y, U és V síkja",
+  "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "Egy oszlop az Y, U és V síkok mindegyikéhez a PSNR YUV, SSIM YUV, MS-SSIM YUV és PSNR-HVS-M mellett, többletköltség nélkül velük együtt számolva. A korábban pontozott videókat újra ki kell számolni a kitöltésükhöz.",
+  "Calculated with {metric}.": "A(z) {metric} metrikával számolva."
  },
  "plurals": {
   "{shown}/{count} metric selected": ["{shown}/{count} metrika kiválasztva", "{shown}/{count} metrika kiválasztva"],

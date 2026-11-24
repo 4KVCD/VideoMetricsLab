@@ -1,6 +1,7 @@
 #include "vml/options.h"
 
 #include <algorithm>
+#include <array>
 #include <stdexcept>
 #include <string_view>
 
@@ -10,6 +11,22 @@
 namespace vml {
 
 namespace {
+
+// The planes' options (MetricDefinition::plane_of), by their names.
+constexpr std::array<std::pair<std::string_view, bool VmafOptions::*>, 12> plane_options{{
+    {"compute_psnr_yuv_y", &VmafOptions::compute_psnr_yuv_y},
+    {"compute_psnr_yuv_u", &VmafOptions::compute_psnr_yuv_u},
+    {"compute_psnr_yuv_v", &VmafOptions::compute_psnr_yuv_v},
+    {"compute_ssim_yuv_y", &VmafOptions::compute_ssim_yuv_y},
+    {"compute_ssim_yuv_u", &VmafOptions::compute_ssim_yuv_u},
+    {"compute_ssim_yuv_v", &VmafOptions::compute_ssim_yuv_v},
+    {"compute_ms_ssim_yuv_y", &VmafOptions::compute_ms_ssim_yuv_y},
+    {"compute_ms_ssim_yuv_u", &VmafOptions::compute_ms_ssim_yuv_u},
+    {"compute_ms_ssim_yuv_v", &VmafOptions::compute_ms_ssim_yuv_v},
+    {"compute_psnr_hvs_y", &VmafOptions::compute_psnr_hvs_y},
+    {"compute_psnr_hvs_u", &VmafOptions::compute_psnr_hvs_u},
+    {"compute_psnr_hvs_v", &VmafOptions::compute_psnr_hvs_v},
+}};
 
 // The option that switches an on/off metric on, by its name in the Python
 // app's VmafOptions (the registry's bool_option).
@@ -43,6 +60,11 @@ bool VmafOptions::*bool_option(std::string_view name) {
     }
     if (name == "compute_psnr_hvs") {
         return &VmafOptions::compute_psnr_hvs;
+    }
+    for (const auto& [plane, option] : plane_options) {
+        if (name == plane) {
+            return option;
+        }
     }
     if (name == "compute_cambi") {
         return &VmafOptions::compute_cambi;

@@ -27,6 +27,9 @@ namespace vml::app {
 
 namespace {
 
+// The object name of Add/remove metrics' switch for the planes' columns.
+constexpr const char* yuv_planes_action = "yuv_planes";
+
 // What Add/remove metrics says of the metrics hidden at first
 // (metrics_hidden_at_first), which most users do not know; none for the rest.
 QString hidden_at_first_tip(std::string_view key) {
@@ -71,12 +74,19 @@ void MainWindow::set_metric_option(VmafOptions& options, int column, bool checke
 
 std::vector<std::string> MainWindow::selected_metrics(const RowData& row_data) {
     // The row's tick boxes, metrics whose column is hidden included, in the
-    // registry's order.
+    // registry's order. A plane has no tick box of its own: it comes with
+    // its metric's, which the registry lists before it.
     const std::vector<std::string> ffmpeg = row_data.options.requested_metrics();
     std::vector<std::string> selected;
+    const auto has = [&selected](std::string_view key) {
+        return std::find(selected.begin(), selected.end(), key) != selected.end();
+    };
     for (const MetricDefinition& metric : metrics()) {
         const std::string key(metric.key);
-        if (std::find(ffmpeg.begin(), ffmpeg.end(), key) != ffmpeg.end() || row_data.extra_metric_keys.contains(key)) {
+        const bool ticked = metric.is_plane() ? has(metric.plane_of)
+                                              : std::find(ffmpeg.begin(), ffmpeg.end(), key) != ffmpeg.end() ||
+                                                    row_data.extra_metric_keys.contains(key);
+        if (ticked) {
             selected.push_back(key);
         }
     }
@@ -89,7 +99,7 @@ std::vector<std::string> MainWindow::requested_metrics(const RowData& row_data) 
     // leaves the row's tick untouched, so showing it again restores it.
     std::vector<std::string> requested;
     for (const std::string& key : selected_metrics(row_data)) {
-        if (!hidden_metrics_.contains(key) && !metric_unavailable_reason(row_data, key)) {
+        if (metric_shown(key) && !metric_unavailable_reason(row_data, key)) {
             requested.push_back(key);
         }
     }
@@ -121,14 +131,27 @@ bool MainWindow::row_metric_enabled(const RowData& row_data, int column) {
     return std::find(selected.begin(), selected.end(), metric_column_of(column)->key) != selected.end();
 }
 
+bool MainWindow::metric_shown(std::string_view key) const {
+    const MetricDefinition& metric = metric_definition(key);
+    if (metric.is_plane()) {
+        return settings_.show_yuv_planes && !hidden_metrics_.contains(std::string(metric.plane_of));
+    }
+    return !hidden_metrics_.contains(std::string(key));
+}
+
+long long MainWindow::listed_metric_count() {
+    return std::count_if(metric_columns().begin(), metric_columns().end(),
+                         [](const MetricColumn& item) { return !metric_definition(item.key).is_plane(); });
+}
+
 void MainWindow::apply_metric_visibility() {
     long long shown = 0;
     for (const MetricColumn& item : metric_columns()) {
-        const bool hidden = hidden_metrics_.contains(item.key);
-        distorted_table_->setColumnHidden(item.column, hidden);
-        shown += hidden ? 0 : 1;
+        const bool visible = metric_shown(item.key);
+        distorted_table_->setColumnHidden(item.column, !visible);
+        shown += visible && !metric_definition(item.key).is_plane() ? 1 : 0;
     }
-    const auto total = static_cast<long long>(metric_columns().size());
+    const long long total = listed_metric_count();
     metrics_count_label_->setText(
         app::ntr("{shown}/{count} metric selected", "{shown}/{count} metrics selected", total, {{"shown", shown}}));
 }
@@ -140,8 +163,11 @@ void MainWindow::show_metrics_menu(const QPoint& position) {
     auto* menu = new StayOpenMenu(this);
     menu->setAttribute(Qt::WA_DeleteOnClose);
     menu->setToolTipsVisible(true);
-    const std::size_t shown = metric_columns().size() - hidden_metrics_.size();
+    const long long shown = listed_metric_count() - static_cast<long long>(hidden_metrics_.size());
     for (const MetricColumn& item : metric_columns()) {
+        if (metric_definition(item.key).is_plane()) {
+            continue;  // shown with the switch below
+        }
         QAction* action = menu->addAction(qt_text(metric_definition(item.key).label));
         action->setCheckable(true);
         action->setChecked(!hidden_metrics_.contains(item.key));
@@ -156,6 +182,15 @@ void MainWindow::show_metrics_menu(const QPoint& position) {
         connect(action, &QAction::toggled, this,
                 [this, key, menu](bool checked) { on_metric_visibility_toggled(key, checked, menu); });
     }
+    menu->addSeparator();
+    QAction* planes = menu->addAction(app::tr("Y, U and V of the YUV metrics"));
+    planes->setObjectName(yuv_planes_action);
+    planes->setCheckable(true);
+    planes->setChecked(settings_.show_yuv_planes);
+    planes->setToolTip(
+        app::tr("A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, "
+                "calculated with them at no extra cost. Videos scored before need Calculate again to fill them."));
+    connect(planes, &QAction::toggled, this, [this](bool checked) { on_yuv_planes_toggled(checked); });
     menu->exec(position);
 }
 
@@ -165,7 +200,7 @@ void MainWindow::on_metric_visibility_toggled(const std::string& key, bool shown
     if (shown) {
         hidden_metrics_.erase(key);
     } else {
-        if (hidden_metrics_.size() + 1 >= metric_columns().size()) {
+        if (static_cast<long long>(hidden_metrics_.size()) + 1 >= listed_metric_count()) {
             return;
         }
         hidden_metrics_.insert(key);
@@ -179,21 +214,41 @@ void MainWindow::on_metric_visibility_toggled(const std::string& key, bool shown
     save_settings();
     apply_metric_visibility();
     if (menu != nullptr) {
+        // The metrics' own entries: not the planes' switch or the separator.
+        const auto is_metric = [](const QAction* action) {
+            return action->isCheckable() && action->objectName() != yuv_planes_action;
+        };
         int visible = 0;
         for (const QAction* action : menu->actions()) {
-            visible += action->isChecked() ? 1 : 0;
+            visible += is_metric(action) && action->isChecked() ? 1 : 0;
         }
         for (QAction* action : menu->actions()) {
-            action->setEnabled(!(visible == 1 && action->isChecked()));
+            if (is_metric(action)) {
+                action->setEnabled(!(visible == 1 && action->isChecked()));
+            }
         }
     }
+    refresh_shown_metrics(shown);
+}
+
+void MainWindow::on_yuv_planes_toggled(bool shown) {
+    // Shows or hides the planes' columns, and saves the choice.
+    settings_.show_yuv_planes = shown;
+    save_settings();
+    apply_metric_visibility();
+    refresh_shown_metrics(shown);
+}
+
+void MainWindow::refresh_shown_metrics(bool more_shown) {
+    // Every row's cells after columns were shown or hidden: what a run asks
+    // for has changed with them.
     std::vector<int> every_row;
     for (int row = 0; row < static_cast<int>(rows_.size()); ++row) {
         set_row_metrics(row);
         every_row.push_back(row);
     }
-    if (shown) {
-        // Scores saved for the metric while it was hidden come back.
+    if (more_shown) {
+        // Scores saved for the metrics while they were hidden come back.
         reload_saved_scores(every_row);
     }
 }

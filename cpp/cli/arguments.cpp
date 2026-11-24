@@ -214,9 +214,11 @@ options:
   -m, --metrics LIST    comma-separated: vmaf, vmaf_neg, vmaf_v1, vmaf_hdr,
                         psnr, ssim, psnr_yuv, ssim_yuv, xpsnr, ms_ssim,
                         ms_ssim_yuv, psnr_hvs, cambi, ciede2000, ssimulacra2,
-                        butteraugli, cvvdp; or all (every one but vmaf_hdr,
-                        which scores PQ (HDR10) videos only) (default: the
-                        app's)
+                        butteraugli, cvvdp; a plane of psnr_yuv, ssim_yuv,
+                        ms_ssim_yuv or psnr_hvs with _y, _u or _v
+                        (psnr_yuv_u); or all (every one but vmaf_hdr, which
+                        scores PQ (HDR10) videos only, and the planes)
+                        (default: the app's)
   --model MODEL         VMAF v0.6.1's model: auto (4K model for a 4K
                         comparison), standard, 4k, or a model .json file
                         (default: auto)
@@ -725,8 +727,10 @@ options:
   -m, --metrics LIST  comma-separated: vmaf, vmaf_neg, vmaf_v1, vmaf_hdr,
                       psnr, ssim, psnr_yuv, ssim_yuv, xpsnr, ms_ssim,
                       ms_ssim_yuv, psnr_hvs, cambi, ciede2000, ssimulacra2,
-                      butteraugli, cvvdp; or all but vmaf_hdr (default: those
-                      the files have columns for)
+                      butteraugli, cvvdp; a plane of psnr_yuv, ssim_yuv,
+                      ms_ssim_yuv or psnr_hvs with _y, _u or _v (psnr_yuv_u);
+                      or all but vmaf_hdr and the planes (default: those the
+                      files have columns for)
   --group-by COLUMN   a column of the anchor's file, such as class: a mean and
                       median for each of its values as well
   --json FILE         also write the results as JSON to FILE; - prints the
@@ -1139,13 +1143,14 @@ std::string metric_keys_text() {
 }
 
 // The metric keys named in a --metrics value, in the registry's order. "all"
-// is every metric but HDR VMAF, which refuses all but PQ videos: with it, a
-// run of SDR videos asked for "all" would fail.
+// is every metric but HDR VMAF, which refuses all but PQ videos (with it, a
+// run of SDR videos asked for "all" would fail), and the planes, which are
+// named one by one.
 std::vector<std::string> metric_list(const std::string& text) {
     std::vector<std::string> keys;
     if (ascii_lower(python_strip(text)) == "all") {
         for (const MetricDefinition& metric : metrics()) {
-            if (metric.key != "vmaf_hdr") {
+            if (metric.key != "vmaf_hdr" && !metric.is_plane()) {
                 keys.emplace_back(metric.key);
             }
         }

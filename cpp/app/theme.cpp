@@ -1024,6 +1024,7 @@ QTabBar::tab:hover:!selected { color: {text}; border-bottom: 2px solid {border_s
 QTabBar::tab:disabled { color: {disabled}; }
 QHeaderView::section { background: {raised}; color: {text_soft}; border: 0; border-right: 1px solid {border}; border-bottom: 1px solid {border}; padding: 4px 6px; font-weight: 600; }
 QTableView, QTableWidget, QListView, QTreeView { background: {card}; alternate-background-color: {card_alt}; color: {text}; border: 1px solid {border}; border-radius: 6px; gridline-color: {border}; selection-background-color: {accent_tint}; selection-color: {text}; }
+QTableView#frozenColumns { border: none; border-radius: 0px; }
 QTableCornerButton::section { background: {raised}; border: 0; }
 QMenu { background: {card}; color: {text}; border: 1px solid {border_strong}; border-radius: 6px; padding: 4px; }
 QMenu::item { padding: 5px 24px 5px 20px; border-radius: 4px; }

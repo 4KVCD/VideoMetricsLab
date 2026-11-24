@@ -1539,12 +1539,17 @@ void GraphPanel::setup_stats_table() {
     stats_table_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     stats_table_->verticalHeader()->setVisible(false);
     const std::span<const MetricDefinition> all = metrics();
+    const std::vector<std::string> scored = scored_metrics();
     for (int column = first_mean_column(); column < mean_column_end(); ++column) {
+        const MetricDefinition& spec = all[static_cast<std::size_t>(column - first_mean_column())];
+        // A plane (MetricDefinition::plane_of) only where a run has it: most
+        // runs have none, and twelve empty columns would crowd the rest.
+        stats_table_->setColumnHidden(column, spec.is_plane() && std::find(scored.begin(), scored.end(),
+                                                                           spec.key) == scored.end());
         QTableWidgetItem* head = stats_table_->horizontalHeaderItem(column);
         if (head == nullptr) {
             continue;
         }
-        const MetricDefinition& spec = all[static_cast<std::size_t>(column - first_mean_column())];
         const bool selected = spec.key == metric.key;
         // The axis label carries the unit ("PSNR (dB)"), which the heading
         // leaves off to keep the column narrow.

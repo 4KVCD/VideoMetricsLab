@@ -95,8 +95,13 @@ TEST(BdRatePanel, ShowsTheBdRatesOfTwoEncoders) {
     EXPECT_EQ(panel.anchor.sequences->rowCount(), 2);
     EXPECT_EQ(panel.heading_label->text(),
               "slow against fast. Sequences in both: 2. Negative: less bitrate for the same score.");
-    // A column per metric; mean, median, s1, s2
-    ASSERT_EQ(panel.results->columnCount(), 18);
+    // A column per metric, the planes none of these scores (hidden); mean,
+    // median, s1, s2
+    int shown_columns = 0;
+    for (int column = 0; column < panel.results->columnCount(); ++column) {
+        shown_columns += panel.results->isColumnHidden(column) ? 0 : 1;
+    }
+    ASSERT_EQ(shown_columns, 18);
     EXPECT_EQ(panel.results->horizontalHeaderItem(1)->text(), "VMAF v0.6.1");
     ASSERT_EQ(panel.results->rowCount(), 4);
     const QTableWidgetItem* s1_vmaf = panel.results->item(2, 1);

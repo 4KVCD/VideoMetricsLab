@@ -210,16 +210,22 @@ TEST_F(GraphPanelTest, ShowsTheRunsAsThePythonApp) {
         shown.chart().resize(800, 400);
         const nlohmann::json& expected = item.at("table");
         QTableWidget& stats = table(panel);
+        // The columns shown: the planes' (hidden without their scores) came
+        // after the Python app.
+        std::vector<int> shown_columns;
         std::vector<std::string> headers;
         for (int column = 0; column < stats.columnCount(); ++column) {
-            headers.push_back(stats.horizontalHeaderItem(column)->text().toStdString());
+            if (!stats.isColumnHidden(column)) {
+                shown_columns.push_back(column);
+                headers.push_back(stats.horizontalHeaderItem(column)->text().toStdString());
+            }
         }
         EXPECT_EQ(headers, expected.at("headers").get<std::vector<std::string>>());
         ASSERT_EQ(stats.rowCount(), static_cast<int>(expected.at("cells").size()));
         for (int row = 0; row < stats.rowCount(); ++row) {
-            for (int column = 0; column < stats.columnCount(); ++column) {
-                const nlohmann::json& cell =
-                    expected.at("cells")[static_cast<std::size_t>(row)][static_cast<std::size_t>(column)];
+            for (std::size_t index = 0; index < shown_columns.size(); ++index) {
+                const int column = shown_columns[index];
+                const nlohmann::json& cell = expected.at("cells")[static_cast<std::size_t>(row)][index];
                 const QTableWidgetItem* actual = stats.item(row, column);
                 EXPECT_EQ(actual == nullptr ? nlohmann::json() : nlohmann::json(actual->text().toStdString()), cell)
                     << "row " << row << ", column " << column;

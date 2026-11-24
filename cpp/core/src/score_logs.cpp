@@ -180,11 +180,19 @@ private:
             at == xpsnr_.end() ? std::nullopt : std::optional<double>(at->second), frame_.number_of[vmaf_neg],
             frame_.number_of[vmaf_v1], std::nullopt /* HDR VMAF: never FFmpeg's */,
             std::nullopt /* PSNR YUV: the app's only */, std::nullopt /* SSIM YUV: the app's only */,
-            std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt /* the app's only too */};
+            std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt /* the app's only too */,
+            std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+            std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt /* their planes */};
         frames.push_back(frame_number);
         for (std::size_t column = 0; column < column_count; ++column) {
+            // A column is filled from its first score on, the frames before it
+            // NaN: most columns are never FFmpeg's and stay empty.
+            if (!scored[column] && !values[column]) {
+                continue;
+            }
+            columns[column].resize(frames.size() - 1, std::nanf(""));
             columns[column].push_back(values[column] ? static_cast<float>(*values[column]) : std::nanf(""));
-            scored[column] = scored[column] || values[column].has_value();
+            scored[column] = true;
         }
     }
 

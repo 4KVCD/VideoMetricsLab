@@ -122,6 +122,21 @@ enum Column : int {
     col_psnr_hvs,
     col_cambi,
     col_ciede2000,
+    // The planes of the metrics of the three planes (MetricDefinition::
+    // plane_of), shown beside their metric with Add/remove metrics' "Y, U
+    // and V of the YUV metrics".
+    col_psnr_yuv_y,
+    col_psnr_yuv_u,
+    col_psnr_yuv_v,
+    col_ssim_yuv_y,
+    col_ssim_yuv_u,
+    col_ssim_yuv_v,
+    col_ms_ssim_yuv_y,
+    col_ms_ssim_yuv_u,
+    col_ms_ssim_yuv_v,
+    col_psnr_hvs_y,
+    col_psnr_hvs_u,
+    col_psnr_hvs_v,
     column_count,
 };
 
@@ -392,6 +407,9 @@ private:
     void show_unavailable_cell(QTableWidgetItem& item, const QString& reason);
     void show_tick_cell(QTableWidgetItem& item, const RowData& row_data, const MetricColumn& metric,
                         bool enabled);
+    // A plane's cell without a score: no tick box, as its metric's tick
+    // calculates it.
+    static void show_plane_cell(QTableWidgetItem& item, const MetricColumn& metric);
     // A row's detail for its scores: how many frames were scored, and which
     // metrics ("{count} scored frames; metrics: VMAF, PSNR").
     QString scores_detail(const ComparisonResult& result) const;
@@ -456,9 +474,18 @@ private:
     std::shared_ptr<const RunFacts> saved_facts(const RowData& row_data, const ComparisonResult& shown) const;
     static std::optional<QString> metric_unavailable_reason(const RowData& row_data, const std::string& key);
     static bool row_metric_enabled(const RowData& row_data, int column);
+    // Whether `key`'s column is shown: not hidden with Add/remove metrics,
+    // and for a plane, the planes shown and its metric too.
+    bool metric_shown(std::string_view key) const;
+    // The metrics Add/remove metrics lists: every metric but the planes.
+    static long long listed_metric_count();
     void apply_metric_visibility();
     void show_metrics_menu(const QPoint& position);
     void on_metric_visibility_toggled(const std::string& key, bool shown, QMenu* menu);
+    void on_yuv_planes_toggled(bool shown);
+    // Every row's cells after metric columns were shown or hidden; with
+    // `more_shown`, their saved scores looked up again.
+    void refresh_shown_metrics(bool more_shown);
     void apply_metric_selection(const std::vector<int>& rows, int column, bool checked, bool set_default);
     void on_table_item_changed(QTableWidgetItem* item);
     void on_metric_column_toggled(int column, bool checked);

@@ -131,15 +131,37 @@ constexpr int max_videos_in_flight = max_parallel_jobs + 1;
 
 const std::vector<MetricColumn>& metric_columns() {
     // VMAF NEG beside VMAF v0.6.1, whose variant it is; VMAF v1 and HDR VMAF
-    // after them.
+    // after them; a metric's planes after it.
     static const std::vector<MetricColumn> columns{
-        {col_vmaf, "vmaf"},       {col_vmaf_neg, "vmaf_neg"},       {col_vmaf_v1, "vmaf_v1"},
+        {col_vmaf, "vmaf"},
+        {col_vmaf_neg, "vmaf_neg"},
+        {col_vmaf_v1, "vmaf_v1"},
         {col_vmaf_hdr, "vmaf_hdr"},
-        {col_psnr, "psnr"},       {col_ssim, "ssim"},               {col_xpsnr, "xpsnr"},
-        {col_psnr_yuv, "psnr_yuv"}, {col_ssim_yuv, "ssim_yuv"},
-        {col_ms_ssim, "ms_ssim"}, {col_ms_ssim_yuv, "ms_ssim_yuv"}, {col_psnr_hvs, "psnr_hvs"},
-        {col_cambi, "cambi"}, {col_ciede2000, "ciede2000"},
-        {col_ssimulacra2, "ssimulacra2"}, {col_butteraugli, "butteraugli"}, {col_cvvdp, "cvvdp"},
+        {col_psnr, "psnr"},
+        {col_ssim, "ssim"},
+        {col_xpsnr, "xpsnr"},
+        {col_psnr_yuv, "psnr_yuv"},
+        {col_psnr_yuv_y, "psnr_yuv_y"},
+        {col_psnr_yuv_u, "psnr_yuv_u"},
+        {col_psnr_yuv_v, "psnr_yuv_v"},
+        {col_ssim_yuv, "ssim_yuv"},
+        {col_ssim_yuv_y, "ssim_yuv_y"},
+        {col_ssim_yuv_u, "ssim_yuv_u"},
+        {col_ssim_yuv_v, "ssim_yuv_v"},
+        {col_ms_ssim, "ms_ssim"},
+        {col_ms_ssim_yuv, "ms_ssim_yuv"},
+        {col_ms_ssim_yuv_y, "ms_ssim_yuv_y"},
+        {col_ms_ssim_yuv_u, "ms_ssim_yuv_u"},
+        {col_ms_ssim_yuv_v, "ms_ssim_yuv_v"},
+        {col_psnr_hvs, "psnr_hvs"},
+        {col_psnr_hvs_y, "psnr_hvs_y"},
+        {col_psnr_hvs_u, "psnr_hvs_u"},
+        {col_psnr_hvs_v, "psnr_hvs_v"},
+        {col_cambi, "cambi"},
+        {col_ciede2000, "ciede2000"},
+        {col_ssimulacra2, "ssimulacra2"},
+        {col_butteraugli, "butteraugli"},
+        {col_cvvdp, "cvvdp"},
     };
     return columns;
 }
@@ -195,12 +217,13 @@ MainWindow::MainWindow() {
     default_options_ = options_from_settings();
     default_extra_metric_keys_ = extra_metrics_from_settings();
     for (const std::string& key : settings_.hidden_metrics) {
-        if (std::any_of(metric_columns().begin(), metric_columns().end(),
-                        [&key](const MetricColumn& item) { return key == item.key; })) {
+        if (std::any_of(metric_columns().begin(), metric_columns().end(), [&key](const MetricColumn& item) {
+                return key == item.key && !metric_definition(item.key).is_plane();
+            })) {
             hidden_metrics_.insert(key);
         }
     }
-    if (hidden_metrics_.size() >= metric_columns().size()) {
+    if (static_cast<long long>(hidden_metrics_.size()) >= listed_metric_count()) {
         hidden_metrics_.clear();  // a settings file that hides everything shows everything
     }
 
@@ -996,7 +1019,9 @@ void MainWindow::build_test_table() {
     // the Settings tab.
     QMap<int, bool> checkable;
     for (const MetricColumn& item : metric_columns()) {
-        checkable.insert(item.column, default_metric_ticked(item.column));
+        if (!metric_definition(item.key).is_plane()) {  // a plane comes with its metric's tick
+            checkable.insert(item.column, default_metric_ticked(item.column));
+        }
     }
     metric_header_ = new CheckableHeaderView(checkable, distorted_table_);
     distorted_table_->setHorizontalHeader(metric_header_);
@@ -1015,7 +1040,10 @@ void MainWindow::build_test_table() {
         header_of("vmaf_neg"), header_of("ssimulacra2"), header_of("butteraugli"), header_of("cvvdp"),
         header_of("vmaf_v1"), header_of("vmaf_hdr"), header_of("psnr_yuv"), header_of("ssim_yuv"),
         header_of("ms_ssim"), header_of("ms_ssim_yuv"), header_of("psnr_hvs"), header_of("cambi"),
-        header_of("ciede2000"),
+        header_of("ciede2000"), header_of("psnr_yuv_y"), header_of("psnr_yuv_u"), header_of("psnr_yuv_v"),
+        header_of("ssim_yuv_y"), header_of("ssim_yuv_u"), header_of("ssim_yuv_v"), header_of("ms_ssim_yuv_y"),
+        header_of("ms_ssim_yuv_u"), header_of("ms_ssim_yuv_v"), header_of("psnr_hvs_y"), header_of("psnr_hvs_u"),
+        header_of("psnr_hvs_v"),
     });
     distorted_table_->verticalHeader()->setVisible(false);
     // Kept as a column, but not shown: cropping is in the row's options.
@@ -1062,6 +1090,9 @@ void MainWindow::build_test_table() {
     header->setStretchLastSection(false);
     distorted_table_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     fit_table_columns();
+    // The tick box and File name stay in place while the metrics scroll
+    // sideways, so a row's scores are always beside its name.
+    distorted_table_->freeze_leading_columns(2);
 }
 
 void MainWindow::fit_table_columns() {

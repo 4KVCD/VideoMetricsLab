@@ -69,11 +69,26 @@ enum Column {
     psnr_hvs_column,
     cambi_column,
     ciede2000_column,
+    psnr_yuv_y_column,  // the planes of the metrics of the three planes
+    psnr_yuv_u_column,
+    psnr_yuv_v_column,
+    ssim_yuv_y_column,
+    ssim_yuv_u_column,
+    ssim_yuv_v_column,
+    ms_ssim_yuv_y_column,
+    ms_ssim_yuv_u_column,
+    ms_ssim_yuv_v_column,
+    psnr_hvs_y_column,
+    psnr_hvs_u_column,
+    psnr_hvs_v_column,
     column_count
 };
 inline constexpr std::array<const char*, column_count> column_keys{
-    "vmaf",     "psnr",        "ssim",     "xpsnr", "vmaf_neg", "vmaf_v1",  "vmaf_hdr",
-    "psnr_yuv", "ssim_yuv",    "ms_ssim",  "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000"};
+    "vmaf",          "psnr",          "ssim",          "xpsnr",      "vmaf_neg",   "vmaf_v1",
+    "vmaf_hdr",      "psnr_yuv",      "ssim_yuv",      "ms_ssim",    "ms_ssim_yuv", "psnr_hvs",
+    "cambi",         "ciede2000",     "psnr_yuv_y",    "psnr_yuv_u", "psnr_yuv_v", "ssim_yuv_y",
+    "ssim_yuv_u",    "ssim_yuv_v",    "ms_ssim_yuv_y", "ms_ssim_yuv_u", "ms_ssim_yuv_v", "psnr_hvs_y",
+    "psnr_hvs_u",    "psnr_hvs_v"};
 
 // XPSNR's luma score per frame from the xpsnr filter's stats file, by frame
 // number counted from 0 (the file counts from 1).

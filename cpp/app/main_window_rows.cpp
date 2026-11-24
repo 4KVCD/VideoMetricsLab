@@ -273,6 +273,8 @@ void MainWindow::set_row_metrics(int row) {
             show_score_cell(*item, row_data, *run, metric, *score);
         } else if (const std::optional<QString> unavailable = metric_unavailable_reason(row_data, metric.key)) {
             show_unavailable_cell(*item, *unavailable);
+        } else if (metric_definition(metric.key).is_plane()) {
+            show_plane_cell(*item, metric);
         } else {
             show_tick_cell(*item, row_data, metric, row_metric_enabled(row_data, metric.column));
         }
@@ -325,6 +327,16 @@ void MainWindow::show_score_cell(QTableWidgetItem& item, const RowData& row_data
     font.setBold(true);
     item.setFont(font);
     theme::foreground(&item, std::nullopt);
+}
+
+void MainWindow::show_plane_cell(QTableWidgetItem& item, const MetricColumn& metric) {
+    item.setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+    item.setData(Qt::CheckStateRole, QVariant());
+    item.setText(QString());
+    const MetricDefinition& parent = metric_definition(metric_definition(metric.key).plane_of);
+    item.setToolTip(app::tr("Calculated with {metric}.", {{"metric", qt_text(parent.label)}}));
+    item.setData(score_role, QVariant());
+    item.setFont(QFont());
 }
 
 // The cell of a metric the row cannot have (`reason`): "n/a", and no tick box.

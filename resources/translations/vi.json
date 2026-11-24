@@ -1325,7 +1325,10 @@
   "HDR VMAF HFR (4K / 1.5H)": "HDR VMAF HFR (4K / 1.5H)",
   "HDR VMAF HFR (4K / 3H, up to 110)": "HDR VMAF HFR (4K / 3H, đến 110)",
   "HDR VMAF model:": "Mô hình HDR VMAF:",
-  "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "Mô hình cho cột HDR VMAF (các mô hình HDR VMAF đi kèm của Netflix). Tự động chọn mô hình 1080p ở khoảng cách ba lần chiều cao màn hình, hoặc mô hình 4K ở 1,5 lần cho so sánh 4K, giống VMAF v0.6.1. Chỉ dành cho video PQ (HDR10)."
+  "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "Mô hình cho cột HDR VMAF (các mô hình HDR VMAF đi kèm của Netflix). Tự động chọn mô hình 1080p ở khoảng cách ba lần chiều cao màn hình, hoặc mô hình 4K ở 1,5 lần cho so sánh 4K, giống VMAF v0.6.1. Chỉ dành cho video PQ (HDR10).",
+  "Y, U and V of the YUV metrics": "Y, U và V của các chỉ số YUV",
+  "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "Một cột cho mỗi mặt phẳng Y, U và V bên cạnh PSNR YUV, SSIM YUV, MS-SSIM YUV và PSNR-HVS-M, được tính cùng chúng mà không tốn thêm chi phí. Các video đã chấm điểm trước đó cần Tính lại để điền vào.",
+  "Calculated with {metric}.": "Được tính cùng {metric}."
  },
  "plurals": {
   "{shown}/{count} metric selected": ["Đã chọn {shown}/{count} chỉ số"],

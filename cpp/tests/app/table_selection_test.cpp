@@ -8,6 +8,7 @@
 #include <QFileInfo>
 #include <QItemSelectionModel>
 #include <QMimeData>
+#include <QScrollBar>
 #include <QSignalSpy>
 #include <QTableWidget>
 #include <QTest>
@@ -190,6 +191,77 @@ TEST(TableSelection, DroppedFilesAreSaidAfterTheDrop) {
     QCoreApplication::processEvents();
     ASSERT_EQ(dropped.count(), 1);
     EXPECT_EQ(QFileInfo(dropped.front().front().toStringList().front()), QFileInfo(file));
+}
+
+TEST(TableSelection, FrozenColumnsStayWhileTheOthersScroll) {
+    // As the Videos table: the tick box and File name (the fill column)
+    // frozen, many metric columns beside them in a narrow table.
+    constexpr int columns = 20;
+    std::vector<int> others;
+    for (int column = 0; column < columns; ++column) {
+        if (column != 1) {
+            others.push_back(column);
+        }
+    }
+    FillColumnTable table(4, columns, 1, others);
+    table.setSelectionBehavior(QAbstractItemView::SelectRows);
+    table.setSelectionMode(QAbstractItemView::ExtendedSelection);
+    table.verticalHeader()->setVisible(false);
+    for (int row = 0; row < table.rowCount(); ++row) {
+        auto* tick = new QTableWidgetItem();
+        tick->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable);
+        tick->setCheckState(Qt::Unchecked);
+        table.setItem(row, 0, tick);
+        table.setItem(row, 1, new QTableWidgetItem(QStringLiteral("video %1.mkv").arg(row)));
+    }
+    for (int column = 2; column < columns; ++column) {
+        table.setColumnWidth(column, 80);
+    }
+    table.setColumnWidth(0, 28);
+    table.resize(500, 200);
+    table.freeze_leading_columns(2);
+    table.show();
+    ASSERT_TRUE(QTest::qWaitForWindowExposed(&table));
+    auto* frozen = table.findChild<QTableView*>(QStringLiteral("frozenColumns"));
+    ASSERT_NE(frozen, nullptr);
+
+    // Scrolled fully sideways, the File name cell is drawn where it was, and
+    // a point there is its cell.
+    const QRect name_cell = table.visualRect(table.model()->index(1, 1));
+    QScrollBar* bar = table.horizontalScrollBar();
+    ASSERT_GT(bar->maximum(), 0);
+    bar->setValue(bar->maximum());
+    EXPECT_EQ(table.visualRect(table.model()->index(1, 1)), name_cell);
+    EXPECT_EQ(table.indexAt(name_cell.center()), table.model()->index(1, 1));
+    // frozen_'s viewport lies exactly over the table's.
+    EXPECT_EQ(frozen->viewport()->mapToGlobal(QPoint()), table.viewport()->mapToGlobal(QPoint()));
+
+    // Going to a cell scrolled under the frozen columns brings it out past
+    // them; going to a frozen cell leaves the sideways scrolling alone.
+    table.scrollTo(table.model()->index(0, 5));
+    EXPECT_GE(table.columnViewportPosition(5), table.columnWidth(0) + table.columnWidth(1));
+    const int scrolled = bar->value();
+    table.scrollTo(table.model()->index(3, 1));
+    EXPECT_EQ(bar->value(), scrolled);
+
+    // A click on a frozen tick box ticks it once; a shift-click on another
+    // row's File name selects the rows between, in the table's selection.
+    QSignalSpy changed(&table, &QTableWidget::itemChanged);
+    const QRect tick_cell = table.visualRect(table.model()->index(0, 0));
+    QTest::mouseClick(frozen->viewport(), Qt::LeftButton, {}, tick_cell.center());
+    EXPECT_EQ(changed.count(), 1);
+    EXPECT_EQ(table.item(0, 0)->checkState(), Qt::Checked);
+    QTest::mouseClick(frozen->viewport(), Qt::LeftButton, Qt::ShiftModifier,
+                      table.visualRect(table.model()->index(2, 1)).center());
+    EXPECT_EQ(selected_rows(table), (std::vector<int>{0, 1, 2}));
+
+    // Right to left, the frozen columns are on the right, the tick box first.
+    table.setLayoutDirection(Qt::RightToLeft);
+    QCoreApplication::processEvents();
+    const QRect name_rtl = table.visualRect(table.model()->index(1, 1));
+    EXPECT_GT(name_rtl.center().x(), table.viewport()->width() / 2);
+    EXPECT_GT(table.visualRect(table.model()->index(1, 0)).left(), name_rtl.right());
+    EXPECT_EQ(table.indexAt(name_rtl.center()), table.model()->index(1, 1));
 }
 
 }  // namespace

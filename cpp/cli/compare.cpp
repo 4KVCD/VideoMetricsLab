@@ -607,7 +607,8 @@ std::optional<std::string> sdr_display_note(const CompareArguments& arguments, c
 }
 
 // What a video added to the window starts with ticked, less the metrics its
-// Metrics... picker hides (they are not calculated there).
+// Metrics... picker hides (they are not calculated there), with the planes
+// of those that have them where the window shows them (show_yuv_planes).
 std::vector<std::string> default_metrics(const Settings& settings) {
     VmafOptions options;
     options.extra_features = settings.default_extra_features();
@@ -642,6 +643,11 @@ std::vector<std::string> default_metrics(const Settings& settings) {
     if (hidden.size() < metrics().size()) {  // a settings file that hides everything hides nothing
         for (const std::string& key : hidden) {
             chosen.erase(key);
+        }
+    }
+    for (const MetricDefinition& metric : metrics()) {
+        if (settings.show_yuv_planes && metric.is_plane() && chosen.contains(metric.plane_of)) {
+            chosen.emplace(metric.key);
         }
     }
     std::vector<std::string> keys;

@@ -533,6 +533,17 @@ at most 12 bits, and CIEDE2000 8, 10, 12 or 16 bits. MS-SSIM YUV, PSNR-HVS-M
 and CIEDE2000 read the chroma, so turning one on makes the decoders hand over
 whole pictures, as the 6:1:1 metrics do.
 
+**Y, U and V of the YUV metrics**, at the bottom of Add/remove metrics, adds
+a column for each plane (Y, U, V) beside PSNR YUV, SSIM YUV, MS-SSIM YUV and
+PSNR-HVS-M, for the ones shown. The planes are calculated in their metric's
+pass at no extra cost, whenever that metric is ticked; they have no tick box
+of their own. Videos scored before the switch was turned on show empty plane
+columns until they are calculated again. The planes are saved, exported and
+graphed as metrics of their own (`psnr_yuv_y`, `psnr_yuv_u`, `psnr_yuv_v`,
+and so on), and the command line takes them by these names with `-m`; its
+`all` leaves them out. With the switch on, its default metrics include the
+planes of the YUV metrics it calculates.
+
 Subsampling reduces libvmaf-backed scored frames. XPSNR-only currently keeps
 every frame; do not interpret different coverage as identical measurements.
 

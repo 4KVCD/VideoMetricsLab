@@ -325,12 +325,13 @@ const char* const xpsnr_refusal =
 // The metrics the app's libvmaf-fast alone scores (libvmaf_cpu.h), never
 // FFmpeg's filters: the 6:1:1 metrics (PSNR YUV, SSIM YUV: FFmpeg's filters
 // have no SSIM of the chroma planes), and MS-SSIM, MS-SSIM YUV, PSNR-HVS-M,
-// CAMBI and CIEDE2000.
+// CAMBI and CIEDE2000; and the planes of those that have them.
 constexpr std::array<std::string_view, 7> app_scored_metrics{"psnr_yuv", "ssim_yuv", "ms_ssim", "ms_ssim_yuv",
                                                              "psnr_hvs", "cambi", "ciede2000"};
 
 bool app_scored(std::string_view key) {
-    return std::find(app_scored_metrics.begin(), app_scored_metrics.end(), key) != app_scored_metrics.end();
+    const std::string_view metric = scored_by(key);
+    return std::find(app_scored_metrics.begin(), app_scored_metrics.end(), metric) != app_scored_metrics.end();
 }
 
 // The CAMBI options of a comparison's test video (CambiInput): its own size
@@ -351,9 +352,10 @@ std::map<std::string, std::string> app_only_metrics(const VmafOptions& options, 
     if (options.compute_xpsnr && !ffmpeg_scores_xpsnr(bit_depth)) {
         refused["xpsnr"] = xpsnr_refusal;
     }
-    for (const std::string_view key : app_scored_metrics) {
-        if (options.metric_enabled(key)) {
-            const bool yuv = key == "psnr_yuv" || key == "ssim_yuv";
+    for (const MetricDefinition& metric : metrics()) {
+        const std::string_view key = metric.key;
+        if (app_scored(key) && options.metric_enabled(key)) {
+            const bool yuv = scored_by(key) == "psnr_yuv" || scored_by(key) == "ssim_yuv";
             refused[std::string(key)] =
                 std::string(metric_definition(key).label) +
                 " is calculated by the app alone, which cannot calculate it for this comparison (" +
@@ -963,9 +965,9 @@ std::optional<GpuPlan> cpu_metrics_plan(const VmafOptions& options, std::pair<in
         }
     }
     bool app_only = false;  // a metric FFmpeg's filters do not score
-    for (const std::string_view key : app_scored_metrics) {
-        if (options.metric_enabled(key)) {
-            metrics.emplace_back(key);
+    for (const MetricDefinition& metric : vml::metrics()) {  // a plane right after its metric
+        if (app_scored(metric.key) && options.metric_enabled(metric.key)) {
+            metrics.emplace_back(metric.key);
             app_only = true;
         }
     }

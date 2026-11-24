@@ -64,6 +64,13 @@ struct MetricDefinition {
     // window, SSIMULACRA2's and Butteraugli's 8x8 (libjxl's own tool refuses
     // less; its library and Vship give a perfect score there).
     int smallest_side;
+    // One plane of a metric of the three planes (PSNR YUV, SSIM YUV, MS-SSIM
+    // YUV, PSNR-HVS-M): that metric's key; empty for every other metric. A
+    // plane is scored in its metric's pass, and is shown, saved and exported
+    // as a metric of its own.
+    std::string_view plane_of = {};
+
+    bool is_plane() const { return !plane_of.empty(); }
 
     // A score as shown: at the metric's precision, infinity as a sign, and
     // no value (or NaN) as a dash.
@@ -92,6 +99,10 @@ const MetricDefinition* find_metric(std::string_view key);
 
 // The metric with this key. Throws std::out_of_range for an unknown key.
 const MetricDefinition& metric_definition(std::string_view key);
+
+// The metric whose pass scores `key`: a plane's metric (plane_of), or the
+// metric itself. Throws std::out_of_range for an unknown key.
+std::string_view scored_by(std::string_view key);
 
 // Why pictures compared at `width` x `height` cannot be scored with the
 // metrics of `keys`, naming those they are too small for and the size each
