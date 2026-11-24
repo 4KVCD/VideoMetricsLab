@@ -1305,6 +1305,7 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "HDR VMAF 列使用的模型（Netflix 附带的 HDR VMAF 模型）。“自动”选择 3 倍屏幕高度的 1080p 模型，4K 对比时选择 1.5 倍屏幕高度的 4K 模型，与 VMAF v0.6.1 相同。仅适用于 PQ (HDR10) 视频。"
  },
  "plurals": {
+  "{shown}/{count} metric selected": ["已选择 {shown}/{count} 个指标"],
   "Runs shorter than {count} frame are left out.": ["短于 {count} 帧的连续段不计入。"],
   "{condition}: {count} frame": ["{condition}：{count} 帧"],
   "{condition}: {count} frame, in a segment": ["{condition}：{count} 帧，全部在片段中"],

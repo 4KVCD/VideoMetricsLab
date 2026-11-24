@@ -933,6 +933,11 @@ QHBoxLayout* MainWindow::build_table_heading() {
     table_hint->setWordWrap(true);
     theme::set_role(table_hint, "hint");  // VML Modern: muted beside the card's title
     table_heading->addWidget(table_hint, 1, Qt::AlignBottom);
+    // How many of the metrics the table shows (apply_metric_visibility).
+    metrics_count_label_ = new QLabel;
+    theme::style(metrics_count_label_, "color: {muted};");
+    metrics_count_label_->setContentsMargins(10, 0, 4, 0);
+    table_heading->addWidget(metrics_count_label_, 0, Qt::AlignBottom | Qt::AlignRight);
     table_heading->addWidget(metrics_button_, 0, Qt::AlignBottom);
     return table_heading;
 }

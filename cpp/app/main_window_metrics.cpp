@@ -97,9 +97,15 @@ bool MainWindow::row_metric_enabled(const RowData& row_data, int column) {
 }
 
 void MainWindow::apply_metric_visibility() {
+    long long shown = 0;
     for (const MetricColumn& item : metric_columns()) {
-        distorted_table_->setColumnHidden(item.column, hidden_metrics_.contains(item.key));
+        const bool hidden = hidden_metrics_.contains(item.key);
+        distorted_table_->setColumnHidden(item.column, hidden);
+        shown += hidden ? 0 : 1;
     }
+    const auto total = static_cast<long long>(metric_columns().size());
+    metrics_count_label_->setText(
+        app::ntr("{shown}/{count} metric selected", "{shown}/{count} metrics selected", total, {{"shown", shown}}));
 }
 
 void MainWindow::show_metrics_menu(const QPoint& position) {

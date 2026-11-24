@@ -919,6 +919,7 @@ private:
     QPushButton* source_browse_button_ = nullptr;
     QLabel* source_info_label_ = nullptr;
     QPushButton* metrics_button_ = nullptr;
+    QLabel* metrics_count_label_ = nullptr;  // "x/y metrics selected", beside metrics_button_
     FillColumnTable* distorted_table_ = nullptr;
     CheckableHeaderView* metric_header_ = nullptr;
     QPushButton* remove_all_button_ = nullptr;

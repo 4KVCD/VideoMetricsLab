@@ -1305,6 +1305,7 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "HDR VMAF sütununun modeli (Netflix'in birlikte gelen HDR VMAF modelleri). Otomatik, VMAF v0.6.1'deki gibi, üç ekran yüksekliğinde 1080p modelini veya 4K karşılaştırmalarında bir buçuk yükseklikte 4K modelini seçer. Yalnızca PQ (HDR10) videolar için."
  },
  "plurals": {
+  "{shown}/{count} metric selected": ["{shown}/{count} metrik seçildi", "{shown}/{count} metrik seçildi"],
   "Runs shorter than {count} frame are left out.": ["{count} kareden kısa diziler dışarıda bırakılır.", "{count} kareden kısa diziler dışarıda bırakılır."],
   "{condition}: {count} frame": ["{condition}: {count} kare", "{condition}: {count} kare"],
   "{condition}: {count} frame, in a segment": ["{condition}: {count} kare, bir segmentte", "{condition}: {count} kare, tümü segmentlerde"],

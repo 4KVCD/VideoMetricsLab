@@ -1305,6 +1305,7 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "HDR VMAF 열의 모델입니다(Netflix가 제공하는 HDR VMAF 모델). [자동]은 화면 높이 3배의 1080p 모델을, 4K 비교에서는 화면 높이 1.5배의 4K 모델을 고릅니다(VMAF v0.6.1과 같음). PQ (HDR10) 동영상 전용입니다."
  },
  "plurals": {
+  "{shown}/{count} metric selected": ["선택된 지표: {shown}/{count}"],
   "Runs shorter than {count} frame are left out.": ["{count}프레임보다 짧은 구간은 제외됩니다."],
   "{condition}: {count} frame": ["{condition}: {count}프레임"],
   "{condition}: {count} frame, in a segment": ["{condition}: {count}프레임, 모두 세그먼트 안"],
