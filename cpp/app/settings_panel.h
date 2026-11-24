@@ -49,6 +49,8 @@ struct ClearedResults;
 
 namespace vml::app {
 
+class MetricList;
+
 class FileWrites;
 class Notifier;
 class SegmentRulesEditor;
@@ -148,7 +150,7 @@ public:
     QPushButton* copy_log_button = nullptr;
     QPushButton* export_log_button = nullptr;
     QCheckBox* default_gpu = nullptr;
-    std::map<std::string, QCheckBox*> default_metrics;  // by metric key
+    MetricList* default_metrics = nullptr;  // Default metrics: what new videos start with ticked
     QComboBox* cvvdp_default = nullptr;
     QComboBox* film_grain_default = nullptr;
     QComboBox* vship_build_default = nullptr;  // none where stock Vship 5.1.2 is not bundled

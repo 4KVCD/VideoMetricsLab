@@ -293,7 +293,9 @@ void carry_over_result_formats(Settings& settings) {
 
 // The metrics hidden at first that the window did not have when these
 // settings were saved (not in listed_metrics): hidden, and ticked so that
-// showing one in Add/remove metrics calculates it.
+// showing one in Add/remove metrics calculates it. A file without
+// listed_metrics is v2.6's or older, which had none of the eight; one that
+// lists a metric keeps its ticks and what it shows.
 void hide_new_metrics(Settings& settings) {
     const auto has = [](const std::vector<std::string>& keys, std::string_view key) {
         return std::find(keys.begin(), keys.end(), key) != keys.end();

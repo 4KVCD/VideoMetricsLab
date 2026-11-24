@@ -243,16 +243,43 @@ TEST(Settings, MetricsAddedSinceTheSaveAreHiddenAtFirst) {
     };
     using Keys = std::vector<std::string>;
     Settings settings = load(R"({"hidden_metrics": ["xpsnr"], "default_compute_cambi": false})");
-    EXPECT_EQ(settings.hidden_metrics, (Keys{"xpsnr", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000"}));
+    EXPECT_EQ(settings.hidden_metrics, (Keys{"xpsnr", "vmaf_hdr", "psnr_yuv", "ssim_yuv", "ms_ssim", "ms_ssim_yuv",
+                                             "psnr_hvs", "cambi", "ciede2000"}));
     EXPECT_TRUE(settings.default_compute_cambi);
     settings = load(R"({"hidden_metrics": [], "listed_metrics": ["vmaf", "cambi"], "default_compute_cambi": false})");
-    EXPECT_EQ(settings.hidden_metrics, (Keys{"ms_ssim", "ms_ssim_yuv", "psnr_hvs", "ciede2000"}));
+    EXPECT_EQ(settings.hidden_metrics,
+              (Keys{"vmaf_hdr", "psnr_yuv", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "ciede2000"}));
     EXPECT_FALSE(settings.default_compute_cambi);
     // Saved, every metric is listed: shown ones stay shown when read again.
     settings.hidden_metrics.clear();
     ASSERT_EQ(settings.save_to(folder / "settings.json"), std::nullopt);
     settings = Settings::load_from(folder / "settings.json");
     EXPECT_EQ(settings.hidden_metrics, Keys{});
+}
+
+// New settings start with every Specialized metric (metrics_hidden_at_first)
+// ticked but hidden, so showing one is enough to calculate it; settings
+// saved before the three older ones (HDR VMAF, PSNR YUV and SSIM YUV) were
+// ticked keep them as saved: shown and unticked.
+TEST(Settings, SpecializedMetricsStartTickedButHiddenInNewSettingsOnly) {
+    using Keys = std::vector<std::string>;
+    const Settings fresh;
+    EXPECT_EQ(fresh.hidden_metrics, Keys(metrics_hidden_at_first.begin(), metrics_hidden_at_first.end()));
+    for (const std::string_view key : metrics_hidden_at_first) {
+        EXPECT_TRUE(*fresh.default_compute(key)) << key;
+    }
+    const test::Folder folder;
+    std::ofstream(folder / "settings.json", std::ios::binary)
+        << R"({"default_compute_psnr_yuv": false, "default_compute_ssim_yuv": false, "default_compute_vmaf_hdr": false,)"
+           R"( "hidden_metrics": ["ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000"],)"
+           R"( "listed_metrics": ["vmaf", "vmaf_neg", "vmaf_v1", "vmaf_hdr", "psnr", "ssim", "psnr_yuv", "ssim_yuv",)"
+           R"( "xpsnr", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000", "ssimulacra2", "butteraugli",)"
+           R"( "cvvdp"]})";
+    const Settings saved = Settings::load_from(folder / "settings.json");
+    EXPECT_FALSE(saved.default_compute_psnr_yuv);
+    EXPECT_FALSE(saved.default_compute_ssim_yuv);
+    EXPECT_FALSE(saved.default_compute_vmaf_hdr);
+    EXPECT_EQ(saved.hidden_metrics, (Keys{"ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000"}));
 }
 
 // The settings read are saved as the Python app saves them, to the byte:

@@ -3,7 +3,6 @@
 // share it.
 #pragma once
 
-#include <array>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -11,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "vml/metrics.h"
 #include "vml/notifications.h"
 
 namespace vml {
@@ -28,12 +28,6 @@ struct Settings;
 // What an export saves files of: Settings::export_items, less all but the
 // graphs while no format is ticked.
 std::vector<std::string> exported_items(const Settings& settings);
-
-// The metrics Add/remove metrics lists unticked until the user ticks them
-// (Settings::hidden_metrics): the ones codec comparisons such as MSU's and
-// Xiph's report, which most users do not need.
-inline constexpr std::array<std::string_view, 5> metrics_hidden_at_first{"ms_ssim", "ms_ssim_yuv", "psnr_hvs",
-                                                                        "cambi", "ciede2000"};
 
 // Above this many logical cores, a new install scores two videos at once.
 constexpr unsigned parallel_by_default_above_cores = 12;
@@ -84,12 +78,11 @@ struct Settings {
     bool default_compute_psnr = true;
     bool default_compute_ssim = true;
     bool default_compute_xpsnr = true;
-    // Off by default: the 6:1:1 PSNR of JVET's reports and YUV-SSIM of
-    // MSU's, for comparing with them.
-    bool default_compute_psnr_yuv = false;
-    bool default_compute_ssim_yuv = false;
-    // Ticked, but hidden at first (metrics_hidden_at_first): calculated
-    // once shown in Add/remove metrics.
+    // The Specialized metrics (metrics_hidden_at_first: these, HDR VMAF,
+    // and those below) are ticked, but hidden at first: calculated once
+    // shown in Add/remove metrics. Settings saved before keep their ticks.
+    bool default_compute_psnr_yuv = true;
+    bool default_compute_ssim_yuv = true;
     bool default_compute_ms_ssim = true;
     bool default_compute_ms_ssim_yuv = true;
     bool default_compute_psnr_hvs = true;
@@ -98,8 +91,9 @@ struct Settings {
     bool default_compute_vmaf = true;
     bool default_compute_vmaf_neg = true;
     bool default_compute_vmaf_v1 = true;
-    // Off by default: it scores PQ (HDR10) videos only.
-    bool default_compute_vmaf_hdr = false;
+    // Ticked but hidden at first, as the Specialized metrics are; it scores
+    // PQ (HDR10) videos only.
+    bool default_compute_vmaf_hdr = true;
     bool default_compute_ssimulacra2 = true;
     bool default_compute_butteraugli = true;
     bool default_compute_cvvdp = true;

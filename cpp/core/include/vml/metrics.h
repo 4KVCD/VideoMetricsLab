@@ -4,6 +4,7 @@
 // the metrics in.
 #pragma once
 
+#include <array>
 #include <optional>
 #include <span>
 #include <string>
@@ -111,5 +112,44 @@ std::optional<std::string> too_small_problem(const std::vector<std::string>& key
 
 // The metrics' labels with `separator` between them: "VMAF v0.6.1, PSNR".
 std::string metric_labels(const std::vector<std::string>& keys, std::string_view separator = ", ");
+
+// The metrics most users do not need at first, in the registry's order: HDR
+// VMAF (HDR10 videos only), and the weightings, color and banding metrics
+// that codec comparisons such as JVET's, MSU's and Xiph's report. The one
+// list behind both their place and their first state: Add/remove metrics
+// and Settings > Metrics list them as Specialized, the rest as General
+// purpose; new settings start with them ticked but hidden
+// (Settings::hidden_metrics), so showing one is enough to calculate it.
+inline constexpr std::array<std::string_view, 8> metrics_hidden_at_first{
+    "vmaf_hdr", "psnr_yuv", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000"};
+
+// The two sections Add/remove metrics and Settings > Metrics list the
+// metrics in.
+enum class MetricSection { general_purpose, specialized };
+
+// A metric's section: Specialized for metrics_hidden_at_first, else General
+// purpose. A plane is in its metric's.
+MetricSection section_of(std::string_view key);
+
+// The metrics a section lists, in the registry's order: every metric but the
+// planes, which come with their metric (Settings::show_yuv_planes).
+std::vector<std::string_view> metrics_in(MetricSection section);
+
+// What the window says of a metric, in English (N_(): the window translates
+// it): a few words beside its name in Add/remove metrics and Settings >
+// Metrics; then, for its tooltip, what it measures, its unit and which way
+// is better; and its broad ranges only where they have a source: the app's
+// own bands (its thresholds; the YUV metrics' are PSNR's and SSIM's) or the
+// metric's authors' published scale, else empty. `ranges_source` names that
+// source (not shown; for review and Metrics.EveryMetricFollowsTheRulesFor-
+// AddingOne), empty with no ranges. A plane has its metric's.
+// docs/ARCHITECTURE.md's "Adding a metric" says what a new metric needs.
+struct MetricGuide {
+    std::string_view brief;
+    std::string_view measures;
+    std::string_view ranges;
+    std::string_view ranges_source = {};
+};
+MetricGuide metric_guide(std::string_view key);
 
 }  // namespace vml

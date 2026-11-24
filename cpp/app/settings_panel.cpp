@@ -41,12 +41,14 @@
 #include <initializer_list>
 #include <iterator>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <utility>
 
 #include "file_writes.h"
 #include "formatting.h"
 #include "i18n.h"
+#include "metric_list.h"
 #include "segment_rules_editor.h"
 #include "theme.h"
 #include "vml/app_log.h"
@@ -70,23 +72,6 @@ namespace vml::app {
 namespace {
 
 const app_log::Logger logger("vml.settings_panel");
-
-// The "Default metrics" check boxes, in the order they are shown, the
-// Videos table's and Metric Graphs': the metric's key and its label.
-const std::vector<std::pair<std::string, QString>> default_metric_boxes{
-    {"vmaf", "VMAF v0.6.1"},
-    {"vmaf_neg", "VMAF NEG"},
-    {"vmaf_v1", "VMAF v1"},
-    {"vmaf_hdr", "HDR VMAF"},
-    {"psnr", "PSNR"},
-    {"ssim", "SSIM"},
-    {"xpsnr", "XPSNR"},
-    {"psnr_yuv", "PSNR YUV (6:1:1)"},
-    {"ssim_yuv", "SSIM YUV (6:1:1)"},
-    {"ssimulacra2", "SSIMULACRA2"},
-    {"butteraugli", "Butteraugli"},
-    {"cvvdp", "CVVDP"},
-};
 
 QString text_of(const std::string& text) { return QString::fromStdString(text); }
 
@@ -634,27 +619,23 @@ QGroupBox* SettingsPanel::build_defaults_box() {
     connect(default_gpu, &QCheckBox::toggled, this, [this] { on_edited(); });
     defaults_layout->addWidget(default_gpu);
 
+    // Default metrics: all of them, in the two sections Add/remove metrics
+    // has, side by side, Specialized open (MetricList).
     auto* metrics_row = new QHBoxLayout;
-    metrics_row->addWidget(new QLabel(app::tr("Default metrics:")));
-    for (const auto& [key, label] : default_metric_boxes) {
-        auto* box = new QCheckBox(label);
-        box->setChecked(*settings_.default_compute(key));
-        connect(box, &QCheckBox::toggled, this, [this] { on_edited(); });
-        default_metrics[key] = box;
-        metrics_row->addWidget(box);
-        if (key == "vmaf_hdr") {
-            box->setToolTip(app::tr("PQ (HDR10) videos only: another video fails HDR VMAF alone, with the reason, "
-                                    "and its other metrics are calculated as usual."));
-            // VML Modern: the four VMAFs, then a line, then the other
-            // metrics (theme::separator; nothing in Classic).
-            metrics_row->addWidget(theme::separator(0));
-        }
-        if (key == "psnr_yuv" || key == "ssim_yuv") {
-            box->setToolTip(app::tr("(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. "
-                                    "Calculated by the app only, not with FFmpeg's metrics."));
+    auto* metrics_label = new QLabel(app::tr("Default metrics:"));
+    metrics_row->addWidget(metrics_label, 0, Qt::AlignTop);
+    default_metrics = new MetricList(MetricList::Place::settings);
+    std::set<std::string> ticked;
+    for (const MetricSection section : {MetricSection::general_purpose, MetricSection::specialized}) {
+        for (const std::string_view key : metrics_in(section)) {
+            if (*settings_.default_compute(key)) {
+                ticked.emplace(key);
+            }
         }
     }
-    metrics_row->addStretch(1);
+    default_metrics->set_ticked(ticked);
+    connect(default_metrics, &MetricList::ticks_changed, this, [this] { on_edited(); });
+    metrics_row->addWidget(default_metrics, 1);
     defaults_layout->addLayout(metrics_row);
 
     auto* cvvdp_row = new QHBoxLayout;
@@ -974,10 +955,7 @@ void SettingsPanel::fill_cvvdp_default_combo() {
 void SettingsPanel::show_ffmpeg_folder(const QString& directory) { ffmpeg_edit->setText(directory); }
 
 void SettingsPanel::show_default_metric(const std::string& key, bool checked) {
-    if (const auto found = default_metrics.find(key); found != default_metrics.end()) {
-        const QSignalBlocker blocker(found->second);
-        found->second->setChecked(checked);
-    }
+    default_metrics->set_ticked(key, checked);
 }
 
 void SettingsPanel::show_film_grain_default() {
@@ -1137,8 +1115,11 @@ void SettingsPanel::read_controls() {
     settings_.recognise_test_remuxes = recognise_remuxes->isChecked();
     settings_.check_frame_counts = check_frame_counts->isChecked();
     settings_.default_gpu_decode = default_gpu->isChecked();
-    for (const auto& [key, box] : default_metrics) {
-        *settings_.default_compute(key) = box->isChecked();
+    const std::set<std::string> ticked = default_metrics->ticked();
+    for (const MetricSection section : {MetricSection::general_purpose, MetricSection::specialized}) {
+        for (const std::string_view key : metrics_in(section)) {
+            *settings_.default_compute(key) = ticked.contains(std::string(key));
+        }
     }
     settings_.cvvdp_default_preset = cvvdp_default->currentData().toString().toStdString();
     settings_.compare_decoded_videos = decoded_videos->currentData().toInt();

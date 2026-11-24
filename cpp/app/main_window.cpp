@@ -44,6 +44,7 @@
 #include "graph_panel.h"
 #include "worst_frames_tab.h"
 #include "i18n.h"
+#include "metric_list.h"
 #include "notifier.h"
 #include "options_panel.h"
 #include "run_worker.h"
@@ -980,7 +981,10 @@ QHBoxLayout* MainWindow::build_table_heading() {
                 "already saved for it come back when it is shown again. Also available by right-clicking the column "
                 "headers."));
     connect(metrics_button_, &QPushButton::clicked, this,
-            [this] { show_metrics_menu(metrics_button_->mapToGlobal(metrics_button_->rect().bottomLeft())); });
+            [this] {
+                show_metrics_panel(metrics_button_->mapToGlobal(metrics_button_->rect().bottomLeft()),
+                                   metrics_button_->mapToGlobal(metrics_button_->rect().bottomRight()));
+            });
     auto* table_heading = new QHBoxLayout;
     auto* title = new QLabel(app::tr("Test videos"));  // VML Modern's: the card's title
     theme::set_role(title, "title");
@@ -1045,12 +1049,18 @@ void MainWindow::build_test_table() {
         header_of("ms_ssim_yuv_u"), header_of("ms_ssim_yuv_v"), header_of("psnr_hvs_y"), header_of("psnr_hvs_u"),
         header_of("psnr_hvs_v"),
     });
+    // What each metric measures, as Add/remove metrics says (metric_tip): a
+    // plane's says whose plane it is. Wrapped here: WrapLongToolTips wraps
+    // an item's tooltip by the item under the mouse, which a header has none of.
+    for (const MetricColumn& item : metric_columns()) {
+        distorted_table_->horizontalHeaderItem(item.column)->setToolTip(wrapped_tool_tip(metric_tip(item.key)));
+    }
     distorted_table_->verticalHeader()->setVisible(false);
     // Kept as a column, but not shown: cropping is in the row's options.
     distorted_table_->setColumnHidden(col_black_bars, true);
     metric_header_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(metric_header_, &QWidget::customContextMenuRequested, this,
-            [this](const QPoint& position) { show_metrics_menu(metric_header_->mapToGlobal(position)); });
+            [this](const QPoint& position) { show_metrics_panel(metric_header_->mapToGlobal(position)); });
     apply_metric_visibility();
 
     // A selected row's best and worst scores keep their green and red (Highlight best/worst results).
