@@ -107,6 +107,12 @@ std::string cpu_library_build();
 // chroma planes are half the size rounded down, FFmpeg's rounded up).
 // Frames are given packed as FFmpeg's rawvideo writes them (add), as planes
 // wherever they are (add_planes), or as a decoder's pictures (add_decoded).
+// Told, as a CPU scorer starts, which of its `metrics` the GPU calculates
+// (`on_gpu`: CIEDE2000 and CAMBI where it can, gpu_metrics_of; empty where
+// none), for the run line (StatusKind::metrics_on_gpu).
+using GpuMetricsReport =
+    std::function<void(const std::vector<std::string>& metrics, const std::vector<std::string>& on_gpu)>;
+
 class CpuScorer : public PairScorer {
 public:
     // `metrics` are cpu_feature keys. Every `n_subsample`th frame is scored,
@@ -153,6 +159,11 @@ public:
     // the order the metrics were given, rounded as the files the app reads
     // FFmpeg's scores from round them.
     PairScores finish() override;
+
+    // Its metrics, and those of them the GPU calculates (set as it starts):
+    // what a GpuMetricsReport says.
+    const std::vector<std::string>& metric_keys() const { return metrics_; }
+    std::vector<std::string> gpu_metrics() const;
 
 private:
     // Starts CIEDE2000 and CAMBI on GPU `gpu` where it can (gpu_), and sets
@@ -247,6 +258,7 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
                              const std::string& ffmpeg,
                              const std::string& ffprobe, bool want_vvdec,
                              const std::function<void()>& on_vvdec_opening,
+                             const GpuMetricsReport& on_gpu_metrics,
                              const std::function<void(long long, long long, double)>& on_progress,
                              const CancelToken& cancel);
 

@@ -421,6 +421,9 @@ void start_beside(std::optional<BesideScorer>& scorer, const GpuPlan& plan, int 
         return;
     }
     scorer.emplace(plan, n_subsample, shared);
+    if (const CpuScorer* cpu = scorer->cpu(); cpu != nullptr && plan.on_gpu_metrics) {
+        plan.on_gpu_metrics(cpu->metric_keys(), cpu->gpu_metrics());
+    }
     // Which pass took them, so that a run shows it decoded the videos once for all of its metrics.
     const std::string pass = plan.backend == "hdr"    ? "HDR VMAF"
                              : plan.backend == "cpu" ? "the CPU's metrics"
@@ -664,8 +667,12 @@ GpuAttempt::GpuAttempt(const GpuPlan& plan, int n_subsample) : state_(std::make_
         for (const auto& [key, same] : plan.models) {
             metrics.push_back(key);
         }
-        s.scorer = std::make_unique<CpuScorer>(plan.width, plan.height, plan.bit_depth, metrics, n_subsample,
+        auto cpu = std::make_unique<CpuScorer>(plan.width, plan.height, plan.bit_depth, metrics, n_subsample,
                                                plan.threads, plan.frame_rate, plan.cambi, plan.extra_gpu);
+        if (plan.on_gpu_metrics) {
+            plan.on_gpu_metrics(cpu->metric_keys(), cpu->gpu_metrics());
+        }
+        s.scorer = std::move(cpu);
     } else if (plan.backend == "hdr") {
         s.scorer = make_hdr_scorer(plan, n_subsample);
     } else if (std::any_of(plan.models.begin(), plan.models.end(),

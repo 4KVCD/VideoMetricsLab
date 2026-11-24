@@ -601,6 +601,19 @@ std::string doing(const GpuPlan& plan) {
     return plan.backend == "cpu" || plan.backend == "hdr" ? metric_names(plan) + " in the app" : "VMAF on the GPU";
 }
 
+// `plan`, with its CPU scorers saying which of their metrics the GPU
+// calculates as each starts, as a metrics_on_gpu status.
+GpuPlan reporting_gpu_metrics(const GpuPlan& plan, const StatusCallback& on_status) {
+    GpuPlan reporting = plan;
+    if (on_status) {
+        reporting.on_gpu_metrics = [on_status](const std::vector<std::string>& metrics,
+                                               const std::vector<std::string>& on_gpu) {
+            on_status({metrics_on_gpu_text(metrics, on_gpu), StatusKind::metrics_on_gpu});
+        };
+    }
+    return reporting;
+}
+
 // The plan's metrics scored outside FFmpeg's filters, each video decoded by
 // an FFmpeg of its own whose frames the app pairs and the plan's scorer
 // scores (GpuAttempt): VMAF, NEG and VMAF v1 on the GPU, or PSNR, SSIM and
@@ -608,10 +621,11 @@ std::string doing(const GpuPlan& plan) {
 // fails.
 ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
                              const VmafOptions& options, const std::optional<CropBox>& source_crop,
-                             const std::optional<CropBox>& distorted_crop, const GpuPlan& plan, double fps,
+                             const std::optional<CropBox>& distorted_crop, const GpuPlan& planned, double fps,
                              long long total_frames, const HardwareDecoding& decoding,
                              const ProgressCallback& on_progress, const StatusCallback& on_status,
                              const CancelToken& cancel) {
+    const GpuPlan plan = reporting_gpu_metrics(planned, on_status);
     if (options.requested_metrics().empty()) {
         throw VmafRunError("Select at least one metric to calculate.");
     }
@@ -733,11 +747,12 @@ std::function<void()> on_vvdec_opening(const StatusCallback& on_status) {
 ParsedScores score_decoded_here(const RunEnvironment& environment, const VideoInfo& source,
                                 const VideoInfo& distorted, const VmafOptions& options,
                                 const std::optional<CropBox>& source_crop,
-                                const std::optional<CropBox>& distorted_crop, const GpuPlan& plan, double fps,
+                                const std::optional<CropBox>& distorted_crop, const GpuPlan& planned, double fps,
                                 long long total_frames, const HardwareDecoding& decoding,
                                 const std::pair<std::string, std::string>& decoders,
                                 const ProgressCallback& on_progress, const StatusCallback& on_status,
                                 const CancelToken& cancel) {
+    const GpuPlan plan = reporting_gpu_metrics(planned, on_status);
     const FrameRange range = run_range(options, source);
     if (on_status) {
         on_status(decoding_status("Running " + doing(plan), decoding));
@@ -750,7 +765,8 @@ ParsedScores score_decoded_here(const RunEnvironment& environment, const VideoIn
                                 plan.bit_depth, keys, options.n_subsample, range, total_frames, decoders,
                                 plan.threads, plan.frame_rate, plan.cambi, plan.extra_gpu, options.scale_algorithm,
                                 environment.ffmpeg,
-                                environment.ffprobe, want_vvdec, on_vvdec_opening(on_status), on_progress, cancel)
+                                environment.ffprobe, want_vvdec, on_vvdec_opening(on_status), plan.on_gpu_metrics,
+                                on_progress, cancel)
         : plan.backend == "hdr"
             ? score_decoded_hdr(source, distorted, source_crop, distorted_crop, plan, options.n_subsample, range,
                                 total_frames, options.scale_algorithm, decoders, environment.ffmpeg,
@@ -1592,6 +1608,34 @@ RunStatus status_from_json(const nlohmann::json& json) {
             HardwareDecoding{hwaccel_from(decoding->at("source")), hwaccel_from(decoding->at("distorted"))};
     }
     return status;
+}
+
+std::string metrics_on_gpu_text(const std::vector<std::string>& metrics, const std::vector<std::string>& on_gpu) {
+    const auto joined = [](const std::vector<std::string>& keys) {
+        std::string text;
+        for (const std::string& key : keys) {
+            text += (text.empty() ? "" : ",") + key;
+        }
+        return text;
+    };
+    return joined(metrics) + ";" + joined(on_gpu);
+}
+
+std::pair<std::vector<std::string>, std::vector<std::string>> metrics_on_gpu_from(std::string_view text) {
+    const auto keys = [](std::string_view list) {
+        std::vector<std::string> found;
+        while (!list.empty()) {
+            const std::size_t comma = list.find(',');
+            if (const std::string_view key = list.substr(0, comma); !key.empty()) {
+                found.emplace_back(key);
+            }
+            list = comma == std::string_view::npos ? std::string_view() : list.substr(comma + 1);
+        }
+        return found;
+    };
+    const std::size_t semicolon = text.find(';');
+    return {keys(text.substr(0, semicolon)),
+            keys(semicolon == std::string_view::npos ? std::string_view() : text.substr(semicolon + 1))};
 }
 
 void validate_video_pair(const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options) {

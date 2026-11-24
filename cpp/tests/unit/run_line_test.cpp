@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "reference.h"
+#include "vml/ffmpeg_run.h"
 
 namespace vml {
 namespace {
@@ -78,6 +79,47 @@ TEST(RunLine, IsThePythonAppsLine) {
     for (const Json& item : reference["numbers"]) {
         EXPECT_EQ(numbers_text(item["numbers"].get<std::vector<int>>()), item["text"].get<std::string>());
     }
+}
+
+// A task in the CPU's queue whose scorer gave CIEDE2000 and CAMBI to the GPU
+// (gpu_keys, from a metrics_on_gpu status): the line names them GPU metrics,
+// as the results do, with the pass's figures; the rest stay CPU metrics.
+TEST(RunLine, MetricsTheGpuTakesFromTheCpusTaskAreGpuMetrics) {
+    TaskSnapshot task;
+    task.backend = "cpu";
+    task.lane = "cpu";
+    task.metric_keys = {"psnr", "cambi", "ciede2000"};
+    task.passes = {task.metric_keys};
+    task.state = "running";
+    task.current = 300;
+    task.total = 1000;
+    task.fps = 30.0;
+    EXPECT_EQ(metric_line({task}, false).parts,
+              (std::vector<std::string>{"CPU metrics 1–3 of 3: PSNR, CAMBI, CIEDE2000 (ΔE) 30.0% (30.0 fps, "
+                                        "0:00:23 remaining)"}));
+    task.gpu_keys = {"ciede2000", "cambi"};
+    EXPECT_EQ(metric_line({task}, false).parts,
+              (std::vector<std::string>{
+                  "CPU metrics 1 of 1: PSNR 30.0% (30.0 fps, 0:00:23 remaining)",
+                  "GPU metrics 1–2 of 2: CAMBI, CIEDE2000 (ΔE) 30.0% (30.0 fps, 0:00:23 remaining)"}));
+    // Done: each where it was calculated.
+    task.state = "done";
+    task.done_keys = task.metric_keys;
+    const std::string tooltip = metric_line({task}, false).tooltip;
+    EXPECT_NE(tooltip.find("GPU metrics"), std::string::npos) << tooltip;
+    EXPECT_NE(tooltip.find("CPU metrics"), std::string::npos) << tooltip;
+}
+
+// The status a CPU scorer sends as it starts, both ways.
+TEST(RunLine, MetricsOnGpuStatusTextGoesBothWays) {
+    const std::string text = metrics_on_gpu_text({"psnr", "cambi", "ciede2000"}, {"cambi", "ciede2000"});
+    EXPECT_EQ(text, "psnr,cambi,ciede2000;cambi,ciede2000");
+    const auto [metrics, on_gpu] = metrics_on_gpu_from(text);
+    EXPECT_EQ(metrics, (std::vector<std::string>{"psnr", "cambi", "ciede2000"}));
+    EXPECT_EQ(on_gpu, (std::vector<std::string>{"cambi", "ciede2000"}));
+    const auto [none_metrics, none_on_gpu] = metrics_on_gpu_from(metrics_on_gpu_text({"cambi"}, {}));
+    EXPECT_EQ(none_metrics, std::vector<std::string>{"cambi"});
+    EXPECT_TRUE(none_on_gpu.empty());
 }
 
 }  // namespace
