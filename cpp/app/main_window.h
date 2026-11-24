@@ -43,6 +43,7 @@
 #include "results_export.h"
 #include "saved_results_panel.h"
 #include "row_state.h"
+#include "run_badge.h"
 #include "worst_frame_list.h"
 #include "vml/analysis_request.h"
 #include "vml/cvvdp.h"
@@ -358,14 +359,32 @@ private:
     // The update offered: the dialog, from the title bar's badge or, without
     // one, at once.
     void show_update(const Release& release);
-    // VML Modern's title buttons (title_bar.h), made once Modern is in use:
+    // The title buttons (title_bar.h), made with the window: in VML Modern
     // in the app's title bar where the window has one, else at the tab bar's
-    // right end.
+    // right end; in VML Classic the progress button alone, at the tab bar's
+    // right end. Modern chosen in Settings shows the others.
     void make_title_buttons();
     // The title bar's theme menu ticked as Settings has the theme and looks.
     void show_theme_in_title();
-    // The run's progress on the title buttons' progress button.
-    void show_run_in_title(const QString& status);
+    // The progress button as run_badge_ has it (#226): Ready, the run's
+    // progress, or how it ended, with its tooltip.
+    void show_progress_badge();
+    // The tooltip during a run: the queue's line (queue_line), then each
+    // video in progress with its metric groups' lines, as on its own line.
+    QString running_tooltip() const;
+    // The tooltip of a run that ended: its end message and counts, and each
+    // failed video's failed metrics.
+    QString ended_tooltip() const;
+    // The ticked videos and the metrics a run would calculate for each.
+    RunTicks run_ticks() const;
+    // `ticks` without the planes' metrics (Y, U and V of the YUV metrics),
+    // which come with their metric: for counting, as Add/remove metrics does.
+    static RunTicks listed_ticks(RunTicks ticks);
+    // Once the window is next idle, Done or Cancelled is Ready again if the
+    // ticks have changed since the run ended.
+    void check_ticks_soon();
+    // The run's counts on the progress button: how far it has got.
+    RunCounts run_counts() const;
 
     // ------------------------------------------------------ FFmpeg's presence
     bool check_ffmpeg(bool prompt);
@@ -792,6 +811,9 @@ private:
     void mark_job_over(int index);
     QString job_label(int index) const;
     void update_run_status();
+    // The queue's line on the status line during a run: its counts and the
+    // time it has taken, "Paused" before them while paused.
+    QString queue_line() const;
     std::optional<double> run_elapsed() const;
     QString run_end_message() const;
     QString run_summary(int running, int total) const;
@@ -952,6 +974,7 @@ private:
     // figures, and whether its figures are due on the next tick.
     std::map<int, std::vector<TaskSnapshot>> job_task_progress_;
     std::map<int, std::pair<QString, QString>> job_line_text_;
+    std::map<int, QStringList> job_line_parts_;  // its metric groups' parts, for the progress button's tooltip
     std::map<int, int> job_line_slot_;
     std::map<int, LineShape> job_line_shape_;
     std::set<int> job_lines_due_;
@@ -1008,7 +1031,9 @@ private:
     // The newer release offered, while its message is open.
     QPointer<AppDialog> update_box_;
     TitleBar* title_bar_ = nullptr;          // Windows, VML Modern: the window's own title bar
-    TitleButtons* title_buttons_ = nullptr;  // VML Modern: the progress, theme and update buttons
+    TitleButtons* title_buttons_ = nullptr;  // the progress, theme and update buttons (Classic: progress)
+    RunBadge run_badge_;                     // what the progress button shows
+    bool ticks_check_due_ = false;           // check_ticks_soon's, until it runs
     std::optional<Release> pending_update_;  // offered on the badge, shown when it is clicked
     // The GPU checks a run is waiting for (wait_for_gpu_checks), while it is,
     // and what the status line said before it waited for something.

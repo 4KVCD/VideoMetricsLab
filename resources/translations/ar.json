@@ -116,7 +116,7 @@
   "Whole names": "الأسماء كاملة",
   "Characters from the start:": "أحرف من البداية:",
   "from the end:": "من النهاية:",
-  "Progress of the metrics being calculated": "تقدّم المقاييس قيد الحساب",
+  "Progress of the metrics being calculated: {state}": "تقدّم المقاييس قيد الحساب: {state}",
   "Click to open the Videos tab.": "انقر لفتح علامة التبويب الفيديو.",
   "Update to {version}": "التحديث إلى {version}",
   "{app} {version} is available. Click for what's new and the download.": "{app} {version} متاح. انقر لمعرفة الجديد والتنزيل.",
@@ -1376,7 +1376,12 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "نموذج عمود HDR VMAF (نماذج HDR VMAF المرفقة من Netflix). يختار «تلقائي» نموذج 1080p على ثلاثة أضعاف ارتفاع الشاشة، أو نموذج 4K على مرة ونصف في مقارنات 4K، كما في VMAF v0.6.1. لفيديوهات PQ (HDR10) فقط.",
   "Y, U and V of the YUV metrics": "Y وU وV لمقاييس YUV",
   "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "عمود لكل من المستويات Y وU وV بجانب PSNR YUV وSSIM YUV وMS-SSIM YUV وPSNR-HVS-M، يُحسب معها دون تكلفة إضافية. تحتاج مقاطع الفيديو التي قُيّمت من قبل إلى الحساب مرة أخرى لملئها.",
-  "Calculated with {metric}.": "يُحسب مع {metric}."
+  "Calculated with {metric}.": "يُحسب مع {metric}.",
+  "Done": "اكتمل",
+  "Ready": "جاهز",
+  "Ready: no test videos ticked.": "جاهز: لا توجد فيديوهات اختبار محددة.",
+  "Ready: {videos}, {metrics}.": "جاهز: {videos}، {metrics}.",
+  "{low} to {high} metrics": "من {low} إلى {high} مقاييس"
  },
  "plurals": {
   "Click Remove all again to remove {count} video. Saved results are kept.": ["انقر «إزالة الكل» مرة أخرى لإزالة {count} فيديو. تبقى النتائج المحفوظة.", "انقر «إزالة الكل» مرة أخرى لإزالة فيديو واحد ({count}). تبقى النتائج المحفوظة.", "انقر «إزالة الكل» مرة أخرى لإزالة فيديوين ({count}). تبقى النتائج المحفوظة.", "انقر «إزالة الكل» مرة أخرى لإزالة {count} فيديوهات. تبقى النتائج المحفوظة.", "انقر «إزالة الكل» مرة أخرى لإزالة {count} فيديو. تبقى النتائج المحفوظة.", "انقر «إزالة الكل» مرة أخرى لإزالة {count} فيديو. تبقى النتائج المحفوظة."],
@@ -1629,6 +1634,10 @@
    "أُبقيت {count} نتائج مقاطع الفيديو المرجعية لها مفقودة: احذفها من علامة التبويب «النتائج المحفوظة».",
    "أُبقيت {count} نتيجة مقاطع الفيديو المرجعية لها مفقودة: احذفها من علامة التبويب «النتائج المحفوظة».",
    "أُبقيت {count} نتيجة مقاطع الفيديو المرجعية لها مفقودة: احذفها من علامة التبويب «النتائج المحفوظة»."
-  ]
+  ],
+  "Click to open the Videos tab: the failed video's row says more.": ["انقر لفتح علامة التبويب الفيديو: صفوف الفيديوهات الفاشلة توضح المزيد.", "انقر لفتح علامة التبويب الفيديو: صف الفيديو الفاشل يوضح المزيد.", "انقر لفتح علامة التبويب الفيديو: صفوف الفيديوهات الفاشلة توضح المزيد.", "انقر لفتح علامة التبويب الفيديو: صفوف الفيديوهات الفاشلة توضح المزيد.", "انقر لفتح علامة التبويب الفيديو: صفوف الفيديوهات الفاشلة توضح المزيد.", "انقر لفتح علامة التبويب الفيديو: صفوف الفيديوهات الفاشلة توضح المزيد."],
+  "{count} metric": ["{count} مقياس", "{count} مقياس", "{count} مقياسان", "{count} مقاييس", "{count} مقياسًا", "{count} مقياس"],
+  "{count} metric each": ["{count} مقياس لكل فيديو", "{count} مقياس لكل فيديو", "{count} مقياسان لكل فيديو", "{count} مقاييس لكل فيديو", "{count} مقياسًا لكل فيديو", "{count} مقياس لكل فيديو"],
+  "{count} test video ticked": ["{count} فيديو اختبار محدد", "{count} فيديو اختبار محدد", "{count} فيديوا اختبار محددان", "{count} فيديوهات اختبار محددة", "{count} فيديو اختبار محددًا", "{count} فيديو اختبار محدد"]
  }
 }

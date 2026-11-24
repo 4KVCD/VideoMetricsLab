@@ -230,6 +230,9 @@ window is built, so it follows the interface the app started in, and not in
 high-contrast mode, where the system's colours belong. Its three buttons
 (`TitleButtons`: a run's progress, the theme, an update) are VML Modern's on
 every system: in the bar, or at the tab bar's right end where there is none.
+VML Classic has the progress button alone, at the tab bar's right end. It is
+always there; what it shows (Ready, the run's progress, Done or Cancelled
+until the ticks change) is `RunBadge`'s (`app/run_badge.h`).
 
 When you add to the window:
 

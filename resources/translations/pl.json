@@ -116,7 +116,7 @@
   "Whole names": "Pełne nazwy",
   "Characters from the start:": "Znaki od początku:",
   "from the end:": "od końca:",
-  "Progress of the metrics being calculated": "Postęp obliczanych metryk",
+  "Progress of the metrics being calculated: {state}": "Postęp obliczanych metryk: {state}",
   "Click to open the Videos tab.": "Kliknij, aby otworzyć kartę Wideo.",
   "Update to {version}": "Aktualizuj do {version}",
   "{app} {version} is available. Click for what's new and the download.": "{app} {version} jest dostępna. Kliknij, aby zobaczyć nowości i pobrać.",
@@ -1376,7 +1376,12 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "Model kolumny HDR VMAF (dołączone modele HDR VMAF od Netflix). Automatycznie wybiera model 1080p dla trzech wysokości ekranu albo model 4K dla półtorej przy porównaniach 4K, jak w VMAF v0.6.1. Tylko dla filmów PQ (HDR10).",
   "Y, U and V of the YUV metrics": "Y, U i V metryk YUV",
   "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "Kolumna dla każdej z płaszczyzn Y, U i V obok PSNR YUV, SSIM YUV, MS-SSIM YUV i PSNR-HVS-M, obliczana razem z nimi bez dodatkowego kosztu. Wcześniej ocenione filmy wymagają ponownego Obliczenia, aby je wypełnić.",
-  "Calculated with {metric}.": "Obliczane z {metric}."
+  "Calculated with {metric}.": "Obliczane z {metric}.",
+  "Done": "Zakończono",
+  "Ready": "Gotowe",
+  "Ready: no test videos ticked.": "Gotowe: nie zaznaczono żadnych wideo testowych.",
+  "Ready: {videos}, {metrics}.": "Gotowe: {videos}, {metrics}.",
+  "{low} to {high} metrics": "od {low} do {high} metryk"
  },
  "plurals": {
   "Click Remove all again to remove {count} video. Saved results are kept.": ["Kliknij ponownie „Usuń wszystkie”, aby usunąć {count} wideo. Zapisane wyniki zostają.", "Kliknij ponownie „Usuń wszystkie”, aby usunąć wszystkie {count} wideo. Zapisane wyniki zostają.", "Kliknij ponownie „Usuń wszystkie”, aby usunąć wszystkie {count} wideo. Zapisane wyniki zostają."],
@@ -1539,6 +1544,10 @@
    "Zachowano {count} wynik, którego wideo referencyjnego brakuje: usuń go na karcie Zapisane wyniki.",
    "Zachowano {count} wyniki, których wideo referencyjnych brakuje: usuń je na karcie Zapisane wyniki.",
    "Zachowano {count} wyników, których wideo referencyjnych brakuje: usuń je na karcie Zapisane wyniki."
-  ]
+  ],
+  "Click to open the Videos tab: the failed video's row says more.": ["Kliknij, aby otworzyć kartę Wideo: wiersz wideo z błędem mówi więcej.", "Kliknij, aby otworzyć kartę Wideo: wiersze wideo z błędem mówią więcej.", "Kliknij, aby otworzyć kartę Wideo: wiersze wideo z błędem mówią więcej."],
+  "{count} metric": ["{count} metryka", "{count} metryki", "{count} metryk"],
+  "{count} metric each": ["{count} metryka w każdym", "{count} metryki w każdym", "{count} metryk w każdym"],
+  "{count} test video ticked": ["{count} zaznaczone wideo testowe", "{count} zaznaczone wideo testowe", "{count} zaznaczonych wideo testowych"]
  }
 }

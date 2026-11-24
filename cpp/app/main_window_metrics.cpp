@@ -172,6 +172,7 @@ void MainWindow::on_metrics_shown_changed(const std::set<std::string>& shown) {
     hidden_metrics_ = std::move(hidden);
     save_settings();
     apply_metric_visibility();
+    check_ticks_soon();  // a hidden metric is not calculated: the ticks a run takes changed
     refresh_shown_metrics(more_shown);
 }
 
@@ -181,6 +182,7 @@ void MainWindow::on_yuv_planes_toggled(bool shown) {
     save_settings();
     apply_metric_visibility();
     refresh_shown_metrics(shown);
+    check_ticks_soon();  // the planes a run asks for changed with them
 }
 
 void MainWindow::refresh_shown_metrics(bool more_shown) {

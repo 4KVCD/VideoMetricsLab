@@ -116,7 +116,7 @@
   "Whole names": "Nomes completos",
   "Characters from the start:": "Caracteres do início:",
   "from the end:": "do fim:",
-  "Progress of the metrics being calculated": "Progresso das métricas em cálculo",
+  "Progress of the metrics being calculated: {state}": "Progresso das métricas em cálculo: {state}",
   "Click to open the Videos tab.": "Clique para abrir a guia Vídeos.",
   "Update to {version}": "Atualizar para {version}",
   "{app} {version} is available. Click for what's new and the download.": "{app} {version} está disponível. Clique para ver as novidades e o download.",
@@ -1376,7 +1376,12 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "O modelo da coluna HDR VMAF (os modelos HDR VMAF incluídos da Netflix). Automático escolhe o modelo 1080p a três alturas de tela, ou o 4K a uma e meia em comparações 4K, como no VMAF v0.6.1. Somente para vídeos PQ (HDR10).",
   "Y, U and V of the YUV metrics": "Y, U e V das métricas YUV",
   "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "Uma coluna para cada um dos planos Y, U e V ao lado de PSNR YUV, SSIM YUV, MS-SSIM YUV e PSNR-HVS-M, calculada com elas sem custo extra. Vídeos já pontuados precisam de Calcular novamente para preenchê-las.",
-  "Calculated with {metric}.": "Calculado com {metric}."
+  "Calculated with {metric}.": "Calculado com {metric}.",
+  "Done": "Concluído",
+  "Ready": "Pronto",
+  "Ready: no test videos ticked.": "Pronto: nenhum vídeo de teste marcado.",
+  "Ready: {videos}, {metrics}.": "Pronto: {videos}, {metrics}.",
+  "{low} to {high} metrics": "de {low} a {high} métricas"
  },
  "plurals": {
   "Click Remove all again to remove {count} video. Saved results are kept.": ["Clique em “Remover todos” de novo para remover {count} vídeo. Os resultados salvos são mantidos.", "Clique em “Remover todos” de novo para remover todos os {count} vídeos. Os resultados salvos são mantidos."],
@@ -1509,6 +1514,10 @@
   "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "{count} resultado mantido, cujo vídeo de referência sumiu: exclua-o na aba Resultados salvos.",
    "{count} resultados mantidos, cujos vídeos de referência sumiram: exclua-os na aba Resultados salvos."
-  ]
+  ],
+  "Click to open the Videos tab: the failed video's row says more.": ["Clique para abrir a guia Vídeos: a linha do vídeo com falha diz mais.", "Clique para abrir a guia Vídeos: as linhas dos vídeos com falha dizem mais."],
+  "{count} metric": ["{count} métrica", "{count} métricas"],
+  "{count} metric each": ["{count} métrica cada", "{count} métricas cada"],
+  "{count} test video ticked": ["{count} vídeo de teste marcado", "{count} vídeos de teste marcados"]
  }
 }

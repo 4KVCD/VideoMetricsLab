@@ -1,11 +1,12 @@
 // VML Modern's title bar and its quiet buttons.
 //
 // TitleButtons is three small buttons any tab can use: a run's progress
-// (shown only during a run; a click opens the Videos tab), the theme (a menu
-// of the themes), and an update's badge (shown only when one is available; a
-// click shows it). They are VML Modern's alone. On Windows they sit in the
-// title bar; elsewhere, and on Windows where the title bar stays the
-// system's, at the right end of the tab bar.
+// (always there: Ready, the run's progress, how it ended; a click opens the
+// Videos tab), the theme (a menu of the themes), and an update's badge
+// (shown only when one is available; a click shows it). In VML Modern, on
+// Windows they sit in the title bar; elsewhere, and on Windows where the
+// title bar stays the system's, at the right end of the tab bar. VML Classic
+// has the progress button alone, at the tab bar's right end.
 //
 // TitleBar (Windows) is the window's title bar drawn by the app, in the
 // theme's colours: the icon, the title, the TitleButtons and the minimize,
@@ -27,8 +28,6 @@
 
 #include <QWidget>
 
-#include <optional>
-
 class QAbstractButton;
 class QLabel;
 class QMainWindow;
@@ -46,15 +45,21 @@ class TitleButtons : public QWidget {
 public:
     explicit TitleButtons(QWidget* parent = nullptr);
 
-    // A run's progress: `text` ("2 of 5 · 43 %") on the button, `fraction`
-    // (0 to 1) as its thin bar, `tooltip` the status line. None: no run, the
-    // button hidden.
+    // The progress button: `text` ("2 of 5 · 43 %") on it, `fraction` (0
+    // to 1) as its thin bar, `tooltip` (rich text), `state` for its
+    // accessible name ("2 of 5, 43 %"), and its text and bar in the error
+    // colour or muted. A tooltip shown is updated in place.
     struct Progress {
+        enum class Tone { normal, error, muted };
         QString text;
         double fraction = 0.0;
         QString tooltip;
+        QString state;
+        Tone tone = Tone::normal;
     };
-    void set_progress(const std::optional<Progress>& progress);
+    void set_progress(const Progress& progress);
+    // VML Modern: every button. VML Classic: the progress button alone.
+    void set_modern(bool modern);
     // An update's version on its badge; empty: none, the badge hidden.
     void set_update(const QString& version);
     // The theme ticked in the theme menu ("", "light" or "dark"), and the
@@ -66,6 +71,9 @@ public:
 
 signals:
     void progress_clicked();
+    // The progress button's tooltip is about to show: set_progress, with
+    // the tooltip as it is now.
+    void progress_tooltip_wanted();
     void update_clicked();
     void theme_chosen(const QString& theme);
     // A look picked in the Light look (`dark` false) or Dark look menu.
@@ -82,7 +90,9 @@ private:
     QActionGroup* light_looks_ = nullptr;  // its Light look menu's
     QActionGroup* dark_looks_ = nullptr;   // its Dark look menu's
     QToolButton* update_ = nullptr;
+    QString update_version_;
     QString theme_value_;
+    bool modern_ = true;
 };
 
 #ifdef _WIN32

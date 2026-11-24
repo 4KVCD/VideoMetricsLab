@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <set>
 #include <tuple>
 #include <utility>
@@ -33,6 +34,7 @@
 #include "run_worker.h"
 #include "settings_panel.h"
 #include "stream_records.h"
+#include "theme.h"
 #include "widgets.h"
 #include "window_helpers.h"
 #include "vml/app_log.h"
@@ -394,6 +396,7 @@ void MainWindow::begin_run(const std::vector<int>& checked, std::vector<std::sha
     finished_jobs_.clear();
     job_line_slot_.clear();
     job_line_text_.clear();
+    job_line_parts_.clear();
     job_line_shape_.clear();
     job_lines_due_.clear();
     job_fallbacks_.clear();
@@ -414,6 +417,7 @@ void MainWindow::begin_run(const std::vector<int>& checked, std::vector<std::sha
     job_facts_.assign(job_rows_.size(), nullptr);
     run_hold_ = RunHold::none;
     run_tick_timer_->start();
+    run_badge_.start();
     set_run_ui_active(true);
     update_run_status();  // the counts, the skipped included, before any video starts
     pause_button_->setChecked(false);
@@ -602,7 +606,7 @@ void MainWindow::set_run_ui_active(bool active) {
             click_twice_->disarm();  // Remove all and Start over are frozen for the run
         }
     } else {
-        show_run_in_title({});  // the progress button goes with the run
+        show_progress_badge();  // how the run ended (on_all_finished)
         refresh_length_note();  // the videos scored are compared already
     }
     // Saved Results' Delete, locked for the run's pairs' comparisons: the
@@ -809,6 +813,7 @@ void MainWindow::mark_job_over(int index) {
     job_task_progress_.erase(index);
     job_lines_due_.erase(index);
     job_line_shape_.erase(index);
+    job_line_parts_.erase(index);
     if (job_line_text_.erase(index) > 0) {
         arrange_job_lines();
     }
@@ -836,35 +841,34 @@ void MainWindow::update_run_status() {
     }
     const int running = static_cast<int>(std::count_if(running_jobs_.begin(), running_jobs_.end(),
                                                        [this](int index) { return !finished_jobs_.contains(index); }));
-    const int total = static_cast<int>(job_rows_.size());
+    if (run_hold_ != RunHold::paused && running == 0 && !(run_active_ && !job_rows_.empty())) {
+        return;
+    }
+    show_status(queue_line());
+    show_progress_badge();
+}
+
+QString MainWindow::queue_line() const {
+    const int running = static_cast<int>(std::count_if(running_jobs_.begin(), running_jobs_.end(),
+                                                       [this](int index) { return !finished_jobs_.contains(index); }));
     const std::optional<double> elapsed = run_elapsed();
     const QString elapsed_text =
         elapsed ? "   ·   " + app::tr("Elapsed: {time}", {{"time", format_hms(*elapsed)}}) : QString();
-    const QString summary = run_summary(running, total);
-    if (run_hold_ == RunHold::paused) {
-        show_status(app::tr("Paused   ·   ") + summary + elapsed_text);
-        show_run_in_title(app::tr("Paused   ·   ") + summary + elapsed_text);
-        return;
-    }
-    if (running == 0 && !(run_active_ && total > 0)) {
-        return;
-    }
-    show_status(summary + elapsed_text);
-    show_run_in_title(summary + elapsed_text);
+    const QString summary = run_summary(running, static_cast<int>(job_rows_.size())) + elapsed_text;
+    return run_hold_ == RunHold::paused ? app::tr("Paused   ·   ") + summary : summary;
 }
 
-void MainWindow::show_run_in_title(const QString& status) {
-    if (title_buttons_ == nullptr) {
-        return;
-    }
-    const int total = static_cast<int>(job_rows_.size());
-    if (!run_active_ || total == 0) {
-        title_buttons_->set_progress(std::nullopt);
-        return;
-    }
+RunCounts MainWindow::run_counts() const {
     // How far the queue has got: each video counts alike, a video in
     // progress by its tasks' frames counted (a task done counts whole). Only
     // a rough measure, shown as a thin bar, as the status line explains.
+    RunCounts counts;
+    counts.total = static_cast<int>(job_rows_.size());
+    counts.finished = static_cast<int>(finished_jobs_.size());
+    counts.failed = run_failed_count_ + run_partial_count_;
+    if (counts.total == 0) {
+        return counts;
+    }
     double counted = static_cast<double>(finished_jobs_.size());
     for (const auto& [index, tasks] : job_task_progress_) {
         if (finished_jobs_.contains(index) || tasks.empty()) {
@@ -878,13 +882,145 @@ void MainWindow::show_run_in_title(const QString& status) {
         }
         counted += sum / static_cast<double>(tasks.size());
     }
-    const double fraction = std::clamp(counted / total, 0.0, 1.0);
-    QString text = app::tr("{done} of {total}", {{"done", static_cast<int>(finished_jobs_.size())}, {"total", total}}) +
-                   QStringLiteral(" · ") + app::tr("{percent} %", {{"percent", static_cast<int>(fraction * 100)}});
-    if (run_hold_ == RunHold::paused) {
-        text = app::tr("Paused") + QStringLiteral(" · ") + text;
+    counts.fraction = std::clamp(counted / counts.total, 0.0, 1.0);
+    return counts;
+}
+
+namespace {
+
+// A tooltip's paragraph in rich text, its lines kept as they are (the
+// status line's wide gaps too).
+QString tooltip_lines(const QStringList& lines, const QString& style = {}) {
+    QStringList escaped;
+    for (const QString& line : lines) {
+        escaped.append(line.toHtmlEscaped());
     }
-    title_buttons_->set_progress(TitleButtons::Progress{text, fraction, status});
+    return QStringLiteral("<p style=\"white-space:pre;%1\">%2</p>").arg(style, escaped.join(QStringLiteral("<br>")));
+}
+
+// A video's paragraph: its name in bold, and its lines under it, indented.
+// Progress lines stay whole, as on the Videos tab; a failure's reason,
+// which can name a path and how to fix it, wraps (the tooltip's width is
+// Qt's for rich text then).
+QString tooltip_video(const QString& name, const QStringList& lines, bool wrap = false) {
+    QString html = QStringLiteral("<p style=\"white-space:pre; margin-bottom:0\"><b>%1</b></p>").arg(name.toHtmlEscaped());
+    for (const QString& line : lines) {
+        html += QStringLiteral("<p style=\"margin:0 0 0 16px;%1\">%2</p>")
+                    .arg(wrap ? QString() : QStringLiteral(" white-space:pre;"),
+                         line.toHtmlEscaped().replace('\n', QStringLiteral("<br>")));
+    }
+    return html;
+}
+
+}  // namespace
+
+QString MainWindow::running_tooltip() const {
+    QString html = tooltip_lines({queue_line()});
+    for (const int index : running_jobs_) {  // in the order they started
+        if (finished_jobs_.contains(index)) {
+            continue;
+        }
+        const auto parts = job_line_parts_.find(index);
+        html += tooltip_video(job_label(index), parts != job_line_parts_.end() ? parts->second : QStringList());
+    }
+    return html;
+}
+
+QString MainWindow::ended_tooltip() const {
+    // Made once, as the run ends: its elapsed time would grow after it.
+    QString html = tooltip_lines({run_end_message() + "  " + run_summary(0, static_cast<int>(job_rows_.size()))});
+    for (const std::shared_ptr<RowData>& row_data : job_rows_) {
+        if (!row_index_of(row_data.get())) {
+            continue;  // removed during the run
+        }
+        QStringList lines;
+        if (row_data->analysis_status == RowState::failed) {
+            lines.append(tr_message(row_data->status_detail.section("\n\n", 0, 0)));  // the video's reason
+        } else if (row_data->analysis_status == RowState::partly_failed) {
+            for (const MetricDefinition& metric : metrics()) {
+                if (metric.is_plane()) {
+                    continue;  // a plane fails with its metric, which says so
+                }
+                const auto why = row_data->metric_failures.find(std::string(metric.key));
+                if (why != row_data->metric_failures.end()) {
+                    lines.append(app::tr("{metrics} failed: {error}",
+                                         {{"metrics", qt_text(metric.label)}, {"error", tr_message(why->second)}}));
+                }
+            }
+        }
+        if (!lines.isEmpty()) {
+            html += tooltip_video(text_of(row_data->path.stem()), lines, true);
+        }
+    }
+    return html;
+}
+
+RunTicks MainWindow::run_ticks() const {
+    // Each ticked row by its identity: its data, and its file, so that a
+    // row made where a removed one was is not taken for it.
+    RunTicks ticks;
+    for (const int row : checked_rows()) {
+        if (row >= static_cast<int>(rows_.size())) {
+            continue;  // a row still being built
+        }
+        const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        ticks.emplace_back(
+            std::to_string(reinterpret_cast<std::uintptr_t>(&row_data)) + "|" + row_data.path.generic_string(),
+            requested_metrics(row_data));
+    }
+    return ticks;
+}
+
+RunTicks MainWindow::listed_ticks(RunTicks ticks) {
+    // The metrics as Add/remove metrics counts them: a plane (Y, U, V of a
+    // YUV metric) comes with its metric, not as one of its own.
+    for (auto& [row, keys] : ticks) {
+        std::erase_if(keys, [](const std::string& key) { return metric_definition(key).is_plane(); });
+    }
+    return ticks;
+}
+
+void MainWindow::check_ticks_soon() {
+    // Only Done and Cancelled look, once per burst of table changes (a load
+    // changes many cells): when the window is next idle.
+    const RunBadge::Phase phase = run_badge_.phase();
+    if (ticks_check_due_ || run_active_ || (phase != RunBadge::Phase::done && phase != RunBadge::Phase::cancelled)) {
+        return;
+    }
+    ticks_check_due_ = true;
+    QTimer::singleShot(0, this, [this] {
+        ticks_check_due_ = false;
+        if (!run_active_ && run_badge_.ticks_now(run_ticks())) {
+            show_progress_badge();
+        }
+    });
+}
+
+void MainWindow::show_progress_badge() {
+    if (title_buttons_ == nullptr) {
+        return;
+    }
+    const RunBadge::Phase phase = run_badge_.phase();
+    const bool running = phase == RunBadge::Phase::running;
+    const bool ended = phase == RunBadge::Phase::done || phase == RunBadge::Phase::cancelled;
+    const BadgeLook look = badge_look(phase, run_hold_ == RunHold::paused,
+                                      running ? run_counts() : ended ? run_badge_.ended_counts() : RunCounts{});
+    // Ready's tooltip is made here only when asked for (on hover, as the
+    // button's tooltip is about to show) or as a run ends: not as ticks change.
+    QString tooltip = running ? running_tooltip()
+                      : ended ? run_badge_.ended_tooltip()
+                              : tooltip_lines({ready_tooltip(listed_ticks(run_ticks()))});
+    const QString click = look.tone == BadgeLook::Tone::error
+                              ? ntr("Click to open the Videos tab: the failed video's row says more.",
+                                    "Click to open the Videos tab: the failed videos' rows say more.",
+                                    run_badge_.ended_counts().failed)
+                              : app::tr("Click to open the Videos tab.");
+    tooltip += tooltip_lines({click}, "color:" + theme::color("muted").name() + ";");
+    using Tone = TitleButtons::Progress::Tone;
+    const Tone tone = look.tone == BadgeLook::Tone::error   ? Tone::error
+                      : look.tone == BadgeLook::Tone::muted ? Tone::muted
+                                                            : Tone::normal;
+    title_buttons_->set_progress({look.text, look.fraction, tooltip, look.state, tone});
 }
 
 std::optional<double> MainWindow::run_elapsed() const {
@@ -1081,6 +1217,7 @@ void MainWindow::render_job_progress(int index) {
     for (const std::string& part : line.parts) {
         parts.append(qt_text(part));
     }
+    job_line_parts_[index] = parts;  // the progress button's tooltip: its metric groups, one a line
     if (!line.plans.empty()) {
         // A resolution test decodes only its source.
         const bool source_only = job_rows_[static_cast<std::size_t>(index)]->options.resample_test.has_value();
@@ -1354,6 +1491,7 @@ void MainWindow::on_all_finished() {
     complete_run_record();
     run_tick_timer_->stop();
     run_hold_ = RunHold::none;
+    run_badge_.end(run_was_cancelled_, run_counts(), ended_tooltip(), run_ticks());
     set_run_ui_active(false);
     pause_button_->setChecked(false);
     pause_button_->setText(app::tr("Pause"));

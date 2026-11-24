@@ -59,6 +59,7 @@ add_library(vml_app STATIC
     settings_panel.cpp
     settings_appearance.cpp
     settings_notifications.cpp
+    run_badge.cpp
     stream_records.cpp
     theme.cpp
     title_bar.cpp

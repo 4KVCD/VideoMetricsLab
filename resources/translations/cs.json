@@ -116,7 +116,7 @@
   "Whole names": "Celé názvy",
   "Characters from the start:": "Znaků od začátku:",
   "from the end:": "od konce:",
-  "Progress of the metrics being calculated": "Průběh počítaných metrik",
+  "Progress of the metrics being calculated: {state}": "Průběh počítaných metrik: {state}",
   "Click to open the Videos tab.": "Kliknutím otevřete kartu Videa.",
   "Update to {version}": "Aktualizovat na {version}",
   "{app} {version} is available. Click for what's new and the download.": "{app} {version} je k dispozici. Klikněte pro novinky a stažení.",
@@ -1376,7 +1376,12 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "Model pro sloupec HDR VMAF (modely HDR VMAF od Netflixu). Automaticky zvolí model 1080p na trojnásobku výšky obrazovky, nebo model 4K na 1,5násobku pro porovnání ve 4K, stejně jako VMAF v0.6.1. Pouze pro videa PQ (HDR10).",
   "Y, U and V of the YUV metrics": "Y, U a V metrik YUV",
   "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "Sloupec pro každou z rovin Y, U a V vedle PSNR YUV, SSIM YUV, MS-SSIM YUV a PSNR-HVS-M, počítaný spolu s nimi bez dalších nákladů. Dříve vyhodnocená videa je třeba znovu vypočítat, aby se vyplnily.",
-  "Calculated with {metric}.": "Počítáno s {metric}."
+  "Calculated with {metric}.": "Počítáno s {metric}.",
+  "Done": "Hotovo",
+  "Ready": "Připraveno",
+  "Ready: no test videos ticked.": "Připraveno: nejsou zaškrtnuta žádná testovací videa.",
+  "Ready: {videos}, {metrics}.": "Připraveno: {videos}, {metrics}.",
+  "{low} to {high} metrics": "{low} až {high} metrik"
  },
  "plurals": {
   "Click Remove all again to remove {count} video. Saved results are kept.": ["Dalším kliknutím na „Odebrat vše“ odeberete {count} video. Uložené výsledky zůstanou.", "Dalším kliknutím na „Odebrat vše“ odeberete všechna {count} videa. Uložené výsledky zůstanou.", "Dalším kliknutím na „Odebrat vše“ odeberete všech {count} videí. Uložené výsledky zůstanou."],
@@ -1539,6 +1544,10 @@
    "Zachován {count} výsledek, jehož referenční video chybí: odstraňte jej na kartě Uložené výsledky.",
    "Zachovány {count} výsledky, jejichž referenční videa chybí: odstraňte je na kartě Uložené výsledky.",
    "Zachováno {count} výsledků, jejichž referenční videa chybí: odstraňte je na kartě Uložené výsledky."
-  ]
+  ],
+  "Click to open the Videos tab: the failed video's row says more.": ["Kliknutím otevřete kartu Videa: více řekne řádek videa, které selhalo.", "Kliknutím otevřete kartu Videa: více řeknou řádky videí, která selhala.", "Kliknutím otevřete kartu Videa: více řeknou řádky videí, která selhala."],
+  "{count} metric": ["{count} metrika", "{count} metriky", "{count} metrik"],
+  "{count} metric each": ["{count} metrika u každého", "{count} metriky u každého", "{count} metrik u každého"],
+  "{count} test video ticked": ["{count} zaškrtnuté testovací video", "{count} zaškrtnutá testovací videa", "{count} zaškrtnutých testovacích videí"]
  }
 }

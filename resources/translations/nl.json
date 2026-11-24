@@ -116,7 +116,7 @@
   "Whole names": "Volledige namen",
   "Characters from the start:": "Tekens vanaf het begin:",
   "from the end:": "vanaf het einde:",
-  "Progress of the metrics being calculated": "Voortgang van de metrieken die worden berekend",
+  "Progress of the metrics being calculated: {state}": "Voortgang van de metrieken die worden berekend: {state}",
   "Click to open the Videos tab.": "Klik om het tabblad Video's te openen.",
   "Update to {version}": "Bijwerken naar {version}",
   "{app} {version} is available. Click for what's new and the download.": "{app} {version} is beschikbaar. Klik voor wat er nieuw is en de download.",
@@ -1376,7 +1376,12 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "Model voor de kolom HDR VMAF (de HDR VMAF-modellen die Netflix meelevert). Automatisch kiest het 1080p-model op drie keer de schermhoogte, of het 4K-model op anderhalf keer voor 4K-vergelijkingen, net als VMAF v0.6.1. Alleen voor PQ-video's (HDR10).",
   "Y, U and V of the YUV metrics": "Y, U en V van de YUV-metrieken",
   "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "Een kolom voor elk van de vlakken Y, U en V naast PSNR YUV, SSIM YUV, MS-SSIM YUV en PSNR-HVS-M, zonder extra kosten met hen berekend. Eerder gescoorde video's moeten opnieuw worden berekend om ze te vullen.",
-  "Calculated with {metric}.": "Berekend met {metric}."
+  "Calculated with {metric}.": "Berekend met {metric}.",
+  "Done": "Klaar",
+  "Ready": "Gereed",
+  "Ready: no test videos ticked.": "Gereed: geen testvideo's aangevinkt.",
+  "Ready: {videos}, {metrics}.": "Gereed: {videos}, {metrics}.",
+  "{low} to {high} metrics": "{low} tot {high} metrieken"
  },
  "plurals": {
   "Click Remove all again to remove {count} video. Saved results are kept.": ["Klik nogmaals op 'Alles verwijderen' om {count} video te verwijderen. Opgeslagen resultaten blijven bewaard.", "Klik nogmaals op 'Alles verwijderen' om alle {count} video's te verwijderen. Opgeslagen resultaten blijven bewaard."],
@@ -1509,6 +1514,10 @@
   "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "{count} resultaat bewaard waarvan de referentievideo ontbreekt: verwijder het op het tabblad Opgeslagen resultaten.",
    "{count} resultaten bewaard waarvan de referentievideo's ontbreken: verwijder ze op het tabblad Opgeslagen resultaten."
-  ]
+  ],
+  "Click to open the Videos tab: the failed video's row says more.": ["Klik om het tabblad Video's te openen: de rij van de mislukte video zegt meer.", "Klik om het tabblad Video's te openen: de rijen van de mislukte video's zeggen meer."],
+  "{count} metric": ["{count} metriek", "{count} metrieken"],
+  "{count} metric each": ["elk {count} metriek", "elk {count} metrieken"],
+  "{count} test video ticked": ["{count} testvideo aangevinkt", "{count} testvideo's aangevinkt"]
  }
 }

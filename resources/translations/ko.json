@@ -116,7 +116,7 @@
   "Whole names": "전체 이름",
   "Characters from the start:": "앞에서부터 글자 수:",
   "from the end:": "끝에서부터:",
-  "Progress of the metrics being calculated": "계산 중인 지표의 진행 상황",
+  "Progress of the metrics being calculated: {state}": "계산 중인 지표의 진행 상황: {state}",
   "Click to open the Videos tab.": "클릭하면 영상 탭을 엽니다.",
   "Update to {version}": "{version}(으)로 업데이트",
   "{app} {version} is available. Click for what's new and the download.": "{app} {version}을(를) 사용할 수 있습니다. 클릭하면 새 기능과 다운로드를 볼 수 있습니다.",
@@ -1376,7 +1376,12 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "HDR VMAF 열의 모델입니다(Netflix가 제공하는 HDR VMAF 모델). [자동]은 화면 높이 3배의 1080p 모델을, 4K 비교에서는 화면 높이 1.5배의 4K 모델을 고릅니다(VMAF v0.6.1과 같음). PQ (HDR10) 동영상 전용입니다.",
   "Y, U and V of the YUV metrics": "YUV 메트릭의 Y, U, V",
   "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "PSNR YUV, SSIM YUV, MS-SSIM YUV, PSNR-HVS-M 옆에 Y, U, V 각 평면의 열을 표시합니다. 추가 비용 없이 함께 계산됩니다. 이전에 점수를 매긴 동영상은 채우려면 다시 계산해야 합니다.",
-  "Calculated with {metric}.": "{metric}와 함께 계산됩니다."
+  "Calculated with {metric}.": "{metric}와 함께 계산됩니다.",
+  "Done": "완료",
+  "Ready": "준비됨",
+  "Ready: no test videos ticked.": "준비됨: 체크된 테스트 영상이 없습니다.",
+  "Ready: {videos}, {metrics}.": "준비됨: {videos}, {metrics}.",
+  "{low} to {high} metrics": "지표 {low}~{high}개"
  },
  "plurals": {
   "Click Remove all again to remove {count} video. Saved results are kept.": ["'모두 제거'를 한 번 더 클릭하면 영상 {count}개를 제거합니다. 저장된 결과는 유지됩니다."],
@@ -1479,6 +1484,10 @@
   ],
   "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "참조 영상이 없는 결과 {count}개를 유지했습니다. 저장된 결과 탭에서 삭제하세요."
-  ]
+  ],
+  "Click to open the Videos tab: the failed video's row says more.": ["클릭하면 영상 탭을 엽니다. 실패한 영상의 행에 자세한 내용이 있습니다."],
+  "{count} metric": ["지표 {count}개"],
+  "{count} metric each": ["각각 지표 {count}개"],
+  "{count} test video ticked": ["테스트 영상 {count}개 체크됨"]
  }
 }

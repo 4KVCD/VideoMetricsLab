@@ -116,7 +116,7 @@
   "Whole names": "完整名称",
   "Characters from the start:": "开头字符数：",
   "from the end:": "结尾：",
-  "Progress of the metrics being calculated": "正在计算的指标进度",
+  "Progress of the metrics being calculated: {state}": "正在计算的指标进度：{state}",
   "Click to open the Videos tab.": "单击打开“视频”选项卡。",
   "Update to {version}": "更新到 {version}",
   "{app} {version} is available. Click for what's new and the download.": "{app} {version} 已推出。单击查看新功能和下载。",
@@ -1376,7 +1376,12 @@
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "HDR VMAF 列使用的模型（Netflix 附带的 HDR VMAF 模型）。“自动”选择 3 倍屏幕高度的 1080p 模型，4K 对比时选择 1.5 倍屏幕高度的 4K 模型，与 VMAF v0.6.1 相同。仅适用于 PQ (HDR10) 视频。",
   "Y, U and V of the YUV metrics": "YUV 指标的 Y、U 和 V",
   "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "在 PSNR YUV、SSIM YUV、MS-SSIM YUV 和 PSNR-HVS-M 旁边为 Y、U、V 每个平面各显示一列，与它们一起计算，无额外开销。之前已评分的视频需要再次计算才能填入。",
-  "Calculated with {metric}.": "与 {metric} 一起计算。"
+  "Calculated with {metric}.": "与 {metric} 一起计算。",
+  "Done": "完成",
+  "Ready": "就绪",
+  "Ready: no test videos ticked.": "就绪：未勾选测试视频。",
+  "Ready: {videos}, {metrics}.": "就绪：{videos}，{metrics}。",
+  "{low} to {high} metrics": "{low} 到 {high} 个指标"
  },
  "plurals": {
   "Click Remove all again to remove {count} video. Saved results are kept.": ["再次单击“全部移除”以移除全部 {count} 个视频。已保存的结果会保留。"],
@@ -1479,6 +1484,10 @@
   ],
   "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
    "已保留 {count} 个参考视频已丢失的结果：请在“已保存的结果”选项卡中删除。"
-  ]
+  ],
+  "Click to open the Videos tab: the failed video's row says more.": ["单击打开“视频”选项卡：失败视频的行中有更多信息。"],
+  "{count} metric": ["{count} 个指标"],
+  "{count} metric each": ["每个 {count} 个指标"],
+  "{count} test video ticked": ["已勾选 {count} 个测试视频"]
  }
 }
