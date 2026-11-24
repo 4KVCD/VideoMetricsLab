@@ -97,6 +97,14 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
                                    const PerceptualBackends& perceptual_backends = {},
                                    const MetricResultSet& saved = MetricResultSet(), bool share_decode = false);
 
+// The CPU scorer's metrics `keys` as a task's name in the log and vml-cli's
+// list of what a run calculates gives them: "PSNR; CAMBI and CIEDE2000 (ΔE)
+// on the GPU where it can". With `gpu_offered` (VMAF's place is the GPU:
+// VmafOptions::vmaf_on_gpu), those the scorer may hand the GPU
+// (gpu_metrics_of) are named so, as where they go is decided only as it
+// starts (it says so then: StatusKind::metrics_on_gpu).
+std::string cpu_metrics_text(const std::vector<std::string>& keys, bool gpu_offered);
+
 // What the CPU's task says of the metrics a failed check of the GPU sent it
 // (`failures`, each metric's key and why): a note for each reason, with its
 // metrics, of those calculated (`calculated`) only: a saved score moved

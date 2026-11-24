@@ -955,5 +955,16 @@ TEST(JobRunner, AVideoCancelledBeforeAnyScoreIsCancelledWhateverIsSaved) {
     EXPECT_EQ(reported.cancelled, 1);
 }
 
+// What a run calculates names CIEDE2000 and CAMBI as the GPU's where it may
+// take them (VMAF's place the GPU), not as CPU metrics the line then calls
+// GPU metrics; with VMAF on the CPU they are the CPU's.
+TEST(JobRunner, CpuMetricsTheGpuMayTakeAreNamedSo) {
+    const std::vector<std::string> keys{"psnr", "cambi", "ciede2000"};
+    EXPECT_EQ(cpu_metrics_text(keys, true), "PSNR; CAMBI and CIEDE2000 (\xCE\x94" "E) on the GPU where it can");
+    EXPECT_EQ(cpu_metrics_text({"ciede2000"}, true), "CIEDE2000 (\xCE\x94" "E) on the GPU where it can");
+    EXPECT_EQ(cpu_metrics_text(keys, false), "PSNR, CAMBI, CIEDE2000 (\xCE\x94" "E)");
+    EXPECT_EQ(cpu_metrics_text({"psnr", "ssim"}, true), "PSNR, SSIM");
+}
+
 }  // namespace
 }  // namespace vml

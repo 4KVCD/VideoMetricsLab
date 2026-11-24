@@ -19,6 +19,7 @@
 #include "vml/ffmpeg_run.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
+#include "vml/gpu_cpu_metrics.h"
 #include "vml/gpu_decoders.h"
 #include "vml/gpu_frames.h"
 #include "vml/gpu_vmaf.h"
@@ -35,6 +36,21 @@
 #include "vml/vship.h"
 
 namespace vml {
+
+std::string cpu_metrics_text(const std::vector<std::string>& keys, bool gpu_offered) {
+    const std::vector<std::string> gpu_can =
+        gpu_offered ? gpu_metrics_of(keys, false, {}) : std::vector<std::string>{};  // size and CAMBI's options aside
+    std::vector<std::string> here;
+    std::vector<std::string> maybe_gpu;  // in `keys`' order
+    for (const std::string& key : keys) {
+        (std::find(gpu_can.begin(), gpu_can.end(), key) != gpu_can.end() ? maybe_gpu : here).push_back(key);
+    }
+    std::string text = metric_labels(here);
+    if (!maybe_gpu.empty()) {
+        text += (text.empty() ? "" : "; ") + metric_labels(maybe_gpu, " and ") + " on the GPU where it can";
+    }
+    return text;
+}
 
 namespace {
 
@@ -456,10 +472,12 @@ std::pair<std::vector<std::string>, std::vector<std::string>> JobRun::shown_keys
 
 std::string JobRun::task_name(std::size_t task) const {
     const auto [own, beside] = shown_keys(task);
-    std::string name =
-        std::string(pool_of(task) == gpu_pool ? "GPU" : "CPU") + " metrics (" + metric_labels(own) + ")";
+    const bool gpu_offered = job_.options.vmaf_on_gpu;
+    const bool on_cpu = pool_of(task) != gpu_pool;
+    std::string name = std::string(on_cpu ? "CPU" : "GPU") + " metrics (" +
+                       (on_cpu ? cpu_metrics_text(own, gpu_offered) : metric_labels(own)) + ")";
     if (!beside.empty()) {
-        name += " with CPU metrics (" + metric_labels(beside) + ") beside them";
+        name += " with CPU metrics (" + cpu_metrics_text(beside, gpu_offered) + ") beside them";
     }
     return name;
 }
