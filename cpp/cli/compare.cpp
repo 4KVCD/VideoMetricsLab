@@ -612,6 +612,8 @@ std::vector<std::string> default_metrics(const Settings& settings) {
     VmafOptions options;
     options.extra_features = settings.default_extra_features();
     options.compute_xpsnr = settings.default_compute_xpsnr;
+    options.compute_psnr_yuv = settings.default_compute_psnr_yuv;
+    options.compute_ssim_yuv = settings.default_compute_ssim_yuv;
     options.compute_vmaf = settings.default_compute_vmaf;
     options.compute_vmaf_neg = settings.default_compute_vmaf_neg;
     options.compute_vmaf_v1 = settings.default_compute_vmaf_v1;
@@ -655,11 +657,11 @@ std::optional<std::string> not_yet(const CompareArguments& arguments, const Sett
     });
     const std::optional<std::string> vmaf_on = vmaf_where(arguments);
     const bool cpu_metrics = std::any_of(asked.begin(), asked.end(), [](const std::string& key) {
-        return key == "psnr" || key == "ssim" || key == "xpsnr";
+        return is_cpu_metric(key);
     });
-    // The app scores PSNR, SSIM and XPSNR itself unless VMAF is calculated
-    // on the CPU beside them, in FFmpeg; with FFmpeg's frames, the C++ app
-    // pairs them itself only.
+    // The app scores PSNR, SSIM and XPSNR (and their 6:1:1 forms) itself
+    // unless VMAF is calculated on the CPU beside them, in FFmpeg; with
+    // FFmpeg's frames, the C++ app pairs them itself only.
     if (cpu_metrics && (!vmaf || (vmaf_on ? *vmaf_on == "gpu" : settings.default_vmaf_on_gpu)) &&
         ascii_lower(platform::environment_variable("VML_VMAF_PIPES").value_or("")) == "canvas") {
         return "PSNR, SSIM or XPSNR with FFmpeg pairing the frames (VML_VMAF_PIPES=canvas)";

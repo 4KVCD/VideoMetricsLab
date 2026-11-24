@@ -361,20 +361,20 @@ void BesideScorer::add_planes(const FramePlanes& reference, const FramePlanes& d
     }
 }
 
-CpuScorer& BesideScorer::luma_only_scorer() {
+CpuScorer& BesideScorer::cpu_alone() {
     if (hdr_ || !cpu_) {
-        throw std::logic_error("HDR VMAF beside a pass reads whole frames, not downloads of their luma");
+        throw std::logic_error("HDR VMAF beside a pass reads whole frames from system memory, not downloads");
     }
     return *cpu_;
 }
 
 void BesideScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot) {
-    luma_only_scorer().add_decoded(reference, reference_slot, test, test_slot);
+    cpu_alone().add_decoded(reference, reference_slot, test, test_slot);
 }
 
 void BesideScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot,
                                const std::function<void(Plane, Plane)>& also) {
-    luma_only_scorer().add_decoded(reference, reference_slot, test, test_slot, also);
+    cpu_alone().add_decoded(reference, reference_slot, test, test_slot, also);
 }
 
 PairScores BesideScorer::finish() {
@@ -833,6 +833,9 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     }
     // HDR VMAF beside reads whole frames (its colour conversion takes the chroma too) from system memory (HostPairs).
     const bool whole_frames = std::ranges::find(plan.beside, "vmaf_hdr") != plan.beside.end();
+    // The 6:1:1 metrics beside read the chroma too: the decoders decode whole
+    // frames, and the engine is given their luma.
+    const bool chroma_beside = cpu_metrics_read_chroma(plan.beside);
     std::string gpu;  // its name, for messages
     if (cuda) {
         // libvmaf's CUDA code takes NVIDIA's pictures on the GPU and uploads
@@ -860,9 +863,9 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     require_same_range(source, distorted);
     const std::pair size(plan.width, plan.height);
     std::vector<DecodePlan> plans = plan_pair(source, distorted, source_crop, distorted_crop, size, plan.bit_depth,
-                                              !whole_frames, scale_algorithm, decoders);
+                                              !whole_frames && !chroma_beside, scale_algorithm, decoders);
     if (!whole_frames) {
-        require_luma_of_size(plans, size, plan.bit_depth);
+        require_frames_of_size(plans, size, plan.bit_depth);
     }
     if (cuda) {
         plan_pair_seek(plans, distorted, source, range.decode_start, ffmpeg, ffprobe, cancel);

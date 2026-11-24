@@ -165,10 +165,13 @@ VmafOptions MainWindow::read_panel_options() const {
             }
         }
     }
-    return options_panel_->read_options(extra_features, metric_header_->is_checked(col_vmaf),
-                                        metric_header_->is_checked(col_vmaf_neg),
-                                        metric_header_->is_checked(col_vmaf_v1),
-                                        metric_header_->is_checked(col_vmaf_hdr), metric_header_->is_checked(col_xpsnr));
+    VmafOptions options = options_panel_->read_options(
+        extra_features, metric_header_->is_checked(col_vmaf), metric_header_->is_checked(col_vmaf_neg),
+        metric_header_->is_checked(col_vmaf_v1), metric_header_->is_checked(col_vmaf_hdr),
+        metric_header_->is_checked(col_xpsnr));
+    options.compute_psnr_yuv = metric_header_->is_checked(col_psnr_yuv);
+    options.compute_ssim_yuv = metric_header_->is_checked(col_ssim_yuv);
+    return options;
 }
 
 void MainWindow::on_panel_field_edited(const QString& field) {
@@ -770,6 +773,8 @@ void MainWindow::add_cvvdp_display_rows(const std::vector<int>& rows, const Cvvd
             options.compute_vmaf_v1 = false;
             options.compute_vmaf_hdr = false;
             options.compute_xpsnr = false;
+            options.compute_psnr_yuv = false;
+            options.compute_ssim_yuv = false;
             options.extra_features.clear();
             display_row.extra_metric_keys = {"cvvdp"};
         });

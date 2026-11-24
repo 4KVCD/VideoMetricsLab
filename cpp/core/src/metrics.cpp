@@ -41,7 +41,7 @@ using enum MetricAggregation;
 // In the order the app shows them. Key "vmaf" is the v0.6.1 family (its
 // standard and 4K models), as it always was: saved scores, settings and
 // exports keep the key; only the label names the version.
-const std::array<MetricDefinition, 10> registry{{
+const std::array<MetricDefinition, 12> registry{{
     {"vmaf", "VMAF v0.6.1", "VMAF v0.6.1", "VMAF v0.6.1", "VMAF v0.6.1", 2, "", frame, higher_is_better,
      arithmetic, 100.0, vmaf_thresholds, bool_option("compute_vmaf"), {}, vmaf_smallest_side},
     {"vmaf_neg", "VMAF NEG", "VMAF NEG", "VMAF NEG", "VMAF NEG", 2, "", frame, higher_is_better, arithmetic,
@@ -59,6 +59,15 @@ const std::array<MetricDefinition, 10> registry{{
      std::nullopt, psnr_thresholds, libvmaf_feature("name=psnr"), {}, 0},
     {"ssim", "SSIM", "SSIM", "SSIM", "SSIM", 4, "", frame, higher_is_better, arithmetic, std::nullopt,
      ssim_thresholds, libvmaf_feature("name=float_ssim"), {}, 11},
+    // PSNR and SSIM of the three planes weighted 6:1:1 ((6 Y + Cb + Cr) / 8),
+    // as JVET's common test conditions weigh PSNR and MSU's codec comparisons
+    // weigh YUV-SSIM. Scored by the app's own
+    // libvmaf-fast only: FFmpeg's filter has no SSIM of the chroma. Chroma
+    // needs 11 samples for SSIM's window, so twice that for 4:2:0.
+    {"psnr_yuv", "PSNR YUV (6:1:1)", "PSNR YUV", "PSNR YUV (dB)", "PSNR YUV (dB)", 2, " dB", frame,
+     higher_is_better, arithmetic, std::nullopt, psnr_thresholds, bool_option("compute_psnr_yuv"), {}, 0},
+    {"ssim_yuv", "SSIM YUV (6:1:1)", "SSIM YUV", "SSIM YUV", "SSIM YUV", 4, "", frame, higher_is_better,
+     arithmetic, std::nullopt, ssim_thresholds, bool_option("compute_ssim_yuv"), {}, 22},
     // XPSNR is the one metric that reports infinity (an identical frame),
     // and is averaged its own way (stats.h).
     {"xpsnr", "XPSNR", "XPSNR", "XPSNR (dB)", "XPSNR (dB)", 2, " dB", frame, higher_is_better,

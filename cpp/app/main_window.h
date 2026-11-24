@@ -114,6 +114,8 @@ enum Column : int {
     col_cvvdp,
     col_vmaf_v1,
     col_vmaf_hdr,
+    col_psnr_yuv,
+    col_ssim_yuv,
     column_count,
 };
 

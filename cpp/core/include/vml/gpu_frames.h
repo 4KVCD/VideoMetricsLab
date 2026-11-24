@@ -690,9 +690,10 @@ std::vector<DecodePlan> plan_pair(const VideoInfo& source, const VideoInfo& dist
                                   int bit_depth, bool luma_only, const std::string& scale_algorithm,
                                   const std::pair<std::string, std::string>& decoders);
 
-// Throws GpuDecodeUnavailableError unless each plan's frames are luma planes of
-// `size` and `bit_depth`, which the memory they are written into is made for.
-void require_luma_of_size(const std::vector<DecodePlan>& plans, std::pair<int, int> size, int bit_depth);
+// Throws GpuDecodeUnavailableError unless each plan's frames are of `size` and
+// `bit_depth` (its luma planes, or its whole 4:2:0 frames, as it decodes),
+// which the memory they are written into is made for.
+void require_frames_of_size(const std::vector<DecodePlan>& plans, std::pair<int, int> size, int bit_depth);
 
 // How the slots of the pairs scored are given back: each to its decoder, by
 // default, as soon as no later pair uses it; or, for VMAF v1 reading the

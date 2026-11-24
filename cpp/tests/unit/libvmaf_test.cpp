@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -101,6 +102,96 @@ TEST(Libvmaf, CpuMetricsReadPaddedPlanesAsPackedOnes) {
     ASSERT_EQ(from_frames.frames.size(), static_cast<std::size_t>(frames));
     EXPECT_EQ(from_planes.frames, from_frames.frames);
     EXPECT_EQ(from_planes.by_metric, from_frames.by_metric);
+}
+
+// A 10-bit 4:2:0 pair of an odd size, packed as FFmpeg writes it: chroma
+// rounded up. `same_chroma` gives the test the reference's chroma.
+constexpr int yuv_width = 65, yuv_height = 39;
+
+std::pair<std::vector<std::uint8_t>, std::vector<std::uint8_t>> yuv_pair(int index, bool same_chroma) {
+    const PackedFrame packed(yuv_width, yuv_height, 10);
+    std::vector<std::uint8_t> reference(packed.bytes()), test(packed.bytes());
+    const std::size_t luma_samples = static_cast<std::size_t>(yuv_width) * yuv_height;
+    for (std::size_t i = 0; i < reference.size() / 2; ++i) {
+        const auto sample = static_cast<std::uint16_t>((i * 7 + index * 13) % 1024);
+        const bool keep = same_chroma && i >= luma_samples;
+        const auto changed = static_cast<std::uint16_t>(keep ? sample : (sample + i % 5 + (i % 3) * 9) % 1024);
+        reference[2 * i] = static_cast<std::uint8_t>(sample);
+        reference[2 * i + 1] = static_cast<std::uint8_t>(sample >> 8);
+        test[2 * i] = static_cast<std::uint8_t>(changed);
+        test[2 * i + 1] = static_cast<std::uint8_t>(changed >> 8);
+    }
+    return {reference, test};
+}
+
+PairScores score_yuv_pairs(const std::vector<std::string>& metrics, bool same_chroma) {
+    CpuScorer scorer(yuv_width, yuv_height, 10, metrics, 1, 1);
+    for (int index = 0; index < 2; ++index) {
+        const auto [reference, test] = yuv_pair(index, same_chroma);
+        scorer.add(reference, test);
+    }
+    return scorer.finish();
+}
+
+const std::vector<double>& scores_of(const PairScores& scores, const std::string& key) {
+    const auto found = std::ranges::find(scores.by_metric, key, &std::pair<std::string, std::vector<double>>::first);
+    EXPECT_NE(found, scores.by_metric.end()) << key;
+    return found->second;
+}
+
+// PSNR YUV is (6 Y + Cb + Cr) / 8 of the three planes' PSNRs, each worked out
+// here from the samples: the chroma's whole samples only (32 x 19 of the 33 x
+// 20 an odd 65 x 39 frame has), at the 10-bit peak of 1023.
+TEST(Libvmaf, PsnrYuvWeighsTheLumaSixTimesTheChroma) {
+    if (!std::filesystem::exists(libvmaf_folder() / platform::shared_library_name("libvmaf"))) {
+        GTEST_SKIP() << "the app ships no libvmaf-fast for this system yet";
+    }
+    const PackedFrame packed(yuv_width, yuv_height, 10);
+    const PairScores scores = score_yuv_pairs({"psnr_yuv"}, false);
+    const std::vector<double>& yuv = scores_of(scores, "psnr_yuv");
+    ASSERT_EQ(yuv.size(), 2U);
+    for (int index = 0; index < 2; ++index) {
+        const auto [reference, test] = yuv_pair(index, false);
+        const FramePlanes reference_planes = packed.planes(reference.data()), test_planes = packed.planes(test.data());
+        const auto plane_psnr = [&](int plane, int columns, int rows) {
+            double sse = 0;
+            for (int row = 0; row < rows; ++row) {
+                const auto* a = reinterpret_cast<const std::uint16_t*>(reference_planes[plane].data +
+                                                                       row * reference_planes[plane].stride);
+                const auto* b = reinterpret_cast<const std::uint16_t*>(test_planes[plane].data +
+                                                                       row * test_planes[plane].stride);
+                for (int column = 0; column < columns; ++column) {
+                    const double difference = static_cast<double>(a[column]) - b[column];
+                    sse += difference * difference;
+                }
+            }
+            return 10.0 * std::log10(1023.0 * 1023.0 / (sse / (columns * rows)));
+        };
+        const double expected = (6 * plane_psnr(0, yuv_width, yuv_height) +
+                                 plane_psnr(1, yuv_width / 2, yuv_height / 2) +
+                                 plane_psnr(2, yuv_width / 2, yuv_height / 2)) / 8;
+        EXPECT_NEAR(yuv[static_cast<std::size_t>(index)], expected, 1e-6) << "frame " << index;
+    }
+}
+
+// The 6:1:1 metrics leave PSNR and SSIM as they were (XPSNR's own PSNR
+// takes PSNR's place with XPSNR on), and chroma that matches counts as SSIM 1
+// and as PSNR's 72 dB ceiling at 10 bits.
+TEST(Libvmaf, YuvMetricsLeaveTheLumaScoresAsTheyWere) {
+    if (!std::filesystem::exists(libvmaf_folder() / platform::shared_library_name("libvmaf"))) {
+        GTEST_SKIP() << "the app ships no libvmaf-fast for this system yet";
+    }
+    const PairScores luma = score_yuv_pairs({"psnr", "ssim"}, true);
+    const PairScores all = score_yuv_pairs({"psnr", "ssim", "xpsnr", "psnr_yuv", "ssim_yuv"}, true);
+    EXPECT_EQ(scores_of(all, "psnr"), scores_of(luma, "psnr"));
+    EXPECT_EQ(scores_of(all, "ssim"), scores_of(luma, "ssim"));
+    const std::vector<double>&psnr = scores_of(luma, "psnr"), &ssim = scores_of(luma, "ssim");
+    const std::vector<double>&psnr_yuv = scores_of(all, "psnr_yuv"), &ssim_yuv = scores_of(all, "ssim_yuv");
+    ASSERT_EQ(psnr_yuv.size(), psnr.size());
+    for (std::size_t i = 0; i < psnr.size(); ++i) {
+        EXPECT_NEAR(psnr_yuv[i], (6 * psnr[i] + 2 * 72.0) / 8, 1e-6);
+        EXPECT_NEAR(ssim_yuv[i], (6 * ssim[i] + 2.0) / 8, 1e-6);
+    }
 }
 
 // A model libvmaf does not have is an error that says what failed.

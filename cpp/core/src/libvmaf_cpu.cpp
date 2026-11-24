@@ -14,10 +14,12 @@ namespace vml {
 
 namespace {
 
-constexpr std::array<CpuFeature, 3> cpu_features{{
+constexpr std::array<CpuFeature, 5> cpu_features{{
     {"psnr", "psnr", "psnr_y", 6},
     {"ssim", "float_ssim", "float_ssim", 6},
     {"xpsnr", "xpsnr", "xpsnr_y", 4},
+    {"psnr_yuv", "psnr", "psnr_y", 6, "psnr_cb", "psnr_cr"},
+    {"ssim_yuv", "float_ssim", "float_ssim", 6, "float_ssim_cb", "float_ssim_cr"},
 }};
 
 // The most memory CpuScorer's pictures may take (unless two pairs alone take
@@ -31,6 +33,53 @@ constexpr std::size_t xpsnr_picture_memory = std::size_t{270} << 20;
 
 bool has(const std::vector<std::string>& metrics, std::string_view key) {
     return std::find(metrics.begin(), metrics.end(), key) != metrics.end();
+}
+
+// An extractor of libvmaf's and the options it is started with.
+struct Extractor {
+    std::string name;
+    std::vector<std::pair<std::string, std::string>> options;
+};
+
+// The extractors that score `metrics`, each started once. PSNR and SSIM read
+// the chroma planes only for their 6:1:1 metric. With XPSNR, the luma's PSNR
+// comes from the squared errors it sums anyway (its option "psnr"), not a
+// pass of its own over both pictures (4K PSNR + SSIM + XPSNR 6% faster with
+// Intel's decoder, 11% with NVIDIA's); PSNR then scores the chroma alone, for
+// PSNR YUV.
+std::vector<Extractor> extractors_for(const std::vector<std::string>& metrics, int frame_rate) {
+    for (const std::string& metric : metrics) {
+        if (cpu_feature(metric) == nullptr) {
+            throw std::invalid_argument(metric + " is not scored with libvmaf's CPU extractors");
+        }
+    }
+    const bool psnr_yuv = has(metrics, "psnr_yuv");
+    const bool ssim_yuv = has(metrics, "ssim_yuv");
+    const bool psnr = psnr_yuv || has(metrics, "psnr");
+    const bool xpsnr = has(metrics, "xpsnr");
+    std::vector<Extractor> extractors;
+    if (psnr && (!xpsnr || psnr_yuv)) {
+        // Set both ways, as libvmaf's PSNR reads the chroma of a 4:2:0
+        // picture by default.
+        extractors.push_back({"psnr", {{"enable_chroma", psnr_yuv ? "true" : "false"},
+                                       {"enable_luma", xpsnr ? "false" : "true"}}});
+    }
+    if (ssim_yuv || has(metrics, "ssim")) {
+        extractors.push_back({"float_ssim", {}});
+        if (ssim_yuv) {
+            extractors.back().options.emplace_back("enable_chroma", "true");
+        }
+    }
+    if (xpsnr) {
+        // Weighted by the source's activity (the extractor's default), as
+        // FFmpeg's filter weights by its first input, the source in the app's
+        // commands.
+        extractors.push_back({"xpsnr", {{"frame_rate", std::to_string(frame_rate)}}});
+        if (psnr) {
+            extractors.back().options.emplace_back("psnr", "true");
+        }
+    }
+    return extractors;
 }
 
 // A context of libvmaf's, closed however the check ends.
@@ -82,57 +131,46 @@ const CpuFeature* cpu_feature(std::string_view key) {
     return found == cpu_features.end() ? nullptr : &*found;
 }
 
+bool cpu_metrics_read_chroma(const std::vector<std::string>& metrics) {
+    return std::any_of(metrics.begin(), metrics.end(), [](const std::string& metric) {
+        const CpuFeature* feature = cpu_feature(metric);
+        return feature != nullptr && !feature->cb.empty();
+    });
+}
+
 std::string cpu_library_build() { return "libvmaf-fast " + libvmaf_fast_version() + " (CPU)"; }
 
 CpuScorer::CpuScorer(int width, int height, int bit_depth, std::vector<std::string> metrics, int n_subsample,
                      int threads, int frame_rate)
     : library_(libvmaf()), metrics_(std::move(metrics)), step_(static_cast<unsigned>(std::max(1, n_subsample))) {
-    rows_ = static_cast<std::size_t>(height);
-    row_bytes_ = static_cast<std::size_t>(width) * bytes_per_sample(bit_depth);
-    luma_bytes_ = rows_ * row_bytes_;
-    frame_bytes_ = PackedFrame(width, height, bit_depth).bytes();
+    chroma_ = cpu_metrics_read_chroma(metrics_);
+    odd_ = width % 2 != 0 || height % 2 != 0;
+    sample_ = bytes_per_sample(bit_depth);
+    packed_ = PackedFrame(width, height, bit_depth);
+    frame_bytes_ = packed_.bytes();
+    decoded_bytes_ = chroma_ ? frame_bytes_ : static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * sample_;
     threads = std::max(0, threads);
     const VmafConfiguration configuration{VMAF_LOG_LEVEL_ERROR, static_cast<unsigned>(threads), step_, 0, 0};
     VmafContext* context = nullptr;
     check_libvmaf(library_.init(&context, configuration), "Starting libvmaf");
     context_ = context;
     try {
-        // With XPSNR, PSNR comes from the squared errors it sums anyway (its
-        // option "psnr"), not a pass of its own over both pictures: 4K PSNR +
-        // SSIM + XPSNR 6% faster with Intel's decoder, 11% with NVIDIA's.
-        const bool fused = has(metrics_, "psnr") && has(metrics_, "xpsnr");
-        for (const std::string& metric : metrics_) {
-            if (fused && metric == "psnr") {
-                continue;
-            }
-            const CpuFeature* feature = cpu_feature(metric);
-            if (feature == nullptr) {
-                throw std::invalid_argument(metric + " is not scored with libvmaf's CPU extractors");
-            }
-            const std::string extractor(feature->extractor);
+        for (const Extractor& extractor : extractors_for(metrics_, frame_rate)) {
             VmafFeatureDictionary* options = nullptr;
-            if (metric == "xpsnr") {
-                // Weighted by the source's activity (the extractor's
-                // default), as FFmpeg's filter weights by its first input,
-                // the source in the app's commands.
-                std::vector<std::pair<std::string, std::string>> settings{{"frame_rate", std::to_string(frame_rate)}};
-                if (fused) {
-                    settings.emplace_back("psnr", "true");
-                }
-                for (const auto& [key, value] : settings) {
-                    if (library_.feature_dictionary_set(&options, key.c_str(), value.c_str()) != 0) {
-                        library_.feature_dictionary_free(&options);
-                        throw LibvmafError("Setting " + extractor + "'s " + key + " failed");
-                    }
+            for (const auto& [key, value] : extractor.options) {
+                if (library_.feature_dictionary_set(&options, key.c_str(), value.c_str()) != 0) {
+                    library_.feature_dictionary_free(&options);
+                    throw LibvmafError("Setting " + extractor.name + "'s " + key + " failed");
                 }
             }
             // libvmaf frees the options (if it refuses them early, a few bytes leak).
-            check_libvmaf(library_.use_feature(context_, extractor.c_str(), options), "Starting " + extractor);
+            check_libvmaf(library_.use_feature(context_, extractor.name.c_str(), options),
+                          "Starting " + extractor.name);
         }
-        const int pairs = cpu_pairs(width, height, bit_depth, threads, has(metrics_, "xpsnr"));
+        const int pairs = cpu_pairs(width, height, bit_depth, threads, has(metrics_, "xpsnr"), chroma_);
         const VmafPictureConfiguration pool{
             {static_cast<unsigned>(width), static_cast<unsigned>(height), static_cast<unsigned>(bit_depth),
-             VMAF_PIX_FMT_YUV400P},
+             chroma_ ? VMAF_PIX_FMT_YUV420P : VMAF_PIX_FMT_YUV400P},
             static_cast<unsigned>(2 * pairs)};
         check_libvmaf(library_.preallocate_pictures(context_, pool), "Allocating pictures");
     } catch (...) {
@@ -180,22 +218,36 @@ void CpuScorer::score(VmafPicture& reference, VmafPicture& distorted) {
     ++count_;
 }
 
-void CpuScorer::fill(VmafPicture& picture, Plane luma) const {
-    auto* target = static_cast<std::uint8_t*>(picture.data[0]);
-    const auto stride = static_cast<std::size_t>(picture.stride[0]);
-    for (std::size_t row = 0; row < rows_; ++row) {
-        std::memcpy(target + row * stride, luma.data + static_cast<std::ptrdiff_t>(row) * luma.stride, row_bytes_);
+void CpuScorer::fill(VmafPicture& picture, const FramePlanes& frame) const {
+    if (chroma_) {
+        fill_picture(picture, frame, sample_, {0, 1, 2});
+    } else {
+        fill_picture(picture, frame, sample_, {0});
     }
+}
+
+bool CpuScorer::laid_out_packed(const VmafPicture& picture) const {
+    const auto row_bytes = [&](int plane) { return static_cast<std::ptrdiff_t>(picture.w[plane] * sample_); };
+    if (picture.stride[0] != row_bytes(0)) {
+        return false;
+    }
+    if (!chroma_) {
+        return true;
+    }
+    // libvmaf's planes follow one another (vmaf_picture_alloc); a packed
+    // frame's chroma rows are half the width rounded up, libvmaf's down.
+    const auto* y = static_cast<const std::uint8_t*>(picture.data[0]);
+    const auto* u = static_cast<const std::uint8_t*>(picture.data[1]);
+    const auto* v = static_cast<const std::uint8_t*>(picture.data[2]);
+    return !odd_ && picture.stride[1] == row_bytes(1) && picture.stride[2] == row_bytes(2) &&
+           u == y + picture.stride[0] * picture.h[0] && v == u + picture.stride[1] * picture.h[1];
 }
 
 void CpuScorer::add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted) {
     if (std::min(reference.size(), distorted.size()) < frame_bytes_) {
         throw LibvmafError("frame " + std::to_string(count_) + " is shorter than a picture");
     }
-    const auto packed = [this](std::span<const std::uint8_t> frame) {
-        return FramePlanes{Plane{frame.data(), static_cast<std::ptrdiff_t>(row_bytes_)}};
-    };
-    add_planes(packed(reference), packed(distorted));
+    add_planes(packed_.planes(reference.data()), packed_.planes(distorted.data()));
 }
 
 void CpuScorer::add_planes(const FramePlanes& reference, const FramePlanes& distorted) {
@@ -209,7 +261,7 @@ void CpuScorer::add_planes(const FramePlanes& reference, const FramePlanes& dist
     }
     try {
         // The two at the same time, the source's on the side thread.
-        side_.both([&] { fill(reference_picture, reference[0]); }, [&] { fill(distorted_picture, distorted[0]); });
+        side_.both([&] { fill(reference_picture, reference); }, [&] { fill(distorted_picture, distorted); });
     } catch (...) {
         give_back(reference_picture, distorted_picture);
         throw;
@@ -275,24 +327,34 @@ void CpuScorer::download_both(VmafPicture& reference_picture, GpuFrameStream& re
 
 void CpuScorer::download(VmafPicture& picture, GpuFrameStream& stream, int slot, std::size_t which) {
     void* const address = picture.data[0];
-    const auto pitch = static_cast<std::size_t>(picture.stride[0]);
-    if (gpu_decoder(stream.backend()).cuda_copies) {
+    // NVIDIA's decoder writes an odd size's chroma rows and columns rounded
+    // up, one more than libvmaf's planes hold.
+    if (gpu_decoder(stream.backend()).cuda_copies && !(chroma_ && odd_)) {
         {
             const std::lock_guard lock(pinned_mutex_);  // the two videos' downloads run at once
             if (!pinned_.contains(address)) {
-                pinned_[address] = stream.pin(address, pitch * picture.h[0]) ? &stream : nullptr;
+                // The picture's planes, one after the other (vmaf_picture_alloc).
+                const std::uint64_t bytes = static_cast<std::uint64_t>(picture.stride[0]) * picture.h[0] +
+                                            (chroma_ ? 2 * static_cast<std::uint64_t>(picture.stride[1]) * picture.h[1]
+                                                     : 0);
+                pinned_[address] = stream.pin(address, bytes) ? &stream : nullptr;
             }
         }
-        stream.download_planes(slot, {address, nullptr, nullptr}, {static_cast<std::int64_t>(pitch), 0, 0});
+        if (chroma_) {
+            stream.download_planes(slot, {address, picture.data[1], picture.data[2]},
+                                   {picture.stride[0], picture.stride[1], picture.stride[2]});
+        } else {
+            stream.download_planes(slot, {address, nullptr, nullptr}, {picture.stride[0], 0, 0});
+        }
     } else if (stream.gives_planes()) {
-        fill(picture, stream.slot_planes(slot)[0]);  // one copy, whatever the picture's row spacing
-    } else if (pitch == row_bytes_) {
+        fill(picture, stream.slot_planes(slot));  // one copy, whatever the picture's row spacings
+    } else if (laid_out_packed(picture)) {
         stream.download(slot, address);
     } else {
         std::vector<std::uint8_t>& staging = staging_[which];
-        staging.resize(luma_bytes_);
+        staging.resize(decoded_bytes_);
         stream.download(slot, staging.data());
-        fill(picture, Plane{staging.data(), static_cast<std::ptrdiff_t>(row_bytes_)});
+        fill(picture, packed_.planes(staging.data()));
     }
 }
 
@@ -310,13 +372,21 @@ PairScores CpuScorer::finish() {
     }
     for (const std::string& metric : metrics_) {
         const CpuFeature& feature = *cpu_feature(metric);
-        const std::string name(feature.feature);
+        const auto read = [&](std::string_view feature_name, unsigned frame) {
+            const std::string name(feature_name);
+            double value = 0;
+            check_libvmaf(library_.feature_score_at_index(context_, name.c_str(), &value, frame),
+                          "Reading " + name + " for frame " + std::to_string(frame));
+            return value;
+        };
         std::vector<double> column;
         column.reserve(result.frames.size());
         for (const unsigned frame : result.frames) {
-            double value = 0;
-            check_libvmaf(library_.feature_score_at_index(context_, name.c_str(), &value, frame),
-                          "Reading " + metric + " for frame " + std::to_string(frame));
+            double value = read(feature.feature, frame);
+            if (!feature.cb.empty()) {
+                // 6:1:1, at full precision, then rounded once
+                value = (6 * value + read(feature.cb, frame) + read(feature.cr, frame)) / 8;
+            }
             column.push_back(python_round(value, feature.decimals));
         }
         result.by_metric.emplace_back(metric, std::move(column));
@@ -335,10 +405,15 @@ bool cpu_scores_xpsnr() {
     return answer;
 }
 
-int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr) {
-    const std::size_t picture = static_cast<std::size_t>((width + 31) & ~31) * static_cast<std::size_t>(height) *
-                                bytes_per_sample(bit_depth);
-    const std::size_t memory = xpsnr ? xpsnr_picture_memory : picture_memory;
+int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr, bool chroma) {
+    // A picture's bytes as vmaf_picture_alloc lays it out: rows of 32
+    // samples, and with chroma two planes half as wide and tall.
+    const auto plane = [&](int w, int h) {
+        return static_cast<std::size_t>((w + 31) & ~31) * static_cast<std::size_t>(h) * bytes_per_sample(bit_depth);
+    };
+    const std::size_t picture = plane(width, height) + (chroma ? 2 * plane(width / 2, height / 2) : 0);
+    const std::size_t luma_memory = xpsnr ? xpsnr_picture_memory : picture_memory;
+    const std::size_t memory = chroma ? luma_memory * 3 / 2 : luma_memory;
     const auto fit = static_cast<long long>(memory / (2 * picture));
     const long long wanted = std::min(8, std::max(1, threads)) + 1;
     return static_cast<int>(std::max(2LL, std::min(wanted, fit))) + (xpsnr ? 1 : 0);
@@ -370,9 +445,9 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
     const auto& [source_backend, test_backend] = decoders;
     require_same_range(source, distorted);
     const std::pair size(width, height);
-    std::vector<DecodePlan> plans = plan_pair(source, distorted, source_crop, distorted_crop, size, bit_depth, true,
-                                              scale_algorithm, decoders);
-    require_luma_of_size(plans, size, bit_depth);
+    std::vector<DecodePlan> plans = plan_pair(source, distorted, source_crop, distorted_crop, size, bit_depth,
+                                              !cpu_metrics_read_chroma(metrics), scale_algorithm, decoders);
+    require_frames_of_size(plans, size, bit_depth);
     // A VVC video decoded by vvdec-vulkan where wanted, on the GPU it picks (this pass has none of its own)
     const bool test_vvdec = vvdec_chosen(plans[0], want_vvdec);
     const bool reference_vvdec = vvdec_chosen(plans[1], want_vvdec);

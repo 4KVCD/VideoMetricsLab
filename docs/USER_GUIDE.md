@@ -485,6 +485,21 @@ original, which FFmpeg's `xpsnr` filter wants as its first input whatever
 its inputs are called, so it differs from FFmpeg commands that give the test
 video first (`[dist][ref]xpsnr`).
 
+PSNR YUV (6:1:1) and SSIM YUV (6:1:1), off by default, weigh the planes as
+JVET's common test conditions weigh PSNR (their YUV BD-rates) and MSU's
+codec comparisons weigh YUV-SSIM, for comparing with those: each frame's (6 x Y + Cb + Cr) / 8 of its three planes' PSNR or
+SSIM, and the score is the mean of the frames'. VVenC's and VTM's own
+YUV-PSNR line is a different average (one PSNR of the planes' errors
+weighted by their sample counts), so it does not match these. Only the app calculates them, with
+its libvmaf-fast, as FFmpeg's metrics have no such average; with VMAF on
+the CPU, it calculates them beside FFmpeg's run. Each plane's
+PSNR stops at libvmaf's ceiling of 6 x bits + 12 dB (60 dB at 8 bits, 72 at
+10), as the PSNR column's does, where FFmpeg's `psnr` filter gives identical
+planes infinity. Videos in other chroma formats are compared as 4:2:0, as
+for every metric here, so a 4:4:4 video's chroma scores are those of its
+4:2:0 form. Turning either on makes the decoders hand over whole pictures
+rather than their luma alone, which costs some speed and memory.
+
 Subsampling reduces libvmaf-backed scored frames. XPSNR-only currently keeps
 every frame; do not interpret different coverage as identical measurements.
 

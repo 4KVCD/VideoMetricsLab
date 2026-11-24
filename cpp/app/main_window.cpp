@@ -135,6 +135,7 @@ const std::vector<MetricColumn>& metric_columns() {
         {col_vmaf, "vmaf"},       {col_vmaf_neg, "vmaf_neg"},       {col_vmaf_v1, "vmaf_v1"},
         {col_vmaf_hdr, "vmaf_hdr"},
         {col_psnr, "psnr"},       {col_ssim, "ssim"},               {col_xpsnr, "xpsnr"},
+        {col_psnr_yuv, "psnr_yuv"}, {col_ssim_yuv, "ssim_yuv"},
         {col_ssimulacra2, "ssimulacra2"}, {col_butteraugli, "butteraugli"}, {col_cvvdp, "cvvdp"},
     };
     return columns;
@@ -966,7 +967,7 @@ void MainWindow::build_test_table() {
         "", app::tr("File name"), app::tr("Media info"), app::tr("Black bars"), app::tr("Scaling"),
         app::tr("Approx. bitrate"), header_of("psnr"), header_of("ssim"), header_of("vmaf"), header_of("xpsnr"),
         header_of("vmaf_neg"), header_of("ssimulacra2"), header_of("butteraugli"), header_of("cvvdp"),
-        header_of("vmaf_v1"), header_of("vmaf_hdr"),
+        header_of("vmaf_v1"), header_of("vmaf_hdr"), header_of("psnr_yuv"), header_of("ssim_yuv"),
     });
     distorted_table_->verticalHeader()->setVisible(false);
     // Kept as a column, but not shown: cropping is in the row's options.
@@ -1023,8 +1024,8 @@ void MainWindow::fit_table_columns() {
         {col_check, 28}, {col_info, 150}, {col_black_bars, 78}, {col_scaling, 90}, {col_bitrate, 65},
     };
     for (const MetricColumn& item : metric_columns()) {
-        const bool wide = item.column == col_psnr || item.column == col_xpsnr || item.column == col_ssimulacra2 ||
-                          item.column == col_butteraugli;
+        const bool wide = item.column == col_psnr || item.column == col_xpsnr || item.column == col_psnr_yuv ||
+                          item.column == col_ssimulacra2 || item.column == col_butteraugli;
         starting_widths[item.column] = wide ? 110 : 78;
     }
     for (const auto& [column, width] : starting_widths) {
@@ -1147,6 +1148,8 @@ VmafOptions MainWindow::options_from_settings() const {
     options.vship_build = default_vship_build(settings_.default_vship_build);
     options.extra_features = settings_.default_extra_features();
     options.compute_xpsnr = settings_.default_compute_xpsnr;
+    options.compute_psnr_yuv = settings_.default_compute_psnr_yuv;
+    options.compute_ssim_yuv = settings_.default_compute_ssim_yuv;
     options.compute_vmaf = settings_.default_compute_vmaf;
     options.compute_vmaf_neg = settings_.default_compute_vmaf_neg;
     options.compute_vmaf_v1 = settings_.default_compute_vmaf_v1;

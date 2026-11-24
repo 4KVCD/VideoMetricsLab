@@ -130,8 +130,8 @@ struct GpuPlan {
 std::unique_ptr<HdrScorer> make_hdr_scorer(const GpuPlan& plan, int n_subsample);
 
 // What a pass scores beside its own metrics, from the same frames
-// (GpuPlan::beside): PSNR, SSIM and XPSNR with libvmaf's CPU extractors
-// (CpuScorer), HDR VMAF (HdrScorer), or both. Each scores every
+// (GpuPlan::beside): PSNR, SSIM, XPSNR, PSNR YUV and SSIM YUV with libvmaf's
+// CPU extractors (CpuScorer), HDR VMAF (HdrScorer), or both. Each scores every
 // `n_subsample`th pair, as the pass's own scorers do.
 class BesideScorer : public PairScorer {
 public:
@@ -146,12 +146,13 @@ public:
     void add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted) override;
     void add_planes(const FramePlanes& reference, const FramePlanes& distorted) override;
 
-    // Whether it reads whole pictures (HDR VMAF reads the chroma), which a
-    // pass then gives it in system memory (HostPairs, or FFmpeg's pipes)
-    // rather than through add_decoded's downloads of the luma alone.
+    // Whether it scores HDR VMAF, which reads whole pictures (its colour
+    // conversion takes the chroma) that a pass then gives it in system memory
+    // (HostPairs, or FFmpeg's pipes) rather than through add_decoded's
+    // downloads.
     bool reads_whole_frames() const { return hdr_ != nullptr; }
 
-    // CpuScorer::add_decoded, for a scorer that does not read whole frames
+    // CpuScorer::add_decoded, for a scorer without HDR VMAF
     // (std::logic_error otherwise).
     void add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot);
     void add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot,
@@ -162,7 +163,7 @@ public:
     PairScores finish() override;
 
 private:
-    CpuScorer& luma_only_scorer();
+    CpuScorer& cpu_alone();
 
     std::optional<CpuScorer> cpu_;
     std::unique_ptr<HdrScorer> hdr_;

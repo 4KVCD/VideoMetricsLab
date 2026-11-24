@@ -54,6 +54,8 @@ void take_run_options(VmafOptions& options, const ComparisonResult& result) {
         options.extra_features.emplace_back("name=float_ssim");
     }
     options.compute_xpsnr = has("xpsnr");
+    options.compute_psnr_yuv = has("psnr_yuv");
+    options.compute_ssim_yuv = has("ssim_yuv");
     options.compute_vmaf = has("vmaf");
     options.compute_vmaf_neg = has("vmaf_neg");
     options.compute_vmaf_v1 = has("vmaf_v1");

@@ -29,6 +29,12 @@ bool VmafOptions::*bool_option(std::string_view name) {
     if (name == "compute_xpsnr") {
         return &VmafOptions::compute_xpsnr;
     }
+    if (name == "compute_psnr_yuv") {
+        return &VmafOptions::compute_psnr_yuv;
+    }
+    if (name == "compute_ssim_yuv") {
+        return &VmafOptions::compute_ssim_yuv;
+    }
     throw std::logic_error("no option called " + std::string(name));
 }
 

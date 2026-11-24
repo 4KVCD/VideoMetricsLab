@@ -81,6 +81,8 @@ const std::vector<std::pair<std::string, QString>> default_metric_boxes{
     {"psnr", "PSNR"},
     {"ssim", "SSIM"},
     {"xpsnr", "XPSNR"},
+    {"psnr_yuv", "PSNR YUV (6:1:1)"},
+    {"ssim_yuv", "SSIM YUV (6:1:1)"},
     {"ssimulacra2", "SSIMULACRA2"},
     {"butteraugli", "Butteraugli"},
     {"cvvdp", "CVVDP"},
@@ -646,6 +648,10 @@ QGroupBox* SettingsPanel::build_defaults_box() {
             // VML Modern: the four VMAFs, then a line, then the other
             // metrics (theme::separator; nothing in Classic).
             metrics_row->addWidget(theme::separator(0));
+        }
+        if (key == "psnr_yuv" || key == "ssim_yuv") {
+            box->setToolTip(app::tr("(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. "
+                                    "Calculated by the app only, not with FFmpeg's metrics."));
         }
     }
     metrics_row->addStretch(1);

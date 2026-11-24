@@ -30,8 +30,9 @@ namespace {
 // new metric never moves them.
 constexpr std::array<std::string_view, 5> first_columns{"vmaf", "vmaf_neg", "psnr", "ssim", "xpsnr"};
 // Columns only exports that have their scores get, so that every other
-// export keeps the columns it always had: HDR VMAF scores PQ videos only.
-constexpr std::array<std::string_view, 1> scored_only_columns{"vmaf_hdr"};
+// export keeps the columns it always had: HDR VMAF scores PQ videos only, and
+// the 6:1:1 metrics are off unless asked for.
+constexpr std::array<std::string_view, 3> scored_only_columns{"vmaf_hdr", "psnr_yuv", "ssim_yuv"};
 
 template <std::size_t N>
 bool is_one_of(const std::array<std::string_view, N>& keys, std::string_view key) {

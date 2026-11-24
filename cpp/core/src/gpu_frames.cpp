@@ -2754,11 +2754,13 @@ std::vector<DecodePlan> plan_pair(const VideoInfo& source, const VideoInfo& dist
     return plans;
 }
 
-void require_luma_of_size(const std::vector<DecodePlan>& plans, std::pair<int, int> size, int bit_depth) {
+void require_frames_of_size(const std::vector<DecodePlan>& plans, std::pair<int, int> size, int bit_depth) {
     const std::size_t luma_bytes =
         static_cast<std::size_t>(size.first) * static_cast<std::size_t>(size.second) * bytes_per_sample(bit_depth);
-    if (std::any_of(plans.begin(), plans.end(),
-                    [luma_bytes](const DecodePlan& plan) { return plan.frame_bytes() != luma_bytes; })) {
+    const std::size_t frame_bytes = PackedFrame(size.first, size.second, bit_depth).bytes();
+    if (std::any_of(plans.begin(), plans.end(), [&](const DecodePlan& plan) {
+            return plan.frame_bytes() != (plan.luma_only ? luma_bytes : frame_bytes);
+        })) {
         throw GpuDecodeUnavailableError("the decoders' frames are not the size compared at");
     }
 }

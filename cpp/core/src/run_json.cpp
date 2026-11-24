@@ -237,6 +237,8 @@ nlohmann::json options_json(const VmafOptions& options) {
             {"scale_algorithm", options.scale_algorithm},
             {"scale_direction", static_cast<int>(options.scale_direction)},
             {"compute_xpsnr", options.compute_xpsnr},
+            {"compute_psnr_yuv", options.compute_psnr_yuv},
+            {"compute_ssim_yuv", options.compute_ssim_yuv},
             {"compute_vmaf", options.compute_vmaf},
             {"compute_vmaf_neg", options.compute_vmaf_neg},
             {"compute_vmaf_v1", options.compute_vmaf_v1},
@@ -270,6 +272,8 @@ VmafOptions options_from(const nlohmann::json& text) {
     text.at("scale_algorithm").get_to(options.scale_algorithm);
     options.scale_direction = static_cast<ScaleDirection>(text.at("scale_direction").get<int>());
     text.at("compute_xpsnr").get_to(options.compute_xpsnr);
+    options.compute_psnr_yuv = text.value("compute_psnr_yuv", false);
+    options.compute_ssim_yuv = text.value("compute_ssim_yuv", false);
     text.at("compute_vmaf").get_to(options.compute_vmaf);
     text.at("compute_vmaf_neg").get_to(options.compute_vmaf_neg);
     text.at("compute_vmaf_v1").get_to(options.compute_vmaf_v1);

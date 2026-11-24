@@ -100,6 +100,11 @@ nlohmann::ordered_json devices_json(const DeviceFindings& found, const std::vect
     for (const char* key : {"psnr", "ssim", "xpsnr"}) {
         metrics[key] = where("cpu", std::nullopt, cpu_detail);
     }
+    // The 6:1:1 metrics are the app's own: FFmpeg's filter has none.
+    for (const char* key : {"psnr_yuv", "ssim_yuv"}) {
+        metrics[key] = found.cpu_metrics_in_app ? where("cpu", std::nullopt, cpu_detail)
+                                                : where(nullptr, std::nullopt, "not available: needs the app's libvmaf");
+    }
     if (found.vship) {
         const std::string detail = vship_build_name(*found.vship) + ", " + vship_build_api(found.vship->build);
         for (const char* key : {"ssimulacra2", "butteraugli", "cvvdp"}) {

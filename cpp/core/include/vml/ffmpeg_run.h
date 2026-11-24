@@ -223,9 +223,10 @@ FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& comma
 // to FFmpeg ("ffmpeg").
 bool cpu_metrics_in_app();
 
-// Whether `key` is PSNR, SSIM or XPSNR: the metrics of FFmpeg's that the app
-// scores itself with libvmaf's CPU extractors, where the GPU scores the
-// others (VMAF, NEG and VMAF v1).
+// Whether `key` is PSNR, SSIM, XPSNR, PSNR YUV or SSIM YUV: the metrics the
+// app scores itself with libvmaf's CPU extractors, where the GPU scores the
+// others (VMAF, NEG and VMAF v1); FFmpeg's filters score the first three
+// otherwise, and the 6:1:1 two not at all.
 bool is_cpu_metric(std::string_view key);
 
 // Whether the CPU metrics `keys` are scored on every frame whatever the GPU's

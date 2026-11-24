@@ -76,6 +76,10 @@ struct Settings {
     bool default_compute_psnr = true;
     bool default_compute_ssim = true;
     bool default_compute_xpsnr = true;
+    // Off by default: the 6:1:1 PSNR of JVET's reports and YUV-SSIM of
+    // MSU's, for comparing with them.
+    bool default_compute_psnr_yuv = false;
+    bool default_compute_ssim_yuv = false;
     bool default_compute_vmaf = true;
     bool default_compute_vmaf_neg = true;
     bool default_compute_vmaf_v1 = true;

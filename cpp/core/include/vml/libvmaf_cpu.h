@@ -34,16 +34,23 @@ class GpuFrameStream;  // gpu_frames.h
 // They match what FFmpeg's libvmaf filter is asked for ("name=psnr",
 // "name=float_ssim") and how its log names and rounds the scores the app
 // reads; XPSNR is rounded as FFmpeg's xpsnr filter writes its stats file
-// ("%3.4f").
+// ("%3.4f"). A 6:1:1 metric (PSNR YUV, SSIM YUV) is (6 Y + Cb + Cr) / 8 of
+// its extractor's luma feature and its two chroma features, rounded once.
 struct CpuFeature {
-    std::string_view key;  // the app's metric key: "psnr", "ssim", "xpsnr"
+    std::string_view key;  // the app's metric key: "psnr", "ssim", "xpsnr", "psnr_yuv", "ssim_yuv"
     std::string_view extractor;
     std::string_view feature;
     int decimals;
+    std::string_view cb = {};  // a 6:1:1 metric's chroma features; empty otherwise
+    std::string_view cr = {};
 };
 
 // The extractor of metric `key`, or nullptr for one not scored this way.
 const CpuFeature* cpu_feature(std::string_view key);
+
+// Whether `metrics` (cpu_feature keys) read the chroma planes: a 6:1:1
+// metric does; the others read the luma alone.
+bool cpu_metrics_read_chroma(const std::vector<std::string>& metrics);
 
 // What a score calculated this way records as having calculated it:
 // "libvmaf-fast v1 (CPU)".
@@ -55,11 +62,14 @@ std::string cpu_library_build();
 // filter allocates, zeroes and copies two new pictures for every pair on its
 // single filter thread before libvmaf's threads see them.
 //
-// The pictures hold luma only: the app keeps PSNR's luma score (psnr_y) and
-// SSIM, which read nothing else, and libvmaf's PSNR skips the chroma planes
-// of a picture without them. Frames are given packed as FFmpeg's rawvideo
-// writes them (add; only the luma is read), as planes wherever they are
-// (add_planes), or as a decoder's pictures (add_decoded).
+// The pictures hold luma only unless a 6:1:1 metric is asked for
+// (cpu_metrics_read_chroma): PSNR's luma score (psnr_y), SSIM and XPSNR read
+// nothing else, and libvmaf's PSNR skips the chroma planes of a picture
+// without them. With a 6:1:1 metric they are 4:2:0, as the frames given; an
+// odd size's last chroma column or row is then not compared (libvmaf's
+// chroma planes are half the size rounded down, FFmpeg's rounded up).
+// Frames are given packed as FFmpeg's rawvideo writes them (add), as planes
+// wherever they are (add_planes), or as a decoder's pictures (add_decoded).
 class CpuScorer : public PairScorer {
 public:
     // `metrics` are cpu_feature keys. Every `n_subsample`th frame is scored,
@@ -73,21 +83,20 @@ public:
     CpuScorer& operator=(const CpuScorer&) = delete;
 
     std::size_t frame_bytes() const override { return frame_bytes_; }
-    // The bytes of a frame's luma, which is what the decoders hand over.
-    std::size_t luma_bytes() const { return luma_bytes_; }
 
     void add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted) override;
     void add_planes(const FramePlanes& reference, const FramePlanes& distorted) override;
 
-    // Scores one more pair held by the app's decoders, which decode luma
-    // only. NVIDIA's decoder copies the luma into libvmaf's picture itself,
-    // with the picture's row spacing, into memory it page-locks the first
-    // time each of the pool's pictures comes round. The software decoder's
-    // is copied in from where the decoder holds it (GpuFrameStream::
-    // slot_planes). The others write it straight into the picture when the
-    // picture's rows are packed, as libvmaf lays them out at most widths
-    // (multiples of 32 samples), and otherwise into a buffer that is then
-    // copied in. Where the decoders allow (downloads_at_once), or one of the
+    // Scores one more pair held by the app's decoders, which decode the
+    // planes the pictures hold (luma only, or whole 4:2:0 frames). NVIDIA's
+    // decoder copies them into libvmaf's picture itself, with the picture's
+    // row spacings, into memory it page-locks the first time each of the
+    // pool's pictures comes round. The software decoder's are copied in from
+    // where the decoder holds them (GpuFrameStream::slot_planes). The others
+    // write them straight into the picture when its planes lie as a packed
+    // frame's, as libvmaf lays them out at most widths (multiples of 32
+    // samples; 64 with chroma), and otherwise into a buffer that is then
+    // copied in, as NVIDIA's are for an odd size with chroma. Where the decoders allow (downloads_at_once), or one of the
     // two is copied from where the software decoder holds it, the two come
     // at the same time, the source's on a thread of the scorer's.
     void add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot);
@@ -112,8 +121,11 @@ private:
     // Both pictures of a pair, at the same time where add_decoded says.
     void download_both(VmafPicture& reference_picture, GpuFrameStream& reference, int reference_slot,
                        VmafPicture& distorted_picture, GpuFrameStream& test, int test_slot);
-    // Copies a luma plane into the picture.
-    void fill(VmafPicture& picture, Plane luma) const;
+    // Copies the planes the pictures hold into the picture.
+    void fill(VmafPicture& picture, const FramePlanes& frame) const;
+    // Whether the picture's planes lie as those of a packed frame, so that a
+    // decoder can write the frame straight into it.
+    bool laid_out_packed(const VmafPicture& picture) const;
     void release();
 
     const Libvmaf& library_;
@@ -121,16 +133,18 @@ private:
     unsigned step_ = 1;
     unsigned count_ = 0;
     VmafContext* context_ = nullptr;
-    std::size_t rows_ = 0;
-    std::size_t row_bytes_ = 0;
-    std::size_t luma_bytes_ = 0;
+    bool chroma_ = false;  // the pictures hold the chroma planes too (a 6:1:1 metric)
+    bool odd_ = false;     // an odd width or height
+    std::size_t sample_ = 1;
+    PackedFrame packed_;            // the frames given, planes packed
+    std::size_t decoded_bytes_ = 0;  // what a decoder hands over: the luma, or the whole frame with chroma_
     std::size_t frame_bytes_ = 0;
     // The pictures' memory page-locked for NVIDIA's decoder, by address,
     // with the stream that locked it (nullptr where it could not).
     std::map<void*, GpuFrameStream*> pinned_;
     std::mutex pinned_mutex_;
-    // A decoder's plane, written packed for a picture whose rows are padded:
-    // the source's and the test video's.
+    // A decoder's picture, written packed for a picture of libvmaf's whose
+    // planes do not lie so: the source's and the test video's.
     std::vector<std::uint8_t> staging_[2];
     SideThread side_;  // takes in the source's picture beside the test video's
 };
@@ -143,9 +157,10 @@ bool cpu_scores_xpsnr();
 
 // How many pairs of pictures CpuScorer's pool holds: one pair per libvmaf
 // thread plus one being filled, counting at most 8 threads, within 200 MB
-// (270 MB with XPSNR), but at least two pairs; XPSNR gets one more, for the
-// test pictures it keeps from the previous frames.
-int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr);
+// (270 MB with XPSNR; half as much again for pictures with `chroma`, so that
+// they come to as many pairs), but at least two pairs; XPSNR gets one more,
+// for the test pictures it keeps from the previous frames.
+int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr, bool chroma);
 
 // Copies the given planes (0 Y, 1 U, 2 V) of a frame into a libvmaf picture of
 // its size, `sample` bytes a sample. Its planes are the frame's, but for an odd
@@ -155,7 +170,7 @@ void fill_picture(VmafPicture& picture, const FramePlanes& frame, std::size_t sa
                   std::initializer_list<int> planes);
 
 // PSNR, SSIM and XPSNR (CpuScorer) with both videos decoded in this process,
-// luma only, as score_decoded (gpu_vmaf.h) does for VMAF: by `decoders`
+// luma only unless a 6:1:1 metric reads the chroma, as score_decoded (gpu_vmaf.h) does for VMAF: by `decoders`
 // (the source's and the test video's), cropped as FFmpeg's crop filter
 // crops and widened as FFmpeg converts, paired frame N with frame N, those
 // `range` decodes (score_frame_pairs). A video compared at another

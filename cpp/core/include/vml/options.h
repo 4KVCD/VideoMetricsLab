@@ -120,6 +120,11 @@ struct VmafOptions {
     std::string scale_algorithm = "bicubic";
     ScaleDirection scale_direction = ScaleDirection::source_to_distorted;
     bool compute_xpsnr = false;
+    // PSNR and SSIM of the three planes weighted 6:1:1, as JVET's PSNR and MSU's YUV-SSIM:
+    // scored by the app's own libvmaf-fast only (its SSIM of the chroma is
+    // not upstream libvmaf's, which FFmpeg's filter runs).
+    bool compute_psnr_yuv = false;
+    bool compute_ssim_yuv = false;
     bool compute_vmaf = true;
     bool compute_vmaf_neg = false;
     // VMAF v1, with its own model: what the user chose, and what a run
