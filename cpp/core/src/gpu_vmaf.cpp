@@ -296,10 +296,10 @@ GpuModels scores_on_gpu(bool compute_vmaf, bool compute_vmaf_neg, const std::str
     return models;
 }
 
-std::unique_ptr<HdrScorer> make_hdr_scorer(const GpuPlan& plan, int n_subsample) {
+std::unique_ptr<HdrScorer> make_hdr_scorer(const GpuPlan& plan, int n_subsample, GpuFrameStream* shared) {
     return std::make_unique<HdrScorer>(plan.width, plan.height, plan.bit_depth,
                                        platform::path_from_text(plan.hdr_model_file), plan.hdr_colours, n_subsample,
-                                       plan.hdr_threads, plan.hdr_gpu);
+                                       plan.hdr_threads, plan.hdr_gpu, shared);
 }
 
 namespace {
@@ -320,7 +320,7 @@ void append_scores(PairScores& scores, PairScores&& more, const std::string& wha
 
 }  // namespace
 
-BesideScorer::BesideScorer(const GpuPlan& plan, int n_subsample) {
+BesideScorer::BesideScorer(const GpuPlan& plan, int n_subsample, GpuFrameStream* shared) {
     std::vector<std::string> cpu_metrics;
     bool hdr = false;
     for (const std::string& key : plan.beside) {
@@ -335,7 +335,7 @@ BesideScorer::BesideScorer(const GpuPlan& plan, int n_subsample) {
                      plan.frame_rate, plan.cambi, plan.extra_gpu);
     }
     if (hdr) {
-        hdr_ = make_hdr_scorer(plan, n_subsample);
+        hdr_ = make_hdr_scorer(plan, n_subsample, shared);
     }
 }
 
@@ -363,13 +363,18 @@ void BesideScorer::add_planes(const FramePlanes& reference, const FramePlanes& d
 
 CpuScorer& BesideScorer::cpu_alone() {
     if (hdr_ || !cpu_) {
-        throw std::logic_error("HDR VMAF beside a pass reads whole frames from system memory, not downloads");
+        throw std::logic_error("HDR VMAF beside a pass reads whole frames, not the CPU's metrics' downloads");
     }
     return *cpu_;
 }
 
 void BesideScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot) {
-    cpu_alone().add_decoded(reference, reference_slot, test, test_slot);
+    if (cpu_) {
+        cpu_->add_decoded(reference, reference_slot, test, test_slot);
+    }
+    if (hdr_) {
+        hdr_->add_decoded(reference, reference_slot, test, test_slot);
+    }
 }
 
 void BesideScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot,
@@ -389,11 +394,12 @@ PairScores BesideScorer::finish() {
     return scores;
 }
 
-void start_beside(std::optional<BesideScorer>& scorer, const GpuPlan& plan, int n_subsample) {
+void start_beside(std::optional<BesideScorer>& scorer, const GpuPlan& plan, int n_subsample,
+                  GpuFrameStream* shared) {
     if (plan.beside.empty()) {
         return;
     }
-    scorer.emplace(plan, n_subsample);
+    scorer.emplace(plan, n_subsample, shared);
     // Which pass took them, so that a run shows it decoded the videos once for all of its metrics.
     const std::string pass = plan.backend == "hdr"    ? "HDR VMAF"
                              : plan.backend == "cpu" ? "the CPU's metrics"
@@ -831,8 +837,8 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     if (cuda && !plan.beside.empty()) {
         throw std::invalid_argument("libvmaf's CUDA code is not given CPU metrics to score beside it");
     }
-    // HDR VMAF beside reads whole frames (its colour conversion takes the chroma too) from system memory (HostPairs).
-    const bool whole_frames = std::ranges::find(plan.beside, "vmaf_hdr") != plan.beside.end();
+    // HDR VMAF beside reads whole frames (its colour conversion takes the chroma too).
+    const bool hdr_beside = std::ranges::find(plan.beside, "vmaf_hdr") != plan.beside.end();
     // The 6:1:1 metrics beside read the chroma too: the decoders decode whole
     // frames, and the engine is given their luma.
     const bool chroma_beside = cpu_metrics_read_chroma(plan.beside);
@@ -863,8 +869,8 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     require_same_range(source, distorted);
     const std::pair size(plan.width, plan.height);
     std::vector<DecodePlan> plans = plan_pair(source, distorted, source_crop, distorted_crop, size, plan.bit_depth,
-                                              !whole_frames && !chroma_beside, scale_algorithm, decoders);
-    if (!whole_frames) {
+                                              !hdr_beside && !chroma_beside, scale_algorithm, decoders);
+    if (!hdr_beside) {
         require_frames_of_size(plans, size, plan.bit_depth);
     }
     if (cuda) {
@@ -899,6 +905,13 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
         open_pass_stream(distorted, plans[0], 4, test_backend, vvdec.test, plan.device, ffmpeg, ffprobe, hand_over);
     GpuFrameStream reference = open_pass_stream(source, plans[1], 4, source_backend, vvdec.reference, plan.device,
                                                 ffmpeg, ffprobe, hand_over);
+    // The metrics beside. Where the decoders and Vulkan share memory (below), HDR VMAF's GPU takes the pictures
+    // from the decoders too, if it converts them (HdrScorer's `shared`); the pass's scorer then does as well.
+    // After the streams, so that it goes before them: it gives back the memory NVIDIA's decoder page-locked for
+    // it, and the decoders' memory it imported.
+    const bool may_share = !vvdec.any() && test.shares_gpu_memory_with(reference);
+    std::optional<BesideScorer> beside;
+    start_beside(beside, plan, n_subsample, may_share ? &test : nullptr);
     // Declared after the streams so that it goes first: it holds on to the
     // decoder's memory.
     std::optional<VulkanScorer> scorer;
@@ -955,7 +968,7 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
         app_log::write(app_log::Level::info, "vml.vmaf_vulkan",
                        "VMAF with Vulkan: the frames go through system memory (the videos' decoders share no GPU "
                        "memory)");
-    } else if (test.shares_gpu_memory_with(reference) && !whole_frames) {
+    } else if (may_share && (!beside || beside->takes_decoded())) {
         try {
             scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, plan.device, &test);
             shared = true;
@@ -968,10 +981,11 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     if (!scorer) {
         scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, plan.device);
     }
-    // After the streams, so that it goes before them: it gives back the
-    // memory NVIDIA's decoder page-locked for it.
-    std::optional<BesideScorer> beside;
-    start_beside(beside, plan, n_subsample);
+    if (!shared && hdr_beside && beside->takes_decoded()) {
+        // HDR VMAF took the decoders' pictures, the pass's scorer could not: both read them in system memory.
+        beside.reset();
+        start_beside(beside, plan, n_subsample);
+    }
     if (beside && beside->reads_whole_frames() &&
         std::any_of(plans.begin(), plans.end(),
                     [&](const DecodePlan& decoded) { return decoded.frame_bytes() != beside->frame_bytes(); })) {
@@ -984,13 +998,14 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     // decoders are written straight into the engine's memory instead.
     // vvdec-vulkan's not handed over are always taken so, as its GPU copies
     // them only into its own buffer, and the CPU's metrics read them there
-    // too. So are all pictures beside HDR VMAF, which reads whole frames.
+    // too. So are all pictures beside HDR VMAF where the decoders do not
+    // copy them on the GPU, as it reads whole frames.
     // Last, so that it goes first: it unlocks memory with the streams.
     const auto as_planes = [](const GpuFrameStream& stream) {
         return stream.gives_planes() || gpu_decoder(stream.backend()).cuda_copies;
     };
     std::optional<HostPairs> pairs;
-    if ((vvdec.any() && !shared) || whole_frames || (!shared && !beside && as_planes(reference) && as_planes(test))) {
+    if (!shared && (vvdec.any() || hdr_beside || (!beside && as_planes(reference) && as_planes(test)))) {
         pairs.emplace(reference, plans[1], test, plans[0]);
     }
     test.start();

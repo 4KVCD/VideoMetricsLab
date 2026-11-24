@@ -94,12 +94,15 @@ public:
     // `shared_reference` is the source's decoder where it does not share the
     // test decoder's GPU memory (SharedSlots): the engine must then calculate
     // every feature itself from the planes copied on the GPU, as nothing is
-    // downloaded from the decoders (VmafV1Error otherwise). Throws
-    // VmafV1Error (or VmafVulkanError, LibvmafError).
+    // downloaded from the decoders (VmafV1Error otherwise). `converts`, with
+    // `shared`: the pictures are to be converted (convert_on_gpu, which must
+    // then be asked for before the first pair). Throws VmafV1Error (or
+    // VmafVulkanError, LibvmafError).
     V1Scorer(int width, int height, int bit_depth, const std::filesystem::path& model, int n_subsample = 1,
              std::optional<int> device = std::nullopt, std::optional<int> threads = std::nullopt,
              std::string name = "vmaf_v1", GpuFrameStream* shared = nullptr, bool gpu_cambi = true,
-             bool gpu_speed = true, bool pictures = false, GpuFrameStream* shared_reference = nullptr);
+             bool gpu_speed = true, bool pictures = false, GpuFrameStream* shared_reference = nullptr,
+             bool converts = false);
     ~V1Scorer() override;
     V1Scorer(const V1Scorer&) = delete;
     V1Scorer& operator=(const V1Scorer&) = delete;
@@ -135,10 +138,15 @@ public:
     // For HDR VMAF, before the first pair: has the engine convert each pair
     // given from here on with `plans` (libvmaf's vmaf_picture_convert_gpu_plan,
     // the source's then the test video's) before scoring it, so that the
-    // pairs given are the videos' own 4:2:0 pictures, 16-bit samples. False,
-    // with why in `why`, where the engine refuses the plans; the scorer must
-    // then not be used.
+    // pairs given are the videos' own 4:2:0 pictures, 16-bit samples; for a
+    // scorer made with `shared`, add_decoded then has the decoders copy all
+    // three planes of each picture on the GPU. False, with why in `why`,
+    // where the engine refuses the plans; the scorer must then not be used.
     bool convert_on_gpu(const std::array<std::span<const std::uint32_t>, 2>& plans, std::string& why);
+
+    // Whether it was made with `shared` (it takes add_decoded's pairs, not
+    // add_planes').
+    bool shares_decoders() const;
 
     // With convert_on_gpu: one picture of side `side` (0 the source) converted
     // by the GPU into the three planes at `out`, to be checked against

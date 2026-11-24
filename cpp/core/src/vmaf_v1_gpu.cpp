@@ -472,6 +472,14 @@ struct V1Scorer::State {
     bool pictures = false;
     // Whether the engine converts each pair before scoring it (convert_on_gpu).
     bool converting = false;
+    // Converting a decoder's pictures: where in a slot's shared buffer each
+    // side's planes go (the source's, then the test video's Y, U and V), rows
+    // packed.
+    struct SourcePlane {
+        std::uint64_t offset = 0;
+        std::int64_t pitch = 0;
+    };
+    std::array<std::array<SourcePlane, 3>, 2> convert_sources{};
     // The decoders' slots given back through release_later that the engine
     // may still read: the last frame that reads each, its stream and slot.
     struct Held {
@@ -733,7 +741,7 @@ std::array<double, 10> adm_motion_values(const Options& adm, const Options& moti
 
 V1Scorer::V1Scorer(int width, int height, int bit_depth, const std::filesystem::path& model, int n_subsample,
                    std::optional<int> device, std::optional<int> threads, std::string name, GpuFrameStream* shared,
-                   bool gpu_cambi, bool gpu_speed, bool pictures, GpuFrameStream* shared_reference)
+                   bool gpu_cambi, bool gpu_speed, bool pictures, GpuFrameStream* shared_reference, bool converts)
     : state_(std::make_unique<State>()) {
     State& s = *state_;
     const VulkanEngine& engine = s.engine;
@@ -762,7 +770,9 @@ V1Scorer::V1Scorer(int width, int height, int bit_depth, const std::filesystem::
         throw VmafV1Error("the bundled Vulkan engine has no ADM adm_skip_scale0 (HDR VMAF)");
     }
     int flags = vulkan_context_flags(shared != nullptr, shared != nullptr && shared_reference != nullptr);
-    if (pictures && shared != nullptr && engine.pictures != nullptr && engine.pictures_mode != nullptr) {
+    if (converts && shared != nullptr) {
+        flags |= vulkan_convert_flag;
+    } else if (pictures && shared != nullptr && engine.pictures != nullptr && engine.pictures_mode != nullptr) {
         flags |= pictures_flag;
     }
     s.check(engine.create_v1_ex != nullptr
@@ -888,8 +898,21 @@ void V1Scorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFra
         return 0;
     };
     std::uint64_t copied = 0;
-    const bool chroma_copied = score && s.on_gpu.contains(v1_speed) && s.shared_chroma;
-    if (chroma_copied) {
+    const bool chroma_copied = !s.converting && score && s.on_gpu.contains(v1_speed) && s.shared_chroma;
+    if (s.converting) {
+        // Each picture's three planes where the engine converts them from:
+        // the source's always (motion reads it), the test video's when the
+        // pair is scored.
+        const auto copy_source = [&](GpuFrameStream& stream, int slot, std::uint64_t base, std::size_t side) {
+            const std::array<State::SourcePlane, 3>& places = s.convert_sources[side];
+            return copy_planes(stream, slot, {base + places[0].offset, base + places[1].offset, base + places[2].offset},
+                               {places[0].pitch, places[1].pitch, places[2].pitch});
+        };
+        copied = copy_source(reference, reference_slot, next.base, 0);
+        if (score) {
+            copied = std::max(copied, copy_source(test, test_slot, next.distorted_base, 1));
+        }
+    } else if (chroma_copied) {
         // Each picture's chroma planes go into the slot's shared buffer along
         // with its luma: one copy on the GPU per picture, at the slot's
         // address as that picture's decoder imported it. The source's U and V
@@ -916,7 +939,7 @@ void V1Scorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFra
     if (copied != 0) {
         s.check(s.engine.commit_after(s.gpu, copied), what);
     }
-    if (score && s.on_gpu.contains(v1_speed) && !chroma_copied) {
+    if (score && s.on_gpu.contains(v1_speed) && !chroma_copied && !s.converting) {
         // The chroma planes are downloaded into the engine's memory for them.
         std::array<std::uint8_t*, 4> chroma{};
         std::uint32_t stride = 0;
@@ -959,14 +982,36 @@ bool V1Scorer::convert_on_gpu(const std::array<std::span<const std::uint32_t>, 2
     }
     const std::array<const std::uint32_t*, 2> words{plans[0].data(), plans[1].data()};
     const std::array<std::size_t, 2> counts{plans[0].size(), plans[1].size()};
-    if (s.engine.v1_convert(s.gpu, words.data(), counts.data()) != 0) {
+    if (s.shared && s.engine.convert_source == nullptr) {
+        why = "the bundled Vulkan engine converts no decoder's pictures";
+        return false;
+    }
+    const auto refused = [&s, &why] {
         const char* said = s.engine.error();
         why = std::string("the Vulkan engine refused the conversion: ") + (said != nullptr ? said : "");
         return false;
+    };
+    if (s.engine.v1_convert(s.gpu, words.data(), counts.data()) != 0) {
+        return refused();
+    }
+    if (s.shared) {
+        for (int side = 0; side < 2; ++side) {
+            for (int plane = 0; plane < 3; ++plane) {
+                std::uint32_t width = 0;
+                std::uint32_t height = 0;
+                State::SourcePlane& place = s.convert_sources[side][plane];
+                if (s.engine.convert_source(s.gpu, side, plane, &place.offset, &width, &height) != 0) {
+                    return refused();
+                }
+                place.pitch = static_cast<std::int64_t>(width) * 2;
+            }
+        }
     }
     s.converting = true;
     return true;
 }
+
+bool V1Scorer::shares_decoders() const { return state_->shared.has_value(); }
 
 void V1Scorer::test_convert(int side, const std::array<const std::uint16_t*, 3>& planes,
                             const std::array<std::ptrdiff_t, 3>& strides, const std::array<std::uint16_t*, 3>& out,
@@ -1343,8 +1388,6 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
     const bool v1 = std::any_of(plan.models.begin(), plan.models.end(),
                                 [](const auto& model) { return model.first == "vmaf_v1"; });
     const bool hand_over = pass_may_hand_over(plan);
-    // HDR VMAF beside reads whole frames from system memory (HostPairs), not a download of their luma.
-    const bool whole_frames = std::ranges::find(plan.beside, "vmaf_hdr") != plan.beside.end();
     const int pool = hand_over && plan.backend == "vulkan" && v1 && source_backend == test_backend &&
                              hands_over_textures(test_backend)
                          ? 6
@@ -1362,6 +1405,15 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
         open_pass_stream(distorted, plans[0], pool, test_backend, test_vvdec, vvdec_device, ffmpeg, ffprobe, hand_over);
     GpuFrameStream reference = open_pass_stream(source, plans[1], pool, source_backend, reference_vvdec, vvdec_device,
                                                 ffmpeg, ffprobe, hand_over);
+    // The CPU's metrics and HDR VMAF, which read the same frames. Where the
+    // decoders and Vulkan share memory (below), HDR VMAF's GPU takes the
+    // pictures from the decoders too, if it converts them (HdrScorer's
+    // `shared`); the GPU's scorers then do as well. After the streams, so
+    // that it goes before them: it holds on to the decoders' memory.
+    const bool may_share = !test_vvdec && !reference_vvdec && test.shares_gpu_memory_with(reference) &&
+                           (gpu_decoder(test_backend).cuda_copies || plan.backend == "vulkan");
+    std::optional<BesideScorer> beside;
+    start_beside(beside, plan, n_subsample, may_share ? &test : nullptr);
     // Declared after the streams so that it goes first: it holds on to the
     // decoders' memory.
     std::optional<MultiScorer> scorer;
@@ -1399,8 +1451,7 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
         // Windows' own decoder for one video and AMF's for the other.
         logger.info("VMAF v1 with the GPU: the frames go through system memory (the videos' decoders share no "
                     "GPU memory)");
-    } else if (test.shares_gpu_memory_with(reference) && !whole_frames &&
-               (gpu_decoder(test_backend).cuda_copies || plan.backend == "vulkan")) {
+    } else if (may_share && (!beside || beside->takes_decoded())) {
         try {
             scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, plan.backend, device,
                            &test, pool > 4 && test.gives_textures() && reference.gives_textures());
@@ -1417,9 +1468,11 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
                     [&](const DecodePlan& decoded) { return decoded.frame_bytes() != scorer->frame_bytes(); })) {
         throw VmafV1Error("the decoders' frames are not the size the scorers take");
     }
-    // The CPU's metrics and HDR VMAF, which read the same frames.
-    std::optional<BesideScorer> beside;
-    start_beside(beside, plan, n_subsample);
+    if (!on_gpu && beside && beside->reads_whole_frames() && beside->takes_decoded()) {
+        // HDR VMAF took the decoders' pictures, the GPU's scorers could not: both read them in system memory.
+        beside.reset();
+        start_beside(beside, plan, n_subsample);
+    }
     if (beside && beside->frame_bytes() != scorer->frame_bytes()) {
         throw VmafV1Error("the metrics beside the GPU's take frames of another size than its own");
     }
@@ -1442,7 +1495,9 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
         test, reference, range, total_frames,
         [&](int test_slot, int reference_slot) {
             if (on_gpu) {
-                // The CPU's metrics read a download of the luma the GPU's scorers copy where it is.
+                // The CPU's metrics read a download of the luma the GPU's
+                // scorers copy where it is; HDR VMAF's GPU copies the
+                // pictures too.
                 if (beside) {
                     beside->add_decoded(reference, reference_slot, test, test_slot);
                 }

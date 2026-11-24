@@ -132,6 +132,11 @@ struct VulkanEngine {
     int (*v1_convert)(VulkanContext* context, const std::uint32_t* const* plans, const std::size_t* words);
     int (*test_convert)(VulkanContext* context, int side, const std::uint16_t* const* planes,
                         const std::ptrdiff_t* strides, std::uint16_t* const* out, const std::ptrdiff_t* out_strides);
+    // In a context sharing the decoders' memory that converts: where in each
+    // slot's shared buffer a decoder copies side `side`'s plane `plane` (rows
+    // packed, 16-bit samples), and its size (nullptr in an engine without it).
+    int (*convert_source)(VulkanContext* context, int side, int plane, std::uint64_t* offset, std::uint32_t* width,
+                          std::uint32_t* height);
 };
 
 // How many frames the engine works on at once, as the Python app asks for
@@ -152,6 +157,10 @@ inline constexpr int vulkan_shared_flag = 1 << 19;
 // allocation only once a process: NVIDIA's on Windows refused a second
 // import of a slot's buffer, by CUDA or by another Vulkan device alike.
 inline constexpr int vulkan_split_flag = 1 << 3;
+// With vulkan_shared_flag, for VMAF v1 whose pictures the engine converts
+// (HDR VMAF, vv_v1_convert): the decoder's pictures are copied out of the
+// slots for the conversion, not read where they are.
+inline constexpr int vulkan_convert_flag = 1 << 1;
 
 // A context's flags: its frames in flight, and whether its frames come from
 // GPU memory (`shared`), two decoders' (`split`, with `shared` only).

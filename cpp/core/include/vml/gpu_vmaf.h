@@ -130,8 +130,9 @@ struct GpuPlan {
 };
 
 // HDR VMAF's scorer for a plan that scores it (GpuPlan::hdr_model_file,
-// hdr_colours, hdr_threads, hdr_gpu). Throws as HdrScorer does.
-std::unique_ptr<HdrScorer> make_hdr_scorer(const GpuPlan& plan, int n_subsample);
+// hdr_colours, hdr_threads, hdr_gpu), with HdrScorer's `shared`. Throws as
+// HdrScorer does.
+std::unique_ptr<HdrScorer> make_hdr_scorer(const GpuPlan& plan, int n_subsample, GpuFrameStream* shared = nullptr);
 
 // What a pass scores beside its own metrics, from the same frames
 // (GpuPlan::beside): PSNR, SSIM, XPSNR, PSNR YUV and SSIM YUV with libvmaf's
@@ -139,9 +140,9 @@ std::unique_ptr<HdrScorer> make_hdr_scorer(const GpuPlan& plan, int n_subsample)
 // `n_subsample`th pair, as the pass's own scorers do.
 class BesideScorer : public PairScorer {
 public:
-    // Throws LibvmafError, and std::invalid_argument for a size HDR VMAF's
-    // model refuses.
-    BesideScorer(const GpuPlan& plan, int n_subsample);
+    // `shared` is HDR VMAF's (HdrScorer). Throws LibvmafError, and
+    // std::invalid_argument for a size HDR VMAF's model refuses.
+    BesideScorer(const GpuPlan& plan, int n_subsample, GpuFrameStream* shared = nullptr);
     ~BesideScorer() override;
     BesideScorer(const BesideScorer&) = delete;
     BesideScorer& operator=(const BesideScorer&) = delete;
@@ -151,14 +152,19 @@ public:
     void add_planes(const FramePlanes& reference, const FramePlanes& distorted) override;
 
     // Whether it scores HDR VMAF, which reads whole pictures (its colour
-    // conversion takes the chroma) that a pass then gives it in system memory
-    // (HostPairs, or FFmpeg's pipes) rather than through add_decoded's
-    // downloads.
+    // conversion takes the chroma).
     bool reads_whole_frames() const { return hdr_ != nullptr; }
 
-    // CpuScorer::add_decoded, for a scorer without HDR VMAF
-    // (std::logic_error otherwise).
+    // Whether add_decoded may be given the pairs: no HDR VMAF, or one that
+    // takes them from the decoders on the GPU (HdrScorer::takes_decoded). A
+    // pass otherwise gives them in system memory (HostPairs, or FFmpeg's
+    // pipes).
+    bool takes_decoded() const { return !hdr_ || hdr_->takes_decoded(); }
+
+    // CpuScorer::add_decoded and HdrScorer::add_decoded.
     void add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot);
+    // The same with CpuScorer's `also`, for a scorer without HDR VMAF
+    // (std::logic_error otherwise).
     void add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot,
                      const std::function<void(Plane, Plane)>& also);
 
@@ -188,9 +194,10 @@ inline bool pass_may_hand_over(const GpuPlan& plan) { return plan.beside.empty()
 bool both_copy_on_gpu(const GpuFrameStream& test, const GpuFrameStream& reference);
 
 // The scorer of a plan's metrics beside its own (GpuPlan::beside), made in
-// `scorer` where the plan has any (and logged, with the pass it joins).
-// Throws as BesideScorer does.
-void start_beside(std::optional<BesideScorer>& scorer, const GpuPlan& plan, int n_subsample);
+// `scorer` where the plan has any (and logged, with the pass it joins), with
+// BesideScorer's `shared`. Throws as BesideScorer does.
+void start_beside(std::optional<BesideScorer>& scorer, const GpuPlan& plan, int n_subsample,
+                  GpuFrameStream* shared = nullptr);
 
 // The pass's `scores` with those of the metrics scored beside them (if any)
 // added after theirs. Throws LibvmafError when the two were not scored for

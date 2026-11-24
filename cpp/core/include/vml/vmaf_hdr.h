@@ -116,10 +116,15 @@ public:
     // scored. The features on the GPU numbered `gpu` (Vulkan's number, -1
     // for the best one) where VMAF v1's engine can calculate them, else
     // (and without `gpu`) by libvmaf on `threads` threads (at least 1); the
-    // log says which, where the pictures are converted, and why. Throws LibvmafError, and std::invalid_argument
-    // for a size the model refuses (hdr_targets).
+    // log says which, where the pictures are converted, and why. With
+    // `shared`, the decoder whose memory the GPU's scorer may share (the
+    // test video's, the source's decoder copying into it too): where the GPU
+    // converts the pictures, add_decoded's pairs are then copied there by the
+    // decoders, never through system memory. Throws LibvmafError, and
+    // std::invalid_argument for a size the model refuses (hdr_targets).
     HdrScorer(int width, int height, int bit_depth, const std::filesystem::path& model_file,
-              const HdrColours& colours, int n_subsample, int threads, std::optional<int> gpu = std::nullopt);
+              const HdrColours& colours, int n_subsample, int threads, std::optional<int> gpu = std::nullopt,
+              GpuFrameStream* shared = nullptr);
     ~HdrScorer() override;
     HdrScorer(const HdrScorer&) = delete;
     HdrScorer& operator=(const HdrScorer&) = delete;
@@ -127,6 +132,16 @@ public:
     std::size_t frame_bytes() const override;
     void add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted) override;
     void add_planes(const FramePlanes& reference, const FramePlanes& distorted) override;
+
+    // Whether add_decoded's pairs reach the GPU without a download (made
+    // with `shared`, the GPU converting the pictures). Until the first pair's
+    // conversion check, which may turn it off.
+    bool takes_decoded() const;
+
+    // One more pair held by the decoders: copied on the GPU where
+    // takes_decoded, else downloaded whole and given to add_planes. The first
+    // pair is downloaded either way, to check the GPU's conversion.
+    void add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot);
 
     // The frames scored (every n_subsample-th) and their scores under
     // "vmaf_hdr", each kept to 6 decimals.
@@ -139,8 +154,10 @@ private:
 
 // HDR VMAF of a plan with backend "hdr" (GpuPlan::hdr_colours; its model the
 // file named by its one model), both videos decoded in this process as
-// whole frames, as score_decoded_v1 (vmaf_v1_gpu.h) decodes them, the
-// pictures read in system memory. Throws as score_decoded_v1 does.
+// whole frames, as score_decoded_v1 (vmaf_v1_gpu.h) decodes them. Where the
+// decoders and Vulkan share GPU memory and the GPU converts the pictures,
+// the decoders copy them there; otherwise they are read in system memory.
+// Throws as score_decoded_v1 does.
 PairScores score_decoded_hdr(const VideoInfo& source, const VideoInfo& distorted,
                              const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
                              const GpuPlan& plan, int n_subsample, const FrameRange& range, long long total_frames,

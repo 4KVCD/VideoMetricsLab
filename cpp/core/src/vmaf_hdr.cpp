@@ -332,8 +332,9 @@ struct HdrScorer::State {
     // `converter` converted, as frame `fed`.
     void feed(Converter& converter);
 
-    // The features' scorer on the GPU, or nullptr (the log says why).
-    std::unique_ptr<V1Scorer> make_gpu_scorer() const;
+    // The features' scorer on the GPU, or nullptr (the log says why). With
+    // `share`, one that takes the pairs from the decoders (V1Scorer's `shared`).
+    std::unique_ptr<V1Scorer> make_gpu_scorer(GpuFrameStream* share = nullptr) const;
     // libvmaf's own extractors for the features (`handles`).
     void start_cpu_features();
     // The conversion threads.
@@ -355,6 +356,10 @@ struct HdrScorer::State {
     int n_subsample = 1;
     int threads = 1;
     std::optional<int> device;  // the features' GPU, if any (-1 the best)
+    // The first pair of add_decoded, downloaded for check_gpu_conversion
+    // (both videos' pictures, packed), and every pair of it where the GPU
+    // does not take them from the decoders.
+    std::vector<std::uint8_t> downloaded;
     // The features on the GPU (VMAF v1's engine, with the HDR model's
     // options), or nullptr: libvmaf's own extractors (`handles`).
     std::unique_ptr<V1Scorer> gpu;
@@ -428,7 +433,8 @@ void HdrScorer::State::feed(Converter& converter) {
 }
 
 HdrScorer::HdrScorer(int width, int height, int bit_depth, const std::filesystem::path& model_file,
-                     const HdrColours& colours, int n_subsample, int threads, std::optional<int> gpu)
+                     const HdrColours& colours, int n_subsample, int threads, std::optional<int> gpu,
+                     GpuFrameStream* shared)
     : state_(std::make_unique<State>(libvmaf())) {
     State& s = *state_;
     if (s.library.picture_convert == nullptr) {
@@ -447,18 +453,35 @@ HdrScorer::HdrScorer(int width, int height, int bit_depth, const std::filesystem
     s.n_subsample = n_subsample;
     s.threads = std::max(1, threads);
     s.device = gpu;
-    s.gpu = s.make_gpu_scorer();
+    // The decoders copy the pictures into the GPU's scorer only where it
+    // converts them (10- and 12-bit, with libvmaf's plan), into its buffers
+    // for the converted pictures: so not where the model shrinks them.
+    const bool share = shared != nullptr && s.bit_depth > 8 && s.library.picture_convert_gpu_plan != nullptr &&
+                       static_cast<unsigned>(width) <= s.targets[0].w &&
+                       static_cast<unsigned>(height) <= s.targets[0].h;
+    s.gpu = s.make_gpu_scorer(share ? shared : nullptr);
     if (s.gpu) {
         s.start_gpu_conversion();
+        if (s.gpu && s.gpu->shares_decoders() && !s.gpu_converts) {
+            // It would score the decoders' pictures unconverted: one that
+            // takes them in system memory (its GPU memory given back first).
+            s.gpu.reset();
+            s.gpu = s.make_gpu_scorer();
+            if (!s.gpu) {
+                s.start_cpu_features();
+            }
+        }
     } else {
         s.start_cpu_features();
     }
     if (!s.gpu_converts) {
         s.start_converters();
+    } else if (s.gpu->shares_decoders()) {
+        logger.info("HDR VMAF's pictures copied into the GPU's memory by the decoders");
     }
 }
 
-std::unique_ptr<V1Scorer> HdrScorer::State::make_gpu_scorer() const {
+std::unique_ptr<V1Scorer> HdrScorer::State::make_gpu_scorer(GpuFrameStream* share) const {
     if (!device) {
         return nullptr;
     }
@@ -470,10 +493,15 @@ std::unique_ptr<V1Scorer> HdrScorer::State::make_gpu_scorer() const {
     try {
         auto scorer = std::make_unique<V1Scorer>(
             static_cast<int>(converted.w), static_cast<int>(converted.h), static_cast<int>(converted.bpc),
-            model_file, n_subsample, *device >= 0 ? device : std::nullopt, threads, "vmaf_hdr");
+            model_file, n_subsample, *device >= 0 ? device : std::nullopt, threads, "vmaf_hdr", share, true, true,
+            false, nullptr, share != nullptr);
         logger.info("HDR VMAF's features on the GPU (Vulkan)");
         return scorer;
     } catch (const LibvmafError& error) {
+        if (share != nullptr) {  // where the decoders and Vulkan cannot share memory: from system memory
+            logger.info(std::string("HDR VMAF's pictures read in system memory: ") + error.what());
+            return make_gpu_scorer();
+        }
         logger.info(std::string("HDR VMAF's features on the CPU: ") + error.what());
         return nullptr;
     }
@@ -681,6 +709,35 @@ void HdrScorer::add_planes(const FramePlanes& reference, const FramePlanes& dist
     converter.thread.run([&s, &converter] { s.convert(converter); });
 }
 
+bool HdrScorer::takes_decoded() const {
+    const State& s = *state_;
+    return s.gpu_converts && s.gpu->shares_decoders();
+}
+
+void HdrScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot) {
+    State& s = *state_;
+    if (!takes_decoded() || s.given == 0) {
+        // Downloaded: to check the GPU's conversion on the first pair, or
+        // where the GPU does not take the pairs from the decoders.
+        const std::size_t bytes = s.packed.bytes();
+        s.downloaded.resize(2 * bytes);
+        reference.download(reference_slot, s.downloaded.data());
+        test.download(test_slot, s.downloaded.data() + bytes);
+        const FramePlanes reference_planes = s.packed.planes(s.downloaded.data());
+        const FramePlanes test_planes = s.packed.planes(s.downloaded.data() + bytes);
+        if (takes_decoded()) {
+            s.check_gpu_conversion(reference_planes, test_planes);
+        }
+        if (!takes_decoded()) {  // the check turned it off, or it was never on
+            add_planes(reference_planes, test_planes);
+            return;
+        }
+    }
+    ++s.given;
+    ++s.fed;
+    s.gpu->add_decoded(reference, reference_slot, test, test_slot);
+}
+
 PairScores HdrScorer::finish() {
     State& s = *state_;
     while (s.fed < s.given) {
@@ -737,11 +794,18 @@ PairScores score_decoded_hdr(const VideoInfo& source, const VideoInfo& distorted
         on_vvdec_opening();
     }
     plan_pair_seek(plans, distorted, source, range.decode_start, ffmpeg, ffprobe, cancel);
-    GpuFrameStream test = open_pass_stream(distorted, plans[0], 4, test_backend, test_vvdec, -1, ffmpeg, ffprobe);
+    // AMD's decoder hands its pictures over on the GPU where nothing beside
+    // reads them in system memory (pass_may_hand_over); NVIDIA's always does.
+    const bool hand_over = pass_may_hand_over(plan);
+    GpuFrameStream test =
+        open_pass_stream(distorted, plans[0], 4, test_backend, test_vvdec, -1, ffmpeg, ffprobe, hand_over);
     GpuFrameStream reference =
-        open_pass_stream(source, plans[1], 4, source_backend, reference_vvdec, -1, ffmpeg, ffprobe);
-    // Declared after the streams so that they go first.
-    const std::unique_ptr<HdrScorer> scorer = make_hdr_scorer(plan, n_subsample);
+        open_pass_stream(source, plans[1], 4, source_backend, reference_vvdec, -1, ffmpeg, ffprobe, hand_over);
+    // Declared after the streams so that they go first. The decoders copy
+    // the pictures into the GPU's memory where they share it with Vulkan
+    // (HdrScorer's `shared`); vvdec-vulkan's do not (it shares none).
+    const bool may_share = !test_vvdec && !reference_vvdec && test.shares_gpu_memory_with(reference);
+    const std::unique_ptr<HdrScorer> scorer = make_hdr_scorer(plan, n_subsample, may_share ? &test : nullptr);
     std::optional<BesideScorer> beside;  // the CPU's metrics, from the same frames
     start_beside(beside, plan, n_subsample);
     if (std::any_of(plans.begin(), plans.end(),
@@ -751,16 +815,28 @@ PairScores score_decoded_hdr(const VideoInfo& source, const VideoInfo& distorted
     if (beside && beside->frame_bytes() != scorer->frame_bytes()) {
         throw LibvmafError("the CPU's metrics take frames of another size than HDR VMAF");
     }
-    // The pictures in system memory, the software decoder's read where it
-    // holds them. Last, so that it goes first: its side thread's jobs use the
+    // Where HDR VMAF's GPU does not take the pictures from the decoders, they
+    // go through system memory, the software decoder's read where it holds
+    // them. Last, so that it goes first: its side thread's jobs use the
     // scorers.
-    HostPairs pairs(reference, plans[1], test, plans[0]);
+    std::optional<HostPairs> pairs;
+    if (!scorer->takes_decoded()) {
+        pairs.emplace(reference, plans[1], test, plans[0]);
+    }
     test.start();
     reference.start();
     score_frame_pairs(
         test, reference, range, total_frames,
         [&](int test_slot, int reference_slot) {
-            pairs.score(reference_slot, test_slot, *scorer, beside ? &*beside : nullptr);
+            if (pairs) {
+                pairs->score(reference_slot, test_slot, *scorer, beside ? &*beside : nullptr);
+                return;
+            }
+            // The CPU's metrics read a download of the planes they need.
+            if (beside) {
+                beside->add_decoded(reference, reference_slot, test, test_slot);
+            }
+            scorer->add_decoded(reference, reference_slot, test, test_slot);
         },
         on_progress, cancel);
     PairScores scores = scorer->finish();
