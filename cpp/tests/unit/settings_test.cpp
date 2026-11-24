@@ -232,6 +232,29 @@ TEST(Settings, ExportsCarryOverResultsByFormat) {
     EXPECT_EQ(settings.export_formats, Items{"csv"});
 }
 
+// The metrics hidden at first are hidden in settings saved before the window
+// had them (no listed_metrics, or a list without them), ticked so that
+// showing one calculates it; once listed, the user's choice stays.
+TEST(Settings, MetricsAddedSinceTheSaveAreHiddenAtFirst) {
+    const test::Folder folder;
+    const auto load = [&folder](const std::string& text) {
+        std::ofstream(folder / "settings.json", std::ios::binary) << text;
+        return Settings::load_from(folder / "settings.json");
+    };
+    using Keys = std::vector<std::string>;
+    Settings settings = load(R"({"hidden_metrics": ["xpsnr"], "default_compute_cambi": false})");
+    EXPECT_EQ(settings.hidden_metrics, (Keys{"xpsnr", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000"}));
+    EXPECT_TRUE(settings.default_compute_cambi);
+    settings = load(R"({"hidden_metrics": [], "listed_metrics": ["vmaf", "cambi"], "default_compute_cambi": false})");
+    EXPECT_EQ(settings.hidden_metrics, (Keys{"ms_ssim", "ms_ssim_yuv", "psnr_hvs", "ciede2000"}));
+    EXPECT_FALSE(settings.default_compute_cambi);
+    // Saved, every metric is listed: shown ones stay shown when read again.
+    settings.hidden_metrics.clear();
+    ASSERT_EQ(settings.save_to(folder / "settings.json"), std::nullopt);
+    settings = Settings::load_from(folder / "settings.json");
+    EXPECT_EQ(settings.hidden_metrics, Keys{});
+}
+
 // The settings read are saved as the Python app saves them, to the byte:
 // every setting in its order, indented as json.dumps(indent=2) indents,
 // text past ASCII escaped, and the CVVDP presets' keys in their order.

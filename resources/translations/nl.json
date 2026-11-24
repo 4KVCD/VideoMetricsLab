@@ -1,7 +1,6 @@
 {
  "strings": {
   "(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 van de scores van de drie vlakken, zoals JVET PSNR en MSU YUV-SSIM weegt. Alleen door de app berekend, niet met de metrieken van FFmpeg.",
-  "More metrics:": "Meer metrieken:",
   "SSIM at five scales (Wang et al.), as MSU's codec reports use it. Calculated by the app only, not with FFmpeg's metrics.": "SSIM op vijf schalen (Wang et al.), zoals de codecrapporten van MSU het gebruiken. Alleen door de app berekend, niet met de metrieken van FFmpeg.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 van de MS-SSIM van de drie vlakken. Alleen door de app berekend, niet met de metrieken van FFmpeg.",
   "PSNR weighted by the eye's sensitivity to contrast and its masking, as Xiph's codec tests report it. Calculated by the app only, not with FFmpeg's metrics.": "PSNR gewogen naar de contrastgevoeligheid en maskering van het oog, zoals de codectests van Xiph het rapporteren. Alleen door de app berekend, niet met de metrieken van FFmpeg.",

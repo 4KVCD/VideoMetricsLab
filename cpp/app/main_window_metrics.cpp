@@ -25,6 +25,31 @@
 
 namespace vml::app {
 
+namespace {
+
+// What Add/remove metrics says of the metrics hidden at first
+// (metrics_hidden_at_first), which most users do not know; none for the rest.
+QString hidden_at_first_tip(std::string_view key) {
+    if (key == "ms_ssim") {
+        return app::tr("SSIM at five scales (Wang et al.), as MSU's codec reports use it. Calculated by the app only, not with FFmpeg's metrics.");
+    }
+    if (key == "ms_ssim_yuv") {
+        return app::tr("(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM. Calculated by the app only, not with FFmpeg's metrics.");
+    }
+    if (key == "psnr_hvs") {
+        return app::tr("PSNR weighted by the eye's sensitivity to contrast and its masking, as Xiph's codec tests report it. Calculated by the app only, not with FFmpeg's metrics.");
+    }
+    if (key == "cambi") {
+        return app::tr("Netflix's banding score of the test video alone: 0 is no banding, 24 the most. Calculated by the app only, not with FFmpeg's metrics.");
+    }
+    if (key == "ciede2000") {
+        return app::tr("The mean colour difference (CIEDE2000 ΔE) of the pixels: 0 is identical, about 1 just noticeable. Calculated by the app only, not with FFmpeg's metrics.");
+    }
+    return {};
+}
+
+}  // namespace
+
 // ------------------------------------------------------------- the metrics
 
 bool MainWindow::default_metric_ticked(int column) const {
@@ -120,6 +145,7 @@ void MainWindow::show_metrics_menu(const QPoint& position) {
         QAction* action = menu->addAction(qt_text(metric_definition(item.key).label));
         action->setCheckable(true);
         action->setChecked(!hidden_metrics_.contains(item.key));
+        action->setToolTip(hidden_at_first_tip(item.key));
         // The last visible metric cannot be hidden: a table with no metrics
         // could calculate nothing.
         if (shown == 1 && !hidden_metrics_.contains(item.key)) {

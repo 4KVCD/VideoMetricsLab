@@ -12,6 +12,7 @@
 #include <variant>
 
 #include "vml/app_log.h"
+#include "vml/metrics.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
 
@@ -105,6 +106,7 @@ const std::unordered_map<std::string, Field>& fields() {
         {"export_graph_background", &Settings::export_graph_background},
         {"export_graph_text", &Settings::export_graph_text},
         {"hidden_metrics", &Settings::hidden_metrics},
+        {"listed_metrics", &Settings::listed_metrics},
         {"cvvdp_default_preset", &Settings::cvvdp_default_preset},
         {"notify_finished", &Settings::notify_finished},
         {"notify_with_failures", &Settings::notify_with_failures},
@@ -288,6 +290,26 @@ void carry_over_result_formats(Settings& settings) {
     settings.export_items = items;
 }
 
+// The metrics hidden at first that the window did not have when these
+// settings were saved (not in listed_metrics): hidden, and ticked so that
+// showing one in Add/remove metrics calculates it.
+void hide_new_metrics(Settings& settings) {
+    const auto has = [](const std::vector<std::string>& keys, std::string_view key) {
+        return std::find(keys.begin(), keys.end(), key) != keys.end();
+    };
+    for (const std::string_view key : metrics_hidden_at_first) {
+        if (has(settings.listed_metrics, key)) {
+            continue;
+        }
+        if (!has(settings.hidden_metrics, key)) {
+            settings.hidden_metrics.emplace_back(key);
+        }
+        if (bool* compute = settings.default_compute(key)) {
+            *compute = true;
+        }
+    }
+}
+
 // Settings > Notifications' keys are kept as plain text where they cannot
 // be encrypted (secrets_can_be_encrypted: on Linux and macOS), so the
 // settings folder is the user's alone (0700) and so is each file written in
@@ -439,6 +461,7 @@ Settings Settings::load_from(const std::filesystem::path& path) {
     } else if (!data.contains("export_formats")) {
         carry_over_result_formats(settings);
     }
+    hide_new_metrics(settings);
     return settings;
 }
 
@@ -564,6 +587,15 @@ std::string Settings::text() const {
     data["export_graph_background"] = export_graph_background;
     data["export_graph_text"] = export_graph_text;
     data["hidden_metrics"] = hidden_metrics;
+    // The metrics this window has, and those an earlier or later version's
+    // file listed: a metric added later is then hidden at first there too.
+    std::vector<std::string> listed = listed_metrics;
+    for (const MetricDefinition& metric : metrics()) {
+        if (std::find(listed.begin(), listed.end(), metric.key) == listed.end()) {
+            listed.emplace_back(metric.key);
+        }
+    }
+    data["listed_metrics"] = listed;
     Json presets = Json::parse(cvvdp_presets_json, nullptr, false);
     data["cvvdp_presets"] = presets.is_array() ? presets : Json::array();
     data["cvvdp_default_preset"] = cvvdp_default_preset;

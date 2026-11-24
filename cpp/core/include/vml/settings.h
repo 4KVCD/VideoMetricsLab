@@ -3,6 +3,7 @@
 // share it.
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -27,6 +28,12 @@ struct Settings;
 // What an export saves files of: Settings::export_items, less all but the
 // graphs while no format is ticked.
 std::vector<std::string> exported_items(const Settings& settings);
+
+// The metrics Add/remove metrics lists unticked until the user ticks them
+// (Settings::hidden_metrics): the ones codec comparisons such as MSU's and
+// Xiph's report, which most users do not need.
+inline constexpr std::array<std::string_view, 5> metrics_hidden_at_first{"ms_ssim", "ms_ssim_yuv", "psnr_hvs",
+                                                                        "cambi", "ciede2000"};
 
 // Above this many logical cores, a new install scores two videos at once.
 constexpr unsigned parallel_by_default_above_cores = 12;
@@ -81,11 +88,13 @@ struct Settings {
     // MSU's, for comparing with them.
     bool default_compute_psnr_yuv = false;
     bool default_compute_ssim_yuv = false;
-    bool default_compute_ms_ssim = false;
-    bool default_compute_ms_ssim_yuv = false;
-    bool default_compute_psnr_hvs = false;
-    bool default_compute_cambi = false;
-    bool default_compute_ciede2000 = false;
+    // Ticked, but hidden at first (metrics_hidden_at_first): calculated
+    // once shown in Add/remove metrics.
+    bool default_compute_ms_ssim = true;
+    bool default_compute_ms_ssim_yuv = true;
+    bool default_compute_psnr_hvs = true;
+    bool default_compute_cambi = true;
+    bool default_compute_ciede2000 = true;
     bool default_compute_vmaf = true;
     bool default_compute_vmaf_neg = true;
     bool default_compute_vmaf_v1 = true;
@@ -207,7 +216,10 @@ struct Settings {
     std::string export_graph_background;
     std::string export_graph_text;
     // The metrics left out of the test-video table (and not calculated).
-    std::vector<std::string> hidden_metrics;
+    std::vector<std::string> hidden_metrics{metrics_hidden_at_first.begin(), metrics_hidden_at_first.end()};
+    // Every metric the window had when the settings were saved: one added
+    // since, if hidden at first, is hidden when they are read (load_from).
+    std::vector<std::string> listed_metrics;
     // The CVVDP presets the user saved, as JSON text of their list
     // ([{"name": ..., "settings": ...}]), and the preset new videos start
     // with: "", or a name no preset has, is Automatic (automatic_cvvdp_preset:

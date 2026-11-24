@@ -500,10 +500,13 @@ for every metric here, so a 4:4:4 video's chroma scores are those of its
 4:2:0 form. Turning either on makes the decoders hand over whole pictures
 rather than their luma alone, which costs some speed and memory.
 
-MS-SSIM, MS-SSIM YUV (6:1:1), PSNR-HVS-M, CAMBI and CIEDE2000, also off by
-default, are the other metrics codec comparisons such as MSU's and Xiph's
-report. Only the app calculates them, with its libvmaf-fast, beside VMAF on
-the GPU or the CPU or alone, on every GPU maker's route:
+MS-SSIM, MS-SSIM YUV (6:1:1), PSNR-HVS-M, CAMBI and CIEDE2000 are the other
+metrics codec comparisons such as MSU's and Xiph's report. They are listed
+unticked in Add/remove metrics, above the Videos table (they are not among
+Settings' default metrics): ticking one there shows its column, and the
+next run calculates it for every video in the table. Only the app
+calculates them, with its libvmaf-fast, beside VMAF on the GPU or the CPU
+or alone, on every GPU maker's route:
 
 - MS-SSIM is SSIM of the luma at five scales (Wang et al. 2003); MS-SSIM YUV
   weighs its three planes' scores 6:1:1, as SSIM YUV does.

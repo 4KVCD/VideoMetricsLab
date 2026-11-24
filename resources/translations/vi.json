@@ -1,7 +1,6 @@
 {
  "strings": {
   "(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 điểm của ba mặt phẳng, như JVET đánh trọng số PSNR và MSU đánh trọng số YUV-SSIM. Chỉ ứng dụng tính, không dùng chỉ số của FFmpeg.",
-  "More metrics:": "Chỉ số khác:",
   "SSIM at five scales (Wang et al.), as MSU's codec reports use it. Calculated by the app only, not with FFmpeg's metrics.": "SSIM ở năm tỉ lệ (Wang và cộng sự), như các báo cáo codec của MSU sử dụng. Chỉ ứng dụng tính, không dùng chỉ số của FFmpeg.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 MS-SSIM của ba mặt phẳng. Chỉ ứng dụng tính, không dùng chỉ số của FFmpeg.",
   "PSNR weighted by the eye's sensitivity to contrast and its masking, as Xiph's codec tests report it. Calculated by the app only, not with FFmpeg's metrics.": "PSNR được đánh trọng số theo độ nhạy tương phản và hiệu ứng che lấp của mắt, như các bài thử codec của Xiph báo cáo. Chỉ ứng dụng tính, không dùng chỉ số của FFmpeg.",

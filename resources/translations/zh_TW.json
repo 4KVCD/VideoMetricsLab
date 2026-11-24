@@ -1,7 +1,6 @@
 {
  "strings": {
   "(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "三個平面分數的 (6 × Y + Cb + Cr) / 8，與 JVET 加權 PSNR、MSU 加權 YUV-SSIM 的方式相同。僅由本應用程式計算，不使用 FFmpeg 的指標。",
-  "More metrics:": "更多指標：",
   "SSIM at five scales (Wang et al.), as MSU's codec reports use it. Calculated by the app only, not with FFmpeg's metrics.": "五個尺度上的 SSIM（Wang 等），與 MSU 編解碼器報告的用法相同。僅由本應用程式計算，不使用 FFmpeg 的指標。",
   "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "三個平面 MS-SSIM 的 (6 × Y + Cb + Cr) / 8。僅由本應用程式計算，不使用 FFmpeg 的指標。",
   "PSNR weighted by the eye's sensitivity to contrast and its masking, as Xiph's codec tests report it. Calculated by the app only, not with FFmpeg's metrics.": "依人眼對比敏感度與遮蔽加權的 PSNR，與 Xiph 編解碼器測試的報告方式相同。僅由本應用程式計算，不使用 FFmpeg 的指標。",
