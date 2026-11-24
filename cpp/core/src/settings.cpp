@@ -44,6 +44,11 @@ const std::unordered_map<std::string, Field>& fields() {
         {"default_compute_xpsnr", &Settings::default_compute_xpsnr},
         {"default_compute_psnr_yuv", &Settings::default_compute_psnr_yuv},
         {"default_compute_ssim_yuv", &Settings::default_compute_ssim_yuv},
+        {"default_compute_ms_ssim", &Settings::default_compute_ms_ssim},
+        {"default_compute_ms_ssim_yuv", &Settings::default_compute_ms_ssim_yuv},
+        {"default_compute_psnr_hvs", &Settings::default_compute_psnr_hvs},
+        {"default_compute_cambi", &Settings::default_compute_cambi},
+        {"default_compute_ciede2000", &Settings::default_compute_ciede2000},
         {"default_compute_vmaf", &Settings::default_compute_vmaf},
         {"default_compute_vmaf_neg", &Settings::default_compute_vmaf_neg},
         {"default_compute_vmaf_v1", &Settings::default_compute_vmaf_v1},
@@ -476,6 +481,11 @@ std::string Settings::text() const {
     data["default_compute_xpsnr"] = default_compute_xpsnr;
     data["default_compute_psnr_yuv"] = default_compute_psnr_yuv;
     data["default_compute_ssim_yuv"] = default_compute_ssim_yuv;
+    data["default_compute_ms_ssim"] = default_compute_ms_ssim;
+    data["default_compute_ms_ssim_yuv"] = default_compute_ms_ssim_yuv;
+    data["default_compute_psnr_hvs"] = default_compute_psnr_hvs;
+    data["default_compute_cambi"] = default_compute_cambi;
+    data["default_compute_ciede2000"] = default_compute_ciede2000;
     data["default_compute_vmaf"] = default_compute_vmaf;
     data["default_compute_vmaf_neg"] = default_compute_vmaf_neg;
     data["default_compute_vmaf_v1"] = default_compute_vmaf_v1;

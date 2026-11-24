@@ -1,6 +1,12 @@
 {
  "strings": {
   "(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 điểm của ba mặt phẳng, như JVET đánh trọng số PSNR và MSU đánh trọng số YUV-SSIM. Chỉ ứng dụng tính, không dùng chỉ số của FFmpeg.",
+  "More metrics:": "Chỉ số khác:",
+  "SSIM at five scales (Wang et al.), as MSU's codec reports use it. Calculated by the app only, not with FFmpeg's metrics.": "SSIM ở năm tỉ lệ (Wang và cộng sự), như các báo cáo codec của MSU sử dụng. Chỉ ứng dụng tính, không dùng chỉ số của FFmpeg.",
+  "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 MS-SSIM của ba mặt phẳng. Chỉ ứng dụng tính, không dùng chỉ số của FFmpeg.",
+  "PSNR weighted by the eye's sensitivity to contrast and its masking, as Xiph's codec tests report it. Calculated by the app only, not with FFmpeg's metrics.": "PSNR được đánh trọng số theo độ nhạy tương phản và hiệu ứng che lấp của mắt, như các bài thử codec của Xiph báo cáo. Chỉ ứng dụng tính, không dùng chỉ số của FFmpeg.",
+  "Netflix's banding score of the test video alone: 0 is no banding, 24 the most. Calculated by the app only, not with FFmpeg's metrics.": "Điểm banding của Netflix chỉ của video thử: 0 là không có banding, 24 là nhiều nhất. Chỉ ứng dụng tính, không dùng chỉ số của FFmpeg.",
+  "The mean colour difference (CIEDE2000 ΔE) of the pixels: 0 is identical, about 1 just noticeable. Calculated by the app only, not with FFmpeg's metrics.": "Độ chênh lệch màu trung bình (CIEDE2000 ΔE) của các điểm ảnh: 0 là giống hệt, khoảng 1 là vừa đủ nhận thấy. Chỉ ứng dụng tính, không dùng chỉ số của FFmpeg.",
   "Nitrate": "Nitrat",
   "Phosphor": "Phốt pho",
   "Green-black shadows with cream text and a gold accent, like an old film print. VML Classic shows Dark.": "Bóng đen ánh xanh với chữ màu kem và màu nhấn vàng, như một bản in phim cũ. VML Classic hiển thị Tối.",
@@ -938,7 +944,7 @@
   "Video bitrate (Mb/s)": "Bitrate video (Mbps)",
   "GOP bitrate (Mb/s)": "Bitrate GOP (Mbps)",
   "Frame size (Mbit)": "Kích thước khung (Mbit)",
-  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: ∞ được vẽ ở {db:g} dB; điểm đã lưu và thống kê vẫn giữ giá trị vô cực.",
+  "{label}: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "{label}: ∞ được vẽ ở {db:g} dB; điểm đã lưu và thống kê vẫn giữ giá trị vô cực.",
   "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: đường cong là JOD của từng giây, vẽ ở giữa giây; cột CVVDP là JOD của toàn bộ video, không phải trung bình các giây của nó. Từ Trung vị đến Lớn nhất mô tả các giây.",
   "{rate:.0f} kb/s": "{rate:.0f} kbps",
   "kb/s": "kbps",

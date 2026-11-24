@@ -136,6 +136,8 @@ const std::vector<MetricColumn>& metric_columns() {
         {col_vmaf_hdr, "vmaf_hdr"},
         {col_psnr, "psnr"},       {col_ssim, "ssim"},               {col_xpsnr, "xpsnr"},
         {col_psnr_yuv, "psnr_yuv"}, {col_ssim_yuv, "ssim_yuv"},
+        {col_ms_ssim, "ms_ssim"}, {col_ms_ssim_yuv, "ms_ssim_yuv"}, {col_psnr_hvs, "psnr_hvs"},
+        {col_cambi, "cambi"}, {col_ciede2000, "ciede2000"},
         {col_ssimulacra2, "ssimulacra2"}, {col_butteraugli, "butteraugli"}, {col_cvvdp, "cvvdp"},
     };
     return columns;
@@ -973,6 +975,8 @@ void MainWindow::build_test_table() {
         app::tr("Approx. bitrate"), header_of("psnr"), header_of("ssim"), header_of("vmaf"), header_of("xpsnr"),
         header_of("vmaf_neg"), header_of("ssimulacra2"), header_of("butteraugli"), header_of("cvvdp"),
         header_of("vmaf_v1"), header_of("vmaf_hdr"), header_of("psnr_yuv"), header_of("ssim_yuv"),
+        header_of("ms_ssim"), header_of("ms_ssim_yuv"), header_of("psnr_hvs"), header_of("cambi"),
+        header_of("ciede2000"),
     });
     distorted_table_->verticalHeader()->setVisible(false);
     // Kept as a column, but not shown: cropping is in the row's options.
@@ -1030,6 +1034,7 @@ void MainWindow::fit_table_columns() {
     };
     for (const MetricColumn& item : metric_columns()) {
         const bool wide = item.column == col_psnr || item.column == col_xpsnr || item.column == col_psnr_yuv ||
+                          item.column == col_psnr_hvs || item.column == col_ciede2000 ||
                           item.column == col_ssimulacra2 || item.column == col_butteraugli;
         starting_widths[item.column] = wide ? 110 : 78;
     }
@@ -1155,6 +1160,11 @@ VmafOptions MainWindow::options_from_settings() const {
     options.compute_xpsnr = settings_.default_compute_xpsnr;
     options.compute_psnr_yuv = settings_.default_compute_psnr_yuv;
     options.compute_ssim_yuv = settings_.default_compute_ssim_yuv;
+    options.compute_ms_ssim = settings_.default_compute_ms_ssim;
+    options.compute_ms_ssim_yuv = settings_.default_compute_ms_ssim_yuv;
+    options.compute_psnr_hvs = settings_.default_compute_psnr_hvs;
+    options.compute_cambi = settings_.default_compute_cambi;
+    options.compute_ciede2000 = settings_.default_compute_ciede2000;
     options.compute_vmaf = settings_.default_compute_vmaf;
     options.compute_vmaf_neg = settings_.default_compute_vmaf_neg;
     options.compute_vmaf_v1 = settings_.default_compute_vmaf_v1;

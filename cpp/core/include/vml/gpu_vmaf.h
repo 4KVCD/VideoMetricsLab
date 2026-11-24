@@ -123,6 +123,7 @@ struct GpuPlan {
     std::vector<std::string> beside;
     int threads = 0;     // the CPU extractors' libvmaf threads
     int frame_rate = 0;  // XPSNR's, in whole frames per second
+    CambiInput cambi;    // CAMBI's test video (libvmaf_cpu.h)
 };
 
 // HDR VMAF's scorer for a plan that scores it (GpuPlan::hdr_model_file,

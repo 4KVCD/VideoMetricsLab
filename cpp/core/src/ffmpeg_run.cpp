@@ -321,12 +321,28 @@ const char* const xpsnr_refusal =
     "XPSNR of videos of more than 8 bits is calculated by the app alone, which cannot calculate it for this "
     "comparison (FFmpeg's xpsnr filter reads such pictures wrongly at some widths)";
 
-// The 6:1:1 metrics (PSNR YUV, SSIM YUV), which FFmpeg's filter does not
-// calculate: the app's libvmaf-fast alone has SSIM of the chroma planes.
-constexpr std::array<std::string_view, 2> yuv_metrics{"psnr_yuv", "ssim_yuv"};
+// The metrics the app's libvmaf-fast alone scores (libvmaf_cpu.h), never
+// FFmpeg's filters: the 6:1:1 metrics (PSNR YUV, SSIM YUV: FFmpeg's filters
+// have no SSIM of the chroma planes), and MS-SSIM, MS-SSIM YUV, PSNR-HVS-M,
+// CAMBI and CIEDE2000.
+constexpr std::array<std::string_view, 7> app_scored_metrics{"psnr_yuv", "ssim_yuv", "ms_ssim", "ms_ssim_yuv",
+                                                             "psnr_hvs", "cambi", "ciede2000"};
+
+bool app_scored(std::string_view key) {
+    return std::find(app_scored_metrics.begin(), app_scored_metrics.end(), key) != app_scored_metrics.end();
+}
+
+// The CAMBI options of a comparison's test video (CambiInput): its own size
+// once cropped (a resolution test's: the size the source is scaled down to),
+// its bit depth and whether it is PQ.
+CambiInput cambi_input(const VideoInfo& distorted, const std::optional<CropBox>& distorted_crop) {
+    const auto [width, height] =
+        distorted.resample_via ? *distorted.resample_via : content_size(distorted, distorted_crop);
+    return {width, height, bit_depth(distorted.pix_fmt), ascii_lower(distorted.color_transfer) == "smpte2084"};
+}
 
 // The metrics of `options` that FFmpeg's filters cannot score for a
-// comparison at `bit_depth`, each with why: the 6:1:1 metrics, and XPSNR
+// comparison at `bit_depth`, each with why: the app's own (app_scored_metrics), and XPSNR
 // where FFmpeg would score it wrongly (ffmpeg_scores_xpsnr). The app scores
 // them, or nobody does.
 std::map<std::string, std::string> app_only_metrics(const VmafOptions& options, int bit_depth) {
@@ -334,12 +350,14 @@ std::map<std::string, std::string> app_only_metrics(const VmafOptions& options, 
     if (options.compute_xpsnr && !ffmpeg_scores_xpsnr(bit_depth)) {
         refused["xpsnr"] = xpsnr_refusal;
     }
-    for (const std::string_view key : yuv_metrics) {
+    for (const std::string_view key : app_scored_metrics) {
         if (options.metric_enabled(key)) {
-            refused[std::string(key)] = std::string(metric_definition(key).label) +
-                                        " is calculated by the app alone, which cannot calculate it for this "
-                                        "comparison (the 6:1:1 metrics are the app's own: FFmpeg's filters have no SSIM of "
-                                        "the chroma planes)";
+            const bool yuv = key == "psnr_yuv" || key == "ssim_yuv";
+            refused[std::string(key)] =
+                std::string(metric_definition(key).label) +
+                " is calculated by the app alone, which cannot calculate it for this comparison (" +
+                (yuv ? "the 6:1:1 metrics are the app's own: FFmpeg's filters have no SSIM of the chroma planes)"
+                     : "it is scored by the app's own libvmaf, not by FFmpeg's filters)");
         }
     }
     return refused;
@@ -564,8 +582,7 @@ std::string metric_names(const GpuPlan& plan) {
                         : key == "ssim"     ? "SSIM"
                         : key == "xpsnr"    ? "XPSNR"
                         : key == "vmaf_hdr" ? "HDR VMAF"
-                        : key == "psnr_yuv" ? "PSNR YUV"
-                        : key == "ssim_yuv" ? "SSIM YUV"
+                        : app_scored(key)   ? std::string(metric_definition(key).short_label)
                                             : key);
     }
     std::string text;
@@ -728,7 +745,8 @@ ParsedScores score_decoded_here(const RunEnvironment& environment, const VideoIn
         plan.backend == "cpu"
             ? score_decoded_cpu(source, distorted, source_crop, distorted_crop, plan.width, plan.height,
                                 plan.bit_depth, keys, options.n_subsample, range, total_frames, decoders,
-                                plan.threads, plan.frame_rate, options.scale_algorithm, environment.ffmpeg,
+                                plan.threads, plan.frame_rate, plan.cambi, options.scale_algorithm,
+                                environment.ffmpeg,
                                 environment.ffprobe, want_vvdec, on_vvdec_opening(on_status), on_progress, cancel)
         : plan.backend == "hdr"
             ? score_decoded_hdr(source, distorted, source_crop, distorted_crop, plan, options.n_subsample, range,
@@ -887,7 +905,7 @@ bool decoded_in_app(const VideoInfo& source, const VideoInfo& distorted, const s
 // libvmaf-fast's score would not be FFmpeg's exactly (xpsnr_frame_rate,
 // xpsnr_in_app), while PSNR and SSIM are still scored in the app; of more
 // bits, FFmpeg's would be wrong (ffmpeg_scores_xpsnr): it is the app's, or
-// nobody's, as PSNR YUV and SSIM YUV are always (app_only_metrics). `cores`
+// nobody's, as the app's own metrics are always (app_only_metrics). `cores`
 // are "Auto"'s threads; `ffmpeg` scales a video the decoders cannot
 // (decoded_in_app).
 std::optional<GpuPlan> cpu_metrics_plan(const VmafOptions& options, std::pair<int, int> size,
@@ -909,12 +927,13 @@ std::optional<GpuPlan> cpu_metrics_plan(const VmafOptions& options, std::pair<in
             metrics.push_back(*metric);
         }
     }
-    for (const std::string_view key : yuv_metrics) {
+    bool app_only = false;  // a metric FFmpeg's filters do not score
+    for (const std::string_view key : app_scored_metrics) {
         if (options.metric_enabled(key)) {
             metrics.emplace_back(key);
+            app_only = true;
         }
     }
-    const bool app_only = cpu_metrics_read_chroma(metrics);
     const auto [width, height] = size;
     const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt}));
     const std::optional<int> frame_rate = options.compute_xpsnr ? xpsnr_frame_rate(distorted) : std::nullopt;
@@ -930,7 +949,7 @@ std::optional<GpuPlan> cpu_metrics_plan(const VmafOptions& options, std::pair<in
         // more CPU per frame for a 4K film against its encode, and slower for
         // a 4K film against a 1080p encode (97 fps against 112). FFmpeg's
         // single run decodes each video once for both libvmaf and XPSNR. The
-        // 6:1:1 metrics are the app's alone, so XPSNR's FFmpeg is then run
+        // app's own metrics are the app's alone, so XPSNR's FFmpeg is then run
         // beside them.
         return std::nullopt;
     }
@@ -956,6 +975,7 @@ std::optional<GpuPlan> cpu_metrics_plan(const VmafOptions& options, std::pair<in
     plan.backend = "cpu";
     plan.threads = options.n_threads > 0 ? options.n_threads : static_cast<int>(cores);
     plan.frame_rate = frame_rate.value_or(0);
+    plan.cambi = cambi_input(distorted, distorted_crop);
     return plan;
 }
 
@@ -1044,6 +1064,7 @@ nlohmann::json plan_json(const GpuPlan& plan) {
     return {{"models", models},           {"width", plan.width},     {"height", plan.height},
             {"bit_depth", plan.bit_depth}, {"device", plan.device},   {"backend", plan.backend},
             {"beside", plan.beside},       {"threads", plan.threads}, {"frame_rate", plan.frame_rate},
+            {"cambi", {plan.cambi.width, plan.cambi.height, plan.cambi.bit_depth, plan.cambi.pq}},
             {"hdr_colours", colours},      {"hdr_model_file", plan.hdr_model_file},
             {"hdr_threads", plan.hdr_threads},
             {"hdr_gpu", plan.hdr_gpu ? nlohmann::json(*plan.hdr_gpu) : nlohmann::json(nullptr)}};
@@ -1069,6 +1090,8 @@ GpuPlan plan_from(const nlohmann::json& text) {
     text.at("beside").get_to(plan.beside);
     text.at("threads").get_to(plan.threads);
     text.at("frame_rate").get_to(plan.frame_rate);
+    const nlohmann::json& cambi = text.at("cambi");
+    plan.cambi = {cambi.at(0).get<int>(), cambi.at(1).get<int>(), cambi.at(2).get<int>(), cambi.at(3).get<bool>()};
     plan.hdr_colours = {colour_from(text.at("hdr_colours").at(0)), colour_from(text.at("hdr_colours").at(1))};
     text.at("hdr_model_file").get_to(plan.hdr_model_file);
     text.at("hdr_threads").get_to(plan.hdr_threads);
@@ -1600,7 +1623,7 @@ bool cpu_metrics_in_app() {
 }
 
 bool is_cpu_metric(std::string_view key) {
-    return key == "psnr" || key == "ssim" || key == "xpsnr" || key == "psnr_yuv" || key == "ssim_yuv";
+    return key == "psnr" || key == "ssim" || key == "xpsnr" || app_scored(key);
 }
 
 bool cpu_metrics_need_every_frame(const std::vector<std::string>& keys, int n_subsample) {
@@ -1997,6 +2020,7 @@ RunScores score_shared(const RunFrames& run, const VmafOptions& options, const G
     plan.beside = plan_keys(cpu);
     plan.threads = cpu.threads;
     plan.frame_rate = cpu.frame_rate;
+    plan.cambi = cpu.cambi;
     ParsedScores scored = score_on_gpu(run.environment, run.source, run.distorted, options, run.source_crop,
                                        run.distorted_crop, plan, run.distorted.fps, run.total_frames, run.decoding,
                                        on_progress, on_status, run.cancel);
@@ -2245,6 +2269,7 @@ std::optional<RunScores> score_hdr_beside(const RunFrames& run, const VmafOption
         plan.beside = plan_keys(*cpu);
         plan.threads = cpu->threads;
         plan.frame_rate = cpu->frame_rate;
+        plan.cambi = cpu->cambi;
     }
     if (gpu) {
         plan.beside.push_back("vmaf_hdr");
@@ -2463,6 +2488,25 @@ void refuse_too_small(const VmafOptions& options, Size size) {
     }
 }
 
+// The app's metrics that cannot score pictures of this size and bit depth
+// (cpu_metrics_unfit: too small, too large or too deep for them), turned off
+// in `options` and logged, to be reported failed alone: in libvmaf one
+// failing would fail the others scored with it. Throws VmafRunError when no
+// metric is left.
+std::map<std::string, std::string> refuse_unfit_metrics(VmafOptions& options, Size size, int bit_depth,
+                                                        const CambiInput& cambi) {
+    const std::map<std::string, std::string> unfit =
+        cpu_metrics_unfit(options.requested_metrics(), size.first, size.second, bit_depth, cambi);
+    for (const auto& [key, reason] : unfit) {
+        logger.warning(reason);
+        options.set_metric_enabled(key, false);
+    }
+    if (!unfit.empty() && options.requested_metrics().empty()) {
+        throw VmafRunError(unfit.begin()->second);
+    }
+    return unfit;
+}
+
 // run_vmaf's run of the pair as it is marked (size_changes.h). Throws
 // VideoSizeChanged when FFmpeg rebuilt its filters for one of them.
 ComparisonResult run_vmaf_once(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
@@ -2484,9 +2528,16 @@ ComparisonResult run_vmaf_once(const RunEnvironment& environment, const VideoInf
     // After cropping: removing a letterbox is what makes a letterboxed source
     // and a cropped encode the same shape.
     validate_display_geometry(source, distorted, source_crop, distorted_crop);
-    refuse_too_small(options, analysis_dimensions(source, distorted, options, source_crop, distorted_crop));
-    return score_pair(environment, source, distorted, std::move(options), source_crop, distorted_crop, decoding,
-                      on_progress, on_status, cancel, result_distorted_path);
+    const Size size = analysis_dimensions(source, distorted, options, source_crop, distorted_crop);
+    refuse_too_small(options, size);
+    const std::map<std::string, std::string> unfit =
+        refuse_unfit_metrics(options, size, bit_depth(analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt})),
+                             cambi_input(distorted, distorted_crop));
+    ComparisonResult result = score_pair(environment, source, distorted, std::move(options), source_crop,
+                                         distorted_crop, decoding, on_progress, on_status, cancel,
+                                         result_distorted_path);
+    result.metric_failures.insert(unfit.begin(), unfit.end());
+    return result;
 }
 
 // `options` with the videos decoded on the CPU, the GPU's video decoding
@@ -2713,16 +2764,25 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
         throw VmafRunError(resample_not_smaller);
     }
     refuse_too_small(options, resample_analysis_dimensions(source, source_crop));
+    VideoInfo test = source;  // as resample_test_on_gpu makes it
+    test.resample_via = resample_via_size(source, source_crop, options.resample_test->width);
+    const std::map<std::string, std::string> unfit =
+        refuse_unfit_metrics(options, resample_analysis_dimensions(source, source_crop),
+                             bit_depth(analysis_pix_fmt({source.pix_fmt})), cambi_input(test, source_crop));
+    const auto with_unfit = [&unfit](ComparisonResult result) {
+        result.metric_failures.insert(unfit.begin(), unfit.end());
+        return result;
+    };
     if (std::optional<ComparisonResult> on_gpu =
             resample_test_on_gpu(environment, source, options, source_crop, on_progress, on_status, cancel)) {
-        return std::move(*on_gpu);
+        return with_unfit(std::move(*on_gpu));
     }
     // A run that fails where FFmpeg may have read the range from a seek, which it
     // cannot check picture by picture (ffmpeg_range_seek), is made again from the
     // video's start, as score_pair's: a video really cut short then fails for good.
     try {
-        return resample_test_by_ffmpeg(environment, source, options, source_crop, decoding, on_progress, on_status,
-                                       cancel);
+        return with_unfit(resample_test_by_ffmpeg(environment, source, options, source_crop, decoding, on_progress,
+                                                  on_status, cancel));
     } catch (const VmafRunError& error) {
         if (!ffmpeg_range_seek(source, run_range(options, source).decode_start, environment.ffmpeg,
                                environment.ffprobe, cancel)) {
@@ -2730,7 +2790,8 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
         }
         turn_off_range_seek(error.what());
     }
-    return resample_test_by_ffmpeg(environment, source, options, source_crop, decoding, on_progress, on_status, cancel);
+    return with_unfit(
+        resample_test_by_ffmpeg(environment, source, options, source_crop, decoding, on_progress, on_status, cancel));
 }
 
 }  // namespace

@@ -125,6 +125,13 @@ struct VmafOptions {
     // not upstream libvmaf's, which FFmpeg's filter runs).
     bool compute_psnr_yuv = false;
     bool compute_ssim_yuv = false;
+    // MS-SSIM, MS-SSIM YUV, PSNR-HVS-M, CAMBI and CIEDE2000: also scored by
+    // the app's own libvmaf-fast only (libvmaf_cpu.h).
+    bool compute_ms_ssim = false;
+    bool compute_ms_ssim_yuv = false;
+    bool compute_psnr_hvs = false;
+    bool compute_cambi = false;
+    bool compute_ciede2000 = false;
     bool compute_vmaf = true;
     bool compute_vmaf_neg = false;
     // VMAF v1, with its own model: what the user chose, and what a run

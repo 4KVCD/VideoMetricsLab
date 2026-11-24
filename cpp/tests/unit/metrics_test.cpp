@@ -19,7 +19,9 @@ std::string direction_name(MetricDirection direction) {
 }
 
 std::string aggregation_name(MetricAggregation aggregation) {
-    return aggregation == MetricAggregation::arithmetic ? "arithmetic" : "square_mean_root";
+    return aggregation == MetricAggregation::arithmetic            ? "arithmetic"
+           : aggregation == MetricAggregation::square_mean_root_db ? "square_mean_root"
+                                                                   : "mean_error_db";
 }
 
 // The registry is the Python app's, metric for metric and in its order:

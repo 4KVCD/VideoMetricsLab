@@ -1,6 +1,12 @@
 {
  "strings": {
   "(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "三個平面分數的 (6 × Y + Cb + Cr) / 8，與 JVET 加權 PSNR、MSU 加權 YUV-SSIM 的方式相同。僅由本應用程式計算，不使用 FFmpeg 的指標。",
+  "More metrics:": "更多指標：",
+  "SSIM at five scales (Wang et al.), as MSU's codec reports use it. Calculated by the app only, not with FFmpeg's metrics.": "五個尺度上的 SSIM（Wang 等），與 MSU 編解碼器報告的用法相同。僅由本應用程式計算，不使用 FFmpeg 的指標。",
+  "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "三個平面 MS-SSIM 的 (6 × Y + Cb + Cr) / 8。僅由本應用程式計算，不使用 FFmpeg 的指標。",
+  "PSNR weighted by the eye's sensitivity to contrast and its masking, as Xiph's codec tests report it. Calculated by the app only, not with FFmpeg's metrics.": "依人眼對比敏感度與遮蔽加權的 PSNR，與 Xiph 編解碼器測試的報告方式相同。僅由本應用程式計算，不使用 FFmpeg 的指標。",
+  "Netflix's banding score of the test video alone: 0 is no banding, 24 the most. Calculated by the app only, not with FFmpeg's metrics.": "僅看測試影片的 Netflix 色帶分數：0 表示無色帶，24 最嚴重。僅由本應用程式計算，不使用 FFmpeg 的指標。",
+  "The mean colour difference (CIEDE2000 ΔE) of the pixels: 0 is identical, about 1 just noticeable. Calculated by the app only, not with FFmpeg's metrics.": "像素的平均色差（CIEDE2000 ΔE）：0 表示相同，約 1 為剛可察覺。僅由本應用程式計算，不使用 FFmpeg 的指標。",
   "Nitrate": "硝酸片",
   "Phosphor": "螢光",
   "Green-black shadows with cream text and a gold accent, like an old film print. VML Classic shows Dark.": "墨綠黑的陰影搭配奶油色文字與金色強調色，如老電影拷貝。VML Classic 顯示為深色。",
@@ -938,7 +944,7 @@
   "Video bitrate (Mb/s)": "影片位元速率 (Mb/s)",
   "GOP bitrate (Mb/s)": "GOP 位元速率 (Mb/s)",
   "Frame size (Mbit)": "影格大小 (Mbit)",
-  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR：∞ 繪製在 {db:g} dB 處；儲存的分數和統計值仍為無限大。",
+  "{label}: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "{label}：∞ 繪製在 {db:g} dB 處；儲存的分數和統計值仍為無限大。",
   "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP：曲線為每一秒的 JOD，繪製在該秒的中點；CVVDP 欄是整部影片的 JOD，並不是各秒的平均值。中位數到最大值描述的是各秒。",
   "{rate:.0f} kb/s": "{rate:.0f} kb/s",
   "kb/s": "kb/s",

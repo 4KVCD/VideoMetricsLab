@@ -2,6 +2,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -12,7 +14,9 @@ namespace vml {
 namespace {
 
 MetricAggregation aggregation_named(const std::string& name) {
-    return name == "square_mean_root" ? MetricAggregation::square_mean_root_db : MetricAggregation::arithmetic;
+    return name == "square_mean_root" ? MetricAggregation::square_mean_root_db
+           : name == "mean_error_db"      ? MetricAggregation::mean_error_db
+                                          : MetricAggregation::arithmetic;
 }
 
 MetricDirection direction_named(const std::string& name) {
@@ -22,6 +26,20 @@ MetricDirection direction_named(const std::string& name) {
 void expect_same(const nlohmann::json& expected, double actual, const char* what) {
     const double value = *test::reference_number(expected);
     EXPECT_TRUE(test::same_number(value, actual)) << what << ": Python " << expected << ", C++ " << actual;
+}
+
+// PSNR-HVS-M's average is the mean of the frames' error, as Daala's tool
+// averages it: -10 log10(mean(10^(-dB / 10))). An identical frame (+inf)
+// adds no error but counts; with every frame identical the average is +inf.
+TEST(Stats, PsnrHvsAveragesTheFramesError) {
+    const double infinity = std::numeric_limits<double>::infinity();
+    const ScoreStats stats = compute_stats(std::vector<double>{30.0, infinity, 40.0}, {},
+                                           MetricAggregation::mean_error_db, MetricDirection::higher_is_better);
+    EXPECT_NEAR(stats.mean, -10.0 * std::log10((1e-3 + 0.0 + 1e-4) / 3), 1e-12);
+    EXPECT_EQ(compute_stats(std::vector<double>{infinity, infinity}, {}, MetricAggregation::mean_error_db,
+                            MetricDirection::higher_is_better)
+                  .mean,
+              infinity);
 }
 
 // Every statistic the app shows, over the shapes of data it meets (as

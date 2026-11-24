@@ -34,13 +34,23 @@ class GpuFrameStream;  // gpu_frames.h
 // They match what FFmpeg's libvmaf filter is asked for ("name=psnr",
 // "name=float_ssim") and how its log names and rounds the scores the app
 // reads; XPSNR is rounded as FFmpeg's xpsnr filter writes its stats file
-// ("%3.4f"). A 6:1:1 metric (PSNR YUV, SSIM YUV) is (6 Y + Cb + Cr) / 8 of
-// its extractor's luma feature and its two chroma features, rounded once.
+// ("%3.4f"). A 6:1:1 metric (PSNR YUV, SSIM YUV, MS-SSIM YUV) is
+// (6 Y + Cb + Cr) / 8 of its extractor's luma feature and its two chroma
+// features, rounded once. CIEDE2000 is shown as the mean colour difference
+// ΔE00 of the frame's pixels (0: identical), from libvmaf's
+// 45 - 20 log10(mean ΔE00), which is +infinity for identical frames.
 struct CpuFeature {
-    std::string_view key;  // the app's metric key: "psnr", "ssim", "xpsnr", "psnr_yuv", "ssim_yuv"
+    enum class Value {
+        feature,     // the feature as libvmaf gives it
+        planes_611,  // (6 feature + cb + cr) / 8
+        delta_e,     // 10^((45 - feature) / 20)
+    };
+    std::string_view key;  // the app's metric key: "psnr", "ssim", "cambi", "ciede2000", ...
     std::string_view extractor;
     std::string_view feature;
     int decimals;
+    bool chroma = false;  // reads the chroma planes
+    Value value = Value::feature;
     std::string_view cb = {};  // a 6:1:1 metric's chroma features; empty otherwise
     std::string_view cr = {};
 };
@@ -48,15 +58,40 @@ struct CpuFeature {
 // The extractor of metric `key`, or nullptr for one not scored this way.
 const CpuFeature* cpu_feature(std::string_view key);
 
-// Whether `metrics` (cpu_feature keys) read the chroma planes: a 6:1:1
-// metric does; the others read the luma alone.
+// Whether `metrics` (cpu_feature keys) read the chroma planes: the 6:1:1
+// metrics, PSNR-HVS-M and CIEDE2000 do; the others read the luma alone.
 bool cpu_metrics_read_chroma(const std::vector<std::string>& metrics);
+
+// What CAMBI (the banding of the test video alone) needs to know of the test
+// video when the pictures compared are not its own: its own size (a video
+// scaled up to the source's is banded as it was encoded: CAMBI scales it
+// back), its own bit depth (an 8-bit encode widened to the source's 10 bits
+// is still dithered as 8 bits), and whether it is PQ (HDR10), whose levels
+// CAMBI reads with the PQ curve. 0 or false: as the pictures.
+struct CambiInput {
+    int width = 0;
+    int height = 0;
+    int bit_depth = 0;
+    bool pq = false;
+};
+
+// The metrics of `metrics` (cpu_feature keys) that libvmaf cannot calculate
+// for pictures of this size and bit depth, each with why. They are left out
+// of the run and reported failed, so the others are still calculated: libvmaf
+// starts its extractors at the first frame, and one that fails then fails
+// them all. MS-SSIM needs 176 samples on each side of each plane it scores,
+// CAMBI a picture at least 216 wide or high and at most 6092 wide plus high
+// (its window outgrows its tables: 3840x2160 is the largest 16:9 size),
+// PSNR-HVS-M 16 (two 8x8 chroma blocks) and at most 12 bits, CIEDE2000 8, 10,
+// 12 or 16 bits.
+std::map<std::string, std::string> cpu_metrics_unfit(const std::vector<std::string>& metrics, int width,
+                                                     int height, int bit_depth, const CambiInput& cambi);
 
 // What a score calculated this way records as having calculated it:
 // "libvmaf-fast v1 (CPU)".
 std::string cpu_library_build();
 
-// Scores PSNR, SSIM and XPSNR of frame pairs given in order, with
+// Scores the CPU metrics (cpu_feature) of frame pairs given in order, with
 // libvmaf-fast's own CPU extractors, in this process, on libvmaf's
 // preallocated pictures. Running them here is faster than in FFmpeg, whose
 // filter allocates, zeroes and copies two new pictures for every pair on its
@@ -75,9 +110,9 @@ public:
     // `metrics` are cpu_feature keys. Every `n_subsample`th frame is scored,
     // on `threads` libvmaf threads (0: libvmaf's own choice). `frame_rate`
     // is XPSNR's, as FFmpeg's filter takes it: whole frames per second.
-    // Throws LibvmafError.
+    // `cambi`: CAMBI's test video. Throws LibvmafError.
     CpuScorer(int width, int height, int bit_depth, std::vector<std::string> metrics, int n_subsample = 1,
-              int threads = 0, int frame_rate = 0);
+              int threads = 0, int frame_rate = 0, const CambiInput& cambi = {});
     ~CpuScorer() override;
     CpuScorer(const CpuScorer&) = delete;
     CpuScorer& operator=(const CpuScorer&) = delete;
@@ -130,6 +165,7 @@ private:
 
     const Libvmaf& library_;
     std::vector<std::string> metrics_;
+    std::string cambi_feature_;  // CAMBI's score's name, which libvmaf builds from its options
     unsigned step_ = 1;
     unsigned count_ = 0;
     VmafContext* context_ = nullptr;
@@ -155,12 +191,18 @@ private:
 // looks for both scores. Asked once.
 bool cpu_scores_xpsnr();
 
+// Whether `metrics` (cpu_feature keys) include one that takes far longer per
+// pair than the decoders take to feed it: MS-SSIM, MS-SSIM YUV, CAMBI,
+// CIEDE2000.
+bool cpu_metrics_slow(const std::vector<std::string>& metrics);
+
 // How many pairs of pictures CpuScorer's pool holds: one pair per libvmaf
-// thread plus one being filled, counting at most 8 threads, within 200 MB
-// (270 MB with XPSNR; half as much again for pictures with `chroma`, so that
-// they come to as many pairs), but at least two pairs; XPSNR gets one more,
-// for the test pictures it keeps from the previous frames.
-int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr, bool chroma);
+// thread plus one being filled, counting at most 8 threads (every thread with
+// a `slow` metric), within 200 MB (270 MB with XPSNR, 800 MB with a slow
+// metric; half as much again for pictures with `chroma`, so that they come to
+// as many pairs), but at least two pairs; XPSNR gets one more, for the test
+// pictures it keeps from the previous frames.
+int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr, bool chroma, bool slow);
 
 // Copies the given planes (0 Y, 1 U, 2 V) of a frame into a libvmaf picture of
 // its size, `sample` bytes a sample. Its planes are the frame's, but for an odd
@@ -169,8 +211,8 @@ int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr, boo
 void fill_picture(VmafPicture& picture, const FramePlanes& frame, std::size_t sample,
                   std::initializer_list<int> planes);
 
-// PSNR, SSIM and XPSNR (CpuScorer) with both videos decoded in this process,
-// luma only unless a 6:1:1 metric reads the chroma, as score_decoded (gpu_vmaf.h) does for VMAF: by `decoders`
+// The CPU metrics (CpuScorer) with both videos decoded in this process,
+// luma only unless a metric reads the chroma, as score_decoded (gpu_vmaf.h) does for VMAF: by `decoders`
 // (the source's and the test video's), cropped as FFmpeg's crop filter
 // crops and widened as FFmpeg converts, paired frame N with frame N, those
 // `range` decodes (score_frame_pairs). A video compared at another
@@ -189,7 +231,7 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
                              int width, int height, int bit_depth, const std::vector<std::string>& metrics,
                              int n_subsample, const FrameRange& range, long long total_frames,
                              const std::pair<std::string, std::string>& decoders, int threads, int frame_rate,
-                             const std::string& scale_algorithm, const std::string& ffmpeg,
+                             const CambiInput& cambi, const std::string& scale_algorithm, const std::string& ffmpeg,
                              const std::string& ffprobe, bool want_vvdec,
                              const std::function<void()>& on_vvdec_opening,
                              const std::function<void(long long, long long, double)>& on_progress,

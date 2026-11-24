@@ -179,7 +179,8 @@ private:
             frame_.number_of[vmaf], first(psnr_y, psnr), first(float_ssim, ssim),
             at == xpsnr_.end() ? std::nullopt : std::optional<double>(at->second), frame_.number_of[vmaf_neg],
             frame_.number_of[vmaf_v1], std::nullopt /* HDR VMAF: never FFmpeg's */,
-            std::nullopt /* PSNR YUV: the app's only */, std::nullopt /* SSIM YUV: the app's only */};
+            std::nullopt /* PSNR YUV: the app's only */, std::nullopt /* SSIM YUV: the app's only */,
+            std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt /* the app's only too */};
         frames.push_back(frame_number);
         for (std::size_t column = 0; column < column_count; ++column) {
             columns[column].push_back(values[column] ? static_cast<float>(*values[column]) : std::nanf(""));

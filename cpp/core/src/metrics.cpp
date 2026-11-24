@@ -41,7 +41,7 @@ using enum MetricAggregation;
 // In the order the app shows them. Key "vmaf" is the v0.6.1 family (its
 // standard and 4K models), as it always was: saved scores, settings and
 // exports keep the key; only the label names the version.
-const std::array<MetricDefinition, 12> registry{{
+const std::array<MetricDefinition, 17> registry{{
     {"vmaf", "VMAF v0.6.1", "VMAF v0.6.1", "VMAF v0.6.1", "VMAF v0.6.1", 2, "", frame, higher_is_better,
      arithmetic, 100.0, vmaf_thresholds, bool_option("compute_vmaf"), {}, vmaf_smallest_side},
     {"vmaf_neg", "VMAF NEG", "VMAF NEG", "VMAF NEG", "VMAF NEG", 2, "", frame, higher_is_better, arithmetic,
@@ -72,6 +72,29 @@ const std::array<MetricDefinition, 12> registry{{
     // and is averaged its own way (stats.h).
     {"xpsnr", "XPSNR", "XPSNR", "XPSNR (dB)", "XPSNR (dB)", 2, " dB", frame, higher_is_better,
      square_mean_root_db, std::nullopt, xpsnr_thresholds, bool_option("compute_xpsnr"), {}, 0},
+    // Calculated by the app's own libvmaf-fast only (libvmaf_cpu.h), off by
+    // default. Their size and bit-depth limits fail the metric alone
+    // (cpu_metrics_unfit), not the run, so their smallest side is 0 here.
+    // MS-SSIM: SSIM at five scales (Wang et al. 2003); MS-SSIM YUV its planes
+    // weighted 6:1:1 as SSIM YUV.
+    {"ms_ssim", "MS-SSIM", "MS-SSIM", "MS-SSIM", "MS-SSIM", 4, "", frame, higher_is_better, arithmetic,
+     std::nullopt, {}, bool_option("compute_ms_ssim"), {}, 0},
+    {"ms_ssim_yuv", "MS-SSIM YUV (6:1:1)", "MS-SSIM YUV", "MS-SSIM YUV", "MS-SSIM YUV", 4, "", frame,
+     higher_is_better, arithmetic, std::nullopt, {}, bool_option("compute_ms_ssim_yuv"), {}, 0},
+    // PSNR-HVS-M (Ponomarenko et al. 2007, Xiph's code): PSNR of the
+    // contrast-masked, contrast-sensitivity-weighted DCT error of 8x8 blocks,
+    // 0.8 Y + 0.1 Cb + 0.1 Cr in the error. +infinity for an identical (or
+    // fully masked) frame, so averaged as its error.
+    {"psnr_hvs", "PSNR-HVS-M", "PSNR-HVS-M", "PSNR-HVS-M (dB)", "PSNR-HVS-M (dB)", 2, " dB", frame,
+     higher_is_better, mean_error_db, std::nullopt, {}, bool_option("compute_psnr_hvs"), {}, 0},
+    // CAMBI: Netflix's banding of the test video alone (0 none, about 5
+    // annoying, 24 the most Netflix has seen; libvmaf clips at 1000).
+    {"cambi", "CAMBI", "CAMBI", "CAMBI", "CAMBI", 3, "", frame, lower_is_better, arithmetic, std::nullopt, {},
+     bool_option("compute_cambi"), {}, 0},
+    // CIEDE2000: the mean colour difference ΔE00 of the frame's pixels
+    // (0 identical, about 1 just noticeable).
+    {"ciede2000", "CIEDE2000 (ΔE)", "CIEDE2000", "CIEDE2000 (ΔE)", "CIEDE2000 (ΔE)", 3, "", frame,
+     lower_is_better, arithmetic, std::nullopt, {}, bool_option("compute_ciede2000"), {}, 0},
     {"ssimulacra2", "SSIMULACRA2", "SSIMULACRA2", "SSIMULACRA2", "SSIMULACRA2", 2, "", frame, higher_is_better,
      arithmetic, 100.0, ssimulacra2_thresholds, std::nullopt, "perceptual", 8},
     {"butteraugli", "Butteraugli", "Butteraugli", "Butteraugli", "Butteraugli", 4, "", frame, lower_is_better,

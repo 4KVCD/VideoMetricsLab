@@ -1,6 +1,12 @@
 {
  "strings": {
   "(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "세 평면 점수의 (6 × Y + Cb + Cr) / 8로, JVET가 PSNR을, MSU가 YUV-SSIM을 가중하는 방식입니다. FFmpeg 지표가 아니라 앱에서만 계산합니다.",
+  "More metrics:": "기타 지표:",
+  "SSIM at five scales (Wang et al.), as MSU's codec reports use it. Calculated by the app only, not with FFmpeg's metrics.": "다섯 스케일의 SSIM(Wang 외)으로, MSU 코덱 보고서에서 쓰는 방식입니다. FFmpeg 지표가 아니라 앱에서만 계산합니다.",
+  "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "세 평면 MS-SSIM의 (6 × Y + Cb + Cr) / 8입니다. FFmpeg 지표가 아니라 앱에서만 계산합니다.",
+  "PSNR weighted by the eye's sensitivity to contrast and its masking, as Xiph's codec tests report it. Calculated by the app only, not with FFmpeg's metrics.": "눈의 대비 민감도와 마스킹으로 가중한 PSNR로, Xiph 코덱 테스트에서 보고하는 방식입니다. FFmpeg 지표가 아니라 앱에서만 계산합니다.",
+  "Netflix's banding score of the test video alone: 0 is no banding, 24 the most. Calculated by the app only, not with FFmpeg's metrics.": "테스트 영상만 보는 Netflix의 밴딩 점수: 0은 밴딩 없음, 24가 가장 심함입니다. FFmpeg 지표가 아니라 앱에서만 계산합니다.",
+  "The mean colour difference (CIEDE2000 ΔE) of the pixels: 0 is identical, about 1 just noticeable. Calculated by the app only, not with FFmpeg's metrics.": "픽셀의 평균 색차(CIEDE2000 ΔE): 0은 동일, 약 1은 겨우 알아챌 정도입니다. FFmpeg 지표가 아니라 앱에서만 계산합니다.",
   "Nitrate": "나이트레이트",
   "Phosphor": "포스퍼",
   "Green-black shadows with cream text and a gold accent, like an old film print. VML Classic shows Dark.": "녹색 기운의 검은 그림자에 크림색 텍스트와 금색 강조색. 오래된 필름 인화 같은 느낌. VML Classic에서는 어둡게로 표시됩니다.",
@@ -938,7 +944,7 @@
   "Video bitrate (Mb/s)": "영상 비트레이트(Mb/s)",
   "GOP bitrate (Mb/s)": "GOP 비트레이트(Mb/s)",
   "Frame size (Mbit)": "프레임 크기(Mbit)",
-  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: ∞는 {db:g} dB에 그려집니다. 저장된 점수와 통계에는 무한대가 그대로 유지됩니다.",
+  "{label}: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "{label}: ∞는 {db:g} dB에 그려집니다. 저장된 점수와 통계에는 무한대가 그대로 유지됩니다.",
   "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: 곡선은 각 초의 JOD이며 그 초의 가운데에 그려집니다. CVVDP 열은 영상 전체의 JOD로, 각 초의 평균이 아닙니다. 중앙값부터 최대까지는 각 초를 나타냅니다.",
   "{rate:.0f} kb/s": "{rate:.0f} kb/s",
   "kb/s": "kb/s",

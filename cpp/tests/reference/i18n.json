@@ -1373,8 +1373,9 @@
    }
   },
   {
-   "text": "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.",
+   "text": "{label}: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.",
    "values": {
+    "label": "XPSNR",
     "db": 1234.5678
    }
   },

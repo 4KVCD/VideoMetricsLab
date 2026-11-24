@@ -1,6 +1,12 @@
 {
  "strings": {
   "(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 van de scores van de drie vlakken, zoals JVET PSNR en MSU YUV-SSIM weegt. Alleen door de app berekend, niet met de metrieken van FFmpeg.",
+  "More metrics:": "Meer metrieken:",
+  "SSIM at five scales (Wang et al.), as MSU's codec reports use it. Calculated by the app only, not with FFmpeg's metrics.": "SSIM op vijf schalen (Wang et al.), zoals de codecrapporten van MSU het gebruiken. Alleen door de app berekend, niet met de metrieken van FFmpeg.",
+  "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 van de MS-SSIM van de drie vlakken. Alleen door de app berekend, niet met de metrieken van FFmpeg.",
+  "PSNR weighted by the eye's sensitivity to contrast and its masking, as Xiph's codec tests report it. Calculated by the app only, not with FFmpeg's metrics.": "PSNR gewogen naar de contrastgevoeligheid en maskering van het oog, zoals de codectests van Xiph het rapporteren. Alleen door de app berekend, niet met de metrieken van FFmpeg.",
+  "Netflix's banding score of the test video alone: 0 is no banding, 24 the most. Calculated by the app only, not with FFmpeg's metrics.": "De bandingscore van Netflix van alleen de testvideo: 0 is geen banding, 24 de meeste. Alleen door de app berekend, niet met de metrieken van FFmpeg.",
+  "The mean colour difference (CIEDE2000 ΔE) of the pixels: 0 is identical, about 1 just noticeable. Calculated by the app only, not with FFmpeg's metrics.": "Het gemiddelde kleurverschil (CIEDE2000 ΔE) van de pixels: 0 is identiek, ongeveer 1 net zichtbaar. Alleen door de app berekend, niet met de metrieken van FFmpeg.",
   "Nitrate": "Nitraat",
   "Phosphor": "Fosfor",
   "Green-black shadows with cream text and a gold accent, like an old film print. VML Classic shows Dark.": "Groenzwarte schaduwen met crème tekst en een gouden accent, als een oude filmkopie. VML Classic toont Donker.",
@@ -938,7 +944,7 @@
   "Video bitrate (Mb/s)": "Videobitrate (Mbps)",
   "GOP bitrate (Mb/s)": "GOP-bitrate (Mbps)",
   "Frame size (Mbit)": "Framegrootte (Mbit)",
-  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: ∞ wordt getekend op {db:g} dB; opgeslagen scores en statistieken behouden oneindig.",
+  "{label}: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "{label}: ∞ wordt getekend op {db:g} dB; opgeslagen scores en statistieken behouden oneindig.",
   "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: de curve is de JOD van elke seconde, getekend in het midden van de seconde; de kolom CVVDP is de JOD van de hele video, die niet het gemiddelde van zijn seconden is. Mediaan tot en met Max beschrijven de seconden.",
   "{rate:.0f} kb/s": "{rate:.0f} kbps",
   "kb/s": "kbps",

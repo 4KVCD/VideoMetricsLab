@@ -465,10 +465,10 @@ film grain. A WebM or IVF file's frame rate is found from its timestamps.
 
 ## Interpreting scores
 
-VMAF, VMAF NEG, PSNR, SSIM, XPSNR, SSIMULACRA2 and Butteraugli are different
-measurements, not interchangeable quality percentages. Higher values generally
-indicate closer agreement for the same comparison recipe, except Butteraugli,
-where lower is better. Change the crop, scale or model and you change the
+VMAF, VMAF NEG, PSNR, SSIM, XPSNR, SSIMULACRA2, Butteraugli and the metrics
+below are different measurements, not interchangeable quality percentages.
+Higher values generally indicate closer agreement for the same comparison
+recipe, except Butteraugli, CAMBI and CIEDE2000, where lower is better. Change the crop, scale or model and you change the
 question being measured. Use visual inspection alongside scores.
 
 The graph's non-VMAF threshold bands are heuristic defaults from synthetic
@@ -499,6 +499,36 @@ planes infinity. Videos in other chroma formats are compared as 4:2:0, as
 for every metric here, so a 4:4:4 video's chroma scores are those of its
 4:2:0 form. Turning either on makes the decoders hand over whole pictures
 rather than their luma alone, which costs some speed and memory.
+
+MS-SSIM, MS-SSIM YUV (6:1:1), PSNR-HVS-M, CAMBI and CIEDE2000, also off by
+default, are the other metrics codec comparisons such as MSU's and Xiph's
+report. Only the app calculates them, with its libvmaf-fast, beside VMAF on
+the GPU or the CPU or alone, on every GPU maker's route:
+
+- MS-SSIM is SSIM of the luma at five scales (Wang et al. 2003); MS-SSIM YUV
+  weighs its three planes' scores 6:1:1, as SSIM YUV does.
+- PSNR-HVS-M (Ponomarenko et al. 2007, as Xiph's Daala tools calculate it)
+  is the PSNR of the error of 8x8 DCT blocks weighted by the eye's contrast
+  sensitivity and masking, of 0.8 Y + 0.1 Cb + 0.1 Cr. An identical (or fully
+  masked) frame scores infinity, and the video's score is the mean of the
+  frames' error, -10 log10(mean(10^(-dB / 10))), as Daala's tool averages it.
+- CAMBI is Netflix's banding score of the test video alone, without the
+  reference: 0 is no banding; about 5 starts to annoy, and 24 is the most
+  Netflix has seen (unwatchable). A test video of fewer bits than
+  the comparison (an 8-bit encode of a 10-bit source) is scored as the 8-bit
+  video it is, a smaller one at its own size, and a PQ (HDR10) one on the PQ
+  curve.
+- CIEDE2000 is the mean colour difference (ΔE00) of the frame's pixels: 0 is
+  identical, about 1 just noticeable. libvmaf gives it as 45 - 20 log10(ΔE00);
+  the app shows ΔE00 itself.
+
+A comparison one of them cannot score fails that metric alone, with the
+reason, and the others are calculated as usual: MS-SSIM needs pictures of at
+least 176x176 (MS-SSIM YUV 352x352), CAMBI at least 216 pixels on one side
+and at most 3840x2160 (width plus height at most 6092), PSNR-HVS-M 16x16 and
+at most 12 bits, and CIEDE2000 8, 10, 12 or 16 bits. MS-SSIM YUV, PSNR-HVS-M
+and CIEDE2000 read the chroma, so turning one on makes the decoders hand over
+whole pictures, as the 6:1:1 metrics do.
 
 Subsampling reduces libvmaf-backed scored frames. XPSNR-only currently keeps
 every frame; do not interpret different coverage as identical measurements.

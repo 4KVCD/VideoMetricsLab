@@ -239,6 +239,11 @@ nlohmann::json options_json(const VmafOptions& options) {
             {"compute_xpsnr", options.compute_xpsnr},
             {"compute_psnr_yuv", options.compute_psnr_yuv},
             {"compute_ssim_yuv", options.compute_ssim_yuv},
+            {"compute_ms_ssim", options.compute_ms_ssim},
+            {"compute_ms_ssim_yuv", options.compute_ms_ssim_yuv},
+            {"compute_psnr_hvs", options.compute_psnr_hvs},
+            {"compute_cambi", options.compute_cambi},
+            {"compute_ciede2000", options.compute_ciede2000},
             {"compute_vmaf", options.compute_vmaf},
             {"compute_vmaf_neg", options.compute_vmaf_neg},
             {"compute_vmaf_v1", options.compute_vmaf_v1},
@@ -274,6 +279,11 @@ VmafOptions options_from(const nlohmann::json& text) {
     text.at("compute_xpsnr").get_to(options.compute_xpsnr);
     options.compute_psnr_yuv = text.value("compute_psnr_yuv", false);
     options.compute_ssim_yuv = text.value("compute_ssim_yuv", false);
+    options.compute_ms_ssim = text.value("compute_ms_ssim", false);
+    options.compute_ms_ssim_yuv = text.value("compute_ms_ssim_yuv", false);
+    options.compute_psnr_hvs = text.value("compute_psnr_hvs", false);
+    options.compute_cambi = text.value("compute_cambi", false);
+    options.compute_ciede2000 = text.value("compute_ciede2000", false);
     text.at("compute_vmaf").get_to(options.compute_vmaf);
     text.at("compute_vmaf_neg").get_to(options.compute_vmaf_neg);
     text.at("compute_vmaf_v1").get_to(options.compute_vmaf_v1);

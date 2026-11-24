@@ -53,7 +53,7 @@ std::vector<double> times_of(const std::vector<int>& frames, double fps);
 void keep_range(ParsedScores& scores, const FrameRange& range, double fps);
 
 // The columns of the scores read, in the Python app's order (HDR VMAF's and the
-// 6:1:1 metrics', which FFmpeg never gives, last).
+// app's own metrics', which FFmpeg never gives, last).
 enum Column {
     vmaf_column,
     psnr_column,
@@ -64,10 +64,16 @@ enum Column {
     hdr_column,
     psnr_yuv_column,
     ssim_yuv_column,
+    ms_ssim_column,
+    ms_ssim_yuv_column,
+    psnr_hvs_column,
+    cambi_column,
+    ciede2000_column,
     column_count
 };
 inline constexpr std::array<const char*, column_count> column_keys{
-    "vmaf", "psnr", "ssim", "xpsnr", "vmaf_neg", "vmaf_v1", "vmaf_hdr", "psnr_yuv", "ssim_yuv"};
+    "vmaf",     "psnr",        "ssim",     "xpsnr", "vmaf_neg", "vmaf_v1",  "vmaf_hdr",
+    "psnr_yuv", "ssim_yuv",    "ms_ssim",  "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000"};
 
 // XPSNR's luma score per frame from the xpsnr filter's stats file, by frame
 // number counted from 0 (the file counts from 1).

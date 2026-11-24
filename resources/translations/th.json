@@ -1,6 +1,12 @@
 {
  "strings": {
   "(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 ของคะแนนทั้งสามระนาบ ตามที่ JVET ถ่วงน้ำหนัก PSNR และ MSU ถ่วงน้ำหนัก YUV-SSIM คำนวณโดยแอปเท่านั้น ไม่ใช่เมตริกของ FFmpeg",
+  "More metrics:": "เมตริกเพิ่มเติม:",
+  "SSIM at five scales (Wang et al.), as MSU's codec reports use it. Calculated by the app only, not with FFmpeg's metrics.": "SSIM ที่ห้าสเกล (Wang และคณะ) ตามที่รายงานโค้เดกของ MSU ใช้ คำนวณโดยแอปเท่านั้น ไม่ใช่เมตริกของ FFmpeg",
+  "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 ของ MS-SSIM ทั้งสามระนาบ คำนวณโดยแอปเท่านั้น ไม่ใช่เมตริกของ FFmpeg",
+  "PSNR weighted by the eye's sensitivity to contrast and its masking, as Xiph's codec tests report it. Calculated by the app only, not with FFmpeg's metrics.": "PSNR ที่ถ่วงน้ำหนักตามความไวต่อคอนทราสต์และการบดบังของตา ตามที่การทดสอบโค้เดกของ Xiph รายงาน คำนวณโดยแอปเท่านั้น ไม่ใช่เมตริกของ FFmpeg",
+  "Netflix's banding score of the test video alone: 0 is no banding, 24 the most. Calculated by the app only, not with FFmpeg's metrics.": "คะแนนแถบสีของ Netflix จากวิดีโอทดสอบเท่านั้น: 0 คือไม่มีแถบสี 24 คือมากที่สุด คำนวณโดยแอปเท่านั้น ไม่ใช่เมตริกของ FFmpeg",
+  "The mean colour difference (CIEDE2000 ΔE) of the pixels: 0 is identical, about 1 just noticeable. Calculated by the app only, not with FFmpeg's metrics.": "ความต่างของสีเฉลี่ย (CIEDE2000 ΔE) ของพิกเซล: 0 คือเหมือนกัน ประมาณ 1 คือพอสังเกตได้ คำนวณโดยแอปเท่านั้น ไม่ใช่เมตริกของ FFmpeg",
   "Nitrate": "ไนเตรต",
   "Phosphor": "ฟอสฟอร์",
   "Green-black shadows with cream text and a gold accent, like an old film print. VML Classic shows Dark.": "เงาดำอมเขียวกับตัวอักษรสีครีมและสีเน้นทอง เหมือนฟิล์มภาพยนตร์เก่า VML Classic แสดงเป็นมืด",
@@ -938,7 +944,7 @@
   "Video bitrate (Mb/s)": "บิตเรตวิดีโอ (Mbps)",
   "GOP bitrate (Mb/s)": "บิตเรต GOP (Mbps)",
   "Frame size (Mbit)": "ขนาดเฟรม (Mbit)",
-  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: ∞ ถูกวาดที่ {db:g} dB คะแนนที่บันทึกไว้และสถิติยังคงเป็นอนันต์",
+  "{label}: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "{label}: ∞ ถูกวาดที่ {db:g} dB คะแนนที่บันทึกไว้และสถิติยังคงเป็นอนันต์",
   "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: เส้นกราฟคือ JOD ของแต่ละวินาที วาดไว้ที่กึ่งกลางของวินาที คอลัมน์ CVVDP คือ JOD ของทั้งวิดีโอ ซึ่งไม่ใช่ค่าเฉลี่ยของวินาทีต่าง ๆ ค่าตั้งแต่มัธยฐานถึงสูงสุดอธิบายวินาทีต่าง ๆ",
   "{rate:.0f} kb/s": "{rate:.0f} kbps",
   "kb/s": "kbps",

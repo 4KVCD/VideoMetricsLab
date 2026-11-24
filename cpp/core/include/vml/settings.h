@@ -80,6 +80,11 @@ struct Settings {
     // MSU's, for comparing with them.
     bool default_compute_psnr_yuv = false;
     bool default_compute_ssim_yuv = false;
+    bool default_compute_ms_ssim = false;
+    bool default_compute_ms_ssim_yuv = false;
+    bool default_compute_psnr_hvs = false;
+    bool default_compute_cambi = false;
+    bool default_compute_ciede2000 = false;
     bool default_compute_vmaf = true;
     bool default_compute_vmaf_neg = true;
     bool default_compute_vmaf_v1 = true;

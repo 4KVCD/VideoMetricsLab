@@ -1,6 +1,12 @@
 {
  "strings": {
   "(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 dari skor ketiga bidang, seperti JVET membobot PSNR dan MSU membobot YUV-SSIM. Dihitung oleh aplikasi saja, bukan dengan metrik FFmpeg.",
+  "More metrics:": "Metrik lainnya:",
+  "SSIM at five scales (Wang et al.), as MSU's codec reports use it. Calculated by the app only, not with FFmpeg's metrics.": "SSIM pada lima skala (Wang dkk.), seperti yang dipakai laporan codec MSU. Dihitung oleh aplikasi saja, bukan dengan metrik FFmpeg.",
+  "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 dari MS-SSIM ketiga bidang. Dihitung oleh aplikasi saja, bukan dengan metrik FFmpeg.",
+  "PSNR weighted by the eye's sensitivity to contrast and its masking, as Xiph's codec tests report it. Calculated by the app only, not with FFmpeg's metrics.": "PSNR yang dibobot menurut kepekaan mata terhadap kontras dan penyamarannya, seperti yang dilaporkan uji codec Xiph. Dihitung oleh aplikasi saja, bukan dengan metrik FFmpeg.",
+  "Netflix's banding score of the test video alone: 0 is no banding, 24 the most. Calculated by the app only, not with FFmpeg's metrics.": "Skor banding Netflix dari video uji saja: 0 berarti tanpa banding, 24 paling banyak. Dihitung oleh aplikasi saja, bukan dengan metrik FFmpeg.",
+  "The mean colour difference (CIEDE2000 ΔE) of the pixels: 0 is identical, about 1 just noticeable. Calculated by the app only, not with FFmpeg's metrics.": "Perbedaan warna rata-rata (CIEDE2000 ΔE) dari piksel: 0 berarti identik, sekitar 1 nyaris terlihat. Dihitung oleh aplikasi saja, bukan dengan metrik FFmpeg.",
   "Nitrate": "Nitrat",
   "Phosphor": "Fosfor",
   "Green-black shadows with cream text and a gold accent, like an old film print. VML Classic shows Dark.": "Bayangan hitam kehijauan dengan teks krem dan aksen emas, seperti cetakan film lama. VML Classic menampilkan Gelap.",
@@ -938,7 +944,7 @@
   "Video bitrate (Mb/s)": "Bitrate video (Mbps)",
   "GOP bitrate (Mb/s)": "Bitrate GOP (Mbps)",
   "Frame size (Mbit)": "Ukuran bingkai (Mbit)",
-  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: ∞ digambar pada {db:g} dB; skor yang disimpan dan statistik tetap menyimpan tak hingga.",
+  "{label}: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "{label}: ∞ digambar pada {db:g} dB; skor yang disimpan dan statistik tetap menyimpan tak hingga.",
   "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: kurva adalah JOD setiap detik, digambar di tengah detik; kolom CVVDP adalah JOD seluruh video, yang bukan rata-rata detiknya. Median hingga Maks menggambarkan detik-detik itu.",
   "{rate:.0f} kb/s": "{rate:.0f} kbps",
   "kb/s": "kbps",

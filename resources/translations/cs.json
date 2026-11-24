@@ -1,6 +1,12 @@
 {
  "strings": {
   "(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 ze skóre tří rovin, jak váží PSNR JVET a YUV-SSIM MSU. Počítá jen aplikace, ne metrikami FFmpeg.",
+  "More metrics:": "Další metriky:",
+  "SSIM at five scales (Wang et al.), as MSU's codec reports use it. Calculated by the app only, not with FFmpeg's metrics.": "SSIM v pěti měřítkách (Wang a kol.), jak ho používají zprávy MSU o kodecích. Počítá jen aplikace, ne metrikami FFmpeg.",
+  "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 z MS-SSIM tří rovin. Počítá jen aplikace, ne metrikami FFmpeg.",
+  "PSNR weighted by the eye's sensitivity to contrast and its masking, as Xiph's codec tests report it. Calculated by the app only, not with FFmpeg's metrics.": "PSNR vážené citlivostí oka na kontrast a jeho maskováním, jak ho uvádějí testy kodeků Xiph. Počítá jen aplikace, ne metrikami FFmpeg.",
+  "Netflix's banding score of the test video alone: 0 is no banding, 24 the most. Calculated by the app only, not with FFmpeg's metrics.": "Skóre bandingu od Netflixu jen pro testované video: 0 bez bandingu, 24 nejvíce. Počítá jen aplikace, ne metrikami FFmpeg.",
+  "The mean colour difference (CIEDE2000 ΔE) of the pixels: 0 is identical, about 1 just noticeable. Calculated by the app only, not with FFmpeg's metrics.": "Průměrný barevný rozdíl (CIEDE2000 ΔE) pixelů: 0 shodné, asi 1 sotva postřehnutelné. Počítá jen aplikace, ne metrikami FFmpeg.",
   "Nitrate": "Nitrát",
   "Phosphor": "Fosfor",
   "Green-black shadows with cream text and a gold accent, like an old film print. VML Classic shows Dark.": "Zelenočerné stíny s krémovým textem a zlatým akcentem, jako starý filmový tisk. VML Classic ukazuje Tmavý.",
@@ -938,7 +944,7 @@
   "Video bitrate (Mb/s)": "Bitrate videa (Mb/s)",
   "GOP bitrate (Mb/s)": "Bitrate GOP (Mb/s)",
   "Frame size (Mbit)": "Velikost snímku (Mbit)",
-  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: ∞ se vykresluje na {db:g} dB; uložená skóre a statistiky si nekonečno ponechávají.",
+  "{label}: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "{label}: ∞ se vykresluje na {db:g} dB; uložená skóre a statistiky si nekonečno ponechávají.",
   "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: křivka je JOD každé sekundy, vykreslený uprostřed sekundy; sloupec CVVDP je JOD celého videa, který není průměrem jeho sekund. Medián až Max popisují sekundy.",
   "{rate:.0f} kb/s": "{rate:.0f} kb/s",
   "kb/s": "kb/s",

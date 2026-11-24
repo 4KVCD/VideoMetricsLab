@@ -86,7 +86,16 @@ const std::vector<std::pair<std::string, QString>> default_metric_boxes{
     {"ssimulacra2", "SSIMULACRA2"},
     {"butteraugli", "Butteraugli"},
     {"cvvdp", "CVVDP"},
+    {"ms_ssim", "MS-SSIM"},
+    {"ms_ssim_yuv", "MS-SSIM YUV (6:1:1)"},
+    {"psnr_hvs", "PSNR-HVS-M"},
+    {"cambi", "CAMBI"},
+    {"ciede2000", "CIEDE2000"},
 };
+
+// The first of the boxes that go on the second row, the app's own metrics
+// (17 boxes do not fit one row).
+constexpr std::string_view first_second_row_box = "ms_ssim";
 
 QString text_of(const std::string& text) { return QString::fromStdString(text); }
 
@@ -637,6 +646,12 @@ QGroupBox* SettingsPanel::build_defaults_box() {
     auto* metrics_row = new QHBoxLayout;
     metrics_row->addWidget(new QLabel(app::tr("Default metrics:")));
     for (const auto& [key, label] : default_metric_boxes) {
+        if (key == first_second_row_box) {
+            metrics_row->addStretch(1);
+            defaults_layout->addLayout(metrics_row);
+            metrics_row = new QHBoxLayout;
+            metrics_row->addWidget(new QLabel(app::tr("More metrics:")));
+        }
         auto* box = new QCheckBox(label);
         box->setChecked(*settings_.default_compute(key));
         connect(box, &QCheckBox::toggled, this, [this] { on_edited(); });
@@ -652,6 +667,21 @@ QGroupBox* SettingsPanel::build_defaults_box() {
         if (key == "psnr_yuv" || key == "ssim_yuv") {
             box->setToolTip(app::tr("(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. "
                                     "Calculated by the app only, not with FFmpeg's metrics."));
+        }
+        if (key == "ms_ssim") {
+            box->setToolTip(app::tr("SSIM at five scales (Wang et al.), as MSU's codec reports use it. Calculated by the app only, not with FFmpeg's metrics."));
+        }
+        if (key == "ms_ssim_yuv") {
+            box->setToolTip(app::tr("(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM. Calculated by the app only, not with FFmpeg's metrics."));
+        }
+        if (key == "psnr_hvs") {
+            box->setToolTip(app::tr("PSNR weighted by the eye's sensitivity to contrast and its masking, as Xiph's codec tests report it. Calculated by the app only, not with FFmpeg's metrics."));
+        }
+        if (key == "cambi") {
+            box->setToolTip(app::tr("Netflix's banding score of the test video alone: 0 is no banding, 24 the most. Calculated by the app only, not with FFmpeg's metrics."));
+        }
+        if (key == "ciede2000") {
+            box->setToolTip(app::tr("The mean colour difference (CIEDE2000 ΔE) of the pixels: 0 is identical, about 1 just noticeable. Calculated by the app only, not with FFmpeg's metrics."));
         }
     }
     metrics_row->addStretch(1);

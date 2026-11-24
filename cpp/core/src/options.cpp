@@ -35,6 +35,21 @@ bool VmafOptions::*bool_option(std::string_view name) {
     if (name == "compute_ssim_yuv") {
         return &VmafOptions::compute_ssim_yuv;
     }
+    if (name == "compute_ms_ssim") {
+        return &VmafOptions::compute_ms_ssim;
+    }
+    if (name == "compute_ms_ssim_yuv") {
+        return &VmafOptions::compute_ms_ssim_yuv;
+    }
+    if (name == "compute_psnr_hvs") {
+        return &VmafOptions::compute_psnr_hvs;
+    }
+    if (name == "compute_cambi") {
+        return &VmafOptions::compute_cambi;
+    }
+    if (name == "compute_ciede2000") {
+        return &VmafOptions::compute_ciede2000;
+    }
     throw std::logic_error("no option called " + std::string(name));
 }
 

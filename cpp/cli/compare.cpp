@@ -614,6 +614,11 @@ std::vector<std::string> default_metrics(const Settings& settings) {
     options.compute_xpsnr = settings.default_compute_xpsnr;
     options.compute_psnr_yuv = settings.default_compute_psnr_yuv;
     options.compute_ssim_yuv = settings.default_compute_ssim_yuv;
+    options.compute_ms_ssim = settings.default_compute_ms_ssim;
+    options.compute_ms_ssim_yuv = settings.default_compute_ms_ssim_yuv;
+    options.compute_psnr_hvs = settings.default_compute_psnr_hvs;
+    options.compute_cambi = settings.default_compute_cambi;
+    options.compute_ciede2000 = settings.default_compute_ciede2000;
     options.compute_vmaf = settings.default_compute_vmaf;
     options.compute_vmaf_neg = settings.default_compute_vmaf_neg;
     options.compute_vmaf_v1 = settings.default_compute_vmaf_v1;

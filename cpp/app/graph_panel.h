@@ -54,10 +54,11 @@ class FileWrites;
 class FrameControls;
 class VideoColors;
 
-// Where an XPSNR frame identical to its reference (infinity) is drawn: above
-// every real score, or a perfect frame would dip below merely good ones. For
-// drawing only: the scores, statistics, readout and exports keep infinity.
-inline constexpr double xpsnr_infinity_plot_db = 123.0;
+// Where a frame scored +infinity (XPSNR's or PSNR-HVS-M's identical frame:
+// MetricDefinition::can_be_infinite) is drawn: above every real score, or a
+// perfect frame would dip below merely good ones. For drawing only: the
+// scores, statistics, readout and exports keep infinity.
+inline constexpr double infinity_plot_db = 123.0;
 
 // One run on the graph: its result, name, colour, whether it is shown, and
 // the figures its table row shows.

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <stdexcept>
 
@@ -14,13 +15,34 @@ namespace vml {
 
 namespace {
 
-constexpr std::array<CpuFeature, 5> cpu_features{{
+using Value = CpuFeature::Value;
+
+// libvmaf's CAMBI score without options; with them it is named from them
+// (cambi_feature).
+constexpr std::string_view cambi_default_feature = "Cambi_feature_cambi_score";
+
+constexpr std::array<CpuFeature, 10> cpu_features{{
     {"psnr", "psnr", "psnr_y", 6},
     {"ssim", "float_ssim", "float_ssim", 6},
     {"xpsnr", "xpsnr", "xpsnr_y", 4},
-    {"psnr_yuv", "psnr", "psnr_y", 6, "psnr_cb", "psnr_cr"},
-    {"ssim_yuv", "float_ssim", "float_ssim", 6, "float_ssim_cb", "float_ssim_cr"},
+    {"psnr_yuv", "psnr", "psnr_y", 6, true, Value::planes_611, "psnr_cb", "psnr_cr"},
+    {"ssim_yuv", "float_ssim", "float_ssim", 6, true, Value::planes_611, "float_ssim_cb", "float_ssim_cr"},
+    {"cambi", "cambi", cambi_default_feature, 6},
+    {"ms_ssim", "float_ms_ssim", "float_ms_ssim", 6},
+    {"ms_ssim_yuv", "float_ms_ssim", "float_ms_ssim", 6, true, Value::planes_611, "float_ms_ssim_cb",
+     "float_ms_ssim_cr"},
+    {"psnr_hvs", "psnr_hvs", "psnr_hvs", 6, true},
+    {"ciede2000", "ciede", "ciede2000", 6, true, Value::delta_e},
 }};
+
+// The limits cpu_metrics_unfit checks, from libvmaf's extractors.
+constexpr int ms_ssim_smallest_plane = 176;  // float_ms_ssim: 11 x 2^4, its window at the 5th scale
+constexpr int cambi_smallest_side = 216;     // cambi.c CAMBI_MIN_WIDTH_HEIGHT, for one of the two sides
+constexpr int cambi_largest_width_plus_height = 6092;  // its window then stays under its 4226-entry tables
+constexpr int cambi_option_smallest = 144;   // the range of its enc_width and enc_height
+constexpr int cambi_option_largest = 7680;
+constexpr int psnr_hvs_smallest_side = 16;   // two 8x8 blocks of 4:2:0 chroma
+constexpr int psnr_hvs_deepest = 12;
 
 // The most memory CpuScorer's pictures may take (unless two pairs alone take
 // more, at 8K). On 4K 10-bit video from NVIDIA's decoder, PSNR + SSIM run
@@ -30,16 +52,70 @@ constexpr std::array<CpuFeature, 5> cpu_features{{
 // 135 fps with 7 pairs, 154 with 8, 169 with 9 (its limit) and 171 with 10.
 constexpr std::size_t picture_memory = std::size_t{200} << 20;
 constexpr std::size_t xpsnr_picture_memory = std::size_t{270} << 20;
+// MS-SSIM, CAMBI and CIEDE2000 take far longer per pair than the decoders
+// take to feed one, so they get a pair per thread: on 4K 10-bit video beside
+// GPU VMAF (RTX 5090, Core Ultra 9 285K, 24 threads), the five new metrics
+// run at 6.0 fps with 6 pairs, 10.8 with 12 and 15.1 with 24 (this limit:
+// 24 pairs of 4K 10-bit pictures with chroma), for 850 MB more at the peak.
+constexpr std::size_t slow_picture_memory = std::size_t{800} << 20;
 
 bool has(const std::vector<std::string>& metrics, std::string_view key) {
     return std::find(metrics.begin(), metrics.end(), key) != metrics.end();
 }
 
 // An extractor of libvmaf's and the options it is started with.
+using ExtractorOptions = std::vector<std::pair<std::string, std::string>>;
 struct Extractor {
     std::string name;
-    std::vector<std::pair<std::string, std::string>> options;
+    ExtractorOptions options;
 };
+
+// The size CAMBI scores the test video at (its enc_width and enc_height):
+// its own, where it was scaled up to the compared size on at least one side
+// and not down on the other, and libvmaf takes that size; otherwise nothing,
+// the compared size (cambi.c itself scores a video scaled down at the
+// compared size).
+std::optional<std::pair<int, int>> cambi_encode_size(const CambiInput& cambi, int width, int height) {
+    const auto in_range = [](int side) { return side >= cambi_option_smallest && side <= cambi_option_largest; };
+    if (cambi.width <= 0 || cambi.height <= 0 || cambi.width > width || cambi.height > height ||
+        (cambi.width == width && cambi.height == height) || !in_range(cambi.width) || !in_range(cambi.height)) {
+        return std::nullopt;
+    }
+    return std::pair(cambi.width, cambi.height);
+}
+
+// CAMBI's options for its test video, in libvmaf's own order of their names
+// (the order it names its score by).
+ExtractorOptions cambi_options(const CambiInput& cambi, int width, int height, int bit_depth) {
+    ExtractorOptions options;
+    if (cambi.bit_depth > 0 && cambi.bit_depth < bit_depth) {
+        options.emplace_back("enc_bitdepth", std::to_string(cambi.bit_depth));
+    }
+    if (const std::optional<std::pair<int, int>> size = cambi_encode_size(cambi, width, height)) {
+        options.emplace_back("enc_height", std::to_string(size->second));
+        options.emplace_back("enc_width", std::to_string(size->first));
+    }
+    if (cambi.pq) {
+        options.emplace_back("eotf", "pq");
+    }
+    return options;
+}
+
+// The name libvmaf gives CAMBI's score with these options
+// (feature_name.c's vmaf_feature_name_from_options): its alias "cambi", then
+// each option's own short name and value, in the order of the options' names.
+std::string cambi_feature(const ExtractorOptions& options) {
+    if (options.empty()) {
+        return std::string(cambi_default_feature);
+    }
+    static const std::map<std::string, std::string, std::less<>> short_names{
+        {"enc_bitdepth", "encbd"}, {"enc_height", "ench"}, {"enc_width", "encw"}, {"eotf", "eotf"}};
+    std::string name = "cambi";
+    for (const auto& [option, value] : options) {
+        name += "_" + short_names.at(option) + "_" + value;
+    }
+    return name;
+}
 
 // The extractors that score `metrics`, each started once. PSNR and SSIM read
 // the chroma planes only for their 6:1:1 metric. With XPSNR, the luma's PSNR
@@ -47,7 +123,8 @@ struct Extractor {
 // pass of its own over both pictures (4K PSNR + SSIM + XPSNR 6% faster with
 // Intel's decoder, 11% with NVIDIA's); PSNR then scores the chroma alone, for
 // PSNR YUV.
-std::vector<Extractor> extractors_for(const std::vector<std::string>& metrics, int frame_rate) {
+std::vector<Extractor> extractors_for(const std::vector<std::string>& metrics, int frame_rate,
+                                      const ExtractorOptions& cambi) {
     for (const std::string& metric : metrics) {
         if (cpu_feature(metric) == nullptr) {
             throw std::invalid_argument(metric + " is not scored with libvmaf's CPU extractors");
@@ -78,6 +155,23 @@ std::vector<Extractor> extractors_for(const std::vector<std::string>& metrics, i
         if (psnr) {
             extractors.back().options.emplace_back("psnr", "true");
         }
+    }
+    if (has(metrics, "cambi")) {
+        extractors.push_back({"cambi", cambi});
+    }
+    // MS-SSIM's planes share one set of decimated buffers, as SSIM's do.
+    const bool ms_ssim_yuv = has(metrics, "ms_ssim_yuv");
+    if (ms_ssim_yuv || has(metrics, "ms_ssim")) {
+        extractors.push_back({"float_ms_ssim", {}});
+        if (ms_ssim_yuv) {
+            extractors.back().options.emplace_back("enable_chroma", "true");
+        }
+    }
+    if (has(metrics, "psnr_hvs")) {
+        extractors.push_back({"psnr_hvs", {}});
+    }
+    if (has(metrics, "ciede2000")) {
+        extractors.push_back({"ciede", {}});
     }
     return extractors;
 }
@@ -134,14 +228,55 @@ const CpuFeature* cpu_feature(std::string_view key) {
 bool cpu_metrics_read_chroma(const std::vector<std::string>& metrics) {
     return std::any_of(metrics.begin(), metrics.end(), [](const std::string& metric) {
         const CpuFeature* feature = cpu_feature(metric);
-        return feature != nullptr && !feature->cb.empty();
+        return feature != nullptr && feature->chroma;
     });
+}
+
+bool cpu_metrics_slow(const std::vector<std::string>& metrics) {
+    return std::any_of(metrics.begin(), metrics.end(), [](const std::string& metric) {
+        return metric == "ms_ssim" || metric == "ms_ssim_yuv" || metric == "cambi" || metric == "ciede2000";
+    });
+}
+
+std::map<std::string, std::string> cpu_metrics_unfit(const std::vector<std::string>& metrics, int width,
+                                                     int height, int bit_depth, const CambiInput& cambi) {
+    const std::string size = std::to_string(width) + "x" + std::to_string(height);
+    const auto square = [](int side) { return std::to_string(side) + "x" + std::to_string(side); };
+    std::map<std::string, std::string> unfit;
+    for (const std::string& metric : metrics) {
+        if ((metric == "ms_ssim" && std::min(width, height) < ms_ssim_smallest_plane) ||
+            (metric == "ms_ssim_yuv" && std::min(width, height) < 2 * ms_ssim_smallest_plane)) {
+            const int side = metric == "ms_ssim" ? ms_ssim_smallest_plane : 2 * ms_ssim_smallest_plane;
+            unfit[metric] = (metric == "ms_ssim" ? "MS-SSIM" : "MS-SSIM YUV") + std::string(" needs pictures of at least ") +
+                            square(side) + "; these are " + size + ".";
+        } else if (metric == "cambi") {
+            const std::pair<int, int> scored = cambi_encode_size(cambi, width, height).value_or(std::pair(width, height));
+            if (std::max(width, height) < cambi_smallest_side ||
+                std::max(scored.first, scored.second) < cambi_smallest_side) {
+                unfit[metric] = "CAMBI needs a video at least " + std::to_string(cambi_smallest_side) +
+                                " pixels wide or high.";
+            } else if (width + height > cambi_largest_width_plus_height) {
+                unfit[metric] = "CAMBI is calculated for pictures up to 3840x2160 (width plus height at most " +
+                                std::to_string(cambi_largest_width_plus_height) + "); these are " + size + ".";
+            }
+        } else if (metric == "psnr_hvs" && std::min(width, height) < psnr_hvs_smallest_side) {
+            unfit[metric] = "PSNR-HVS-M needs pictures of at least " + square(psnr_hvs_smallest_side) +
+                            "; these are " + size + ".";
+        } else if (metric == "psnr_hvs" && bit_depth > psnr_hvs_deepest) {
+            unfit[metric] = "PSNR-HVS-M is calculated up to " + std::to_string(psnr_hvs_deepest) +
+                            " bits; these videos are compared at " + std::to_string(bit_depth) + ".";
+        } else if (metric == "ciede2000" && bit_depth != 8 && bit_depth != 10 && bit_depth != 12 && bit_depth != 16) {
+            unfit[metric] = "CIEDE2000 is calculated at 8, 10, 12 or 16 bits; these videos are compared at " +
+                            std::to_string(bit_depth) + ".";
+        }
+    }
+    return unfit;
 }
 
 std::string cpu_library_build() { return "libvmaf-fast " + libvmaf_fast_version() + " (CPU)"; }
 
 CpuScorer::CpuScorer(int width, int height, int bit_depth, std::vector<std::string> metrics, int n_subsample,
-                     int threads, int frame_rate)
+                     int threads, int frame_rate, const CambiInput& cambi)
     : library_(libvmaf()), metrics_(std::move(metrics)), step_(static_cast<unsigned>(std::max(1, n_subsample))) {
     chroma_ = cpu_metrics_read_chroma(metrics_);
     odd_ = width % 2 != 0 || height % 2 != 0;
@@ -150,12 +285,20 @@ CpuScorer::CpuScorer(int width, int height, int bit_depth, std::vector<std::stri
     frame_bytes_ = packed_.bytes();
     decoded_bytes_ = chroma_ ? frame_bytes_ : static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * sample_;
     threads = std::max(0, threads);
-    const VmafConfiguration configuration{VMAF_LOG_LEVEL_ERROR, static_cast<unsigned>(threads), step_, 0, 0};
+    const int pairs = cpu_pairs(width, height, bit_depth, threads, has(metrics_, "xpsnr"), chroma_,
+                                cpu_metrics_slow(metrics_));
+    // No more libvmaf threads than pairs: a pair is scored by one thread, and
+    // each thread that ever scores one keeps its own copy of every
+    // extractor's buffers (MS-SSIM's and CAMBI's: about 100 MB each at 4K).
+    const unsigned libvmaf_threads = static_cast<unsigned>(std::min(threads, pairs));
+    const VmafConfiguration configuration{VMAF_LOG_LEVEL_ERROR, libvmaf_threads, step_, 0, 0};
     VmafContext* context = nullptr;
     check_libvmaf(library_.init(&context, configuration), "Starting libvmaf");
     context_ = context;
     try {
-        for (const Extractor& extractor : extractors_for(metrics_, frame_rate)) {
+        const ExtractorOptions cambi_with = cambi_options(cambi, width, height, bit_depth);
+        cambi_feature_ = cambi_feature(cambi_with);
+        for (const Extractor& extractor : extractors_for(metrics_, frame_rate, cambi_with)) {
             VmafFeatureDictionary* options = nullptr;
             for (const auto& [key, value] : extractor.options) {
                 if (library_.feature_dictionary_set(&options, key.c_str(), value.c_str()) != 0) {
@@ -167,7 +310,6 @@ CpuScorer::CpuScorer(int width, int height, int bit_depth, std::vector<std::stri
             check_libvmaf(library_.use_feature(context_, extractor.name.c_str(), options),
                           "Starting " + extractor.name);
         }
-        const int pairs = cpu_pairs(width, height, bit_depth, threads, has(metrics_, "xpsnr"), chroma_);
         const VmafPictureConfiguration pool{
             {static_cast<unsigned>(width), static_cast<unsigned>(height), static_cast<unsigned>(bit_depth),
              chroma_ ? VMAF_PIX_FMT_YUV420P : VMAF_PIX_FMT_YUV400P},
@@ -381,11 +523,14 @@ PairScores CpuScorer::finish() {
         };
         std::vector<double> column;
         column.reserve(result.frames.size());
+        const std::string_view name = metric == "cambi" ? std::string_view(cambi_feature_) : feature.feature;
         for (const unsigned frame : result.frames) {
-            double value = read(feature.feature, frame);
-            if (!feature.cb.empty()) {
-                // 6:1:1, at full precision, then rounded once
+            double value = read(name, frame);
+            // at full precision, then rounded once
+            if (feature.value == Value::planes_611) {
                 value = (6 * value + read(feature.cb, frame) + read(feature.cr, frame)) / 8;
+            } else if (feature.value == Value::delta_e) {
+                value = std::pow(10.0, (45.0 - value) / 20.0);  // +infinity (identical) gives 0
             }
             column.push_back(python_round(value, feature.decimals));
         }
@@ -405,17 +550,17 @@ bool cpu_scores_xpsnr() {
     return answer;
 }
 
-int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr, bool chroma) {
+int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr, bool chroma, bool slow) {
     // A picture's bytes as vmaf_picture_alloc lays it out: rows of 32
     // samples, and with chroma two planes half as wide and tall.
     const auto plane = [&](int w, int h) {
         return static_cast<std::size_t>((w + 31) & ~31) * static_cast<std::size_t>(h) * bytes_per_sample(bit_depth);
     };
     const std::size_t picture = plane(width, height) + (chroma ? 2 * plane(width / 2, height / 2) : 0);
-    const std::size_t luma_memory = xpsnr ? xpsnr_picture_memory : picture_memory;
+    const std::size_t luma_memory = slow ? slow_picture_memory : xpsnr ? xpsnr_picture_memory : picture_memory;
     const std::size_t memory = chroma ? luma_memory * 3 / 2 : luma_memory;
     const auto fit = static_cast<long long>(memory / (2 * picture));
-    const long long wanted = std::min(8, std::max(1, threads)) + 1;
+    const long long wanted = (slow ? std::max(1, threads) : std::min(8, std::max(1, threads))) + 1;
     return static_cast<int>(std::max(2LL, std::min(wanted, fit))) + (xpsnr ? 1 : 0);
 }
 
@@ -437,7 +582,7 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
                              int width, int height, int bit_depth, const std::vector<std::string>& metrics,
                              int n_subsample, const FrameRange& range, long long total_frames,
                              const std::pair<std::string, std::string>& decoders, int threads, int frame_rate,
-                             const std::string& scale_algorithm, const std::string& ffmpeg,
+                             const CambiInput& cambi, const std::string& scale_algorithm, const std::string& ffmpeg,
                              const std::string& ffprobe, bool want_vvdec,
                              const std::function<void()>& on_vvdec_opening,
                              const std::function<void(long long, long long, double)>& on_progress,
@@ -460,7 +605,7 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
         open_pass_stream(source, plans[1], 4, source_backend, reference_vvdec, -1, ffmpeg, ffprobe);
     // Declared after the streams so that it goes first: it gives back the
     // memory their decoders page-locked.
-    CpuScorer scorer(width, height, bit_depth, metrics, n_subsample, threads, frame_rate);
+    CpuScorer scorer(width, height, bit_depth, metrics, n_subsample, threads, frame_rate, cambi);
     // vvdec-vulkan's GPU copies its pictures only into a buffer of its stream's, from which they are copied into the
     // scorer's pictures. Last, so that it goes first: its side thread's jobs use the scorer.
     std::optional<HostPairs> pairs;

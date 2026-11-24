@@ -1,6 +1,12 @@
 {
  "strings": {
   "(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 dei punteggi dei tre piani, come JVET pesa il PSNR e MSU lo YUV-SSIM. Calcolato solo dall'app, non con le metriche di FFmpeg.",
+  "More metrics:": "Altre metriche:",
+  "SSIM at five scales (Wang et al.), as MSU's codec reports use it. Calculated by the app only, not with FFmpeg's metrics.": "SSIM su cinque scale (Wang et al.), come lo usano i report sui codec di MSU. Calcolato solo dall'app, non con le metriche di FFmpeg.",
+  "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 dell'MS-SSIM dei tre piani. Calcolato solo dall'app, non con le metriche di FFmpeg.",
+  "PSNR weighted by the eye's sensitivity to contrast and its masking, as Xiph's codec tests report it. Calculated by the app only, not with FFmpeg's metrics.": "PSNR pesato dalla sensibilità dell'occhio al contrasto e dal suo mascheramento, come lo riportano i test sui codec di Xiph. Calcolato solo dall'app, non con le metriche di FFmpeg.",
+  "Netflix's banding score of the test video alone: 0 is no banding, 24 the most. Calculated by the app only, not with FFmpeg's metrics.": "Il punteggio di banding di Netflix del solo video di test: 0 nessun banding, 24 il massimo. Calcolato solo dall'app, non con le metriche di FFmpeg.",
+  "The mean colour difference (CIEDE2000 ΔE) of the pixels: 0 is identical, about 1 just noticeable. Calculated by the app only, not with FFmpeg's metrics.": "La differenza di colore media (CIEDE2000 ΔE) dei pixel: 0 identico, circa 1 appena percettibile. Calcolato solo dall'app, non con le metriche di FFmpeg.",
   "Nitrate": "Nitrato",
   "Phosphor": "Fosforo",
   "Green-black shadows with cream text and a gold accent, like an old film print. VML Classic shows Dark.": "Ombre nero verdastro con testo crema e un accento oro, come una vecchia copia di pellicola. VML Classic mostra Scuro.",
@@ -938,7 +944,7 @@
   "Video bitrate (Mb/s)": "Bitrate video (Mb/s)",
   "GOP bitrate (Mb/s)": "Bitrate per GOP (Mb/s)",
   "Frame size (Mbit)": "Dimensione fotogramma (Mbit)",
-  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: ∞ è tracciato a {db:g} dB; i punteggi salvati e le statistiche mantengono l'infinito.",
+  "{label}: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "{label}: ∞ è tracciato a {db:g} dB; i punteggi salvati e le statistiche mantengono l'infinito.",
   "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: la curva è il JOD di ogni secondo, tracciato a metà del secondo; la colonna CVVDP è il JOD dell'intero video, che non è la media dei suoi secondi. Da Mediana a Max descrivono i secondi.",
   "{rate:.0f} kb/s": "{rate:.0f} kb/s",
   "kb/s": "kb/s",

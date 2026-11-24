@@ -65,8 +65,8 @@ constexpr double hover_search_steps = 5;
 constexpr double widest_sample = -88.88;
 
 // The metric notes under the graph.
-const char* const xpsnr_infinity_note =
-    N_("XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.");
+const char* const infinity_note =
+    N_("{label}: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.");
 const char* const cvvdp_note =
     N_("CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the "
        "whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.");
@@ -416,7 +416,7 @@ void MetricPage::set_frame_curve(int series_id, const SeriesEntry& entry) {
         return;
     }
     ChartSeries series{result->time, result->values, entry.result, entry.color, entry.visible};
-    if (metric_->key == "xpsnr" &&
+    if (metric_->can_be_infinite() &&
         std::any_of(result->values.begin(), result->values.end(), [](float v) { return std::isinf(v) && v > 0; })) {
         // Drawn at a stand-in; the result's own scores, which the statistics,
         // the readout and exports read, keep infinity.
@@ -424,7 +424,7 @@ void MetricPage::set_frame_curve(int series_id, const SeriesEntry& entry) {
             entry.result, result->values);
         for (float& value : drawn->second) {
             if (std::isinf(value) && value > 0) {
-                value = static_cast<float>(xpsnr_infinity_plot_db);
+                value = static_cast<float>(infinity_plot_db);
             }
         }
         series.values = drawn->second;
@@ -1340,8 +1340,8 @@ void GraphPanel::update_metric_hint() {
                              : app::tr("{label} was not calculated. Tick it in the {label} column in Videos, or load "
                                        "results containing it.",
                                        {{"label", qt_text(metric.label)}});
-    if (available && metric.key == "xpsnr") {
-        hint = app::tr(xpsnr_infinity_note, {{"db", xpsnr_infinity_plot_db}});
+    if (available && metric.can_be_infinite()) {
+        hint = app::tr(infinity_note, {{"label", qt_text(metric.short_label)}, {"db", infinity_plot_db}});
     }
     if (available && metric.kind == MetricKind::sequence) {
         hint = app::tr(cvvdp_note);
@@ -2062,8 +2062,8 @@ QPixmap GraphPanel::render_export_image() {
     // The chart with its title, and the lines' statistics keyed by colour.
     const MetricDefinition& metric = current_metric();
     QString title = app::tr("{label} vs time", {{"label", qt_text(metric.label)}});
-    if (metric.key == "xpsnr") {
-        title += app::tr(" — ∞ plotted at {db:g} dB (display only)", {{"db", xpsnr_infinity_plot_db}});
+    if (metric.can_be_infinite()) {
+        title += app::tr(" — ∞ plotted at {db:g} dB (display only)", {{"db", infinity_plot_db}});
     }
     if (const std::optional<std::pair<int, int>> frames = selected_frames()) {
         title += app::tr(" — frames {first} to {last}", {{"first", frames->first}, {"last", frames->second}});

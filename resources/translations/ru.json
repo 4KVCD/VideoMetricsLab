@@ -1,6 +1,12 @@
 {
  "strings": {
   "(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 от оценок трёх плоскостей, как JVET взвешивает PSNR, а MSU — YUV-SSIM. Считается только приложением, не метриками FFmpeg.",
+  "More metrics:": "Другие метрики:",
+  "SSIM at five scales (Wang et al.), as MSU's codec reports use it. Calculated by the app only, not with FFmpeg's metrics.": "SSIM на пяти масштабах (Wang и др.), как его используют отчёты MSU о кодеках. Считается только приложением, не метриками FFmpeg.",
+  "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 от MS-SSIM трёх плоскостей. Считается только приложением, не метриками FFmpeg.",
+  "PSNR weighted by the eye's sensitivity to contrast and its masking, as Xiph's codec tests report it. Calculated by the app only, not with FFmpeg's metrics.": "PSNR, взвешенный по чувствительности глаза к контрасту и его маскировке, как его приводят тесты кодеков Xiph. Считается только приложением, не метриками FFmpeg.",
+  "Netflix's banding score of the test video alone: 0 is no banding, 24 the most. Calculated by the app only, not with FFmpeg's metrics.": "Оценка бандинга Netflix только для тестового видео: 0 — бандинга нет, 24 — больше всего. Считается только приложением, не метриками FFmpeg.",
+  "The mean colour difference (CIEDE2000 ΔE) of the pixels: 0 is identical, about 1 just noticeable. Calculated by the app only, not with FFmpeg's metrics.": "Средняя цветовая разница (CIEDE2000 ΔE) пикселей: 0 — идентично, около 1 — едва заметно. Считается только приложением, не метриками FFmpeg.",
   "Nitrate": "Нитрат",
   "Phosphor": "Фосфор",
   "Green-black shadows with cream text and a gold accent, like an old film print. VML Classic shows Dark.": "Зеленовато-чёрные тени, кремовый текст и золотой акцент, как старая киноплёнка. В VML Classic — Тёмная.",
@@ -938,7 +944,7 @@
   "Video bitrate (Mb/s)": "Битрейт видео (Мбит/с)",
   "GOP bitrate (Mb/s)": "Битрейт по GOP (Мбит/с)",
   "Frame size (Mbit)": "Размер кадра (Мбит)",
-  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: ∞ отображается на уровне {db:g} дБ; в сохранённых оценках и статистике бесконечность сохраняется.",
+  "{label}: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "{label}: ∞ отображается на уровне {db:g} дБ; в сохранённых оценках и статистике бесконечность сохраняется.",
   "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: кривая — это JOD каждой секунды, отображаемый в середине секунды; столбец CVVDP — это JOD всего видео, который не равен среднему по его секундам. Значения от «Медиана» до «Макс.» описывают секунды.",
   "{rate:.0f} kb/s": "{rate:.0f} кбит/с",
   "kb/s": "кбит/с",

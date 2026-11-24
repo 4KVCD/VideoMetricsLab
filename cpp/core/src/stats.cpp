@@ -55,24 +55,32 @@ double percentile(std::span<const double> ordered, double q) {
     return a + (b - a) * (position - lower_position);
 }
 
-// XPSNR's average over the video from per-frame decibels:
-// -20 * log10(mean(10^(-xpsnr / 20))), FFmpeg's own average written in the
-// per-frame values (stats.py explains the derivation). An identical frame
-// (+inf) adds 0 to the sum and 1 to the count, as in FFmpeg.
-double square_mean_root_db(std::span<const double> decibels) {
+// The frames' errors averaged, in decibels: -scale * log10(mean(10^(-dB /
+// scale))). An identical frame (+inf) adds 0 to the sum and 1 to the count.
+double error_mean_db(std::span<const double> decibels, double scale) {
     std::vector<double> distortion(decibels.size());
     for (std::size_t i = 0; i < decibels.size(); ++i) {
-        distortion[i] = std::pow(10.0, -decibels[i] / 20.0);
+        distortion[i] = std::pow(10.0, -decibels[i] / scale);
     }
     const double mean = numpy_mean(distortion);
     // With every frame identical there is no error to average, and infinity
     // is FFmpeg's answer too.
-    return mean <= 0.0 ? infinity : -20.0 * std::log10(mean);
+    return mean <= 0.0 ? infinity : -scale * std::log10(mean);
 }
 
-// aggregate_scores of scores that have no NaN, at least one of them.
+// aggregate_scores of scores that have no NaN, at least one of them. XPSNR's
+// is FFmpeg's own average written in the per-frame values (stats.py explains
+// the derivation); PSNR-HVS-M's averages its error as Daala's tool does.
 double aggregate(std::span<const double> data, MetricAggregation aggregation) {
-    return aggregation == MetricAggregation::square_mean_root_db ? square_mean_root_db(data) : numpy_mean(data);
+    switch (aggregation) {
+    case MetricAggregation::square_mean_root_db:
+        return error_mean_db(data, 20.0);
+    case MetricAggregation::mean_error_db:
+        return error_mean_db(data, 10.0);
+    case MetricAggregation::arithmetic:
+        break;
+    }
+    return numpy_mean(data);
 }
 
 std::vector<double> without_nan(std::span<const double> values) {

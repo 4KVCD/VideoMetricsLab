@@ -20,7 +20,11 @@ enum class MetricDirection { higher_is_better, lower_is_better };
 
 // How a metric's per-frame scores become one number for the video
 // (aggregate_scores in stats.h).
-enum class MetricAggregation { arithmetic, square_mean_root_db };
+// The two in decibels average the frames' errors, so an identical frame
+// (+infinity) adds no error: XPSNR's -20 log10(mean(10^(-dB / 20))), as
+// FFmpeg's xpsnr filter averages, and PSNR-HVS-M's -10 log10(mean(10^(-dB / 10))),
+// as Daala's tool averages its error.
+enum class MetricAggregation { arithmetic, square_mean_root_db, mean_error_db };
 
 // A score band, such as "> 95": the frames scoring above (comparison '>')
 // or below ('<') the value.
@@ -74,6 +78,10 @@ struct MetricDefinition {
     // equally best or worst. With fewer than two to compare, or all showing
     // the same, there is neither.
     std::vector<ScoreMark> best_and_worst(const std::vector<std::optional<double>>& scores) const;
+
+    // Whether a frame's score can be +infinity (an identical frame): the
+    // metrics averaged in decibels of their error.
+    bool can_be_infinite() const { return aggregation != MetricAggregation::arithmetic; }
 };
 
 // Every metric, in the order the app shows them.

@@ -194,6 +194,52 @@ TEST(Libvmaf, YuvMetricsLeaveTheLumaScoresAsTheyWere) {
     }
 }
 
+// The app's metrics a comparison cannot score are refused up front, each with
+// its reason, so they fail alone: libvmaf would fail every metric scored with
+// them. 160x90 is below MS-SSIM's 176 and CAMBI's 216; DCI 4K is past CAMBI's
+// largest window; 14 bits is past PSNR-HVS-M's 12 and not one of CIEDE2000's.
+TEST(Libvmaf, MetricsThatCannotScoreAComparisonAreRefusedAlone) {
+    const std::vector<std::string> all{"psnr", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000"};
+    const auto refused = [&](int width, int height, int bit_depth, CambiInput cambi = {}) {
+        std::vector<std::string> keys;
+        for (const auto& [key, reason] : cpu_metrics_unfit(all, width, height, bit_depth, cambi)) {
+            EXPECT_FALSE(reason.empty()) << key;
+            keys.push_back(key);
+        }
+        return keys;
+    };
+    EXPECT_EQ(refused(160, 90, 8), (std::vector<std::string>{"cambi", "ms_ssim", "ms_ssim_yuv"}));
+    EXPECT_EQ(refused(320, 240, 8), (std::vector<std::string>{"ms_ssim_yuv"}));  // chroma 160x120
+    EXPECT_TRUE(refused(1920, 1080, 10).empty());
+    EXPECT_EQ(refused(4096, 2160, 10), (std::vector<std::string>{"cambi"}));
+    EXPECT_EQ(refused(1920, 1080, 14), (std::vector<std::string>{"ciede2000", "psnr_hvs"}));
+}
+
+// CAMBI's score is found under the name libvmaf gives it for its options (an
+// 8-bit test video of a smaller size, PQ), so a wrong name fails the scoring;
+// and CIEDE2000 of identical pictures (libvmaf's +inf) is a difference of 0.
+TEST(Libvmaf, CambiWithItsOptionsAndCiedeOfIdenticalPicturesAreScored) {
+    if (!std::filesystem::exists(libvmaf_folder() / platform::shared_library_name("libvmaf"))) {
+        GTEST_SKIP() << "the app ships no libvmaf-fast for this system yet";
+    }
+    constexpr int width = 320, height = 240;
+    const PackedFrame packed(width, height, 10);
+    std::vector<std::uint8_t> picture(packed.bytes());
+    for (std::size_t i = 0; i < picture.size() / 2; ++i) {
+        const auto sample = static_cast<std::uint16_t>(64 + (i / 7) % 512);  // a slow ramp: bands
+        picture[2 * i] = static_cast<std::uint8_t>(sample);
+        picture[2 * i + 1] = static_cast<std::uint8_t>(sample >> 8);
+    }
+    for (const CambiInput& cambi : {CambiInput{256, 192, 8, true}, CambiInput{width, height, 10, true}}) {
+        CpuScorer scorer(width, height, 10, {"cambi", "ciede2000"}, 1, 1, 0, cambi);
+        scorer.add(picture, picture);
+        const PairScores scores = scorer.finish();
+        ASSERT_EQ(scores_of(scores, "cambi").size(), 1U) << cambi.width;
+        EXPECT_GE(scores_of(scores, "cambi")[0], 0.0);
+        EXPECT_EQ(scores_of(scores, "ciede2000"), std::vector<double>{0.0});
+    }
+}
+
 // A model libvmaf does not have is an error that says what failed.
 TEST(Libvmaf, AnUnknownModelIsAnError) {
     if (!std::filesystem::exists(libvmaf_folder() / platform::shared_library_name("libvmaf"))) {

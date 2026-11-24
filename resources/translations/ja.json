@@ -1,6 +1,12 @@
 {
  "strings": {
   "(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "3 つのプレーンのスコアの (6 × Y + Cb + Cr) / 8。JVET の PSNR、MSU の YUV-SSIM と同じ重み付けです。FFmpeg の指標ではなく、アプリだけが計算します。",
+  "More metrics:": "その他の指標：",
+  "SSIM at five scales (Wang et al.), as MSU's codec reports use it. Calculated by the app only, not with FFmpeg's metrics.": "5 つのスケールでの SSIM（Wang ら）。MSU のコーデックレポートと同じ使い方です。FFmpeg の指標ではなく、アプリだけが計算します。",
+  "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "3 つのプレーンの MS-SSIM の (6 × Y + Cb + Cr) / 8。FFmpeg の指標ではなく、アプリだけが計算します。",
+  "PSNR weighted by the eye's sensitivity to contrast and its masking, as Xiph's codec tests report it. Calculated by the app only, not with FFmpeg's metrics.": "目のコントラスト感度とマスキングで重み付けした PSNR。Xiph のコーデックテストと同じ報告方法です。FFmpeg の指標ではなく、アプリだけが計算します。",
+  "Netflix's banding score of the test video alone: 0 is no banding, 24 the most. Calculated by the app only, not with FFmpeg's metrics.": "テスト動画だけを見た Netflix のバンディングスコア。0 はバンディングなし、24 が最大です。FFmpeg の指標ではなく、アプリだけが計算します。",
+  "The mean colour difference (CIEDE2000 ΔE) of the pixels: 0 is identical, about 1 just noticeable. Calculated by the app only, not with FFmpeg's metrics.": "画素の平均色差（CIEDE2000 ΔE）。0 は同一、約 1 でかろうじて分かる差です。FFmpeg の指標ではなく、アプリだけが計算します。",
   "Nitrate": "ナイトレート",
   "Phosphor": "フォスファー",
   "Green-black shadows with cream text and a gold accent, like an old film print. VML Classic shows Dark.": "緑がかった黒い影にクリーム色の文字と金色のアクセント。古いフィルムプリントのよう。VML Classic ではダークになります。",
@@ -938,7 +944,7 @@
   "Video bitrate (Mb/s)": "動画ビットレート (Mb/s)",
   "GOP bitrate (Mb/s)": "GOP ビットレート (Mb/s)",
   "Frame size (Mbit)": "フレームサイズ (Mbit)",
-  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR：∞ は {db:g} dB の位置に描画されます。保存されたスコアと統計では無限大のままです。",
+  "{label}: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "{label}：∞ は {db:g} dB の位置に描画されます。保存されたスコアと統計では無限大のままです。",
   "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP：曲線は各秒の JOD で、その秒の中央に描画されます。CVVDP 列は動画全体の JOD で、各秒の平均ではありません。中央値から最大は各秒を表します。",
   "{rate:.0f} kb/s": "{rate:.0f} kb/s",
   "kb/s": "kb/s",

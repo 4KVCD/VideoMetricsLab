@@ -1,6 +1,12 @@
 {
  "strings": {
   "(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "A három sík pontszámának (6 × Y + Cb + Cr) / 8 értéke, ahogy a JVET a PSNR-t és az MSU a YUV-SSIM-et súlyozza. Csak az alkalmazás számolja, nem az FFmpeg metrikái.",
+  "More metrics:": "További metrikák:",
+  "SSIM at five scales (Wang et al.), as MSU's codec reports use it. Calculated by the app only, not with FFmpeg's metrics.": "SSIM öt léptékben (Wang és mtsai), ahogy az MSU kodekjelentései használják. Csak az alkalmazás számolja, nem az FFmpeg metrikái.",
+  "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "A három sík MS-SSIM-jének (6 × Y + Cb + Cr) / 8 értéke. Csak az alkalmazás számolja, nem az FFmpeg metrikái.",
+  "PSNR weighted by the eye's sensitivity to contrast and its masking, as Xiph's codec tests report it. Calculated by the app only, not with FFmpeg's metrics.": "A szem kontrasztérzékenységével és maszkolásával súlyozott PSNR, ahogy a Xiph kodektesztjei közlik. Csak az alkalmazás számolja, nem az FFmpeg metrikái.",
+  "Netflix's banding score of the test video alone: 0 is no banding, 24 the most. Calculated by the app only, not with FFmpeg's metrics.": "A Netflix sávosodási pontszáma, csak a tesztvideóé: 0 nincs sávosodás, 24 a legtöbb. Csak az alkalmazás számolja, nem az FFmpeg metrikái.",
+  "The mean colour difference (CIEDE2000 ΔE) of the pixels: 0 is identical, about 1 just noticeable. Calculated by the app only, not with FFmpeg's metrics.": "A pixelek átlagos színeltérése (CIEDE2000 ΔE): 0 azonos, kb. 1 éppen észrevehető. Csak az alkalmazás számolja, nem az FFmpeg metrikái.",
   "Nitrate": "Nitrát",
   "Phosphor": "Foszfor",
   "Green-black shadows with cream text and a gold accent, like an old film print. VML Classic shows Dark.": "Zöldesfekete árnyékok krémszínű szöveggel és arany kiemelőszínnel, mint egy régi filmkópia. A VML Classic Sötétet mutat.",
@@ -938,7 +944,7 @@
   "Video bitrate (Mb/s)": "Videó bitrátája (Mb/s)",
   "GOP bitrate (Mb/s)": "GOP bitrátája (Mb/s)",
   "Frame size (Mbit)": "Képkockaméret (Mbit)",
-  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: a ∞ {db:g} dB-nél van ábrázolva; a mentett pontszámok és a statisztikák megtartják a végtelent.",
+  "{label}: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "{label}: a ∞ {db:g} dB-nél van ábrázolva; a mentett pontszámok és a statisztikák megtartják a végtelent.",
   "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: a görbe az egyes másodpercek JOD-értéke, a másodperc közepén ábrázolva; a CVVDP oszlop a teljes videó JOD-értéke, amely nem a másodpercei átlaga. A Mediántól a Max.-ig terjedő értékek a másodperceket írják le.",
   "{rate:.0f} kb/s": "{rate:.0f} kb/s",
   "kb/s": "kb/s",

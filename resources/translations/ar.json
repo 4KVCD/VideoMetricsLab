@@ -1,6 +1,12 @@
 {
  "strings": {
   "(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 لنتائج المستويات الثلاثة، كما يزن JVET قيمة PSNR وتزن MSU قيمة YUV-SSIM. يحسبها التطبيق وحده، لا مقاييس FFmpeg.",
+  "More metrics:": "مقاييس أخرى:",
+  "SSIM at five scales (Wang et al.), as MSU's codec reports use it. Calculated by the app only, not with FFmpeg's metrics.": "SSIM على خمسة مقاييس (Wang وآخرون)، كما تستخدمه تقارير MSU عن الترميز. يحسبها التطبيق وحده، لا مقاييس FFmpeg.",
+  "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 لقيم MS-SSIM للمستويات الثلاثة. يحسبها التطبيق وحده، لا مقاييس FFmpeg.",
+  "PSNR weighted by the eye's sensitivity to contrast and its masking, as Xiph's codec tests report it. Calculated by the app only, not with FFmpeg's metrics.": "PSNR موزون بحساسية العين للتباين وبالإخفاء، كما تذكره اختبارات Xiph للترميز. يحسبها التطبيق وحده، لا مقاييس FFmpeg.",
+  "Netflix's banding score of the test video alone: 0 is no banding, 24 the most. Calculated by the app only, not with FFmpeg's metrics.": "درجة التشرّط (banding) من Netflix لفيديو الاختبار وحده: 0 بلا تشرّط، و24 الأكثر. يحسبها التطبيق وحده، لا مقاييس FFmpeg.",
+  "The mean colour difference (CIEDE2000 ΔE) of the pixels: 0 is identical, about 1 just noticeable. Calculated by the app only, not with FFmpeg's metrics.": "متوسط فرق اللون (CIEDE2000 ΔE) للبكسلات: 0 متطابق، ونحو 1 بالكاد يُلاحظ. يحسبها التطبيق وحده، لا مقاييس FFmpeg.",
   "Nitrate": "نترات",
   "Phosphor": "فوسفور",
   "Green-black shadows with cream text and a gold accent, like an old film print. VML Classic shows Dark.": "ظلال سوداء مائلة للخضرة مع نص كريمي ولون تمييز ذهبي، كطبعة فيلم قديمة. يعرض VML Classic الوضع الداكن.",
@@ -938,7 +944,7 @@
   "Video bitrate (Mb/s)": "معدل بت الفيديو (ميغابت/ث)",
   "GOP bitrate (Mb/s)": "معدل بت GOP (ميغابت/ث)",
   "Frame size (Mbit)": "حجم الإطار (ميغابت)",
-  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: تُرسم ∞ عند {db:g} dB؛ وتحتفظ الدرجات المحفوظة والإحصاءات باللانهاية.",
+  "{label}: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "{label}: تُرسم ∞ عند {db:g} dB؛ وتحتفظ الدرجات المحفوظة والإحصاءات باللانهاية.",
   "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: المنحنى هو JOD لكل ثانية، مرسومًا عند منتصف الثانية؛ عمود CVVDP هو JOD للفيديو كاملًا، وهو ليس متوسط ثوانيه. القيم من الوسيط إلى الأعلى تصف الثواني.",
   "{rate:.0f} kb/s": "{rate:.0f} كيلوبت/ث",
   "kb/s": "كيلوبت/ث",

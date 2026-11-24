@@ -56,6 +56,11 @@ void take_run_options(VmafOptions& options, const ComparisonResult& result) {
     options.compute_xpsnr = has("xpsnr");
     options.compute_psnr_yuv = has("psnr_yuv");
     options.compute_ssim_yuv = has("ssim_yuv");
+    options.compute_ms_ssim = has("ms_ssim");
+    options.compute_ms_ssim_yuv = has("ms_ssim_yuv");
+    options.compute_psnr_hvs = has("psnr_hvs");
+    options.compute_cambi = has("cambi");
+    options.compute_ciede2000 = has("ciede2000");
     options.compute_vmaf = has("vmaf");
     options.compute_vmaf_neg = has("vmaf_neg");
     options.compute_vmaf_v1 = has("vmaf_v1");

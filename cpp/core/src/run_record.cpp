@@ -41,11 +41,15 @@ Json summary_rules() {
         for (const Threshold& band : metric.thresholds) {
             bands.push_back(std::string(1, band.comparison) + " " + format_general(band.value));
         }
-        const bool decibels = metric.aggregation == MetricAggregation::square_mean_root_db;
+        const char* const score =
+            metric.kind == MetricKind::sequence ? "the whole video's score, as the metric gives it"
+            : metric.aggregation == MetricAggregation::square_mean_root_db
+                ? "-20 log10(mean(10^(-dB/20))) of the frames (FFmpeg's XPSNR average)"
+            : metric.aggregation == MetricAggregation::mean_error_db
+                ? "-10 log10(mean(10^(-dB/10))) of the frames (the mean of their error, as Daala's tool averages it)"
+                : "the mean of the frames";
         per_metric[std::string(metric.key)] =
-            Json{{"score", metric.kind == MetricKind::sequence ? "the whole video's score, as the metric gives it"
-                           : decibels ? "-20 log10(mean(10^(-dB/20))) of the frames (FFmpeg's XPSNR average)"
-                                      : "the mean of the frames"},
+            Json{{"score", score},
                  {"worst_is", metric.direction == MetricDirection::lower_is_better ? "high" : "low"},
                  {"bands", std::move(bands)}};
     }

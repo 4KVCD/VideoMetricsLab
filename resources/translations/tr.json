@@ -1,6 +1,12 @@
 {
  "strings": {
   "(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "Üç düzlemin puanlarının (6 × Y + Cb + Cr) / 8'i; JVET'in PSNR'yi, MSU'nun YUV-SSIM'i ağırlıklandırdığı gibi. Yalnızca uygulama hesaplar, FFmpeg'in metrikleri değil.",
+  "More metrics:": "Diğer metrikler:",
+  "SSIM at five scales (Wang et al.), as MSU's codec reports use it. Calculated by the app only, not with FFmpeg's metrics.": "Beş ölçekte SSIM (Wang ve ark.); MSU'nun codec raporlarında kullanıldığı gibi. Yalnızca uygulama hesaplar, FFmpeg'in metrikleri değil.",
+  "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "Üç düzlemin MS-SSIM değerlerinin (6 × Y + Cb + Cr) / 8'i. Yalnızca uygulama hesaplar, FFmpeg'in metrikleri değil.",
+  "PSNR weighted by the eye's sensitivity to contrast and its masking, as Xiph's codec tests report it. Calculated by the app only, not with FFmpeg's metrics.": "Gözün kontrast duyarlılığına ve maskelemesine göre ağırlıklandırılmış PSNR; Xiph'in codec testlerinde bildirildiği gibi. Yalnızca uygulama hesaplar, FFmpeg'in metrikleri değil.",
+  "Netflix's banding score of the test video alone: 0 is no banding, 24 the most. Calculated by the app only, not with FFmpeg's metrics.": "Netflix'in yalnızca test videosu için bantlanma puanı: 0 bantlanma yok, 24 en fazla. Yalnızca uygulama hesaplar, FFmpeg'in metrikleri değil.",
+  "The mean colour difference (CIEDE2000 ΔE) of the pixels: 0 is identical, about 1 just noticeable. Calculated by the app only, not with FFmpeg's metrics.": "Piksellerin ortalama renk farkı (CIEDE2000 ΔE): 0 aynı, yaklaşık 1 zar zor fark edilir. Yalnızca uygulama hesaplar, FFmpeg'in metrikleri değil.",
   "Nitrate": "Nitrat",
   "Phosphor": "Fosfor",
   "Green-black shadows with cream text and a gold accent, like an old film print. VML Classic shows Dark.": "Yeşilimsi siyah gölgeler, krem metin ve altın vurgu, eski bir film baskısı gibi. VML Classic Koyu gösterir.",
@@ -938,7 +944,7 @@
   "Video bitrate (Mb/s)": "Video bit hızı (Mb/sn)",
   "GOP bitrate (Mb/s)": "GOP bit hızı (Mb/sn)",
   "Frame size (Mbit)": "Kare boyutu (Mbit)",
-  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: ∞, {db:g} dB'de çizilir; kaydedilen puanlar ve istatistikler sonsuzu korur.",
+  "{label}: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "{label}: ∞, {db:g} dB'de çizilir; kaydedilen puanlar ve istatistikler sonsuzu korur.",
   "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: eğri her saniyenin JOD değeridir ve saniyenin ortasında çizilir; CVVDP sütunu videonun tamamının JOD değeridir ve saniyelerinin ortalaması değildir. Medyan'dan Maks'a kadar olanlar saniyeleri tanımlar.",
   "{rate:.0f} kb/s": "{rate:.0f} kb/sn",
   "kb/s": "kb/sn",

@@ -626,9 +626,9 @@ TEST_F(GraphPanelTest, AnIdenticalXpsnrFrameIsDrawnAboveTheOthersAndKeptInTheSco
     const int id = id_of(panel, "a");
     const std::span<const float> plotted = drawn(xpsnr, id).values;
     EXPECT_EQ(plotted[0], 110.0F);
-    EXPECT_EQ(plotted[1], static_cast<float>(xpsnr_infinity_plot_db));
+    EXPECT_EQ(plotted[1], static_cast<float>(infinity_plot_db));
     EXPECT_TRUE(std::isnan(plotted[2]));
-    EXPECT_EQ(plotted[3], static_cast<float>(xpsnr_infinity_plot_db));
+    EXPECT_EQ(plotted[3], static_cast<float>(infinity_plot_db));
     const MetricCurve* curve = xpsnr.curve(id);
     ASSERT_NE(curve, nullptr);
     EXPECT_TRUE(std::isinf(curve->values[1]));
