@@ -18,6 +18,7 @@
 
 #include "vml/append.h"
 #include "vml/av2_probe.h"
+#include "vml/matroska.h"
 #include "vml/number_format.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
@@ -243,27 +244,34 @@ long long stream_bit_rate(const Json& stream, double duration, long long file_si
 
 // Whether a file's statistics tags describe it. FFmpeg writes none of its own,
 // and copies its input's into what it writes, even through a re-encode, where
-// they can be far from the truth. So in a file it wrote they are used only
-// where they add up: every stream but the attachments and cover art has its
-// size, together they are the file but for its container's own bytes (at
-// least 99.5 % of it: a 2-hour Matroska film's are 0.3 %), and the video is
-// at least half of it. A stale set passes only where the new video is at
-// most 0.5 % of the file larger than the old: its rate is then at most about
-// 1 % off. The sizes are the packets' as read: mkvmerge may store a subtitle
-// track compressed (zlib, as it does PGS) and counts it uncompressed, so only
-// the other streams must fit in the file. "Lavf" also names a file mkvmerge
-// wrote from one FFmpeg did, as mkvmerge keeps its input's ENCODER tag, with
-// statistics of its own.
-bool statistics_are_true(const Json& streams, const Json& format, const Json& video) {
+// they can be far from the truth. Who wrote the file is its Matroska
+// WritingApp (`writing_app`, matroska_writing_app), not its ENCODER tag:
+// mkvmerge keeps its input's, so a file mkvmerge wrote, with statistics of its
+// own, from one FFmpeg made says "Lavf" there. Without the WritingApp (a file
+// not read, or not Matroska), the ENCODER tag says.
+//
+// In a file FFmpeg wrote, the tags are used only where they add up: every
+// stream but the attachments and cover art has its size, the streams but the
+// subtitles are the file but for its container's own bytes (at least 99.5 %
+// of it: a 2-hour Matroska film's are 0.3 %, and no more than all of it), and
+// the video is at least half of it. A stale set passes only where the new
+// video is at most 0.5 % of the file larger than the old: its rate is then at
+// most about 1 % off. The subtitles are left out because their sizes are their
+// packets' as read: a subtitle track may be stored compressed (zlib, as
+// mkvmerge stores PGS) and counted uncompressed, more than it takes in the file.
+bool statistics_are_true(const Json& streams, const Json& format, const Json& video,
+                         const std::optional<std::string>& writing_app) {
     const Json* encoder = tag(format, "ENCODER");
-    if (encoder == nullptr || !encoder->is_string() || !encoder->get<std::string>().starts_with("Lavf")) {
+    const std::string writer = writing_app                                   ? *writing_app
+                               : encoder != nullptr && encoder->is_string() ? encoder->get<std::string>()
+                                                                             : std::string();
+    if (!writer.starts_with("Lavf")) {
         return true;
     }
     const long long file_size = whole(member(format, "size"));
     if (file_size <= 0 || !streams.is_array()) {
         return false;
     }
-    long long streams_bytes = 0;
     long long stored_as_is = 0;  // all but the subtitles, which may be stored compressed
     long long video_bytes = 0;
     for (const Json& stream : streams) {
@@ -276,7 +284,6 @@ bool statistics_are_true(const Json& streams, const Json& format, const Json& vi
             return false;
         }
         const long long size = std::max(0LL, whole(bytes));
-        streams_bytes += size;
         if (type != "subtitle") {
             stored_as_is += size;
         }
@@ -284,7 +291,7 @@ bool statistics_are_true(const Json& streams, const Json& format, const Json& vi
             video_bytes = size;
         }
     }
-    return stored_as_is <= file_size && streams_bytes * 1000 >= file_size * 995 && video_bytes * 2 >= file_size;
+    return stored_as_is <= file_size && stored_as_is * 1000 >= file_size * 995 && video_bytes * 2 >= file_size;
 }
 
 // What the video's display matrix says a player turns it by: 0, 90, 180 or 270
@@ -360,9 +367,8 @@ std::optional<long long> rate_less_the_rest(const Json& video, const Json& strea
 // stated rates when every one states one (with no audio, the file's). Where
 // neither gives one, the file's rate is all there is.
 VideoRate video_bit_rate(const Json& video, const Json& streams, const Json& format, double duration,
-                         bool raw_stream, const std::optional<PacketSample>& sample) {
+                         bool raw_stream, const std::optional<PacketSample>& sample, bool statistics) {
     const long long file_size = whole(member(format, "size"));
-    const bool statistics = statistics_are_true(streams, format, video);
     if (const long long own = stream_bit_rate(video, duration, file_size, statistics); own != 0) {
         return {own};
     }
@@ -428,7 +434,8 @@ int integer_member(const Json& object, const char* key) {
 }  // namespace
 
 VideoInfo video_info_from_probe(const std::filesystem::path& path, std::string_view probe_json,
-                                const std::optional<PacketSample>& sample) {
+                                const std::optional<PacketSample>& sample,
+                                const std::optional<std::string>& writing_app) {
     Json data;
     try {
         data = Json::parse(replace_invalid_utf8(probe_json));
@@ -465,7 +472,9 @@ VideoInfo video_info_from_probe(const std::filesystem::path& path, std::string_v
                                              : static_cast<long long>(frames->get<double>());
     }
     info.format_name = string_member(format, "format_name");
-    const VideoRate rate = video_bit_rate(*video, streams, format, info.duration, info.is_raw_stream(), sample);
+    const bool statistics = statistics_are_true(streams, format, *video, writing_app);
+    const VideoRate rate =
+        video_bit_rate(*video, streams, format, info.duration, info.is_raw_stream(), sample, statistics);
     info.bit_rate = rate.bits_per_second;
     info.bit_rate_whole_file = rate.whole_file;
     info.bit_rate_estimated = rate.estimated;
@@ -476,7 +485,7 @@ VideoInfo video_info_from_probe(const std::filesystem::path& path, std::string_v
     info.codec_name = string_member(*video, "codec_name", "unknown");
     info.profile = string_member(*video, "profile");
     info.level = integer_member(*video, "level");
-    if (statistics_are_true(streams, format, *video)) {
+    if (statistics) {
         info.stream_bytes = std::max(0LL, whole(tag(*video, "NUMBER_OF_BYTES")));
     }
     info.writing_library = tag_text(format, "ENCODER");
@@ -769,9 +778,10 @@ std::optional<VideoInfo> sampled_video_rate(const std::filesystem::path& path, c
     }
     try {
         const std::string probe = format_and_streams(path, ffprobe, cancel);
-        const VideoInfo info = video_info_from_probe(path, probe);
+        const std::optional<std::string> writer = matroska_writing_app(path);
+        const VideoInfo info = video_info_from_probe(path, probe, std::nullopt, writer);
         if (const std::optional<PacketSample> sample = sampled_packets(path, info.bit_rate, ffprobe, cancel)) {
-            return video_info_from_probe(path, probe, sample);
+            return video_info_from_probe(path, probe, sample, writer);
         }
     } catch (const ProbeError&) {
         // The file changed or went since it was read: its rate stays.
@@ -785,14 +795,15 @@ VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffpr
         return probe_av2(path, cancel);  // ffprobe cannot read AV2
     }
     const std::string probe = format_and_streams(path, ffprobe, cancel);
-    VideoInfo info = video_info_from_probe(path, probe);
+    const std::optional<std::string> writer = matroska_writing_app(path);
+    VideoInfo info = video_info_from_probe(path, probe, std::nullopt, writer);
     if (rate_sample == RateSample::now && needs_rate_sample(info)) {
         // The video states no rate of its own: a short stretch of the
         // file's packets gives the other streams' and the container's share.
         // The rate found so far (the file's, or the file's less the stated
         // audio) is near enough to size the stretch.
         if (const std::optional<PacketSample> sample = sampled_packets(path, info.bit_rate, ffprobe, cancel)) {
-            info = video_info_from_probe(path, probe, sample);
+            info = video_info_from_probe(path, probe, sample, writer);
         }
     }
     if (stamped_in_decoding_order(info, probe, ffprobe, cancel)) {

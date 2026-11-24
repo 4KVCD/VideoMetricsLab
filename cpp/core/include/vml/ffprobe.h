@@ -172,10 +172,13 @@ int packet_sample_seconds(long long bits_per_second);
 // bitrate is not recorded, it is estimated from the file's: with `sample`,
 // less its attachments (fonts), the container's own bytes and every other
 // stream (audio, subtitles, data), each at its stated rate or else its rate
-// in the sample; without, less its audio tracks' stated rates. Throws
+// in the sample; without, less its audio tracks' stated rates. `writing_app`
+// is the program that wrote the file (matroska_writing_app), where known: its
+// Matroska statistics are checked only where that is FFmpeg. Throws
 // ProbeError when the output cannot be read or has no video stream.
 VideoInfo video_info_from_probe(const std::filesystem::path& path, std::string_view probe_json,
-                                const std::optional<PacketSample>& sample = std::nullopt);
+                                const std::optional<PacketSample>& sample = std::nullopt,
+                                const std::optional<std::string>& writing_app = std::nullopt);
 
 // The sample in ffprobe's lines of packets (-show_entries
 // packet=stream_index,size,pos -of csv=p=0) of the first `seconds` of a file.

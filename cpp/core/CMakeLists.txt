@@ -45,6 +45,7 @@ add_library(vml_core
     src/job_runner.cpp
     src/libvmaf.cpp
     src/libvmaf_cpu.cpp
+    src/matroska.cpp
     src/metric_cache.cpp
     src/metric_cache_load.cpp
     src/metrics.cpp

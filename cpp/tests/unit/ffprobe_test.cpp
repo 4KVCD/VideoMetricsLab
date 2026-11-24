@@ -4,12 +4,14 @@
 
 #include <chrono>
 #include <filesystem>
+#include <sstream>
 #include <string>
 #include <thread>
 
 #include "reference.h"
 #include "test_videos.h"
 #include "vml/geometry.h"
+#include "vml/matroska.h"
 #include "vml/platform/system.h"
 #include "vml/run_json.h"
 
@@ -159,10 +161,12 @@ TEST(Ffprobe, StatisticsTagsWithALanguageAreTheTracks) {
 // A file FFmpeg wrote, of 1,000,000 bytes over 10 s (800 kb/s), with a video
 // and an Opus track whose sizes the tags give as `video_bytes` and
 // `audio_bytes` ("" for no tags); with `cover_art`, a cover as FFmpeg lists
-// one (a picture stream, with no tags); and with `subtitle_bytes`, a PGS
-// track of that size.
+// one (a picture stream, with no tags); with `subtitle_bytes`, a PGS track of
+// that size; and with `writing_app`, the program that wrote the file, as its
+// Matroska header says (its ENCODER tag says FFmpeg either way).
 VideoInfo ffmpeg_written(const std::string& video_bytes, const std::string& audio_bytes, bool cover_art = false,
-                         const std::string& subtitle_bytes = "") {
+                         const std::string& subtitle_bytes = "",
+                         const std::optional<std::string>& writing_app = std::nullopt) {
     const auto tags = [](const std::string& bytes) {
         return bytes.empty() ? std::string() : R"(,"tags":{"NUMBER_OF_BYTES":")" + bytes + R"("})";
     };
@@ -179,7 +183,7 @@ VideoInfo ffmpeg_written(const std::string& video_bytes, const std::string& audi
                               tags(audio_bytes) + "}" + extra +
                               R"(],"format":{"duration":"10.0","size":"1000000","bit_rate":"800000",)"
                               R"("format_name":"matroska,webm","tags":{"ENCODER":"Lavf63.1.101"}}})";
-    return video_info_from_probe("a.mkv", probe);
+    return video_info_from_probe("a.mkv", probe, std::nullopt, writing_app);
 }
 
 // In a file FFmpeg wrote, the tags count where they add up to the file;
@@ -212,6 +216,48 @@ TEST(Ffprobe, TheVideosRateIsItsOwnWhereTheTagsAddUp) {
     const VideoInfo too_big = ffmpeg_written("900000", "120000", true, "30000");
     EXPECT_EQ(too_big.bit_rate, 800000);
     EXPECT_TRUE(too_big.bit_rate_whole_file);
+
+    // A stale video's tag hidden by a subtitle track counted uncompressed: the
+    // video and audio make 98.9 % of the file, the subtitles take it to 101.9 %.
+    // In a file FFmpeg wrote, the subtitles don't count towards the 99.5 %, so
+    // the tags are not trusted.
+    const VideoInfo stale_hidden = ffmpeg_written("892000", "97000", true, "30000");
+    EXPECT_EQ(stale_hidden.bit_rate, 800000);
+    EXPECT_TRUE(stale_hidden.bit_rate_whole_file);
+    // The same tags in a file mkvmerge wrote (its ENCODER tag kept from
+    // FFmpeg's): its statistics are its own, and count.
+    const VideoInfo by_mkvmerge = ffmpeg_written("892000", "97000", true, "30000", "mkvmerge v94.0 ('Initiate') 64-bit");
+    EXPECT_EQ(by_mkvmerge.bit_rate, 713600);
+    EXPECT_FALSE(by_mkvmerge.bit_rate_estimated || by_mkvmerge.bit_rate_whole_file);
+    // Written by FFmpeg as its header says too: checked as before.
+    EXPECT_TRUE(ffmpeg_written("892000", "97000", true, "30000", "Lavf61.7.100").bit_rate_whole_file);
+}
+
+// An EBML element: its ID's bytes, a one-byte size, its contents.
+std::string element(const std::string& id, const std::string& contents) {
+    return id + static_cast<char>(0x80 | contents.size()) + contents;
+}
+
+// The writing application is read from the Segment Info, before the first
+// cluster, past whatever comes first (a Void); its padding is dropped.
+TEST(Matroska, ReadsTheWritingApplicationFromTheSegmentInfo) {
+    const std::string ebml_header = element("\x1A\x45\xDF\xA3", element("\x42\x82", "matroska"));
+    const std::string segment_unknown_size = std::string("\x18\x53\x80\x67\x01", 5) + std::string(7, '\xFF');
+    const std::string void_element = element("\xEC", std::string(4, '\0'));
+    const std::string info = element("\x15\x49\xA9\x66",
+                                     element("\x2A\xD7\xB1", std::string("\x0F\x42\x40", 3)) +
+                                         element("\x4D\x80", "libebml v1.4.5 + libmatroska v1.7.1") +
+                                         element("\x57\x41", std::string("mkvmerge v94.0\0\0", 16)));
+    const std::string cluster = element("\x1F\x43\xB6\x75", element("\xE7", std::string(1, '\0')));
+    const auto read = [](const std::string& bytes) {
+        std::istringstream in(bytes, std::ios::binary);
+        return matroska_writing_app(in);
+    };
+    EXPECT_EQ(read(ebml_header + segment_unknown_size + void_element + info + cluster), "mkvmerge v94.0");
+    // No Info before the first cluster, a file that isn't Matroska, a cut header.
+    EXPECT_EQ(read(ebml_header + segment_unknown_size + cluster + info), std::nullopt);
+    EXPECT_EQ(read("RIFF$\x00\x00\x00WAVE"), std::nullopt);
+    EXPECT_EQ(read(ebml_header.substr(0, 3)), std::nullopt);
 }
 
 // A 100 s Matroska file of 800 kb/s (10,000,000 bytes) whose video states no
