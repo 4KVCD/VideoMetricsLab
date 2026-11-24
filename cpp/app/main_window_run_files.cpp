@@ -154,7 +154,9 @@ void MainWindow::load_saved_run(const std::filesystem::path& path) {
         dialogs_.alert(app::tr("Failed to load run"), tr_message(QString::fromStdString(error.what())));
         return;
     }
-    const ComparisonResult& result = loaded.first;
+    auto run = std::make_shared<CompletedRun>();
+    run->result = std::move(loaded.first);  // a film's scores: moved, not copied
+    const ComparisonResult& result = run->result;
     // A result belongs to a pair of reference and test video: under another
     // reference it would show a comparison never made. And one row per
     // video: with two rows for a path, every lookup by path (saved scores,
@@ -182,8 +184,6 @@ void MainWindow::load_saved_run(const std::filesystem::path& path) {
         rows_.erase(rows_.begin() + *existing);
     }
 
-    auto run = std::make_shared<CompletedRun>();
-    run->result = result;
     run->label = QString::fromStdString(loaded.second);
     // Metric Graphs' line of the same file, if it is there: replaced, not
     // joined by a second (Import run file... there names it so too).

@@ -192,24 +192,6 @@ std::string python_type_name(const nlohmann::json& value) {
     }
 }
 
-// A run file records no decoding marks (metric_cache.cpp): its scores say
-// nothing of how their pair's AV1 film grain was added.
-void recorded_without_marks(MetricResultSet& results) {
-    MetricResultSet unmarked;
-    for (const std::string& key : results.keys()) {
-        if (const FrameMetricResult* frame = results.frame(key)) {
-            FrameMetricResult copy = *frame;
-            copy.av1_grain_dav1d = false;
-            unmarked.add(std::move(copy));
-        } else if (const SequenceMetricResult* sequence = results.sequence(key)) {
-            SequenceMetricResult copy = *sequence;
-            copy.av1_grain_dav1d = false;
-            unmarked.add(std::move(copy));
-        }
-    }
-    results = std::move(unmarked);
-}
-
 // A file saved while VMAF v1 was a model of the one VMAF column holds its v1
 // scores as "vmaf": they become VMAF v1's, so that they show in the VMAF v1
 // column and are never taken for VMAF v0.6.1's (_v1_from_old_vmaf_column).
@@ -303,10 +285,10 @@ void save_run(const ComparisonResult& result, const std::filesystem::path& path,
     });
 }
 
-std::pair<ComparisonResult, std::string> run_from_text(const std::string& text) {
+std::pair<ComparisonResult, std::string> run_from_text(std::string text) {
     nlohmann::json data;
     try {
-        data = nlohmann::json::parse(python_json_readable(text));
+        data = nlohmann::json::parse(python_json_readable(std::move(text)));
     } catch (const std::exception& error) {
         throw RunFileError(error.what());
     }
@@ -322,14 +304,22 @@ std::pair<ComparisonResult, std::string> run_from_json(const nlohmann::json& dat
         if (!version.is_number() || version.get<double>() != format_version) {
             throw std::invalid_argument("Unsupported analysis result format version: " + python_repr_of(version));
         }
-        const nlohmann::json metric_data = data.value("metric_results", nlohmann::json());
-        if (!metric_data.is_array()) {
+        // Read where it is: a run of a film holds hundreds of thousands of
+        // scores, not to be copied.
+        const auto metric_data = data.find("metric_results");
+        if (metric_data == data.end() || !metric_data->is_array()) {
             throw std::invalid_argument("metric_results must be a list");
         }
         ComparisonResult result;
-        for (const nlohmann::json& item : metric_data) {
-            std::visit([&result](auto&& metric) { result.metric_results.add(std::move(metric)); },
-                       metric_from_dict(item));
+        for (const nlohmann::json& item : *metric_data) {
+            // A run file records no decoding marks (metric_cache.cpp): its
+            // scores say nothing of how their pair's AV1 film grain was added.
+            std::visit(
+                [&result](auto&& metric) {
+                    metric.av1_grain_dav1d = false;
+                    result.metric_results.add(std::move(metric));
+                },
+                metric_from_dict(item));
         }
         // In the order Python reads them, so that a file missing several
         // gives the same first complaint.
@@ -369,12 +359,12 @@ std::pair<ComparisonResult, std::string> run_from_json(const nlohmann::json& dat
         }
         // A file that does not count its frames counts those its scores
         // have, as the Python app's ComparisonResult does.
-        if (const FrameScores frames = frame_scores_from_results(result.metric_results);
-            result.compared_frame_count <= 0 && !frames.frame.empty()) {
-            result.compared_frame_count = frames.frame.back() + 1LL;
+        if (result.compared_frame_count <= 0) {
+            if (const FrameScores frames = frame_scores_from_results(result.metric_results); !frames.frame.empty()) {
+                result.compared_frame_count = frames.frame.back() + 1LL;
+            }
         }
         v1_from_old_vmaf_column(result);
-        recorded_without_marks(result.metric_results);
         return {std::move(result), python_str(python_item(data, "label"))};
     } catch (const RunFileError&) {
         throw;
@@ -388,7 +378,7 @@ std::pair<ComparisonResult, std::string> load_run(const std::filesystem::path& p
     if (!text) {
         throw RunFileError("Could not read " + platform::path_text(path));
     }
-    return run_from_text(*text);
+    return run_from_text(std::move(*text));
 }
 
 }  // namespace vml

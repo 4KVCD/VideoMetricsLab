@@ -44,7 +44,7 @@ void save_run(const ComparisonResult& result, const std::filesystem::path& path,
 // A saved run's result and label, from the file's text. A run saved while
 // VMAF v1 was a model of the one VMAF column comes back with those scores
 // as VMAF v1's. Throws RunFileError.
-std::pair<ComparisonResult, std::string> run_from_text(const std::string& text);
+std::pair<ComparisonResult, std::string> run_from_text(std::string text);
 // run_from_text of the file's JSON, parsed already (made readable first:
 // python_json_readable). Throws RunFileError.
 std::pair<ComparisonResult, std::string> run_from_json(const nlohmann::json& data);
