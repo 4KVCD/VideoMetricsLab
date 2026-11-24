@@ -64,8 +64,10 @@ public:
     // (docs/ARCHITECTURE.md, "Exports"), after their archive item: results
     // and per-frame scores as JSON or CSV, the graphs as a .zip, the weak
     // segments, then the run file; each calling `chosen` with its kind,
-    // usable where `enabled`.
-    static void add_quick_grabs(QMenu& menu, bool enabled, const std::function<void(Export)>& chosen);
+    // usable where `enabled`. One in `refused` is greyed, its reason its
+    // tooltip: said before the click, not in a window after it.
+    static void add_quick_grabs(QMenu& menu, bool enabled, const std::function<void(Export)>& chosen,
+                                const std::map<Export, QString>& refused = {});
 
     // `settings` are the window's (the saved results' folder, the weak
     // segment profiles); `dialogs` the window's, which outlive the panel;
@@ -187,6 +189,9 @@ private:
     // A tile's height, the same for every tile: the box is sized from it.
     int tile_height() const;
     std::vector<const SavedComparison*> selected() const;
+    // Whether the selected comparisons are of more than one reference, which
+    // graphs and weak segments are not made for.
+    bool several_references() const;
     void update_buttons();
 
     const Settings& settings_;

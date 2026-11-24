@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 
+#include "export_indicator.h"
 #include "dialogs.h"
 #include "graph_panel.h"
 #include "vml/bd_rate_report.h"
@@ -54,6 +55,9 @@ public:
 
     // Its questions and messages; the tests answer them.
     Dialogs dialogs;
+    // Where its exports say how they went: the window's indicator
+    // (export_indicator.h). Not set: nowhere.
+    ExportReport export_report;
     // Which of `items` (the scored videos) to add: their places in the list;
     // none for Cancel.
     std::function<std::vector<int>(const QStringList& items)> choose_videos;

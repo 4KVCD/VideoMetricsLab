@@ -38,6 +38,7 @@
 #include <vector>
 
 #include "dialogs.h"
+#include "export_indicator.h"
 #include "graph_bundle.h"
 #include "probe_worker.h"
 #include "results_export.h"
@@ -624,10 +625,19 @@ private:
     // Saves `runs` (a result and its name) as run files (.metrics.json):
     // one where the user says, several into a folder, each named after it.
     void save_run_files(const std::vector<std::pair<const ComparisonResult*, QString>>& runs);
-    void submit_save(const ComparisonResult& result, const std::filesystem::path& path, const QString& label);
     std::vector<ExportedRun> exported_runs() const;
 
     // ------------------------------------- graph exports (main_window_exports.cpp)
+    // The tab bar's right end (the indicator; VML Modern's title buttons
+    // where the window has no title bar of its own), made once.
+    void build_tab_corner();
+    // Says how an export went on the indicator (export_indicator.h).
+    void report_export(const ExportOutcome& outcome);
+    // Writes an export off the window's thread (file_writes_), the indicator
+    // saying "Saving..." until `write` has run, then the files it gives, or
+    // why it failed. `quiet` (the after-run export): only a failure is said.
+    // No export opens a window, for success or failure.
+    void submit_export(const QString& description, std::function<QStringList()> write, bool quiet = false);
     // Graphs to save as one .zip file (graph_bundle.h) once the bitrate they
     // need is read: of `videos`, compared with `reference`, with `extra`
     // files (a video's results); `together`: the videos' graphs together as
@@ -702,6 +712,9 @@ private:
     void export_rows();
     // The menu's export of one kind, of its rows as they are now.
     void export_rows_as(SavedResultsPanel::Export kind);
+    // The Videos table's quick grabs that cannot be made now, with why
+    // (SavedResultsPanel::add_quick_grabs).
+    std::map<SavedResultsPanel::Export, QString> videos_refused() const;
     // What an export holds, by Settings' Exports include: for one video, its
     // results (alone in the document) and its weak segments; for several,
     // the run's results document and their weak segments report; and the
@@ -1060,6 +1073,10 @@ private:
     // that looks whether it is read.
     std::vector<PendingBundle> pending_bundles_;
     QTimer* bundle_timer_ = nullptr;
+    // The tab bar's right end (build_tab_corner), and the indicator there
+    // that says how each export went.
+    QWidget* tab_corner_ = nullptr;
+    ExportIndicator* export_indicator_ = nullptr;
     QLabel* status_label_ = nullptr;
     std::vector<ElidedLabel*> job_progress_labels_;
 };

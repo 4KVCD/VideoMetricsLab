@@ -195,6 +195,19 @@ QString export_action_text(ExportScope scope, const std::vector<std::string>& it
     return contents;
 }
 
+QString nothing_scored_text() {
+    return app::tr("No test video has been scored against the reference yet.");
+}
+
+QString no_conditions_text() {
+    return app::tr("The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.");
+}
+
+QString one_reference_text() {
+    return app::tr("Graphs and weak segments are exported for test videos of one reference: select comparisons that "
+                   "share it.");
+}
+
 bool settled_for_export(const std::vector<std::string>& requested, const std::vector<std::string>& kept,
                         const std::vector<std::string>& failed) {
     const auto in = [](const std::vector<std::string>& keys, const std::string& key) {

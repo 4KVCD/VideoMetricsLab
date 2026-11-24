@@ -943,10 +943,16 @@ void SavedResultsPanel::update_buttons() {
                                       : QString());
 }
 
-void SavedResultsPanel::add_quick_grabs(QMenu& menu, bool enabled, const std::function<void(Export)>& chosen) {
-    const auto add = [&menu, enabled, &chosen](const QString& text, Export kind) {
+void SavedResultsPanel::add_quick_grabs(QMenu& menu, bool enabled, const std::function<void(Export)>& chosen,
+                                        const std::map<Export, QString>& refused) {
+    menu.setToolTipsVisible(true);
+    const auto add = [&menu, enabled, &chosen, &refused](const QString& text, Export kind) {
         QAction* action = menu.addAction(text);
-        action->setEnabled(enabled);
+        const auto why = refused.find(kind);
+        action->setEnabled(enabled && why == refused.end());
+        if (enabled && why != refused.end()) {
+            action->setToolTip(why->second);
+        }
         QObject::connect(action, &QAction::triggered, &menu, [chosen, kind] { chosen(kind); });
         return action;
     };
@@ -954,9 +960,11 @@ void SavedResultsPanel::add_quick_grabs(QMenu& menu, bool enabled, const std::fu
     add(app::tr("Results as CSV..."), Export::results_csv);
     add(app::tr("Per-frame scores as JSON..."), Export::frames_json);
     add(app::tr("Per-frame scores as CSV..."), Export::frames_csv);
-    add(app::tr("Graphs as ZIP..."), Export::graphs)
-        ->setToolTip(app::tr("Each video's graph of every metric, and with several of one reference every metric "
-                             "with all of them; the bitrate graphs where the videos are still there."));
+    QAction* graphs = add(app::tr("Graphs as ZIP..."), Export::graphs);
+    if (!enabled || !refused.contains(Export::graphs)) {  // not refused: what it holds
+        graphs->setToolTip(app::tr("Each video's graph of every metric, and with several of one reference every "
+                                   "metric with all of them; the bitrate graphs where the videos are still there."));
+    }
     add(app::tr("Weak segments as JSON or CSV..."), Export::segments);
     menu.addSeparator();
     add(app::tr("Run file (.metrics.json)..."), Export::run_file);
@@ -980,7 +988,14 @@ void SavedResultsPanel::add_export_items(QMenu& menu) {
     connect(contents, &QAction::triggered, this,
             [this] { emit export_requested(Export::contents, selected_results()); });
     menu.addSeparator();
-    add_quick_grabs(menu, true, [this](Export kind) { emit export_requested(kind, selected_results()); });
+    std::map<Export, QString> refused;
+    if (several_references()) {
+        refused[Export::graphs] = one_reference_text();
+        refused[Export::segments] = one_reference_text();
+    } else if (segment_rules().conditions.empty()) {
+        refused[Export::segments] = no_conditions_text();
+    }
+    add_quick_grabs(menu, true, [this](Export kind) { emit export_requested(kind, selected_results()); }, refused);
     QMenu* segments = menu.addMenu(app::tr("Weak segments by"));
     segments->setToolTipsVisible(true);
     // The rules, one picked: the weak segments' quick grab's and the
@@ -1012,10 +1027,25 @@ QAction* SavedResultsPanel::fill_menu(QMenu& menu) const {
     if (count == 0) {
         return nullptr;
     }
-    QAction* contents = menu.addAction(export_action_text(
-        count == 1 ? ExportScope::this_video : ExportScope::selected_videos, exported_items(settings_)));
-    contents->setEnabled(!export_contents(exported_items(settings_)).isEmpty());
+    const std::vector<std::string> items = exported_items(settings_);
+    QAction* contents =
+        menu.addAction(export_action_text(count == 1 ? ExportScope::this_video : ExportScope::selected_videos, items));
+    const bool needs_one_reference = std::find(items.begin(), items.end(), "graphs") != items.end() ||
+                                     std::find(items.begin(), items.end(), "weak_segments") != items.end();
+    const bool refused = needs_one_reference && several_references();
+    contents->setEnabled(!export_contents(items).isEmpty() && !refused);
+    if (refused) {
+        menu.setToolTipsVisible(true);
+        contents->setToolTip(one_reference_text());
+    }
     return contents;
+}
+
+bool SavedResultsPanel::several_references() const {
+    const std::vector<const SavedComparison*> chosen = selected();
+    return std::any_of(chosen.begin(), chosen.end(), [&chosen](const SavedComparison* saved) {
+        return !same_path(saved->source, chosen.front()->source);
+    });
 }
 
 void SavedResultsPanel::fill_context_menu(QMenu& menu) {

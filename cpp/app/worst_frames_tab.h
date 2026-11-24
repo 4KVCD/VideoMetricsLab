@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 
+#include "export_indicator.h"
 #include "dialogs.h"
 #include "segment_rules_editor.h"
 #include "theme.h"
@@ -70,6 +71,9 @@ public:
     // Settings' Exported graphs, read at each export of the graph (light
     // where not set).
     std::function<theme::ChartColours()> export_colours;
+    // Where its exports say how they went: the window's indicator
+    // (export_indicator.h). Not set: nowhere.
+    ExportReport export_report;
 
     // The videos to choose from (the graph's lines, in their order). The
     // video chosen stays chosen while it is among them; else the first is.
@@ -182,8 +186,12 @@ private:
     void export_segments(ExportKind kind);
     void export_worst(ExportKind kind);
     void export_graph();
-    // Writes `text` to `path` (CR LF on Windows), saying so if it cannot.
+    // Writes `text` at `path`, the Save dialog's answer (nothing for Cancel),
+    // and says how it went (export_report).
     void write_export(const QString& path, const std::string& text);
+    // A text file as the command line writes it (CR LF on Windows): the
+    // error, empty when written.
+    static QString write_text(const QString& path, const std::string& text);
     // The lists side by side where both fit at their natural widths, else
     // one above the other. Only compares the widths kept by fit_list with
     // the room: called on every resize of the work area.

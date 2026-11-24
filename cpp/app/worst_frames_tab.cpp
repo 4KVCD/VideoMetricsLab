@@ -1532,22 +1532,21 @@ void WorstFramesTab::export_graph() {
     }
     const QPixmap image = export_image(*chart_, title, ExportTable{}, font(),
                                        export_colours ? export_colours() : theme::chart_colours(false));
-    if (!image.save(path)) {
-        dialogs_.alert(app::tr("Export failed"), app::tr("Could not write {path}", {{"path", path}}));
-    }
+    report_to(export_report, save_as(path, [&image](const QString& out) {
+                  return image.save(out) ? QString() : could_not_write(out);
+              }));
 }
 
 void WorstFramesTab::write_export(const QString& path, const std::string& text) {
-    if (path.isEmpty()) {
-        return;  // Cancel
-    }
+    report_to(export_report, save_as(path, [&text](const QString& out) { return write_text(out, text); }));
+}
+
+QString WorstFramesTab::write_text(const QString& path, const std::string& text) {
     // A text file, as the command line writes them: CR LF on Windows.
     std::ofstream file(path_of(path));
     file << text;
     file.close();
-    if (!file) {
-        dialogs_.alert(app::tr("Export failed"), app::tr("Could not write {path}", {{"path", path}}));
-    }
+    return file ? QString() : could_not_write(path);
 }
 
 // ------------------------------------------------------------------ layout

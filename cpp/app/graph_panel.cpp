@@ -1215,9 +1215,6 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     // Exports of a feature-length run take seconds each: written off the
     // window's thread, so that the window does not freeze.
     file_writes_ = new FileWrites(this);
-    connect(file_writes_, &FileWrites::write_failed, this,
-            [this](const QString& description, const QString& error) { on_file_write_failed(description, error); });
-    connect(file_writes_, &FileWrites::became_idle, this, [this] { on_file_writes_idle(); });
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
@@ -1282,11 +1279,6 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     root->addWidget(graph_card, 1);
     root->addWidget(build_action_bar());
 
-    // Exports finish later: said here, not in a dialog taking the focus.
-    status_label_ = new QLabel;
-    status_label_->hide();
-    theme::style(status_label_, "color: {muted};");
-    root->addWidget(status_label_);
     metric_hint_ = new QLabel(app::tr("Calculate metrics or import a run file to view graphs."));
     root->addWidget(metric_hint_);
 
@@ -2275,21 +2267,16 @@ void GraphPanel::export_statistics(bool json) {
         }
         text = text_lines(lines);
     }
-    QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly) ||
-        file.write(text.data(), static_cast<qint64>(text.size())) != static_cast<qint64>(text.size()) ||
-        !file.commit()) {
-        dialogs.alert(app::tr("Export failed"), app::tr("Could not write {path}", {{"path", path}}));
-    }
+    report_to(export_report, save_as(path, [&text](const QString& out) { return write_text_file(out, text); }));
 }
 
 void GraphPanel::on_export_png() {
     const std::string key(current_metric().key);
     const QString suggested = suggested_file_name(export_stem() + "_" + QString::fromStdString(key), ".png");
     const QString path = dialogs.save_file(app::tr("Export graph"), suggested, app::tr("PNG image (*.png)"));
-    if (!path.isEmpty() && !render_export_image().save(path)) {
-        dialogs.alert(app::tr("Export failed"), app::tr("Could not write {path}", {{"path", path}}));
-    }
+    report_to(export_report, save_as(path, [this](const QString& out) {
+        return render_export_image().save(out) ? QString() : could_not_write(out);
+    }));
 }
 
 void GraphPanel::on_export_difference() {
@@ -2317,13 +2304,20 @@ void GraphPanel::on_export_difference() {
     if (path.isEmpty()) {
         return;
     }
-    file_writes_->submit(app::tr("export {name}", {{"name", name_of(path_of(path))}}),
-                         [first = first.result, second = second.result, out = path_of(path)] {
-                             export_difference_csv(*first, *second, out);
-                         });
-    export_destination_ = path;
-    status_label_->show();
-    status_label_->setText(app::tr("Exporting the difference to {path}...", {{"path", path}}));
+    // Said on the indicator once written, or where it failed.
+    const QString description = app::tr("export {name}", {{"name", name_of(path_of(path))}});
+    file_writes_->submit(
+        description,
+        [first = first.result, second = second.result, out = path_of(path)] {
+            export_difference_csv(*first, *second, out);
+        },
+        [this, path, description](const QString& error) {
+            report_to(export_report, error.isEmpty() ? ExportOutcome{{path}, {}, {}}
+                                 : ExportOutcome{{},
+                                                 tr_message(error),
+                                                 app::tr("Could not {description}: {error}",
+                                                         {{"description", description}, {"error", tr_message(error)}})});
+        });
 }
 
 std::optional<std::pair<int, int>> GraphPanel::shown_difference_pair() const {
@@ -2429,25 +2423,6 @@ std::vector<GraphPanel::Run> GraphPanel::runs() const {
         runs.push_back({entry.result, entry.label, entry.identity, true, entry.shown});
     }
     return runs;
-}
-
-void GraphPanel::on_file_writes_idle() {
-    // The export is done: said.
-    if (!file_writes_->idle()) {
-        return;
-    }
-    if (export_destination_) {
-        status_label_->setText(app::tr("Export complete: {path}", {{"path", *export_destination_}}));
-        status_label_->show();
-        export_destination_.reset();
-    }
-}
-
-void GraphPanel::on_file_write_failed(const QString& description, const QString& error) {
-    export_destination_.reset();  // not complete: on_file_writes_idle comes next, and must not say it is
-    status_label_->setText(
-        app::tr("Could not {description}: {error}", {{"description", description}, {"error", error}}));
-    status_label_->show();
 }
 
 }  // namespace vml::app

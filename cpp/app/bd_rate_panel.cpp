@@ -791,16 +791,8 @@ void BdRatePanel::on_export() {
         suggested_file_name(side_name(test) + QStringLiteral(" vs ") + side_name(anchor) + QStringLiteral(" - BD-rate"),
                             ".csv"),
         app::tr("CSV file (*.csv)"));
-    if (path.isEmpty()) {
-        return;
-    }
     const std::string text = bd_rate_csv(*report_);
-    QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly) ||
-        file.write(text.data(), static_cast<qint64>(text.size())) != static_cast<qint64>(text.size()) ||
-        !file.commit()) {
-        dialogs.alert(app::tr("Export failed"), app::tr("Could not write {path}", {{"path", path}}));
-    }
+    report_to(export_report, save_as(path, [&text](const QString& out) { return write_text_file(out, text); }));
 }
 
 void BdRatePanel::on_copy() {

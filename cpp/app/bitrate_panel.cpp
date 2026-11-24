@@ -1538,9 +1538,9 @@ void BitratePanel::on_export_png() {
     const QString suggested =
         named ? suggested_file_name(text_of(named->path.stem()) + "_bitrate", ".png") : QStringLiteral("bitrate_plot.png");
     const QString path = dialogs.save_file(app::tr("Export bitrate plot"), suggested, app::tr("PNG image (*.png)"));
-    if (!path.isEmpty() && !render_export_image().save(path)) {
-        dialogs.alert(app::tr("Export failed"), app::tr("Could not write {path}", {{"path", path}}));
-    }
+    report_to(export_report, save_as(path, [this](const QString& out) {
+                  return render_export_image().save(out) ? QString() : could_not_write(out);
+              }));
 }
 
 }  // namespace vml::app

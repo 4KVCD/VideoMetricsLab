@@ -28,6 +28,7 @@
 #include <variant>
 #include <vector>
 
+#include "export_indicator.h"
 #include "dialogs.h"
 #include "results_export.h"
 #include "theme.h"
@@ -322,6 +323,9 @@ public:
 
     // The dialogs that wait for the user, which the tests answer.
     Dialogs dialogs;
+    // Where its exports say how they went: the window's indicator
+    // (export_indicator.h). Not set: nowhere.
+    ExportReport export_report;
     // The colours Export graph as PNG draws in (Settings' Exported graphs), asked at
     // each export; the light chart colours when not set.
     std::function<theme::ChartColours()> export_colours;
@@ -432,8 +436,6 @@ private:
     // Each of `items` doing what it says.
     void connect_menu(const StatsMenu& items);
     void show_graph_menu(ChartWidget& chart, const QPoint& position);
-    void on_file_write_failed(const QString& description, const QString& error);
-    void on_file_writes_idle();
 
     VideoColors* colors_;
     // By series: ids rise as runs are added, and are given again in the
@@ -448,7 +450,6 @@ private:
     bool selecting_available_metric_ = false;
     bool populating_stats_ = false;  // the table is being filled: its edits are not the user's
     FileWrites* file_writes_ = nullptr;
-    std::optional<QString> export_destination_;
 
     QLabel* stats_hint_ = nullptr;
     QTableWidget* stats_table_ = nullptr;
@@ -465,7 +466,6 @@ private:
     bool difference_on_ = false;
     QCheckBox* difference_box_ = nullptr;
     QPushButton* restore_button_ = nullptr;  // Show removed videos
-    QLabel* status_label_ = nullptr;
     QLabel* metric_hint_ = nullptr;
 };
 

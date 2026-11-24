@@ -5,6 +5,7 @@
 // after each run: an export made before it is read waits for it, and says so.
 #include "main_window.h"
 
+#include <QHBoxLayout>
 #include <QMenu>
 #include <QTimer>
 
@@ -17,6 +18,7 @@
 #include <utility>
 
 #include "bitrate_panel.h"
+#include "export_indicator.h"
 #include "file_writes.h"
 #include "i18n.h"
 #include "theme.h"
@@ -69,13 +71,28 @@ std::filesystem::path free_path(const std::filesystem::path& out) {
     return free;
 }
 
-// write_loose_export, saying where its files were written if numbered.
-void write_loose(const std::filesystem::path& folder, const std::vector<BundleFile>& files) {
+// The paths as the indicator lists them.
+QStringList texts_of(const std::vector<std::filesystem::path>& paths) {
+    QStringList texts;
+    for (const std::filesystem::path& path : paths) {
+        texts.append(text_of(path));
+    }
+    return texts;
+}
+
+// write_loose_export, saying where its files were written if numbered: the
+// files written.
+QStringList write_loose(const std::filesystem::path& folder, const std::vector<BundleFile>& files) {
     const std::vector<std::filesystem::path> written = write_loose_export(folder, files);
     if (!written.empty()) {
         log_numbered(folder / platform::path_from_text(files.front().first), written.front());
     }
+    return texts_of(written);
 }
+
+// An export that cannot be made: said on the indicator, as one that failed,
+// not in a window.
+ExportOutcome refused(const QString& why) { return {{}, why, why}; }
 
 // Whether the Bitrate tab is still reading `path` (or is about to).
 bool still_reading(const BitratePanel& panel, const std::filesystem::path& path) {
@@ -95,6 +112,51 @@ std::vector<std::filesystem::path> bitrate_paths(const std::filesystem::path& re
 }
 
 }  // namespace
+
+void MainWindow::build_tab_corner() {
+    // The tab bar's right end, the same place in both interfaces: the
+    // indicator. VML Modern's title buttons join it there where the window
+    // has no title bar of its own (make_title_buttons).
+    if (tab_corner_ != nullptr) {
+        return;
+    }
+    tab_corner_ = new QWidget;
+    auto* layout = new QHBoxLayout(tab_corner_);
+    layout->setContentsMargins(0, 0, 0, 2);
+    layout->setSpacing(6);
+    export_indicator_ = new ExportIndicator;  // Details: a tooltip beside it, no window
+    layout->addWidget(export_indicator_);
+    tabs_->setCornerWidget(tab_corner_, Qt::TopRightCorner);
+    tab_corner_->show();
+}
+
+void MainWindow::report_export(const ExportOutcome& outcome) {
+    if (!outcome.error.isEmpty()) {
+        logger.info("Export failed: " + (outcome.details.isEmpty() ? outcome.error : outcome.details).toStdString());
+    }
+    export_indicator_->show_outcome(outcome);
+}
+
+void MainWindow::submit_export(const QString& description, std::function<QStringList()> write, bool quiet) {
+    if (!quiet) {
+        export_indicator_->show_saving();
+    }
+    auto written = std::make_shared<QStringList>();
+    file_writes_->submit(
+        description, [write = std::move(write), written] { *written = write(); },
+        [this, written, description, quiet](const QString& error) {
+            if (error.isEmpty()) {
+                if (!quiet) {
+                    report_export({*written, {}, {}});
+                }
+                return;
+            }
+            report_export({{},
+                           tr_message(error),
+                           app::tr("Could not {description}: {error}",
+                                   {{"description", description}, {"error", tr_message(error)}})});
+        });
+}
 
 std::optional<BundleVideo> MainWindow::scored_video(const RowData& row_data) const {
     const std::shared_ptr<CompletedRun>& run = row_data.completed_run;
@@ -206,7 +268,16 @@ void MainWindow::fill_videos_export_menu(QMenu& menu) {
     // partial is not exported.
     connect(contents, &QAction::triggered, this, [this] { export_rows(); });
     menu.addSeparator();
-    SavedResultsPanel::add_quick_grabs(menu, any, [this](SavedResultsPanel::Export kind) { export_rows_as(kind); });
+    SavedResultsPanel::add_quick_grabs(
+        menu, any, [this](SavedResultsPanel::Export kind) { export_rows_as(kind); }, videos_refused());
+}
+
+std::map<SavedResultsPanel::Export, QString> MainWindow::videos_refused() const {
+    std::map<SavedResultsPanel::Export, QString> refused;
+    if (saved_weak_rules().conditions.empty()) {
+        refused[SavedResultsPanel::Export::segments] = no_conditions_text();
+    }
+    return refused;
 }
 
 void MainWindow::export_rows() {
@@ -307,9 +378,7 @@ void MainWindow::export_rows_as(SavedResultsPanel::Export kind) {
     case SavedResultsPanel::Export::segments: {
         const SegmentRules rules = saved_weak_rules();
         if (rules.conditions.empty()) {
-            dialogs_.inform(app::tr("No weak segment conditions"),
-                            app::tr("The profile picked has no conditions: set them in Settings > Weak segments, or "
-                                    "pick a preset."));
+            report_export(refused(no_conditions_text()));
             return;
         }
         std::vector<SegmentsReportVideo> report;
@@ -331,9 +400,11 @@ void MainWindow::save_results_document(const nlohmann::ordered_json& document, c
         return;
     }
     std::string bytes = csv ? results_csv(document) : python_json_dumps(document) + "\n";
-    file_writes_->submit(app::tr("export {name}", {{"name", name_of(path_of(path))}}),
-                         [bytes = std::move(bytes), out = path_of(path)] { write_bytes(out, bytes); });
-    show_status(app::tr("Results exported to {path}", {{"path", path}}));
+    submit_export(app::tr("export {name}", {{"name", name_of(path_of(path))}}),
+                  [bytes = std::move(bytes), out = path_of(path)] {
+                      write_bytes(out, bytes);
+                      return QStringList{text_of(out)};
+                  });
 }
 
 void MainWindow::save_per_frame_files(
@@ -350,16 +421,18 @@ void MainWindow::save_per_frame_files(
         files.emplace_back(result, unique_output_path(path_of(folder), output_stem(label.toStdString()),
                                                       json ? ".json" : ".csv", reserved));
     }
-    file_writes_->submit(app::tr("export {name}", {{"name", folder}}), [files = std::move(files), json] {
+    submit_export(app::tr("export {name}", {{"name", folder}}), [files = std::move(files), json] {
+        QStringList written;
         for (const auto& [result, out] : files) {
             if (json) {
                 export_per_frame_json(*result, out);
             } else {
                 export_csv(*result, out);
             }
+            written.append(text_of(out));
         }
+        return written;
     });
-    show_status(app::tr("Per-frame scores exported to {path}", {{"path", folder}}));
 }
 
 MainWindow::ExportPlan MainWindow::export_plan(std::vector<BundleVideo> videos,
@@ -387,8 +460,8 @@ MainWindow::ExportPlan MainWindow::export_plan(std::vector<BundleVideo> videos,
 void MainWindow::save_export(ExportPlan plan, const std::optional<std::filesystem::path>& folder) {
     if (plan.files.empty() && plan.frames.empty() && !plan.graphs) {
         if (!folder) {
-            dialogs_.inform(app::tr("Nothing to export"),
-                            app::tr("Nothing that Settings > Storage > Exports include ticks could be exported."));
+            report_export(
+                refused(app::tr("Nothing that Settings > Storage > Exports include ticks could be exported.")));
         }
         return;
     }
@@ -418,15 +491,23 @@ void MainWindow::save_export(ExportPlan plan, const std::optional<std::filesyste
                           false, automatic, std::move(plan.saved_bitrate), std::move(plan.frames), folders, shared});
             return;
         }
-        file_writes_->submit(app::tr("export {name}", {{"name", name_of(destination)}}),
-                             [files = std::move(plan.files), frames = std::move(plan.frames), out = destination,
-                              automatic, folders, shared] {
-                                 write_zip(automatic ? free_path(out) : out,
-                                           in_video_folders(made_files(files, frames), folders, shared));
-                             });
-        if (!automatic) {
-            show_status(app::tr("Exported to {path}", {{"path", text_of(destination)}}));
+        const QString description = app::tr("export {name}", {{"name", name_of(destination)}});
+        if (automatic) {  // after a run: said only where it fails, on the indicator
+            submit_export(
+                description,
+                [files = std::move(plan.files), frames = std::move(plan.frames), out = destination, folders, shared] {
+                    const std::filesystem::path written = free_path(out);
+                    write_zip(written, in_video_folders(made_files(files, frames), folders, shared));
+                    return QStringList{text_of(written)};
+                },
+                true);
+            return;
         }
+        submit_export(description, [files = std::move(plan.files), frames = std::move(plan.frames), out = destination,
+                                    folders, shared] {
+            write_zip(out, in_video_folders(made_files(files, frames), folders, shared));
+            return QStringList{text_of(out)};
+        });
         return;
     }
     std::filesystem::path destination;
@@ -445,15 +526,18 @@ void MainWindow::save_export(ExportPlan plan, const std::optional<std::filesyste
     if (plan.graphs) {
         queue_bundle({plan.videos, plan.reference, destination, std::move(plan.files), plan.several, automatic, true,
                       false, std::move(plan.saved_bitrate), std::move(plan.frames), folders, shared});
+    } else if (automatic) {
+        submit_export(
+            app::tr("export {name}", {{"name", plan.name}}),
+            [files = std::move(plan.files), frames = std::move(plan.frames), destination, folders, shared] {
+                return write_loose(destination, in_video_folders(made_files(files, frames), folders, shared));
+            },
+            true);
     } else {
-        file_writes_->submit(app::tr("export {name}", {{"name", plan.name}}),
-                             [files = std::move(plan.files), frames = std::move(plan.frames), destination,
-                              folders, shared] {
-                                 write_loose(destination, in_video_folders(made_files(files, frames), folders, shared));
-                             });
-    }
-    if (!plan.graphs && !automatic) {
-        show_status(app::tr("Exported to {path}", {{"path", text_of(destination)}}));
+        submit_export(app::tr("export {name}", {{"name", plan.name}}),
+                      [files = std::move(plan.files), frames = std::move(plan.frames), destination, folders, shared] {
+                          return write_loose(destination, in_video_folders(made_files(files, frames), folders, shared));
+                      });
     }
 }
 
@@ -472,7 +556,7 @@ void MainWindow::export_this_video(int row) {
 void MainWindow::export_all_videos() {
     const std::vector<ExportedRun> runs = exported_runs();
     if (runs.empty()) {
-        dialogs_.inform(app::tr("Nothing to export"), app::tr("No test video has been scored against the reference yet."));
+        report_export(refused(nothing_scored_text()));
         return;
     }
     const std::filesystem::path reference = source_info_ ? source_info_->path : std::filesystem::path();
@@ -513,9 +597,7 @@ void MainWindow::export_saved_contents(const std::vector<LoadedSavedResult>& res
     if (several && !one_reference &&
         (std::find(items.begin(), items.end(), "graphs") != items.end() ||
          std::find(items.begin(), items.end(), "weak_segments") != items.end())) {
-        dialogs_.inform(app::tr("One reference at a time"),
-                        app::tr("Graphs and weak segments are exported for test videos of one reference: select "
-                                "comparisons that share it."));
+        report_export(refused(one_reference_text()));
         return;
     }
     std::vector<BundleVideo> videos;
@@ -543,14 +625,11 @@ SegmentRules MainWindow::saved_weak_rules() const {
 void MainWindow::export_segments_report(const SegmentRules& rules) {
     const std::vector<BundleVideo> videos = scored_videos();
     if (videos.empty()) {
-        dialogs_.inform(app::tr("Nothing to export"),
-                        app::tr("No test video has been scored against the reference yet."));
+        report_export(refused(nothing_scored_text()));
         return;
     }
     if (rules.conditions.empty()) {
-        dialogs_.inform(app::tr("No weak segment conditions"),
-                        app::tr("Set the conditions in Settings > Weak segments first: the report follows the "
-                                "saved ones."));
+        report_export(refused(no_conditions_text()));
         return;
     }
     std::vector<SegmentsReportVideo> report;
@@ -574,9 +653,11 @@ void MainWindow::save_segments_report(const std::vector<SegmentsReportVideo>& re
     const bool csv = path.endsWith(QStringLiteral(".csv"), Qt::CaseInsensitive);
     std::string bytes = csv ? text_lines(segments_report_csv(report, rules))
                             : python_json_dumps(segments_report_json(report, rules)) + "\n";
-    file_writes_->submit(app::tr("export {name}", {{"name", name_of(path_of(path))}}),
-                         [bytes = std::move(bytes), out = path_of(path)] { write_bytes(out, bytes); });
-    show_status(app::tr("Weak segments report exported to {path}", {{"path", path}}));
+    submit_export(app::tr("export {name}", {{"name", name_of(path_of(path))}}),
+                  [bytes = std::move(bytes), out = path_of(path)] {
+                      write_bytes(out, bytes);
+                      return QStringList{text_of(out)};
+                  });
 }
 
 void MainWindow::export_automatically(const RowData& row_data) {
@@ -661,9 +742,10 @@ void MainWindow::queue_bundle(PendingBundle bundle) {
         }
         bundle_timer_->start();
         if (!pending_bundles_.back().automatic) {
-            show_status(app::tr("The bitrate graphs are still being built; the graphs will be exported to {path} "
-                                "as soon as they're done.",
-                                {{"path", text_of(pending_bundles_.back().destination)}}));
+            export_indicator_->show_saving(
+                app::tr("The bitrate graphs are still being built; the graphs will be exported to {path} "
+                        "as soon as they're done.",
+                        {{"path", text_of(pending_bundles_.back().destination)}}));
         }
     }
 }
@@ -698,29 +780,30 @@ void MainWindow::write_ready_bundles(bool now) {
                      std::make_move_iterator(bitrate_graphs.end()));
         const QString destination = text_of(ready.destination);
         // An archive of several videos: each one's files in a folder of its
-        // own (save_export's folders).
+        // own (save_export's folders). One the user asked for says how it
+        // went on the indicator; the after-run one only where it fails.
+        std::function<QStringList()> write;
         if (ready.loose) {
-            file_writes_->submit(app::tr("export {name}", {{"name", name_of(ready.destination)}}),
-                                 [files = std::move(files), frames = ready.frames, out = ready.destination,
-                                  folders = ready.folders, shared = ready.shared] {
-                                     write_loose(out, in_video_folders(made_files(files, frames), folders, shared));
-                                 });
+            write = [files = std::move(files), frames = ready.frames, out = ready.destination, folders = ready.folders,
+                     shared = ready.shared] {
+                return write_loose(out, in_video_folders(made_files(files, frames), folders, shared));
+            };
         } else {
-            file_writes_->submit(app::tr("export {name}", {{"name", name_of(ready.destination)}}),
-                                 [files = std::move(files), frames = ready.frames, out = ready.destination,
-                                  numbered = ready.numbered, folders = ready.folders, shared = ready.shared] {
-                                     write_zip(numbered ? free_path(out) : out,
-                                               in_video_folders(made_files(files, frames), folders, shared));
-                                 });
+            write = [files = std::move(files), frames = ready.frames, out = ready.destination,
+                     numbered = ready.numbered, folders = ready.folders, shared = ready.shared] {
+                const std::filesystem::path written = numbered ? free_path(out) : out;
+                write_zip(written, in_video_folders(made_files(files, frames), folders, shared));
+                return QStringList{text_of(written)};
+            };
         }
+        const QString description = app::tr("export {name}", {{"name", name_of(ready.destination)}});
+        submit_export(description, std::move(write), ready.automatic);
         logger.info("Graphs exported to " + platform::path_text(ready.destination) +
                     (missing.empty() ? std::string() : " without the bitrate of " + QStringList(missing.begin(), missing.end()).join(", ").toStdString()));
-        if (!ready.automatic || !missing.empty()) {
-            show_status(missing.empty()
-                            ? app::tr("Graphs exported to {path}", {{"path", destination}})
-                            : app::tr("Graphs exported to {path}, without a bitrate graph for {names}: their bitrate "
-                                      "couldn't be read.",
-                                      {{"path", destination}, {"names", QStringList(missing.begin(), missing.end()).join(", ")}}));
+        if (!missing.empty()) {  // the files are said on the indicator; what they lack, here
+            show_status(app::tr("Graphs exported to {path}, without a bitrate graph for {names}: their bitrate "
+                                "couldn't be read.",
+                                {{"path", destination}, {"names", QStringList(missing.begin(), missing.end()).join(", ")}}));
         }
     }
     if (pending_bundles_.empty() && bundle_timer_ != nullptr) {
@@ -774,9 +857,7 @@ void MainWindow::export_saved_results(SavedResultsPanel::Export kind, const std:
     }
     case SavedResultsPanel::Export::graphs: {
         if (!one_reference) {
-            dialogs_.inform(app::tr("One reference at a time"),
-                            app::tr("Graphs are exported for test videos of one reference: select comparisons that "
-                                    "share it."));
+            report_export(refused(one_reference_text()));
             return;
         }
         std::vector<BundleVideo> videos;
@@ -796,9 +877,7 @@ void MainWindow::export_saved_results(SavedResultsPanel::Export kind, const std:
     case SavedResultsPanel::Export::segments: {
         const SegmentRules rules = saved_results_panel_->segment_rules();
         if (rules.conditions.empty()) {
-            dialogs_.inform(app::tr("No weak segment conditions"),
-                            app::tr("The profile picked has no conditions: set them in Settings > Weak segments, or "
-                                    "pick a preset."));
+            report_export(refused(no_conditions_text()));
             return;
         }
         std::vector<SegmentsReportVideo> report;

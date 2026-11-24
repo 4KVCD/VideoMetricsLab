@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "export_indicator.h"
 #include "dialogs.h"
 #include "export_image.h"
 #include "theme.h"
@@ -167,6 +168,9 @@ public:
 
     // Its questions and messages; the tests answer them.
     Dialogs dialogs;
+    // Where its exports say how they went: the window's indicator
+    // (export_indicator.h). Not set: nowhere.
+    ExportReport export_report;
     // The saved results' folder, whose saved bitrate (bitrate_store.h) a
     // file's reading looks in first and is saved to; none set: not used.
     std::function<std::filesystem::path()> store_folder;

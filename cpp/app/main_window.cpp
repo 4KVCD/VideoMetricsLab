@@ -736,12 +736,11 @@ void MainWindow::build_ui() {
         save_settings();
     });
     frame_compare_panel_->export_folder = dialogs_.export_folder;
-    connect(frame_compare_panel_, &FrameComparePanel::still_saved, this, [this](const QStringList& files) {
-        // Said as the other exports say it: the files, one a line.
-        dialogs_.inform(app::tr("Export"), app::tr("Export complete: {path}", {{"path", "\n" + files.join("\n")}}));
-    });
+    // Said on the indicator, as every export is: no window.
+    connect(frame_compare_panel_, &FrameComparePanel::still_saved, this,
+            [this](const QStringList& files) { report_export({files, {}, {}}); });
     connect(frame_compare_panel_, &FrameComparePanel::still_failed, this, [this](const QString& error) {
-        dialogs_.alert(app::tr("Export failed"), tr_message(error));
+        report_export({{}, tr_message(error), tr_message(error)});
     });
     tabs_->addTab(frame_compare_panel_, app::tr("Video Compare"));
     // Its own list of videos: a finished run adds its own (on_job_finished).
@@ -756,6 +755,11 @@ void MainWindow::build_ui() {
     };
     graph_panel_->export_colours = export_colours;
     worst_tab_->export_colours = export_colours;
+    // Every tab's exports say how they went on the indicator (build_tab_corner).
+    const auto report = [this](const ExportOutcome& outcome) { report_export(outcome); };
+    graph_panel_->export_report = report;
+    worst_tab_->export_report = report;
+    bitrate_panel_->export_report = report;
     // Metric Graphs' statistics menu offers the Videos table's exports.
     graph_panel_->export_items = [this] { return exported_items(settings_); };
     graph_panel_->video_exportable = [this](const std::string& identity) {
@@ -796,6 +800,7 @@ void MainWindow::build_ui() {
         return graph_panel_->runs();
     });
     bd_rate_panel_->dialogs = standard_dialogs(bd_rate_panel_, export_dir);
+    bd_rate_panel_->export_report = report;
     tabs_->addTab(new ScrollingPage(bd_rate_panel_), app::tr("BD-rate"));
     settings_panel_ = new SettingsPanel(settings_, *file_writes_, [this] { return tools_status_; }, dialogs_);
     connect(settings_panel_, &SettingsPanel::defaults_changed, this, [this] { on_default_settings_changed(); });
@@ -839,6 +844,7 @@ void MainWindow::build_ui() {
     tabs_->addTab(new ScrollingPage(saved_results_panel_), app::tr("Saved Results"));
     tabs_->addTab(new ScrollingPage(settings_panel_), app::tr("Settings"));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
+    build_tab_corner();
     make_title_buttons();
 }
 
@@ -864,9 +870,9 @@ void MainWindow::make_title_buttons() {
     if (title_buttons_ == nullptr) {
         // No bar of the app's own (VML Classic, another system, high
         // contrast, or Modern chosen since the start): at the tab bar's
-        // right end.
+        // right end, after what is there (build_tab_corner).
         title_buttons_ = new TitleButtons;
-        tabs_->setCornerWidget(title_buttons_, Qt::TopRightCorner);
+        tab_corner_->layout()->addWidget(title_buttons_);
         title_buttons_->show();
     }
     title_buttons_->set_modern(modern);

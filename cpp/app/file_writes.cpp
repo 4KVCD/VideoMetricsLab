@@ -13,8 +13,13 @@ FileWrites::~FileWrites() {
 }
 
 void FileWrites::submit(QString description, std::function<void()> write) {
+    submit(std::move(description), std::move(write), {});
+}
+
+void FileWrites::submit(QString description, std::function<void()> write,
+                        std::function<void(const QString& error)> done) {
     std::lock_guard lock(mutex_);
-    writes_.emplace_back(std::move(description), std::move(write));
+    writes_.push_back({std::move(description), std::move(write), std::move(done)});
     ++pending_;
     if (writing_) {
         return;  // the thread takes it after those before it
@@ -33,7 +38,7 @@ bool FileWrites::wait_until_idle(std::chrono::milliseconds timeout) {
 
 void FileWrites::write_all() {
     while (true) {
-        std::pair<QString, std::function<void()>> next;
+        Write next;
         {
             std::lock_guard lock(mutex_);
             if (writes_.empty()) {
@@ -43,11 +48,18 @@ void FileWrites::write_all() {
             next = std::move(writes_.front());
             writes_.pop_front();
         }
-        auto& [description, write] = next;
+        auto& [description, write, done] = next;
+        QString failure;
         try {
             write();
         } catch (const std::exception& error) {
-            emit write_failed(description, QString::fromStdString(error.what()));
+            failure = QString::fromStdString(error.what());
+            if (!done) {
+                emit write_failed(description, failure);
+            }
+        }
+        if (done) {
+            QMetaObject::invokeMethod(this, [done = std::move(done), failure] { done(failure); }, Qt::QueuedConnection);
         }
         bool now_idle = false;
         {
