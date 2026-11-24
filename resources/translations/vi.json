@@ -1,5 +1,6 @@
 {
  "strings": {
+  "(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 điểm của ba mặt phẳng, như JVET đánh trọng số PSNR và MSU đánh trọng số YUV-SSIM. Chỉ ứng dụng tính, không dùng chỉ số của FFmpeg.",
   "Nitrate": "Nitrat",
   "Phosphor": "Phốt pho",
   "Green-black shadows with cream text and a gold accent, like an old film print. VML Classic shows Dark.": "Bóng đen ánh xanh với chữ màu kem và màu nhấn vàng, như một bản in phim cũ. VML Classic hiển thị Tối.",

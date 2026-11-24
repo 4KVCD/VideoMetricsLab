@@ -1,5 +1,6 @@
 {
  "strings": {
+  "(6 x Y + Cb + Cr) / 8 of the three planes' scores, as JVET weighs PSNR and MSU weighs YUV-SSIM. Calculated by the app only, not with FFmpeg's metrics.": "(6 × Y + Cb + Cr) / 8 dei punteggi dei tre piani, come JVET pesa il PSNR e MSU lo YUV-SSIM. Calcolato solo dall'app, non con le metriche di FFmpeg.",
   "Nitrate": "Nitrato",
   "Phosphor": "Fosforo",
   "Green-black shadows with cream text and a gold accent, like an old film print. VML Classic shows Dark.": "Ombre nero verdastro con testo crema e un accento oro, come una vecchia copia di pellicola. VML Classic mostra Scuro.",
