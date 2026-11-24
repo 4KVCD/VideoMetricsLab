@@ -4,7 +4,6 @@
 #include <QNetworkProxyFactory>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QProgressDialog>
 #include <QThread>
 #include <QUrl>
 #include <QWidget>
@@ -56,13 +55,9 @@ FfmpegDownload::~FfmpegDownload() {
 
 void FfmpegDownload::start() {
     remove_parts();  // a crashed download's
-    progress_ = new QProgressDialog(app::tr("Looking for the latest FFmpeg build..."), app::tr("Cancel"), 0, 0, parent_);
-    progress_->setWindowTitle(app::tr("Download FFmpeg"));
+    progress_ = new ProgressDialog(parent_, app::tr("Download FFmpeg"), app::tr("Looking for the latest FFmpeg build..."));
     progress_->setWindowModality(Qt::WindowModal);
-    progress_->setMinimumDuration(0);
-    progress_->setAutoClose(false);
-    progress_->setAutoReset(false);
-    connect(progress_, &QProgressDialog::canceled, this, [this] { cancel(); });
+    connect(progress_, &QDialog::rejected, this, [this] { cancel(); });  // Cancel, Esc or its close button
     progress_->show();
     // Through the system's proxy, if it names one, as the update check.
     QNetworkProxyFactory::setUseSystemConfiguration(true);
@@ -159,15 +154,15 @@ void FfmpegDownload::download_build() {
         fail(app::tr("Could not write {path}", {{"path", zip_.fileName()}}));
         return;
     }
-    progress_->setLabelText(app::tr("Downloading FFmpeg {version} ({size} MB)...",
+    progress_->set_label(app::tr("Downloading FFmpeg {version} ({size} MB)...",
                                     {{"version", QString::fromStdString(build_.version)}, {"size", build_.size / mb}}));
-    progress_->setRange(0, static_cast<int>(build_.size / 1024));  // KB: an int holds them
+    progress_->set_range(0, static_cast<int>(build_.size / 1024));  // KB: an int holds them
     reply_ = get(build_.url, download_timeout_seconds);
     // Written as it comes, never the whole file in memory.
     connect(reply_, &QNetworkReply::readyRead, this, [this] { on_build_data(); });
     connect(reply_, &QNetworkReply::downloadProgress, this, [this](qint64 received, qint64 /*total*/) {
         if (progress_ != nullptr) {
-            progress_->setValue(static_cast<int>(received / 1024));
+            progress_->set_value(static_cast<int>(received / 1024));
         }
     });
     connect(reply_, &QNetworkReply::finished, this, [this] { on_build_finished(); });
@@ -206,8 +201,8 @@ void FfmpegDownload::on_build_finished() {
 }
 
 void FfmpegDownload::unpack() {
-    progress_->setLabelText(app::tr("Unpacking FFmpeg..."));
-    progress_->setRange(0, 0);
+    progress_->set_label(app::tr("Unpacking FFmpeg..."));
+    progress_->set_range(0, 0);
     // A few seconds of decompressing, off the window's thread.
     unpacker_ = QThread::create([this, zip = folder_ / "download.zip.part"] {
         try {

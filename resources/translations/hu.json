@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Start over": "Újrakezdés",
+  "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Törli a referenciát és eltávolítja az összes tesztvideót egy új összehasonlításhoz. A mentett eredmények megmaradnak.",
+  "Click Start over again to clear the reference.": "Kattintson ismét az „Újrakezdés” gombra a referencia törléséhez.",
+  "Every saved score in this folder is deleted. This can't be undone.": "A mappában lévő összes mentett pontszám törlődik. Ez nem vonható vissza.",
+  "Show details": "Részletek megjelenítése",
+  "Hide details": "Részletek elrejtése",
+  "OK": "OK",
   "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM, as SSIM YUV weighs them. Up to 1, higher is better.": "A három sík MS-SSIM-jének (6 × Y + Cb + Cr) / 8 értéke, ahogy az SSIM YUV súlyozza őket. Legfeljebb 1, a magasabb a jobb.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' PSNR, as JVET's common test conditions weigh it. In dB, higher is better.": "A három sík PSNR-jének (6 × Y + Cb + Cr) / 8 értéke, ahogy a JVET közös tesztfeltételei súlyozzák. dB-ben, a magasabb a jobb.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' SSIM, as MSU's codec comparisons weigh YUV-SSIM. Up to 1, higher is better.": "A három sík SSIM-jének (6 × Y + Cb + Cr) / 8 értéke, ahogy az MSU kodek-összehasonlításai a YUV-SSIM-et súlyozzák. Legfeljebb 1, a magasabb a jobb.",
@@ -470,7 +477,6 @@
   "Reading reference video...": "A referenciavideó olvasása...",
   "Could not read video": "A videó nem olvasható",
   "Resolution tests removed": "Felbontástesztek eltávolítva",
-  "Videos of a different length": "Eltérő hosszúságú videók",
   "\n\nAdd them again to test the new source.": "\n\nAdja hozzá őket újra az új forrás teszteléséhez.",
   "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nA metrikák számításához mindkét videón belüli tartomány kell (Tartomány, a(z) Videó előkészítése alatt). A(z) Videó-összehasonlítás a közös részüket mutatja.",
   "Ready.": "Kész.",
@@ -531,7 +537,6 @@
   "Select test videos": "Tesztvideók kiválasztása",
   "Reading...": "Olvasás...",
   "Complete (cached)": "Kész (mentett)",
-  "Remove all videos": "Minden videó eltávolítása",
   "\nLoaded from a previous run (matching files and calculation settings) -- right-click to recompute.": "\nBetöltve egy korábbi futtatásból (ugyanazok a fájlok és számítási beállítások) — jobb kattintással újraszámolhatja.",
   "Recalculate selected metrics (ignore cached/previous results)": "Bejelölt metrikák újraszámítása (mentett/korábbi eredmények figyelmen kívül hagyása)",
   "Nothing to add": "Nincs mit hozzáadni",
@@ -1374,6 +1379,9 @@
   "Calculated with {metric}.": "A(z) {metric} metrikával számolva."
  },
  "plurals": {
+  "Click Remove all again to remove {count} video. Saved results are kept.": ["Kattintson ismét az „Összes eltávolítása” gombra {count} videó eltávolításához. A mentett eredmények megmaradnak.", "Kattintson ismét az „Összes eltávolítása” gombra mind a(z) {count} videó eltávolításához. A mentett eredmények megmaradnak."],
+  "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["Kattintson ismét az „Újrakezdés” gombra a referencia törléséhez és {count} videó eltávolításához. A mentett eredmények megmaradnak.", "Kattintson ismét az „Újrakezdés” gombra a referencia törléséhez és mind a(z) {count} videó eltávolításához. A mentett eredmények megmaradnak."],
+  "{count} test video does not last as long as the reference ({length}).": ["{count} tesztvideó nem olyan hosszú, mint a referencia ({length}).", "{count} tesztvideó nem olyan hosszú, mint a referencia ({length})."],
   "{count} shown": ["{count} látható", "{count} látható"],
   "{count} ticked": ["{count} bejelölve", "{count} bejelölve"],
   "{shown} of {count} shown": ["{shown}/{count} látható", "{shown}/{count} látható"],
@@ -1417,10 +1425,6 @@
   "Reading {count} video...": [
    "{count} videó olvasása...",
    "{count} videó olvasása..."
-  ],
-  "Remove {count} video from the list?\n\nSaved results are kept -- re-adding a video shows its scores again.": [
-   "Eltávolítja a(z) {count} videót a listából?\n\nA mentett eredmények megmaradnak — ha a videót újra hozzáadja, a pontszámai ismét megjelennek.",
-   "Eltávolítja mind a(z) {count} videót a listából?\n\nA mentett eredmények megmaradnak — ha a videót újra hozzáadja, a pontszámai ismét megjelennek."
   ],
   "{count} scored frame; metrics: ": [
    "{count} pontozott képkocka; metrikák: ",

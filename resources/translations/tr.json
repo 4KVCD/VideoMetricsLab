@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Start over": "Baştan başla",
+  "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Referansı temizler ve yeni bir karşılaştırma için tüm test videolarını kaldırır. Kaydedilen sonuçlar korunur.",
+  "Click Start over again to clear the reference.": "Referansı temizlemek için \"Baştan başla\"ya tekrar tıklayın.",
+  "Every saved score in this folder is deleted. This can't be undone.": "Bu klasördeki tüm kayıtlı puanlar silinir. Bu işlem geri alınamaz.",
+  "Show details": "Ayrıntıları göster",
+  "Hide details": "Ayrıntıları gizle",
+  "OK": "Tamam",
   "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM, as SSIM YUV weighs them. Up to 1, higher is better.": "Üç düzlemin MS-SSIM değerlerinin (6 × Y + Cb + Cr) / 8'i; SSIM YUV'nin ağırlıklandırdığı gibi. En fazla 1, yüksek daha iyi.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' PSNR, as JVET's common test conditions weigh it. In dB, higher is better.": "Üç düzlemin PSNR değerlerinin (6 × Y + Cb + Cr) / 8'i; JVET'in ortak test koşullarının ağırlıklandırdığı gibi. dB cinsinden, yüksek daha iyi.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' SSIM, as MSU's codec comparisons weigh YUV-SSIM. Up to 1, higher is better.": "Üç düzlemin SSIM değerlerinin (6 × Y + Cb + Cr) / 8'i; MSU'nun codec karşılaştırmalarının YUV-SSIM'i ağırlıklandırdığı gibi. En fazla 1, yüksek daha iyi.",
@@ -470,7 +477,6 @@
   "Reading reference video...": "Referans video okunuyor...",
   "Could not read video": "Video okunamadı",
   "Resolution tests removed": "Çözünürlük testleri kaldırıldı",
-  "Videos of a different length": "Farklı uzunlukta videolar",
   "\n\nAdd them again to test the new source.": "\n\nYeni kaynağı test etmek için bunları yeniden ekleyin.",
   "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nMetrikleri hesaplamak için her iki videonun içinde kalan bir aralık gerekir (Video hazırlama altında Aralık). Video karşılaştırma ikisinin ortak kısmını gösterir.",
   "Ready.": "Hazır.",
@@ -531,7 +537,6 @@
   "Select test videos": "Test videolarını seçin",
   "Reading...": "Okunuyor...",
   "Complete (cached)": "Tamamlandı (kayıtlı)",
-  "Remove all videos": "Tüm videoları kaldır",
   "\nLoaded from a previous run (matching files and calculation settings) -- right-click to recompute.": "\nÖnceki bir çalıştırmadan yüklendi (dosyalar ve hesaplama ayarları eşleşiyor); yeniden hesaplamak için sağ tıklayın.",
   "Recalculate selected metrics (ignore cached/previous results)": "Seçili metrikleri yeniden hesapla (kayıtlı/önceki sonuçları yok say)",
   "Nothing to add": "Eklenecek bir şey yok",
@@ -1374,6 +1379,9 @@
   "Calculated with {metric}.": "{metric} ile hesaplanır."
  },
  "plurals": {
+  "Click Remove all again to remove {count} video. Saved results are kept.": ["{count} videoyu kaldırmak için \"Tümünü kaldır\"a tekrar tıklayın. Kaydedilen sonuçlar korunur.", "{count} videonun tümünü kaldırmak için \"Tümünü kaldır\"a tekrar tıklayın. Kaydedilen sonuçlar korunur."],
+  "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["Referansı temizleyip {count} videoyu kaldırmak için \"Baştan başla\"ya tekrar tıklayın. Kaydedilen sonuçlar korunur.", "Referansı temizleyip {count} videonun tümünü kaldırmak için \"Baştan başla\"ya tekrar tıklayın. Kaydedilen sonuçlar korunur."],
+  "{count} test video does not last as long as the reference ({length}).": ["{count} test videosu referansla aynı uzunlukta değil ({length}).", "{count} test videosu referansla aynı uzunlukta değil ({length})."],
   "{count} shown": ["{count} gösteriliyor", "{count} gösteriliyor"],
   "{count} ticked": ["{count} işaretli", "{count} işaretli"],
   "{shown} of {count} shown": ["{count} içinden {shown} gösteriliyor", "{count} içinden {shown} gösteriliyor"],
@@ -1417,10 +1425,6 @@
   "Reading {count} video...": [
    "{count} video okunuyor...",
    "{count} video okunuyor..."
-  ],
-  "Remove {count} video from the list?\n\nSaved results are kept -- re-adding a video shows its scores again.": [
-   "{count} video listeden kaldırılsın mı?\n\nKaydedilen sonuçlar korunur; bir videoyu yeniden eklemek puanlarını tekrar gösterir.",
-   "{count} videonun tümü listeden kaldırılsın mı?\n\nKaydedilen sonuçlar korunur; bir videoyu yeniden eklemek puanlarını tekrar gösterir."
   ],
   "{count} scored frame; metrics: ": [
    "{count} puanlanmış kare; metrikler: ",

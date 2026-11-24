@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Start over": "重新开始",
+  "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "清除参考视频并移除所有测试视频，以开始新的比较。已保存的结果会保留。",
+  "Click Start over again to clear the reference.": "再次单击“重新开始”以清除参考视频。",
+  "Every saved score in this folder is deleted. This can't be undone.": "此文件夹中所有已保存的分数都将被删除。此操作无法撤消。",
+  "Show details": "显示详细信息",
+  "Hide details": "隐藏详细信息",
+  "OK": "确定",
   "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM, as SSIM YUV weighs them. Up to 1, higher is better.": "三个平面 MS-SSIM 的 (6 × Y + Cb + Cr) / 8，与 SSIM YUV 的加权方式相同。最高为 1，越高越好。",
   "(6 x Y + Cb + Cr) / 8 of the three planes' PSNR, as JVET's common test conditions weigh it. In dB, higher is better.": "三个平面 PSNR 的 (6 × Y + Cb + Cr) / 8，与 JVET 通用测试条件的加权方式相同。单位 dB，越高越好。",
   "(6 x Y + Cb + Cr) / 8 of the three planes' SSIM, as MSU's codec comparisons weigh YUV-SSIM. Up to 1, higher is better.": "三个平面 SSIM 的 (6 × Y + Cb + Cr) / 8，与 MSU 编解码器对比中 YUV-SSIM 的加权方式相同。最高为 1，越高越好。",
@@ -468,7 +475,6 @@
   "Reading reference video...": "正在读取参考视频...",
   "Could not read video": "无法读取视频",
   "Resolution tests removed": "已移除分辨率测试",
-  "Videos of a different length": "长度不同的视频",
   "\n\nAdd them again to test the new source.": "\n\n如需测试新的源视频，请重新添加。",
   "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\n计算指标需要一个两段视频都包含的范围（视频准备 中的 范围）。视频对比 会显示两者共有的部分。",
   "Ready.": "就绪。",
@@ -529,7 +535,6 @@
   "Select test videos": "选择测试视频",
   "Reading...": "正在读取...",
   "Complete (cached)": "已完成（已保存）",
-  "Remove all videos": "移除所有视频",
   "\nLoaded from a previous run (matching files and calculation settings) -- right-click to recompute.": "\n从之前的运行加载（文件和计算设置均匹配）——右键单击可重新计算。",
   "Recalculate selected metrics (ignore cached/previous results)": "重新计算所选指标（忽略已保存/之前的结果）",
   "Nothing to add": "没有可添加的内容",
@@ -1374,6 +1379,9 @@
   "Calculated with {metric}.": "与 {metric} 一起计算。"
  },
  "plurals": {
+  "Click Remove all again to remove {count} video. Saved results are kept.": ["再次单击“全部移除”以移除全部 {count} 个视频。已保存的结果会保留。"],
+  "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["再次单击“重新开始”以清除参考视频并移除全部 {count} 个视频。已保存的结果会保留。"],
+  "{count} test video does not last as long as the reference ({length}).": ["{count} 个测试视频的长度与参考视频（{length}）不同。"],
   "{count} shown": ["已显示 {count} 个"],
   "{count} ticked": ["已勾选 {count} 个"],
   "{shown} of {count} shown": ["已显示 {shown}/{count} 个"],
@@ -1408,9 +1416,6 @@
   ],
   "Reading {count} video...": [
    "正在读取 {count} 个视频..."
-  ],
-  "Remove {count} video from the list?\n\nSaved results are kept -- re-adding a video shows its scores again.": [
-   "要从列表中移除全部 {count} 个视频吗？\n\n已保存的结果会保留——重新添加视频时会再次显示其分数。"
   ],
   "{count} scored frame; metrics: ": [
    "{count} 个已评分帧；指标："

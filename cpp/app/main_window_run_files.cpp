@@ -193,6 +193,7 @@ void MainWindow::load_saved_run(const std::filesystem::path& path) {
     row_data.video_info = result.distorted_info;
     row_data.completed_run = run;
     row_data.analysis_status.reset();
+    refresh_length_note();  // scored already: compared
     take_run_options(row_data.options, result);
     // A CVVDP score means something only with the display it was made for:
     // the row takes that display, so that the score and the row agree.

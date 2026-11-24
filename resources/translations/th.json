@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Start over": "เริ่มใหม่",
+  "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "ล้างวิดีโออ้างอิงและนำวิดีโอทดสอบทั้งหมดออก เพื่อเริ่มการเปรียบเทียบใหม่ ผลลัพธ์ที่บันทึกยังคงอยู่",
+  "Click Start over again to clear the reference.": "คลิก \"เริ่มใหม่\" อีกครั้งเพื่อล้างวิดีโออ้างอิง",
+  "Every saved score in this folder is deleted. This can't be undone.": "คะแนนที่บันทึกไว้ทั้งหมดในโฟลเดอร์นี้จะถูกลบ และไม่สามารถเลิกทำได้",
+  "Show details": "แสดงรายละเอียด",
+  "Hide details": "ซ่อนรายละเอียด",
+  "OK": "ตกลง",
   "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM, as SSIM YUV weighs them. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 ของ MS-SSIM ทั้งสามระนาบ ตามที่ SSIM YUV ถ่วงน้ำหนัก สูงสุด 1 ยิ่งสูงยิ่งดี",
   "(6 x Y + Cb + Cr) / 8 of the three planes' PSNR, as JVET's common test conditions weigh it. In dB, higher is better.": "(6 × Y + Cb + Cr) / 8 ของ PSNR ทั้งสามระนาบ ตามที่เงื่อนไขการทดสอบร่วมของ JVET ถ่วงน้ำหนัก หน่วย dB ยิ่งสูงยิ่งดี",
   "(6 x Y + Cb + Cr) / 8 of the three planes' SSIM, as MSU's codec comparisons weigh YUV-SSIM. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 ของ SSIM ทั้งสามระนาบ ตามที่การเปรียบเทียบโคเดกของ MSU ถ่วงน้ำหนัก YUV-SSIM สูงสุด 1 ยิ่งสูงยิ่งดี",
@@ -470,7 +477,6 @@
   "Reading reference video...": "กำลังอ่านวิดีโออ้างอิง...",
   "Could not read video": "อ่านวิดีโอไม่ได้",
   "Resolution tests removed": "นำการทดสอบความละเอียดออกแล้ว",
-  "Videos of a different length": "วิดีโอที่ความยาวต่างกัน",
   "\n\nAdd them again to test the new source.": "\n\nเพิ่มอีกครั้งเพื่อทดสอบต้นฉบับใหม่",
   "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nการคำนวณเมตริกต้องใช้ช่วงที่อยู่ภายในวิดีโอทั้งสอง (ช่วง ใต้ การเตรียมวิดีโอ) เปรียบเทียบวิดีโอ จะแสดงส่วนที่ทั้งสองมีร่วมกัน",
   "Ready.": "พร้อม",
@@ -531,7 +537,6 @@
   "Select test videos": "เลือกวิดีโอทดสอบ",
   "Reading...": "กำลังอ่าน...",
   "Complete (cached)": "เสร็จสิ้น (บันทึกไว้)",
-  "Remove all videos": "นำวิดีโอทั้งหมดออก",
   "\nLoaded from a previous run (matching files and calculation settings) -- right-click to recompute.": "\nโหลดจากการรันก่อนหน้า (ไฟล์และการตั้งค่าการคำนวณเหมือนกัน) — คลิกขวาเพื่อคำนวณใหม่",
   "Recalculate selected metrics (ignore cached/previous results)": "คำนวณเมตริกที่ทำเครื่องหมายใหม่ (ไม่ใช้ผลลัพธ์ที่บันทึก/ก่อนหน้า)",
   "Nothing to add": "ไม่มีอะไรให้เพิ่ม",
@@ -1374,6 +1379,9 @@
   "Calculated with {metric}.": "คำนวณพร้อมกับ {metric}"
  },
  "plurals": {
+  "Click Remove all again to remove {count} video. Saved results are kept.": ["คลิก \"นำออกทั้งหมด\" อีกครั้งเพื่อนำวิดีโอ {count} รายการออก ผลลัพธ์ที่บันทึกยังคงอยู่"],
+  "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["คลิก \"เริ่มใหม่\" อีกครั้งเพื่อล้างวิดีโออ้างอิงและนำวิดีโอ {count} รายการออก ผลลัพธ์ที่บันทึกยังคงอยู่"],
+  "{count} test video does not last as long as the reference ({length}).": ["วิดีโอทดสอบ {count} รายการมีความยาวไม่เท่ากับต้นฉบับ ({length})"],
   "{count} shown": ["แสดง {count}"],
   "{count} ticked": ["ทำเครื่องหมาย {count}"],
   "{shown} of {count} shown": ["แสดง {shown} จาก {count}"],
@@ -1408,9 +1416,6 @@
   ],
   "Reading {count} video...": [
    "กำลังอ่านวิดีโอ {count} รายการ..."
-  ],
-  "Remove {count} video from the list?\n\nSaved results are kept -- re-adding a video shows its scores again.": [
-   "นำวิดีโอทั้ง {count} รายการออกจากรายการหรือไม่\n\nผลลัพธ์ที่บันทึกยังคงอยู่ — เพิ่มวิดีโออีกครั้งจะแสดงคะแนนกลับมา"
   ],
   "{count} scored frame; metrics: ": [
    "ให้คะแนน {count} เฟรม; เมตริก: "

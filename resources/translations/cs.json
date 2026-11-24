@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Start over": "Začít znovu",
+  "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Vymaže referenci a odebere všechna testovací videa pro nové porovnání. Uložené výsledky zůstanou.",
+  "Click Start over again to clear the reference.": "Dalším kliknutím na „Začít znovu“ vymažete referenci.",
+  "Every saved score in this folder is deleted. This can't be undone.": "Všechna uložená skóre v této složce budou odstraněna. Tuto akci nelze vrátit zpět.",
+  "Show details": "Zobrazit podrobnosti",
+  "Hide details": "Skrýt podrobnosti",
+  "OK": "OK",
   "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM, as SSIM YUV weighs them. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 z MS-SSIM tří rovin, jak je váží SSIM YUV. Nejvýše 1, vyšší je lepší.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' PSNR, as JVET's common test conditions weigh it. In dB, higher is better.": "(6 × Y + Cb + Cr) / 8 z PSNR tří rovin, jak ho váží společné testovací podmínky JVET. V dB, vyšší je lepší.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' SSIM, as MSU's codec comparisons weigh YUV-SSIM. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 ze SSIM tří rovin, jak srovnání kodeků MSU váží YUV-SSIM. Nejvýše 1, vyšší je lepší.",
@@ -470,7 +477,6 @@
   "Reading reference video...": "Čte se referenční video...",
   "Could not read video": "Video nelze přečíst",
   "Resolution tests removed": "Testy rozlišení odebrány",
-  "Videos of a different length": "Videa jiné délky",
   "\n\nAdd them again to test the new source.": "\n\nPřidejte je znovu pro otestování nového zdroje.",
   "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nVýpočet metrik potřebuje rozsah uvnitř obou videí (Rozsah, v části Příprava videa). Porovnání videa ukazuje část, kterou mají společnou.",
   "Ready.": "Připraveno.",
@@ -531,7 +537,6 @@
   "Select test videos": "Vyberte testovací videa",
   "Reading...": "Čtení...",
   "Complete (cached)": "Hotovo (uloženo)",
-  "Remove all videos": "Odebrat všechna videa",
   "\nLoaded from a previous run (matching files and calculation settings) -- right-click to recompute.": "\nNačteno z předchozího běhu (stejné soubory i nastavení výpočtu) — pravým kliknutím přepočítáte.",
   "Recalculate selected metrics (ignore cached/previous results)": "Přepočítat zaškrtnuté metriky (ignorovat uložené/předchozí výsledky)",
   "Nothing to add": "Nic k přidání",
@@ -1374,6 +1379,9 @@
   "Calculated with {metric}.": "Počítáno s {metric}."
  },
  "plurals": {
+  "Click Remove all again to remove {count} video. Saved results are kept.": ["Dalším kliknutím na „Odebrat vše“ odeberete {count} video. Uložené výsledky zůstanou.", "Dalším kliknutím na „Odebrat vše“ odeberete všechna {count} videa. Uložené výsledky zůstanou.", "Dalším kliknutím na „Odebrat vše“ odeberete všech {count} videí. Uložené výsledky zůstanou."],
+  "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["Dalším kliknutím na „Začít znovu“ vymažete referenci a odeberete {count} video. Uložené výsledky zůstanou.", "Dalším kliknutím na „Začít znovu“ vymažete referenci a odeberete všechna {count} videa. Uložené výsledky zůstanou.", "Dalším kliknutím na „Začít znovu“ vymažete referenci a odeberete všech {count} videí. Uložené výsledky zůstanou."],
+  "{count} test video does not last as long as the reference ({length}).": ["{count} testovací video netrvá stejně dlouho jako reference ({length}).", "{count} testovací videa netrvají stejně dlouho jako reference ({length}).", "{count} testovacích videí netrvá stejně dlouho jako reference ({length})."],
   "{count} shown": ["{count} zobrazena", "{count} zobrazeny", "{count} zobrazeno"],
   "{count} ticked": ["{count} zaškrtnuta", "{count} zaškrtnuty", "{count} zaškrtnuto"],
   "{shown} of {count} shown": ["zobrazeno {shown} z {count}", "zobrazeno {shown} z {count}", "zobrazeno {shown} z {count}"],
@@ -1426,11 +1434,6 @@
    "Čte se {count} video...",
    "Čtou se {count} videa...",
    "Čte se {count} videí..."
-  ],
-  "Remove {count} video from the list?\n\nSaved results are kept -- re-adding a video shows its scores again.": [
-   "Odebrat {count} video ze seznamu?\n\nUložené výsledky zůstanou — po opětovném přidání videa se jeho skóre znovu zobrazí.",
-   "Odebrat všechna {count} videa ze seznamu?\n\nUložené výsledky zůstanou — po opětovném přidání videa se jeho skóre znovu zobrazí.",
-   "Odebrat všech {count} videí ze seznamu?\n\nUložené výsledky zůstanou — po opětovném přidání videa se jeho skóre znovu zobrazí."
   ],
   "{count} scored frame; metrics: ": [
    "{count} ohodnocený snímek; metriky: ",

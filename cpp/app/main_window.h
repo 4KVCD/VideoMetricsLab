@@ -64,7 +64,6 @@ class QHBoxLayout;
 class QLabel;
 class QLineEdit;
 class QMenu;
-class QMessageBox;
 class QPushButton;
 class QTableWidgetItem;
 class QTimer;
@@ -73,6 +72,7 @@ class QVBoxLayout;
 namespace vml::app {
 
 class CheckableHeaderView;
+class ClickTwice;
 class ElidedLabel;
 class CvvdpDisplayDialog;
 class FfmpegDownload;
@@ -207,9 +207,6 @@ struct RowData {
     // Whether its frame rate was asked for as it was added (a raw stream that
     // stores none): after a Cancel, only Calculate metrics asks again.
     bool frame_rate_asked = false;
-    // Whether its length was compared with the reference's (warned about
-    // once, as it was added or the reference chosen).
-    bool length_checked = false;
     VmafOptions options;
     // The range before the Range unit was last switched, restored where the
     // range is switched back with no edit (switch_range_unit).
@@ -444,9 +441,11 @@ private:
     // Asks the frame rate of the videos just added that have none (raw streams
     // that store none), and of the reference.
     void ask_new_frame_rates();
-    // Warns, once for each, of the test videos just added (or all of them,
-    // after a new reference) that do not last as long as the reference.
-    void warn_about_lengths();
+    // The Videos footer's note of the test videos that do not last as long
+    // as the reference (none: no note), found again from the rows and the
+    // reference as they are now: after videos are added or removed, a new
+    // reference, a range edited, or a run.
+    void refresh_length_note();
     // The same for the reference (`reference`) and `videos`, and enters the
     // answers. False once one is cancelled.
     bool ask_frame_rates(bool reference, const std::vector<std::filesystem::path>& videos);
@@ -459,6 +458,14 @@ private:
     std::optional<int> row_index_of_path(const std::filesystem::path& path) const;
     void on_remove_distorted();
     void on_remove_all_distorted();
+    // The footer's note: Remove all's or Start over's line while one is
+    // armed (click_twice_), else the length note.
+    void show_footer_note();
+    // The rows all removed, and (Start over) the reference cleared too: the
+    // window as it starts, but for its settings.
+    void remove_all_rows();
+    void on_start_over();
+    void clear_reference();
     void on_table_selection_changed();
     void on_highlight_toggled(bool on);
     void schedule_best_worst();
@@ -977,6 +984,13 @@ private:
     FillColumnTable* distorted_table_ = nullptr;
     CheckableHeaderView* metric_header_ = nullptr;
     QPushButton* remove_all_button_ = nullptr;
+    QPushButton* start_over_button_ = nullptr;
+    // Beside them: an armed button's line, else the length note.
+    QLabel* footer_note_ = nullptr;
+    QString length_note_;
+    QString length_note_tip_;
+    // Remove all and Start over are clicked twice (click_twice.h).
+    ClickTwice* click_twice_ = nullptr;
     QCheckBox* highlight_check_ = nullptr;
     std::vector<QWidget*> file_action_widgets_;
     QPushButton* run_button_ = nullptr;
@@ -992,7 +1006,7 @@ private:
     BitratePanel* bitrate_panel_ = nullptr;
     BdRatePanel* bd_rate_panel_ = nullptr;
     // The newer release offered, while its message is open.
-    QPointer<QMessageBox> update_box_;
+    QPointer<AppDialog> update_box_;
     TitleBar* title_bar_ = nullptr;          // Windows, VML Modern: the window's own title bar
     TitleButtons* title_buttons_ = nullptr;  // VML Modern: the progress, theme and update buttons
     std::optional<Release> pending_update_;  // offered on the badge, shown when it is clicked

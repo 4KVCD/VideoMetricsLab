@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Start over": "Bắt đầu lại",
+  "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Xóa video tham chiếu và gỡ mọi video thử, để bắt đầu một so sánh mới. Kết quả đã lưu vẫn còn.",
+  "Click Start over again to clear the reference.": "Nhấp \"Bắt đầu lại\" lần nữa để xóa video tham chiếu.",
+  "Every saved score in this folder is deleted. This can't be undone.": "Mọi điểm đã lưu trong thư mục này sẽ bị xóa. Không thể hoàn tác.",
+  "Show details": "Hiện chi tiết",
+  "Hide details": "Ẩn chi tiết",
+  "OK": "OK",
   "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM, as SSIM YUV weighs them. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 MS-SSIM của ba mặt phẳng, như SSIM YUV đánh trọng số. Tối đa 1, càng cao càng tốt.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' PSNR, as JVET's common test conditions weigh it. In dB, higher is better.": "(6 × Y + Cb + Cr) / 8 PSNR của ba mặt phẳng, như các điều kiện thử chung của JVET đánh trọng số. Tính bằng dB, càng cao càng tốt.",
   "(6 x Y + Cb + Cr) / 8 of the three planes' SSIM, as MSU's codec comparisons weigh YUV-SSIM. Up to 1, higher is better.": "(6 × Y + Cb + Cr) / 8 SSIM của ba mặt phẳng, như các so sánh codec của MSU đánh trọng số YUV-SSIM. Tối đa 1, càng cao càng tốt.",
@@ -470,7 +477,6 @@
   "Reading reference video...": "Đang đọc video tham chiếu...",
   "Could not read video": "Không đọc được video",
   "Resolution tests removed": "Đã xóa các phép thử độ phân giải",
-  "Videos of a different length": "Video có độ dài khác",
   "\n\nAdd them again to test the new source.": "\n\nThêm lại để thử nguồn mới.",
   "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nTính chỉ số cần một khoảng nằm trong cả hai video (Khoảng, trong Chuẩn bị video). So sánh video hiển thị phần chung của hai video.",
   "Ready.": "Sẵn sàng.",
@@ -531,7 +537,6 @@
   "Select test videos": "Chọn video thử",
   "Reading...": "Đang đọc...",
   "Complete (cached)": "Hoàn tất (đã lưu)",
-  "Remove all videos": "Xóa mọi video",
   "\nLoaded from a previous run (matching files and calculation settings) -- right-click to recompute.": "\nĐã tải từ lần chạy trước (cùng tệp và thiết lập tính toán) — bấm chuột phải để tính lại.",
   "Recalculate selected metrics (ignore cached/previous results)": "Tính lại các chỉ số đã đánh dấu (bỏ qua kết quả đã lưu/trước đó)",
   "Nothing to add": "Không có gì để thêm",
@@ -1374,6 +1379,9 @@
   "Calculated with {metric}.": "Được tính cùng {metric}."
  },
  "plurals": {
+  "Click Remove all again to remove {count} video. Saved results are kept.": ["Nhấp \"Xóa tất cả\" lần nữa để xóa cả {count} video. Kết quả đã lưu vẫn còn."],
+  "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["Nhấp \"Bắt đầu lại\" lần nữa để xóa video tham chiếu và cả {count} video. Kết quả đã lưu vẫn còn."],
+  "{count} test video does not last as long as the reference ({length}).": ["{count} video thử không dài bằng video tham chiếu ({length})."],
   "{count} shown": ["Đang hiện {count}"],
   "{count} ticked": ["Đã đánh dấu {count}"],
   "{shown} of {count} shown": ["Đang hiện {shown} trên {count}"],
@@ -1408,9 +1416,6 @@
   ],
   "Reading {count} video...": [
    "Đang đọc {count} video..."
-  ],
-  "Remove {count} video from the list?\n\nSaved results are kept -- re-adding a video shows its scores again.": [
-   "Xóa cả {count} video khỏi danh sách?\n\nKết quả đã lưu vẫn còn — thêm lại video sẽ hiện lại điểm của nó."
   ],
   "{count} scored frame; metrics: ": [
    "Đã chấm {count} khung hình; chỉ số: "

@@ -1,5 +1,12 @@
 {
  "strings": {
+  "Start over": "最初からやり直す",
+  "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "参照動画をクリアし、すべてのテスト動画を削除して、新しい比較を始めます。保存済みの結果は残ります。",
+  "Click Start over again to clear the reference.": "もう一度「最初からやり直す」をクリックすると参照動画をクリアします。",
+  "Every saved score in this folder is deleted. This can't be undone.": "このフォルダーに保存されたスコアはすべて削除されます。元に戻すことはできません。",
+  "Show details": "詳細を表示",
+  "Hide details": "詳細を隠す",
+  "OK": "OK",
   "(6 x Y + Cb + Cr) / 8 of the three planes' MS-SSIM, as SSIM YUV weighs them. Up to 1, higher is better.": "3 つのプレーンの MS-SSIM の (6 × Y + Cb + Cr) / 8。SSIM YUV と同じ重み付けです。最大 1、高いほど良好です。",
   "(6 x Y + Cb + Cr) / 8 of the three planes' PSNR, as JVET's common test conditions weigh it. In dB, higher is better.": "3 つのプレーンの PSNR の (6 × Y + Cb + Cr) / 8。JVET の共通テスト条件と同じ重み付けです。単位は dB、高いほど良好です。",
   "(6 x Y + Cb + Cr) / 8 of the three planes' SSIM, as MSU's codec comparisons weigh YUV-SSIM. Up to 1, higher is better.": "3 つのプレーンの SSIM の (6 × Y + Cb + Cr) / 8。MSU のコーデック比較が YUV-SSIM に使う重み付けです。最大 1、高いほど良好です。",
@@ -468,7 +475,6 @@
   "Reading reference video...": "参照動画を読み込み中...",
   "Could not read video": "動画を読み込めませんでした",
   "Resolution tests removed": "解像度テストを削除しました",
-  "Videos of a different length": "長さの異なる動画",
   "\n\nAdd them again to test the new source.": "\n\n新しいソースをテストするには、もう一度追加してください。",
   "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nメトリクスの計算には、両方の動画に収まる範囲が必要です（動画の準備 の 範囲）。動画比較 では両方に共通する部分が表示されます。",
   "Ready.": "準備完了。",
@@ -529,7 +535,6 @@
   "Select test videos": "テスト動画を選択",
   "Reading...": "読み込み中...",
   "Complete (cached)": "完了（保存済み）",
-  "Remove all videos": "すべての動画を削除",
   "\nLoaded from a previous run (matching files and calculation settings) -- right-click to recompute.": "\n以前の実行から読み込みました（ファイルと計算設定が一致）。再計算するには右クリックします。",
   "Recalculate selected metrics (ignore cached/previous results)": "選択した指標を再計算（保存済み/以前の結果を無視）",
   "Nothing to add": "追加するものはありません",
@@ -1374,6 +1379,9 @@
   "Calculated with {metric}.": "{metric} と一緒に計算されます。"
  },
  "plurals": {
+  "Click Remove all again to remove {count} video. Saved results are kept.": ["もう一度「すべて削除」をクリックすると {count} 本の動画を削除します。保存済みの結果は残ります。"],
+  "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["もう一度「最初からやり直す」をクリックすると参照動画をクリアし、{count} 本の動画を削除します。保存済みの結果は残ります。"],
+  "{count} test video does not last as long as the reference ({length}).": ["{count} 本のテスト動画の長さがリファレンス（{length}）と異なります。"],
   "{count} shown": ["{count} 個を表示"],
   "{count} ticked": ["{count} 個にチェック"],
   "{shown} of {count} shown": ["{count} 個中 {shown} 個を表示"],
@@ -1408,9 +1416,6 @@
   ],
   "Reading {count} video...": [
    "{count} 本の動画を読み込み中..."
-  ],
-  "Remove {count} video from the list?\n\nSaved results are kept -- re-adding a video shows its scores again.": [
-   "{count} 本の動画をすべてリストから削除しますか？\n\n保存済みの結果は残ります。動画を追加し直すとスコアが再び表示されます。"
   ],
   "{count} scored frame; metrics: ": [
    "採点済みフレーム {count}、指標："

@@ -1,7 +1,6 @@
 #include "self_test.h"
 
 #include <QImageReader>
-#include <QMessageBox>
 #include <QSslSocket>
 #include <QStyle>
 
@@ -12,6 +11,7 @@
 #include <optional>
 #include <tuple>
 
+#include "app_dialog.h"
 #include "vml/cancel.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/gpu_checks.h"
@@ -262,12 +262,13 @@ int run_self_test(const QApplication& app, bool quiet) {
         destination.reset();
     }
     if (!quiet) {
-        QMessageBox box;
-        box.setWindowTitle(QStringLiteral("Self-test"));
-        box.setText(QString::fromStdString(report.text()) +
-                    (destination ? QStringLiteral("\n\nSaved to %1").arg(QString::fromStdString(platform::path_text(*destination)))
-                                 : QString()));
-        box.exec();
+        Message message;
+        message.kind = report.failed() ? MessageKind::failure : MessageKind::information;
+        message.title = QStringLiteral("Self-test");
+        message.text = QString::fromStdString(report.text()) +
+                       (destination ? QStringLiteral("\n\nSaved to %1").arg(QString::fromStdString(platform::path_text(*destination)))
+                                    : QString());
+        show_message(nullptr, message);
     }
     return report.failed() ? 1 : 0;
 }

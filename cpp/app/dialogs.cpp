@@ -1,18 +1,17 @@
 #include "dialogs.h"
 
 #include <QCheckBox>
-#include <QDialog>
-#include <QDialogButtonBox>
 #include <QFileDialog>
-#include <QInputDialog>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
-#include <QMessageBox>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QVBoxLayout>
 
+#include "app_dialog.h"
 #include "i18n.h"
+#include "theme.h"
 #include "vml/ffprobe.h"
 #include "vml/platform/system.h"
 #include "window_helpers.h"
@@ -35,25 +34,21 @@ QString named_videos(const QStringList& videos) {
 }
 
 std::optional<FilmGrainAnswer> ask_film_grain(QWidget* parent, const QStringList& videos) {
-    QDialog dialog(parent);
-    dialog.setWindowTitle(tr("Film grain"));
-    auto* layout = new QVBoxLayout(&dialog);
-    auto* text = new QLabel(tr("These videos tell the player to add film grain. Calculate their metrics:"), &dialog);
+    AppDialog dialog(parent, tr("Film grain"));
+    auto* layout = new QVBoxLayout(dialog.body());
+    layout->setContentsMargins(20, 18, 20, 16);
+    auto* text = new QLabel(tr("These videos tell the player to add film grain. Calculate their metrics:"));
     text->setWordWrap(true);
     layout->addWidget(text);
-    layout->addWidget(new QLabel(named_videos(videos), &dialog));
-    auto* with = new QRadioButton(tr("With film grain (what viewers see)"), &dialog);
-    auto* without = new QRadioButton(tr("Without film grain (the coded pictures only)"), &dialog);
+    layout->addWidget(new QLabel(named_videos(videos)));
+    auto* with = new QRadioButton(tr("With film grain (what viewers see)"));
+    auto* without = new QRadioButton(tr("Without film grain (the coded pictures only)"));
     with->setChecked(true);
     layout->addWidget(with);
     layout->addWidget(without);
-    auto* again = new QCheckBox(tr("Don't ask again (change it in Settings)"), &dialog);
+    auto* again = new QCheckBox(tr("Don't ask again (change it in Settings)"));
     layout->addWidget(again);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    buttons->button(QDialogButtonBox::Ok)->setText(tr("Calculate metrics"));
-    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    layout->addWidget(buttons);
+    add_dialog_buttons(dialog, layout, tr("Calculate metrics"));
     if (dialog.exec() != QDialog::Accepted) {
         return std::nullopt;
     }
@@ -70,35 +65,29 @@ std::optional<double> entered_frame_rate(const QString& text) {
 }
 
 std::optional<FrameRateAnswer> ask_frame_rate(QWidget* parent, const QString& video, double reference_fps, int others) {
-    QDialog dialog(parent);
-    dialog.setWindowTitle(tr("Enter the frame rate"));
-    auto* layout = new QVBoxLayout(&dialog);
+    AppDialog dialog(parent, tr("Enter the frame rate"));
+    auto* layout = new QVBoxLayout(dialog.body());
+    layout->setContentsMargins(20, 18, 20, 16);
     auto* text = new QLabel(tr("{video} is a raw video stream that does not store its frame rate. Enter it as a number "
                                "or a fraction, such as 24 or 24000/1001:",
-                               {{"video", video}}),
-                            &dialog);
+                               {{"video", video}}));
     text->setTextFormat(Qt::PlainText);  // a file's name is not markup
     text->setWordWrap(true);
     layout->addWidget(text);
-    auto* entry = new QLineEdit(&dialog);
+    auto* entry = new QLineEdit;
     layout->addWidget(entry);
     if (reference_fps > 0) {
-        layout->addWidget(new QLabel(tr("The reference is {fps:.3f} fps.", {{"fps", reference_fps}}), &dialog));
+        layout->addWidget(new QLabel(tr("The reference is {fps:.3f} fps.", {{"fps", reference_fps}})));
     }
     auto* for_the_others = new QCheckBox(ntr("Use it for {count} other video without a frame rate",
                                              "Use it for {count} other videos without a frame rate",
-                                             static_cast<long long>(others)),
-                                         &dialog);
+                                             static_cast<long long>(others)));
     for_the_others->setVisible(others > 0);
     layout->addWidget(for_the_others);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    QPushButton* ok = buttons->button(QDialogButtonBox::Ok);
+    QPushButton* ok = add_dialog_buttons(dialog, layout);
     ok->setEnabled(false);
     QObject::connect(entry, &QLineEdit::textChanged, ok,
                      [ok](const QString& typed) { ok->setEnabled(entered_frame_rate(typed).has_value()); });
-    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    layout->addWidget(buttons);
     if (dialog.exec() != QDialog::Accepted) {
         return std::nullopt;
     }
@@ -106,20 +95,20 @@ std::optional<FrameRateAnswer> ask_frame_rate(QWidget* parent, const QString& vi
 }
 
 std::optional<CloseAnswer> ask_close_during_run(QWidget* parent) {
-    QMessageBox box(QMessageBox::Question, tr("A run is in progress"),
-                    tr("Closing the window stops the run, and the videos still being scored are left unfinished."),
-                    QMessageBox::NoButton, parent);
-    QPushButton* stop = box.addButton(tr("Stop and close"), QMessageBox::DestructiveRole);
-    QPushButton* keep = box.addButton(tr("Keep running"), QMessageBox::RejectRole);
-    box.setDefaultButton(keep);  // Enter leaves the run going
-    box.setEscapeButton(keep);
-    auto* again = new QCheckBox(tr("Don't ask again (change it in Settings)"), &box);
-    box.setCheckBox(again);
-    box.exec();
-    if (box.clickedButton() != stop) {
+    Message message;
+    message.kind = MessageKind::warning;
+    message.title = tr("A run is in progress");
+    message.text = tr("Closing the window stops the run, and the videos still being scored are left unfinished.");
+    message.buttons = {{tr("Stop and close"), MessageButton::Role::danger},
+                       {tr("Keep running"), MessageButton::Role::primary}};
+    message.default_button = 1;  // Enter leaves the run going
+    message.escape_button = 1;
+    message.check = tr("Don't ask again (change it in Settings)");
+    const MessageAnswer answer = show_message(parent, message);
+    if (answer.button != 0) {
         return std::nullopt;
     }
-    return CloseAnswer{again->isChecked()};
+    return CloseAnswer{answer.checked};
 }
 
 }  // namespace
@@ -135,37 +124,62 @@ Dialogs standard_dialogs(QWidget* parent, std::function<std::string()> export_di
         const std::string chosen = export_dir ? export_dir() : std::string();
         return text_of(chosen.empty() ? platform::home_directory() / "Documents" : platform::path_from_text(chosen));
     };
-    return {
-        [parent](const QString& title, const QString& text) { QMessageBox::information(parent, title, text); },
-        [parent](const QString& title, const QString& text) { QMessageBox::critical(parent, title, text); },
-        [parent](const QString& title, const QString& text) {
-            return QMessageBox::question(parent, title, text) == QMessageBox::Yes;
-        },
-        [parent](const QString& title, const QString& text) {
-            return QMessageBox::question(parent, title, text, QMessageBox::Yes | QMessageBox::No, QMessageBox::No) ==
-                   QMessageBox::Yes;
-        },
-        [parent](const QString& title, const QString& filter) {
-            return QFileDialog::getOpenFileName(parent, title, QString(), filter);
-        },
-        [parent, export_folder](const QString& title, const QString& suggested, const QString& filter) {
-            return QFileDialog::getSaveFileName(parent, title, save_dialog_start(suggested, export_folder()), filter);
-        },
-        [parent](const QString& title, const QString& start) {
-            return QFileDialog::getExistingDirectory(parent, title, start);
-        },
-        [parent](const QStringList& videos) { return ask_film_grain(parent, videos); },
-        [parent](const QString& video, double reference_fps, int others) {
-            return ask_frame_rate(parent, video, reference_fps, others);
-        },
-        [parent] { return ask_close_during_run(parent); },
-        export_folder,
-        [parent](const QString& title, const QString& label, const QString& text) -> std::optional<QString> {
-            bool ok = false;
-            const QString answer = QInputDialog::getText(parent, title, label, QLineEdit::Normal, text, &ok);
-            return ok ? std::optional(answer) : std::nullopt;
-        },
+    // A message with OK alone, of `kind`.
+    const auto tell = [parent](MessageKind kind) {
+        return [parent, kind](const QString& title, const QString& text) {
+            Message message;
+            message.kind = kind;
+            message.title = title;
+            message.text = text;
+            show_message(parent, message);
+        };
     };
+    // A question answered Yes or No, Enter's `yes_default` or No.
+    const auto question = [parent](bool yes_default) {
+        return [parent, yes_default](const QString& title, const QString& text) {
+            Message message;
+            message.kind = MessageKind::question;
+            message.title = title;
+            message.text = text;
+            message.buttons = {{tr("Yes"), yes_default ? MessageButton::Role::primary : MessageButton::Role::plain},
+                               {tr("No"), MessageButton::Role::plain}};
+            message.default_button = yes_default ? 0 : 1;
+            message.escape_button = 1;
+            return show_message(parent, message).button == 0;
+        };
+    };
+    Dialogs dialogs;
+    dialogs.inform = tell(MessageKind::information);
+    dialogs.alert = tell(MessageKind::failure);
+    dialogs.warn = tell(MessageKind::warning);
+    dialogs.message = [parent](const Message& message) { return show_message(parent, message); };
+    dialogs.ask = question(true);
+    dialogs.ask_no_default = question(false);
+    dialogs.open_file = [parent](const QString& title, const QString& filter) {
+        return QFileDialog::getOpenFileName(parent, title, QString(), filter);
+    };
+    dialogs.open_file_at = [parent](const QString& title, const QString& start, const QString& filter) {
+        return QFileDialog::getOpenFileName(parent, title, start, filter);
+    };
+    dialogs.open_files_at = [parent](const QString& title, const QString& start) {
+        return QFileDialog::getOpenFileNames(parent, title, start);
+    };
+    dialogs.save_file = [parent, export_folder](const QString& title, const QString& suggested, const QString& filter) {
+        return QFileDialog::getSaveFileName(parent, title, save_dialog_start(suggested, export_folder()), filter);
+    };
+    dialogs.choose_folder = [parent](const QString& title, const QString& start) {
+        return QFileDialog::getExistingDirectory(parent, title, start);
+    };
+    dialogs.ask_film_grain = [parent](const QStringList& videos) { return ask_film_grain(parent, videos); };
+    dialogs.ask_frame_rate = [parent](const QString& video, double reference_fps, int others) {
+        return ask_frame_rate(parent, video, reference_fps, others);
+    };
+    dialogs.ask_close_during_run = [parent] { return ask_close_during_run(parent); };
+    dialogs.export_folder = export_folder;
+    dialogs.ask_text = [parent](const QString& title, const QString& label, const QString& text) {
+        return ask_line(parent, title, label, text);
+    };
+    return dialogs;
 }
 
 }  // namespace vml::app

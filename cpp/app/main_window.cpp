@@ -7,14 +7,12 @@
 #include <QCloseEvent>
 #include <QDesktopServices>
 #include <QEvent>
-#include <QFileDialog>
 #include <QFileInfo>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
-#include <QMessageBox>
 #include <QNetworkAccessManager>
 #include <QNetworkProxyFactory>
 #include <QNetworkReply>
@@ -53,6 +51,7 @@
 #include "stream_records.h"
 #include "theme.h"
 #include "video_names.h"
+#include "click_twice.h"
 #include "title_bar.h"
 #include "vml/app_log.h"
 #include "vml/append.h"
@@ -1140,6 +1139,20 @@ std::vector<QWidget*> MainWindow::add_file_buttons(QBoxLayout* buttons) {
     remove_all_button_ = new QPushButton(app::tr("Remove all"));
     theme::set_role(remove_all_button_, "quiet");
     connect(remove_all_button_, &QPushButton::clicked, this, [this] { on_remove_all_distorted(); });
+    start_over_button_ = new QPushButton(app::tr("Start over"));
+    theme::set_role(start_over_button_, "quiet");
+    start_over_button_->setToolTip(app::tr("Clears the reference and removes every test video, for a new "
+                                           "comparison. Saved results are kept."));
+    connect(start_over_button_, &QPushButton::clicked, this, [this] { on_start_over(); });
+    // Remove all's and Start over's line when one is armed (confirm_click),
+    // else the videos that do not last as long as the reference.
+    footer_note_ = new QLabel;
+    footer_note_->setObjectName("videosFooterNote");
+    footer_note_->setTextFormat(Qt::PlainText);
+    theme::set_role(footer_note_, "hint");  // the length note muted; an armed line in the danger colour over it
+    footer_note_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);  // never widens the window
+    click_twice_ = new ClickTwice(this);
+    connect(click_twice_, &ClickTwice::changed, this, [this] { show_footer_note(); });
     // A saved run's file read into the table: a row of its own, as Add files
     // adds one. Frozen during a run with the files: a saved run can bring a
     // reference of its own, which would change what the running videos mean.
@@ -1151,7 +1164,14 @@ std::vector<QWidget*> MainWindow::add_file_buttons(QBoxLayout* buttons) {
     buttons->addWidget(theme::separator(0));  // adding | removing (Modern's line)
     buttons->addWidget(remove_button);
     buttons->addWidget(remove_all_button_);
-    buttons->addStretch(1);
+    buttons->addWidget(start_over_button_);
+    buttons->addSpacing(8);
+    buttons->addWidget(footer_note_, 1);
+    // Any other of the footer's buttons is another decision: an armed one is
+    // let go.
+    for (QPushButton* other : {add_button, add_resample_button, load_button_, remove_button}) {
+        connect(other, &QPushButton::clicked, click_twice_, &ClickTwice::disarm);
+    }
     highlight_check_ = new QCheckBox(app::tr("Highlight best/worst results"));
     highlight_check_->setChecked(settings_.highlight_best_worst);
     connect(highlight_check_, &QCheckBox::toggled, this, [this](bool on) { on_highlight_toggled(on); });
@@ -1170,7 +1190,7 @@ std::vector<QWidget*> MainWindow::add_file_buttons(QBoxLayout* buttons) {
     best_worst_timer_->setInterval(0);
     connect(best_worst_timer_, &QTimer::timeout, this, [this] { apply_best_worst(); });
     connect(distorted_table_->model(), &QAbstractItemModel::rowsRemoved, this, [this] { schedule_best_worst(); });
-    return {add_button, add_resample_button, load_button_, remove_button, remove_all_button_};
+    return {add_button, add_resample_button, load_button_, remove_button, remove_all_button_, start_over_button_};
 }
 
 QWidget* MainWindow::build_run_panel() {
@@ -1355,31 +1375,31 @@ void MainWindow::show_update(const Release& release) {
         update_box_->raise();
         return;
     }
-    auto* box = new QMessageBox(this);
-    box->setAttribute(Qt::WA_DeleteOnClose);
-    box->setIcon(QMessageBox::Information);
-    box->setWindowTitle(app::tr("Update available"));
-    box->setText(app::tr("{app} {version} is available. You have {current}.",
-                         {{"app", "VideoMetricsLab"},
-                          {"version", QString::fromStdString(release.version)},
-                          {"current", VML_VERSION}}));
-    box->setInformativeText(app::tr("Updating does not affect your saved results or settings: they are stored "
-                                    "separately from the app, in {cache_dir} and {user_data_dir}.",
-                                    {{"cache_dir", text_of(cache_folder())},
-                                     {"user_data_dir", text_of(Settings::file().parent_path())}}));
+    Message message;
+    message.title = app::tr("Update available");
+    message.headline = app::tr("{app} {version} is available. You have {current}.",
+                               {{"app", "VideoMetricsLab"},
+                                {"version", QString::fromStdString(release.version)},
+                                {"current", VML_VERSION}});
+    message.text = app::tr("Updating does not affect your saved results or settings: they are stored "
+                           "separately from the app, in {cache_dir} and {user_data_dir}.",
+                           {{"cache_dir", text_of(cache_folder())},
+                            {"user_data_dir", text_of(Settings::file().parent_path())}});
     if (!python_strip(release.notes).empty()) {
-        box->setDetailedText(QString::fromStdString(release.notes));
+        message.details = QString::fromStdString(release.notes);
     }
-    QPushButton* download = box->addButton(app::tr("Download"), QMessageBox::AcceptRole);
-    QPushButton* skip = box->addButton(app::tr("Skip this version"), QMessageBox::DestructiveRole);
-    box->addButton(app::tr("Later"), QMessageBox::RejectRole);
-    box->setDefaultButton(download);
-    connect(box, &QMessageBox::finished, this, [this, box, download, skip, release] {
-        if (box->clickedButton() == download) {
+    constexpr int download = 0;
+    constexpr int skip = 1;
+    message.buttons = {{app::tr("Download"), MessageButton::Role::primary},
+                       {app::tr("Skip this version"), MessageButton::Role::plain},
+                       {app::tr("Later"), MessageButton::Role::plain}};
+    // Not waited for: the window goes on while it is open.
+    AppDialog* box = message_dialog(this, message, [this, release](MessageAnswer answer) {
+        if (answer.button == download) {
             // This system's package itself, where the release names it (the
             // Python app opened the page).
             QDesktopServices::openUrl(QUrl(QString::fromStdString(release.download_url.value_or(release.page_url))));
-        } else if (box->clickedButton() == skip) {
+        } else if (answer.button == skip) {
             settings_.skipped_update_version = release.version;
             save_settings();
             pending_update_.reset();
@@ -1466,29 +1486,27 @@ bool MainWindow::check_ffmpeg(bool prompt) {
     }
     const QString found_where = app::tr("\n\nffmpeg was looked for at:\n  {path}", {{"path", status.ffmpeg.path}}) +
                                 app::tr("\nffprobe at:\n  {path}", {{"path", status.ffprobe.path}});
+    Message message;
+    message.kind = MessageKind::warning;
+    message.title = app::tr("ffmpeg not usable");
 #ifdef _WIN32
-    QMessageBox box(QMessageBox::Warning, app::tr("ffmpeg not usable"),
-                    problems.join("\n") + found_where +
-                        app::tr("\n\nThe app can download FFmpeg for you (about 200 MB, from the FFmpeg-Builds "
-                                "project on GitHub), or you can point it at an ffmpeg.exe you already have."),
-                    QMessageBox::NoButton, this);
-    QPushButton* download = box.addButton(app::tr("Download FFmpeg"), QMessageBox::AcceptRole);
-    QPushButton* locate = box.addButton(app::tr("Locate ffmpeg.exe"), QMessageBox::ActionRole);
-    box.addButton(app::tr("Not now"), QMessageBox::RejectRole);
-    box.setDefaultButton(download);
-    box.exec();
-    if (box.clickedButton() == download) {
+    message.text = problems.join("\n") + found_where +
+                   app::tr("\n\nThe app can download FFmpeg for you (about 200 MB, from the FFmpeg-Builds "
+                           "project on GitHub), or you can point it at an ffmpeg.exe you already have.");
+    message.buttons = {{app::tr("Download FFmpeg"), MessageButton::Role::primary},
+                       {app::tr("Locate ffmpeg.exe"), MessageButton::Role::plain},
+                       {app::tr("Not now"), MessageButton::Role::plain}};
+    const int answer = dialogs_.message(message).button;
+    if (answer == 0) {
         on_download_ffmpeg();
-    } else if (box.clickedButton() == locate) {
+    } else if (answer == 1) {
         return on_locate_ffmpeg();
     }
 #else
-    const auto answer = QMessageBox::warning(
-        this, app::tr("ffmpeg not usable"),
-        problems.join("\n") + install + found_where +
-            app::with_program_names(app::tr("\n\nWould you like to point the app at ffmpeg.exe now?")),
-        QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
-    if (answer == QMessageBox::Yes) {
+    message.text = problems.join("\n") + install + found_where +
+                   app::with_program_names(app::tr("\n\nWould you like to point the app at ffmpeg.exe now?"));
+    message.buttons = {{app::tr("Yes"), MessageButton::Role::primary}, {app::tr("No"), MessageButton::Role::plain}};
+    if (dialogs_.message(message).button == 0) {
         return on_locate_ffmpeg();
     }
 #endif
@@ -1511,7 +1529,7 @@ void MainWindow::on_download_ffmpeg() {
     });
     connect(ffmpeg_download_, &FfmpegDownload::failed, this, [this, finished](const QString& message) {
         finished();
-        QMessageBox::warning(this, app::tr("FFmpeg download failed"), message);
+        dialogs_.alert(app::tr("FFmpeg download failed"), message);
     });
     connect(ffmpeg_download_, &FfmpegDownload::cancelled, this, [this, finished] {
         finished();
@@ -1529,7 +1547,7 @@ void MainWindow::on_ffmpeg_downloaded(const std::filesystem::path& folder) {
     const ToolsStatus status = check_tools(trial);
     if (!status.ok()) {
         const QStringList problems = tool_problems(status);
-        QMessageBox::warning(this, app::tr("Still not usable"), problems.join("\n"));
+        dialogs_.warn(app::tr("Still not usable"), problems.join("\n"));
         // Of no use, and the app's own: not left for the next start.
         std::error_code error;
         std::filesystem::remove(folder / "ffmpeg.exe", error);
@@ -1570,8 +1588,8 @@ bool MainWindow::on_locate_ffmpeg() {
     const QString ffmpeg_exe = "ffmpeg";
     const QString ffprobe_exe = "ffprobe";
 #endif
-    const QString chosen = QFileDialog::getOpenFileName(
-        this, app::tr("Select {ffmpeg_exe}", {{"ffmpeg_exe", ffmpeg_exe}}), QString(),
+    const QString chosen = dialogs_.open_file_at(
+        app::tr("Select {ffmpeg_exe}", {{"ffmpeg_exe", ffmpeg_exe}}), QString(),
         app::tr("{ffmpeg_exe} ({ffmpeg_exe});;All files (*)", {{"ffmpeg_exe", ffmpeg_exe}}));
     if (chosen.isEmpty()) {
         return false;
@@ -1583,17 +1601,17 @@ bool MainWindow::on_locate_ffmpeg() {
                         app::tr("{ffprobe_exe} wasn't found next to {ffmpeg_exe}.\n\nThe app needs both. Please select "
                                 "{ffprobe_exe} as well (it normally ships in the same folder).",
                                 {{"ffprobe_exe", ffprobe_exe}, {"ffmpeg_exe", ffmpeg_exe}}));
-        const QString probe_chosen = QFileDialog::getOpenFileName(
-            this, app::tr("Select {ffprobe_exe}", {{"ffprobe_exe", ffprobe_exe}}), text_of(directory),
+        const QString probe_chosen = dialogs_.open_file_at(
+            app::tr("Select {ffprobe_exe}", {{"ffprobe_exe", ffprobe_exe}}), text_of(directory),
             app::tr("{ffprobe_exe} ({ffprobe_exe});;All files (*)", {{"ffprobe_exe", ffprobe_exe}}));
         if (probe_chosen.isEmpty()) {
             return false;
         }
         if (!same_path(path_of(probe_chosen).parent_path(), directory)) {
-            QMessageBox::warning(this, app::tr("Different folders"),
-                                 app::tr("{ffmpeg_exe} and {ffprobe_exe} need to be in the same folder for the app to "
-                                         "find both.",
-                                         {{"ffmpeg_exe", ffmpeg_exe}, {"ffprobe_exe", ffprobe_exe}}));
+            dialogs_.warn(app::tr("Different folders"),
+                          app::tr("{ffmpeg_exe} and {ffprobe_exe} need to be in the same folder for the app to "
+                                  "find both.",
+                                  {{"ffmpeg_exe", ffmpeg_exe}, {"ffprobe_exe", ffprobe_exe}}));
             return false;
         }
     }
@@ -1612,7 +1630,7 @@ bool MainWindow::on_locate_ffmpeg() {
     use_stream_fingerprinter(status.ffmpeg.path, status.ffprobe.path);
     if (!status.ok()) {
         const QStringList problems = tool_problems(status);
-        QMessageBox::warning(this, app::tr("Still not usable"), problems.join("\n"));
+        dialogs_.warn(app::tr("Still not usable"), problems.join("\n"));
         check_ffmpeg(false);
         return false;
     }

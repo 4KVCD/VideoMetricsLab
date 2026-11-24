@@ -1,7 +1,7 @@
 #include "resample_target_dialog.h"
 
 #include <QComboBox>
-#include <QDialogButtonBox>
+#include <QVBoxLayout>
 #include <QFormLayout>
 #include <QLabel>
 #include <QSignalBlocker>
@@ -31,8 +31,7 @@ QSpinBox* size_box(int low, int high, const char* name) {
 }  // namespace
 
 ResampleTargetDialog::ResampleTargetDialog(Size reference, const std::string& scaler, QWidget* parent)
-    : QDialog(parent), reference_(reference) {
-    setWindowTitle(app::tr("Add resolution test"));
+    : AppDialog(parent, app::tr("Add resolution test")), reference_(reference) {
     const int smallest = resample_smallest_width(reference);
     const int largest = resample_largest_width(reference);
     sizes_ = new QComboBox;
@@ -52,7 +51,9 @@ ResampleTargetDialog::ResampleTargetDialog(Size reference, const std::string& sc
     }
     scalers_->setCurrentText(QString::fromStdString(scaler));
 
-    auto* form = new QFormLayout(this);
+    auto* outer = new QVBoxLayout(body());
+    auto* form = new QFormLayout;
+    outer->addLayout(form);
     form->addRow(app::tr("Downscale to (then scale back up):"), sizes_);
     form->addRow(app::tr("Width:"), width_);
     form->addRow(app::tr("Height:"), height_);
@@ -60,10 +61,7 @@ ResampleTargetDialog::ResampleTargetDialog(Size reference, const std::string& sc
     black_bars_note->setWordWrap(true);
     form->addRow(black_bars_note);
     form->addRow(app::tr("Scaling algorithm:"), scalers_);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    form->addRow(buttons);
+    add_dialog_buttons(*this, outer);
 
     // The second listed size, as the list has always opened, or half the width
     // where the reference is too small for any.

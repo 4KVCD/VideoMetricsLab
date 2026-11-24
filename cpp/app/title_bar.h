@@ -102,7 +102,10 @@ public:
     // and not high contrast (whose colours are the system's).
     static bool wanted();
 
-    explicit TitleBar(QMainWindow* window);
+    // window's bar: the main window's (its TitleButtons, minimize,
+    // maximize and close), or with dialog a dialog's (AppDialog: its title
+    // and close alone, moved but not resized, minimized or maximized).
+    explicit TitleBar(QWidget* window, bool dialog = false);
 
     // Asks Qt for the window's area up to its top edge, with no title or
     // buttons of its own: before the window is first shown.
@@ -131,7 +134,8 @@ private:
     void show_window_state();
     void show_active();
 
-    QMainWindow* window_;
+    QWidget* window_;
+    bool dialog_ = false;
     QLabel* icon_ = nullptr;
     QLabel* title_ = nullptr;
     TitleButtons* buttons_ = nullptr;
