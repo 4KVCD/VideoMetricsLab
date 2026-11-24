@@ -597,7 +597,6 @@
   "Frame {frame}: no visible series.": "الإطار {frame}: لا سلاسل ظاهرة.",
   "Frame {frame}": "الإطار {frame}",
   "Series and statistics": "السلاسل والإحصاءات",
-  "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "لم يُحسب {label}. حدّده في عمود {label} في «الفيديو»، أو حمّل نتائج تتضمنه.",
   "Export results": "تصدير النتائج",
   "CSV file (*.csv)": "ملف CSV (*.csv)",
   "JSON file (*.json)": "ملف JSON (*.json)",

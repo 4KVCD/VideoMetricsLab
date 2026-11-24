@@ -597,7 +597,6 @@
   "Frame {frame}: no visible series.": "Khung {frame}: không có chuỗi nào hiển thị.",
   "Frame {frame}": "Khung {frame}",
   "Series and statistics": "Chuỗi và thống kê",
-  "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "Chưa tính {label}. Đánh dấu nó trong cột {label} ở thẻ Video, hoặc tải kết quả có chứa nó.",
   "Export results": "Xuất kết quả",
   "CSV file (*.csv)": "Tệp CSV (*.csv)",
   "JSON file (*.json)": "Tệp JSON (*.json)",

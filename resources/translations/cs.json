@@ -597,7 +597,6 @@
   "Frame {frame}: no visible series.": "Snímek {frame}: žádné viditelné řady.",
   "Frame {frame}": "Snímek {frame}",
   "Series and statistics": "Řady a statistiky",
-  "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "{label} nebyla spočítána. Zaškrtněte ji ve sloupci {label} na kartě Videa, nebo načtěte výsledky, které ji obsahují.",
   "Export results": "Exportovat výsledky",
   "CSV file (*.csv)": "Soubor CSV (*.csv)",
   "JSON file (*.json)": "Soubor JSON (*.json)",

@@ -55,6 +55,15 @@ class GraphPanelTest : public ::testing::Test {
 protected:
     static QTableWidget& table(GraphPanel& panel) { return *panel.stats_table_; }
     static QTabWidget& tabs(GraphPanel& panel) { return *panel.tabs_; }
+    // The metrics with a tab (and a mean column), in order.
+    static std::vector<std::string> shown_metrics(const GraphPanel& panel) {
+        std::vector<std::string> keys;
+        for (const MetricDefinition* metric : panel.shown_metrics_) {
+            keys.emplace_back(metric->key);
+        }
+        return keys;
+    }
+    static int details_column(const GraphPanel& panel) { return panel.mean_column_end(); }
     static QSpinBox& frame_spin(GraphPanel& panel) { return *panel.frame_controls_->frame_spin; }
     static QCheckBox& difference_box(GraphPanel& panel) { return *panel.difference_box_; }
     static QSpinBox& range_start_spin(GraphPanel& panel) { return *panel.frame_controls_->range_start_spin; }
@@ -69,6 +78,7 @@ protected:
         emit box.editingFinished();
     }
     static QString stats_hint(const GraphPanel& panel) { return panel.stats_hint_->text(); }
+    static QString metric_hint(const GraphPanel& panel) { return panel.metric_hint_->text(); }
     static void export_statistics(GraphPanel& panel, bool json) { panel.export_statistics(json); }
     // The statistics' right-click menu for the line labelled `label`: its
     // items' texts, in order, and those it offers disabled.
@@ -129,10 +139,10 @@ protected:
     static const std::map<int, SeriesEntry>& entries(const GraphPanel& panel) { return panel.entries_; }
     // A metric's page, shown (and so built).
     static MetricPage& page(GraphPanel& panel, const std::string& key) {
-        const std::span<const MetricDefinition> all = metrics();
-        const auto at =
-            std::find_if(all.begin(), all.end(), [&key](const MetricDefinition& m) { return m.key == key; });
-        panel.tabs_->setCurrentIndex(static_cast<int>(at - all.begin()));
+        const std::vector<std::string> shown = shown_metrics(panel);
+        const auto at = std::find(shown.begin(), shown.end(), key);
+        EXPECT_NE(at, shown.end()) << "no tab for " << key;
+        panel.tabs_->setCurrentIndex(static_cast<int>(at - shown.begin()));
         return *panel.pages_.at(key);
     }
     static QString readout(const MetricPage& page) { return page.hover_label_->text(); }
@@ -210,22 +220,16 @@ TEST_F(GraphPanelTest, ShowsTheRunsAsThePythonApp) {
         shown.chart().resize(800, 400);
         const nlohmann::json& expected = item.at("table");
         QTableWidget& stats = table(panel);
-        // The columns shown: the planes' (hidden without their scores) came
-        // after the Python app.
-        std::vector<int> shown_columns;
         std::vector<std::string> headers;
         for (int column = 0; column < stats.columnCount(); ++column) {
-            if (!stats.isColumnHidden(column)) {
-                shown_columns.push_back(column);
-                headers.push_back(stats.horizontalHeaderItem(column)->text().toStdString());
-            }
+            headers.push_back(stats.horizontalHeaderItem(column)->text().toStdString());
         }
         EXPECT_EQ(headers, expected.at("headers").get<std::vector<std::string>>());
         ASSERT_EQ(stats.rowCount(), static_cast<int>(expected.at("cells").size()));
         for (int row = 0; row < stats.rowCount(); ++row) {
-            for (std::size_t index = 0; index < shown_columns.size(); ++index) {
-                const int column = shown_columns[index];
-                const nlohmann::json& cell = expected.at("cells")[static_cast<std::size_t>(row)][index];
+            for (int column = 0; column < stats.columnCount(); ++column) {
+                const nlohmann::json& cell =
+                    expected.at("cells")[static_cast<std::size_t>(row)][static_cast<std::size_t>(column)];
                 const QTableWidgetItem* actual = stats.item(row, column);
                 EXPECT_EQ(actual == nullptr ? nlohmann::json() : nlohmann::json(actual->text().toStdString()), cell)
                     << "row " << row << ", column " << column;
@@ -834,7 +838,7 @@ TEST_F(GraphPanelTest, ALineWithNoScoresForTheMetricShowsDashesAndExports) {
     const int b = 0;  // added first
     ASSERT_EQ(stats.item(b, 0)->text(), "b");
     // After the means, before the ✕.
-    for (int column = 1 + static_cast<int>(metrics().size()); column < stats.columnCount() - 1; ++column) {
+    for (int column = details_column(panel); column < stats.columnCount() - 1; ++column) {
         const QTableWidgetItem* cell = stats.item(b, column);
         ASSERT_NE(cell, nullptr) << column;
         EXPECT_EQ(cell->text().toStdString(), "—") << stats.horizontalHeaderItem(column)->text().toStdString();
@@ -999,12 +1003,11 @@ TEST_F(GraphPanelTest, AFrameRangesStatisticsAndShading) {
     const std::vector<double> in_range(a_vmaf.begin() + 3, a_vmaf.begin() + 8);
     const ScoreStats stats = compute_stats(in_range, spec.thresholds, spec.aggregation, spec.direction);
     const auto text = [&spec](std::optional<double> value) { return QString::fromStdString(spec.format_value(value)); };
-    const std::span<const MetricDefinition> all = metrics();
-    const auto column_of = [&all](std::string_view key) {
-        return 1 + static_cast<int>(std::find_if(all.begin(), all.end(), [key](const auto& m) { return m.key == key; }) -
-                                    all.begin());
+    const std::vector<std::string> shown = shown_metrics(panel);
+    const auto column_of = [&shown](std::string_view key) {
+        return 1 + static_cast<int>(std::find(shown.begin(), shown.end(), key) - shown.begin());
     };
-    const int details = 1 + static_cast<int>(all.size());
+    const int details = details_column(panel);
     QTableWidget& cells = table(panel);
     ASSERT_EQ(cells.item(0, 0)->text(), "a");
     EXPECT_EQ(cells.item(0, column_of("vmaf"))->text(), text(aggregate_scores(in_range, spec.aggregation)));
@@ -1041,7 +1044,7 @@ TEST_F(GraphPanelTest, AFrameRangeOnCvvdpsPageIsTheSecondsItIsIn) {
     const MetricDefinition& spec = *find_metric("cvvdp");
     const ScoreStats seconds =
         compute_stats(std::vector<double>{9.0, 8.0}, spec.thresholds, spec.aggregation, spec.direction);
-    const int details = 1 + static_cast<int>(metrics().size());
+    const int details = details_column(panel);
     EXPECT_EQ(table(panel).item(0, details)->text(), QString::fromStdString(spec.format_value(seconds.median)));
     EXPECT_TRUE(stats_hint(panel).contains("whole seconds")) << stats_hint(panel).toStdString();
     ASSERT_TRUE(cvvdp.chart().highlight());
@@ -1050,6 +1053,101 @@ TEST_F(GraphPanelTest, AFrameRangeOnCvvdpsPageIsTheSecondsItIsIn) {
     const auto [headers, rows] = export_table(panel);
     ASSERT_EQ(rows.size(), 1u);
     EXPECT_EQ(std::get<2>(rows.front())[0], "—");
+}
+
+// Issue #222: a tab and a mean column for each metric some line has scores
+// of, in the app's order, as Worst Frames and the graph export show them
+// (scored_metrics): they come with the first line that has the metric and go
+// with the last. The preferred metric (Settings' graph_metric) is shown when
+// a line has it, the first shown otherwise, and stays preferred; with no
+// line, its tab alone.
+TEST_F(GraphPanelTest, TabsAndColumnsAreTheScoredMetrics) {
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    std::vector<std::string> chosen;
+    QObject::connect(&panel, &GraphPanel::metric_changed, [&chosen](const QString& key) {
+        chosen.push_back(key.toStdString());
+    });
+    const auto means = [&panel] {
+        std::vector<std::string> headers;
+        for (int column = 1; column < details_column(panel); ++column) {
+            headers.push_back(table(panel).horizontalHeaderItem(column)->text().toStdString());
+        }
+        return headers;
+    };
+    const auto tab_texts = [&panel] {
+        std::vector<std::string> texts;
+        for (int index = 0; index < tabs(panel).count(); ++index) {
+            texts.push_back(tabs(panel).tabText(index).toStdString());
+        }
+        return texts;
+    };
+    const auto current = [&panel] {
+        return shown_metrics(panel).at(static_cast<std::size_t>(tabs(panel).currentIndex()));
+    };
+    panel.set_preferred_metric("psnr");
+    EXPECT_EQ(shown_metrics(panel), (std::vector<std::string>{"psnr"}));
+    EXPECT_EQ(means(), (std::vector<std::string>{"PSNR"}));
+
+    // VMAF and PSNR; then VMAF and CVVDP (a whole-video score), which goes
+    // after PSNR, the registry's order, not the order lines came in.
+    ComparisonResult a = vmaf_result("a.mkv", std::vector<float>(10, 90.0F));
+    add_frames(a, "psnr", {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, std::vector<float>(10, 40.0F));
+    panel.add_run({shared(std::move(a)), "a", {}, true});
+    EXPECT_EQ(shown_metrics(panel), (std::vector<std::string>{"vmaf", "psnr"}));
+    EXPECT_EQ(tab_texts(), (std::vector<std::string>{"VMAF v0.6.1", "PSNR"}));
+    EXPECT_EQ(means(), (std::vector<std::string>{"VMAF v0.6.1", "PSNR"}));
+    EXPECT_EQ(current(), "psnr");
+    panel.add_run({range_run("b.mkv", std::vector<float>(10, 80.0F)), "b", {}, true});
+    EXPECT_EQ(shown_metrics(panel), panel.scored_metrics());
+    EXPECT_EQ(shown_metrics(panel), (std::vector<std::string>{"vmaf", "psnr", "cvvdp"}));
+    EXPECT_EQ(means(), (std::vector<std::string>{"VMAF v0.6.1", "PSNR", "CVVDP"}));
+    EXPECT_EQ(table(panel).item(0, 3)->text(), "—");  // a has no CVVDP
+    EXPECT_TRUE(chosen.empty());
+
+    // CVVDP chosen, then its only line removed: the first tab shown, the
+    // choice kept, and shown again when a line brings it back.
+    page(panel, "cvvdp");
+    EXPECT_EQ(chosen, (std::vector<std::string>{"cvvdp"}));
+    panel.remove_runs({id_of(panel, "b")});
+    EXPECT_EQ(shown_metrics(panel), (std::vector<std::string>{"vmaf", "psnr"}));
+    EXPECT_EQ(means(), (std::vector<std::string>{"VMAF v0.6.1", "PSNR"}));
+    EXPECT_EQ(current(), "vmaf");
+    EXPECT_EQ(chosen.size(), 1u);
+    panel.add_run({range_run("b.mkv", std::vector<float>(10, 80.0F)), "b", {}, true});
+    EXPECT_EQ(current(), "cvvdp");
+    ASSERT_NE(page(panel, "cvvdp").curve(id_of(panel, "b")), nullptr);
+
+    // No line left: the preferred metric's tab alone, its page empty.
+    panel.remove_runs({id_of(panel, "a"), id_of(panel, "b")});
+    EXPECT_EQ(shown_metrics(panel), (std::vector<std::string>{"cvvdp"}));
+    EXPECT_EQ(means(), (std::vector<std::string>{"CVVDP"}));
+    EXPECT_EQ(table(panel).rowCount(), 0);
+    EXPECT_TRUE(page(panel, "cvvdp").curves().empty());
+    EXPECT_EQ(metric_hint(panel), "Calculate metrics or import a run file to view graphs.");
+
+    // A YUV metric's Y, U and V planes (MetricDefinition::plane_of): their
+    // columns and tabs too only where a line has their scores, after their
+    // metric. c has PSNR YUV alone; d its planes as well.
+    const std::vector<int> frames{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    ComparisonResult c = vmaf_result("c.mkv", std::vector<float>(10, 85.0F));
+    add_frames(c, "psnr_yuv", frames, std::vector<float>(10, 41.0F));
+    ComparisonResult d = c;
+    d.distorted = "d.mkv";
+    for (const char* plane : {"psnr_yuv_y", "psnr_yuv_u", "psnr_yuv_v"}) {
+        add_frames(d, plane, frames, std::vector<float>(10, 42.0F));
+    }
+    panel.add_run({shared(std::move(c)), "c", {}, true});
+    EXPECT_EQ(shown_metrics(panel), (std::vector<std::string>{"vmaf", "psnr_yuv"}));
+    panel.add_run({shared(std::move(d)), "d", {}, true});
+    EXPECT_EQ(shown_metrics(panel),
+              (std::vector<std::string>{"vmaf", "psnr_yuv", "psnr_yuv_y", "psnr_yuv_u", "psnr_yuv_v"}));
+    EXPECT_EQ(means(), (std::vector<std::string>{"VMAF v0.6.1", "PSNR YUV (6:1:1)", "PSNR YUV: Y", "PSNR YUV: U",
+                                                 "PSNR YUV: V"}));
+    EXPECT_EQ(table(panel).item(0, 3)->text(), "—");  // c has no Y plane
+    EXPECT_EQ(table(panel).item(1, 3)->text(), "42.00");
+    panel.remove_runs({id_of(panel, "d")});
+    EXPECT_EQ(shown_metrics(panel), (std::vector<std::string>{"vmaf", "psnr_yuv"}));
 }
 
 TEST_F(GraphPanelTest, AShiftDragAcrossTheGraphSelectsFrames) {

@@ -597,7 +597,6 @@
   "Frame {frame}": "프레임 {frame}",
   "Series and statistics": "계열 및 통계",
   "Calculate metrics or import a run file to view graphs.": "그래프를 보려면 지표를 계산하거나 실행 결과 파일을 가져오세요.",
-  "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "{label}은(는) 계산되지 않았습니다. [영상]의 {label} 열을 체크하거나 이를 포함한 결과를 불러오세요.",
   "Export results": "결과 내보내기",
   "CSV file (*.csv)": "CSV 파일 (*.csv)",
   "JSON file (*.json)": "JSON 파일 (*.json)",

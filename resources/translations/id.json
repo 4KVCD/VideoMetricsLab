@@ -597,7 +597,6 @@
   "Frame {frame}: no visible series.": "Bingkai {frame}: tidak ada seri yang terlihat.",
   "Frame {frame}": "Bingkai {frame}",
   "Series and statistics": "Seri dan statistik",
-  "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "{label} belum dihitung. Centang di kolom {label} pada Video, atau muat hasil yang memuatnya.",
   "Export results": "Ekspor hasil",
   "CSV file (*.csv)": "Berkas CSV (*.csv)",
   "JSON file (*.json)": "Berkas JSON (*.json)",

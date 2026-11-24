@@ -241,7 +241,8 @@ private:
     ReadoutLabel* hover_label_ = nullptr;
 };
 
-// The tab: one page per metric, and the table of lines and statistics.
+// The tab: one page per metric a line has, and the table of lines and
+// statistics.
 // The line of a run file on Metric Graphs, by the file it was read from:
 // one line for it however it is imported, on Metric Graphs or the Videos
 // tab, and however often.
@@ -315,7 +316,8 @@ public:
     // are put back after. For an export drawn apart from the tab
     // (graph_bundle.h).
     QPixmap render_export_image(const std::string& key, const std::vector<std::string>& identities, QSize size);
-    // The metrics any line has scores of, in the app's order.
+    // The metrics any line has scores of, in the app's order: those with a
+    // tab and a column in the table, and those the export covers.
     std::vector<std::string> scored_metrics() const;
 
     // The dialogs that wait for the user, which the tests answer.
@@ -354,8 +356,18 @@ private:
 
     MetricPage* build_page(const MetricDefinition& metric);
     void on_tab_changed(int index);
+    // The tab shown built, in place of its stand-in, when first shown.
+    void build_current_page();
     void update_metric_hint();
-    void select_available_metric();
+    // The tabs (and the table's mean columns) brought up to date with the
+    // metrics the lines have, and the preferred metric shown if a line has
+    // it, else the first that one has; whether the tabs changed.
+    bool select_available_metric();
+    void set_metric_tabs(std::vector<const MetricDefinition*> shown, const MetricDefinition& current);
+    // The table's columns: the series, a mean per shown metric, the
+    // selected metric's statistics, the remove button.
+    int mean_column_end() const { return 1 + static_cast<int>(shown_metrics_.size()); }
+    bool is_mean_column(int column) const { return column >= 1 && column < mean_column_end(); }
     QWidget* build_action_bar();
     void on_frame_requested(int frame);
     void on_range_dragged(MetricPage* page, double start, double now, bool finished);
@@ -442,6 +454,10 @@ private:
     QTableWidget* stats_table_ = nullptr;
     QTabWidget* tabs_ = nullptr;
     std::map<std::string, MetricPage*> pages_;
+    // The metrics with a tab and a mean column, in the app's order: those
+    // some line has scores of (scored_metrics), or while none has any, the
+    // preferred one alone. Never empty.
+    std::vector<const MetricDefinition*> shown_metrics_;
     // Go to frame and the frame range (issue #17), shared with the Bitrate tab.
     FrameControls* frame_controls_ = nullptr;
     // The Difference box: on for every page (not saved), drawn where a page

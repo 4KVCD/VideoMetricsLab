@@ -597,7 +597,6 @@
   "Frame {frame}: no visible series.": "{frame}. képkocka: nincs látható sorozat.",
   "Frame {frame}": "{frame}. képkocka",
   "Series and statistics": "Sorozatok és statisztikák",
-  "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "Nincs kiszámolva: {label}. Jelölje be a(z) {label} oszlopban a Videók lapon, vagy töltsön be olyan eredményeket, amelyek tartalmazzák.",
   "Export results": "Eredmények exportálása",
   "CSV file (*.csv)": "CSV-fájl (*.csv)",
   "JSON file (*.json)": "JSON-fájl (*.json)",

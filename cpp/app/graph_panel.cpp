@@ -71,11 +71,8 @@ const char* const cvvdp_note =
     N_("CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the "
        "whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.");
 
-// The table's columns: the series, then one mean per metric, then the
-// selected metric's detail, then the remove button.
+// The table's first mean column (GraphPanel::mean_column_end).
 int first_mean_column() { return 1; }
-int mean_column_end() { return 1 + static_cast<int>(metrics().size()); }
-bool is_mean_column(int column) { return column >= first_mean_column() && column < mean_column_end(); }
 
 bool worst_is_high(const MetricDefinition& metric) { return metric.direction == MetricDirection::lower_is_better; }
 
@@ -1257,9 +1254,10 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     top_layout->addWidget(stats_table_, 1);
     root->addWidget(top);
 
-    // Below, a tab per metric, each with its full-width chart. Each chart
-    // keeps a pixmap of its drawing, its main cost, so pages are built when
-    // first shown: the first metric's now, the others when chosen.
+    // Below, a tab per metric a line has scores of (select_available_metric),
+    // each with its full-width chart. Each chart keeps a pixmap of its
+    // drawing, its main cost, so pages are built when first shown. Until a
+    // line comes, the preferred metric's tab alone.
     tabs_ = new QuietTabWidget;
     // The metric tabs' own look: the native one can make the selected tab
     // hard to tell from the others.
@@ -1271,11 +1269,9 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
         "border-bottom: 3px solid palette(highlighted-text); font-weight: bold; }}"));
     theme::set_role(tabs_->tabBar(), "segmented");
     theme::set_role(tabs_, "segmented");
-    const std::span<const MetricDefinition> all = metrics();
-    tabs_->addTab(build_page(all.front()), qt_text(all.front().label));
-    for (std::size_t i = 1; i < all.size(); ++i) {
-        tabs_->addTab(new QWidget, qt_text(all[i].label));  // built when first shown
-    }
+    const MetricDefinition& first = *find_metric(preferred_metric_);
+    shown_metrics_ = {&first};
+    tabs_->addTab(build_page(first), qt_text(first.label));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
     // VML Modern: the metrics' pills, the chart and its readout one card,
     // as the stats are; Classic: the tabs as they were (theme::container).
@@ -1318,85 +1314,119 @@ MetricPage* GraphPanel::build_page(const MetricDefinition& metric) {
 void GraphPanel::on_tab_changed(int index) {
     // Builds a page when first shown, and brings the table and the hint up
     // to date for it.
-    if (index < 0) {
+    if (index < 0 || index >= static_cast<int>(shown_metrics_.size())) {
         return;
     }
-    const MetricDefinition& metric = metrics()[static_cast<std::size_t>(index)];
-    const std::string key(metric.key);
-    if (!pages_.contains(key)) {
-        MetricPage* page = build_page(metric);
-        const bool blocked = tabs_->blockSignals(true);
-        QWidget* placeholder = tabs_->widget(index);
-        tabs_->removeTab(index);
-        delete placeholder;
-        tabs_->insertTab(index, page, qt_text(metric.label));
-        tabs_->setCurrentIndex(index);
-        tabs_->blockSignals(blocked);
-        // The runs already shown: lines are added only to the pages there
-        // are.
-        for (const auto& [id, entry] : entries_) {
-            page->set_curve(id, entry);
-        }
-    }
+    build_current_page();
     if (!selecting_available_metric_) {
-        preferred_metric_ = key;
-        emit metric_changed(QString::fromStdString(key));
+        preferred_metric_ = shown_metrics_[static_cast<std::size_t>(index)]->key;
+        emit metric_changed(QString::fromStdString(preferred_metric_));
     }
     update_metric_hint();
     refresh_stats_table();
     refresh_page_controls();
 }
 
+void GraphPanel::build_current_page() {
+    const int index = tabs_->currentIndex();
+    const MetricDefinition& metric = current_metric();
+    if (index < 0 || pages_.contains(std::string(metric.key))) {
+        return;
+    }
+    MetricPage* page = build_page(metric);
+    const bool blocked = tabs_->blockSignals(true);
+    QWidget* placeholder = tabs_->widget(index);
+    tabs_->removeTab(index);
+    delete placeholder;
+    tabs_->insertTab(index, page, qt_text(metric.label));
+    tabs_->setCurrentIndex(index);
+    tabs_->blockSignals(blocked);
+    // The runs already shown: lines are added only to the pages there are.
+    for (const auto& [id, entry] : entries_) {
+        page->set_curve(id, entry);
+    }
+}
+
 void GraphPanel::set_preferred_metric(const std::string& key) {
     preferred_metric_ = find_metric(key) != nullptr ? key : "vmaf";
-    select_available_metric();
+    if (select_available_metric()) {
+        refresh_stats_table();
+        refresh_page_controls();
+    }
 }
 
 void GraphPanel::update_metric_hint() {
-    // A note under the page: why the metric has no data, or how to read it.
+    // A note under the page: how to read the metric, or with no line to
+    // show (a tab is shown only for a metric a line has), how to get one.
     const MetricDefinition& metric = current_metric();
-    const auto has = [this](std::string_view key) {
-        return std::any_of(entries_.begin(), entries_.end(),
-                           [key](const auto& item) { return item.second.result->has_metric(std::string(key)); });
-    };
-    const bool available = has(metric.key);
-    QString hint = available ? QString()
-                             : app::tr("{label} was not calculated. Tick it in the {label} column in Videos, or load "
-                                       "results containing it.",
-                                       {{"label", qt_text(metric.label)}});
-    if (available && metric.can_be_infinite()) {
+    QString hint;
+    if (scored_metrics().empty()) {
+        hint = app::tr("Calculate metrics or import a run file to view graphs.");
+    } else if (metric.can_be_infinite()) {
         hint = app::tr(infinity_note, {{"label", qt_text(metric.short_label)}, {"db", infinity_plot_db}});
-    }
-    if (available && metric.kind == MetricKind::sequence) {
+    } else if (metric.kind == MetricKind::sequence) {
         hint = app::tr(cvvdp_note);
     }
     metric_hint_->setText(hint);
     metric_hint_->setVisible(!hint.isEmpty());
-    const std::span<const MetricDefinition> all = metrics();
-    for (std::size_t i = 0; i < all.size(); ++i) {
-        tabs_->setTabToolTip(static_cast<int>(i), has(all[i].key) ? QString() : app::tr("Not calculated"));
-    }
 }
 
-void GraphPanel::select_available_metric() {
-    // The preferred metric if a run has it, else the first that has data.
-    std::vector<std::string> available;
-    for (const MetricDefinition& metric : metrics()) {
-        if (std::any_of(entries_.begin(), entries_.end(), [&metric](const auto& item) {
-                return item.second.result->has_metric(std::string(metric.key));
-            })) {
-            available.emplace_back(metric.key);
-        }
+bool GraphPanel::select_available_metric() {
+    // The tabs of the metrics the lines have (the export's, scored_metrics),
+    // or the preferred metric's alone while none has any. The preferred
+    // metric (Settings.graph_metric) shown if a line has it, else the first
+    // shown; the preference itself stays, to be shown when a line brings it.
+    const MetricDefinition& preferred = *find_metric(preferred_metric_);
+    std::vector<const MetricDefinition*> shown;
+    for (const std::string& key : scored_metrics()) {
+        shown.push_back(find_metric(key));
     }
-    const std::string key = std::find(available.begin(), available.end(), preferred_metric_) != available.end()
-                                ? preferred_metric_
-                                : (available.empty() ? preferred_metric_ : available.front());
-    const std::span<const MetricDefinition> all = metrics();
-    const auto at = std::find_if(all.begin(), all.end(), [&key](const MetricDefinition& m) { return m.key == key; });
+    if (shown.empty()) {
+        shown.push_back(&preferred);
+    }
+    const MetricDefinition& current =
+        std::find(shown.begin(), shown.end(), &preferred) != shown.end() ? preferred : *shown.front();
+    const bool changed = shown != shown_metrics_;
+    if (changed) {
+        set_metric_tabs(std::move(shown), current);
+    }
+    const auto at = std::find(shown_metrics_.begin(), shown_metrics_.end(), &current);
     selecting_available_metric_ = true;
-    tabs_->setCurrentIndex(static_cast<int>(at - all.begin()));
+    tabs_->setCurrentIndex(static_cast<int>(at - shown_metrics_.begin()));
     selecting_available_metric_ = false;
     update_metric_hint();
+    return changed;
+}
+
+void GraphPanel::set_metric_tabs(std::vector<const MetricDefinition*> shown, const MetricDefinition& current) {
+    // The tabs laid out again, `current`'s shown and built. A page built is
+    // kept while its metric stays; one whose metric goes has no line left
+    // and is deleted, with the stand-ins of pages never shown.
+    const bool blocked = tabs_->blockSignals(true);
+    std::vector<QWidget*> old;
+    while (tabs_->count() > 0) {
+        old.push_back(tabs_->widget(0));
+        tabs_->removeTab(0);
+    }
+    for (auto page = pages_.begin(); page != pages_.end();) {
+        const bool stays = std::any_of(shown.begin(), shown.end(),
+                                       [&page](const MetricDefinition* metric) { return metric->key == page->first; });
+        page = stays ? std::next(page) : pages_.erase(page);
+    }
+    for (QWidget* widget : old) {
+        if (std::none_of(pages_.begin(), pages_.end(), [widget](const auto& page) { return page.second == widget; })) {
+            delete widget;
+        }
+    }
+    shown_metrics_ = std::move(shown);
+    for (const MetricDefinition* metric : shown_metrics_) {
+        const auto page = pages_.find(std::string(metric->key));
+        tabs_->addTab(page != pages_.end() ? static_cast<QWidget*>(page->second) : new QWidget, qt_text(metric->label));
+    }
+    const auto at = std::find(shown_metrics_.begin(), shown_metrics_.end(), &current);
+    tabs_->setCurrentIndex(static_cast<int>(at - shown_metrics_.begin()));
+    tabs_->blockSignals(blocked);
+    build_current_page();
 }
 
 QWidget* GraphPanel::build_action_bar() {
@@ -1512,16 +1542,17 @@ void GraphPanel::cap_panel_heights() {
 
 const MetricDefinition& GraphPanel::current_metric() const {
     const int index = tabs_->currentIndex();
-    return metrics()[static_cast<std::size_t>(index >= 0 ? index : 0)];
+    return *shown_metrics_[static_cast<std::size_t>(index >= 0 ? index : 0)];
 }
 
 void GraphPanel::setup_stats_table() {
-    // The columns: the series, every metric's mean (the comparison being
-    // made, so always there), then the selected metric's statistics in full.
+    // The columns: the series, the mean of every metric with a tab (the
+    // comparison being made, so always there), then the selected metric's
+    // statistics in full.
     const MetricDefinition& metric = current_metric();
     QStringList headers{app::tr("Series")};
-    for (const MetricDefinition& each : metrics()) {
-        headers.append(qt_text(each.label));
+    for (const MetricDefinition* each : shown_metrics_) {
+        headers.append(qt_text(each->label));
     }
     for (const char* label : {N_("Median"), N_("StDev"), N_("Min"), N_("Max")}) {
         headers.append(app::tr(label));
@@ -1538,18 +1569,14 @@ void GraphPanel::setup_stats_table() {
     stats_table_->setHorizontalHeaderLabels(headers);
     stats_table_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     stats_table_->verticalHeader()->setVisible(false);
-    const std::span<const MetricDefinition> all = metrics();
-    const std::vector<std::string> scored = scored_metrics();
+    // A plane's column (MetricDefinition::plane_of) too only where a line
+    // has its scores, as every metric's: shown_metrics_ holds no other.
     for (int column = first_mean_column(); column < mean_column_end(); ++column) {
-        const MetricDefinition& spec = all[static_cast<std::size_t>(column - first_mean_column())];
-        // A plane (MetricDefinition::plane_of) only where a run has it: most
-        // runs have none, and twelve empty columns would crowd the rest.
-        stats_table_->setColumnHidden(column, spec.is_plane() && std::find(scored.begin(), scored.end(),
-                                                                           spec.key) == scored.end());
         QTableWidgetItem* head = stats_table_->horizontalHeaderItem(column);
         if (head == nullptr) {
             continue;
         }
+        const MetricDefinition& spec = *shown_metrics_[static_cast<std::size_t>(column - first_mean_column())];
         const bool selected = spec.key == metric.key;
         // The axis label carries the unit ("PSNR (dB)"), which the heading
         // leaves off to keep the column narrow.
@@ -1655,7 +1682,7 @@ void GraphPanel::on_stats_header_clicked(int column) {
 void GraphPanel::show_metric_detail(int index) {
     // The metric the table details is the graph's own, rather than one of
     // its own: they are two views of one metric, and must not disagree.
-    if (index >= 0 && index < static_cast<int>(metrics().size()) && index != tabs_->currentIndex()) {
+    if (index >= 0 && index < static_cast<int>(shown_metrics_.size()) && index != tabs_->currentIndex()) {
         tabs_->setCurrentIndex(index);
     }
 }
@@ -1956,13 +1983,12 @@ bool GraphPanel::wait_until_file_writes_idle(std::chrono::milliseconds timeout) 
 
 void GraphPanel::refresh_stats_table() {
     // A row per line (shown or not: the table is the list of lines, and a
-    // hidden one needs its row to be ticked again), every metric's mean, and
-    // the selected metric's statistics.
+    // hidden one needs its row to be ticked again), the mean of every metric
+    // with a tab, and the selected metric's statistics.
     populating_stats_ = true;
     setup_stats_table();
     const MetricDefinition& metric = current_metric();
     const MetricPage* page = pages_.at(std::string(metric.key));
-    const std::span<const MetricDefinition> all = metrics();
     const auto number_item = [](const QString& text) {
         // Right-aligned in a monospaced face: near-equal numbers (SSIM's
         // 0.9938 against 0.9699) differ in digits that line up.
@@ -1982,7 +2008,7 @@ void GraphPanel::refresh_stats_table() {
         // Every metric's mean, its page built or not: a page not yet shown
         // must not decide what the comparison says.
         for (int column = first_mean_column(); column < mean_column_end(); ++column) {
-            const MetricDefinition& spec = all[static_cast<std::size_t>(column - first_mean_column())];
+            const MetricDefinition& spec = *shown_metrics_[static_cast<std::size_t>(column - first_mean_column())];
             const std::string key(spec.key);
             const auto mean = entry.means.find(key);
             const std::optional<double> value = range ? range_mean(*entry.result, spec, *range)
@@ -2108,15 +2134,14 @@ QPixmap GraphPanel::render_export_image() {
 
 QPixmap GraphPanel::render_export_image(const std::string& key, const std::vector<std::string>& identities,
                                         QSize size) {
-    const auto& all = metrics();
-    const auto metric = std::find_if(all.begin(), all.end(), [&key](const MetricDefinition& each) {
-        return each.key == key;
-    });
-    if (metric == all.end()) {
+    // Only a metric with a tab: one a line has scores of (scored_metrics).
+    const auto metric = std::find_if(shown_metrics_.begin(), shown_metrics_.end(),
+                                     [&key](const MetricDefinition* each) { return each->key == key; });
+    if (metric == shown_metrics_.end()) {
         return {};
     }
     const int shown_page = tabs_->currentIndex();
-    tabs_->setCurrentIndex(static_cast<int>(metric - all.begin()));  // builds the page when first shown
+    tabs_->setCurrentIndex(static_cast<int>(metric - shown_metrics_.begin()));  // builds the page when first shown
     std::map<int, bool> was_visible;
     for (const auto& [id, entry] : entries_) {
         was_visible[id] = entry.visible;

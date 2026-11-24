@@ -1650,12 +1650,6 @@
    }
   },
   {
-   "text": "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.",
-   "values": {
-    "label": "<label>"
-   }
-  },
-  {
    "text": "{label} — starting…",
    "values": {
     "label": "<label>"
@@ -2552,7 +2546,6 @@
     "<label> (fehlgeschlagen)",
     "<label> (wartet)",
     "<label> über die Zeit",
-    "<label> wurde nicht berechnet. Haken Sie die Spalte <label> unter „Videos“ an oder laden Sie Ergebnisse, die sie enthalten.",
     "<label> — startet…",
     "<label>: schwarze Balken abgeschnitten – <sides>.\nVerglichen in <cropped> statt <full>.",
     "<label>: keine schwarzen Balken. Vollständig verglichen in <size>.",
@@ -3300,7 +3293,6 @@
     "<label> (ошибка)",
     "<label> (в очереди)",
     "<label> во времени",
-    "<label> не вычислялась. Отметьте её в столбце <label> на вкладке «Видео» или загрузите результаты, где она есть.",
     "<label> — запуск…",
     "<label>: чёрные полосы обрезаны — <sides>.\nСравнено в <cropped> вместо <full>.",
     "<label>: чёрных полос нет. Сравнено целиком в <size>.",
@@ -4048,7 +4040,6 @@
     "<label> (فشل)",
     "<label> (في الانتظار)",
     "<label> عبر الزمن",
-    "لم يُحسب <label>. حدّده في عمود <label> في «الفيديو»، أو حمّل نتائج تتضمنه.",
     "<label> — جارٍ البدء…",
     "<label>: اقتُصّت الأشرطة السوداء — <sides>.\nقورن بحجم <cropped> بدل <full>.",
     "<label>: لا أشرطة سوداء. قورن كاملًا بحجم <size>.",
@@ -4796,7 +4787,6 @@
     "<label>（失敗）",
     "<label>（待機中）",
     "<label> の推移",
-    "<label> は計算されていません。［動画］の <label> 列にチェックを入れるか、それを含む結果を読み込んでください。",
     "<label> — 開始中…",
     "<label>：黒帯を切り取りました（<sides>）。\n<full> ではなく <cropped> で比較しました。",
     "<label>：黒帯なし。<size> の全体で比較しました。",
@@ -5544,7 +5534,6 @@
     "<label>（失败）",
     "<label>（排队中）",
     "<label> 随时间变化",
-    "未计算 <label>。请在“视频”中勾选 <label> 列，或加载包含它的结果。",
     "<label> — 正在开始…",
     "<label>：已裁掉黑边——<sides>。\n以 <cropped> 而不是 <full> 进行比较。",
     "<label>：没有黑边。以完整的 <size> 进行比较。",
@@ -6292,7 +6281,6 @@
     "<label> (ล้มเหลว)",
     "<label> (อยู่ในคิว)",
     "<label> ตามเวลา",
-    "ยังไม่ได้คำนวณ <label> ทำเครื่องหมายในคอลัมน์ <label> ในแท็บวิดีโอ หรือโหลดผลลัพธ์ที่มีเมตริกนี้",
     "<label> — กำลังเริ่ม…",
     "<label>: ครอปแถบดำแล้ว — <sides>\nเปรียบเทียบที่ <cropped> แทน <full>",
     "<label>: ไม่มีแถบดำ เปรียบเทียบทั้งภาพที่ <size>",

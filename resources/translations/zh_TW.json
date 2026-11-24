@@ -597,7 +597,6 @@
   "Frame {frame}": "第 {frame} 格",
   "Series and statistics": "數列與統計",
   "Calculate metrics or import a run file to view graphs.": "計算指標或匯入執行結果檔案以檢視圖表。",
-  "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "未計算 {label}。請在「影片」中勾選 {label} 欄，或載入包含它的結果。",
   "Export results": "匯出結果",
   "CSV file (*.csv)": "CSV 檔案 (*.csv)",
   "JSON file (*.json)": "JSON 檔案 (*.json)",

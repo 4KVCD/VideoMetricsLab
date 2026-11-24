@@ -597,7 +597,6 @@
   "Frame {frame}": "フレーム {frame}",
   "Series and statistics": "系列と統計",
   "Calculate metrics or import a run file to view graphs.": "グラフを表示するには、指標を計算するか実行結果ファイルをインポートしてください。",
-  "{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.": "{label} は計算されていません。［動画］の {label} 列にチェックを入れるか、それを含む結果を読み込んでください。",
   "Export results": "結果をエクスポート",
   "CSV file (*.csv)": "CSV ファイル (*.csv)",
   "JSON file (*.json)": "JSON ファイル (*.json)",
