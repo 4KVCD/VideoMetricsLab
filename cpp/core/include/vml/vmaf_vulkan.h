@@ -90,6 +90,10 @@ struct VulkanEngine {
     int (*v1_cambi_scores)(VulkanContext* context, double* out, unsigned frames);
     int (*v1_speed)(VulkanContext* context, const double* options);
     int (*v1_speed_scores)(VulkanContext* context, double* out, unsigned frames);
+    // CIEDE2000 of host frames (submit_v1, 4:2:0) and its scores, as libvmaf's
+    // 45 - 20 log10(dE00); nullptr in an engine before libvmaf-fast b0927d4b.
+    int (*v1_ciede)(VulkanContext* context);
+    int (*v1_ciede_scores)(VulkanContext* context, double* out, unsigned frames);
     int (*submit_v1)(VulkanContext* context, const std::uint8_t* const* planes, const std::ptrdiff_t* strides,
                      int score);
     int (*chroma_staging)(VulkanContext* context, std::uint8_t** planes, std::uint32_t* stride);
@@ -155,6 +159,10 @@ inline int vulkan_context_flags(bool shared, bool split) {
     const int in_flight = split ? vulkan_split_frames_in_flight : vulkan_frames_in_flight;
     return (in_flight << 8) | (shared ? vulkan_shared_flag : 0) | (split ? vulkan_split_flag : 0);
 }
+
+// Flag bits 16 to 18: a VMAF v1 context without motion, VIF and ADM, for
+// CAMBI or CIEDE2000 alone (no previous frame and no ADM images are kept).
+inline constexpr int vulkan_no_vmaf_features_flags = 7 << 16;
 
 // Throws VmafVulkanError saying that `what` failed, with the engine's
 // message, when `error` is one of the engine's errors (negative).

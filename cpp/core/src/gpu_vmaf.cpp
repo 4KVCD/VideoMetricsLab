@@ -332,7 +332,7 @@ BesideScorer::BesideScorer(const GpuPlan& plan, int n_subsample) {
     }
     if (!cpu_metrics.empty()) {
         cpu_.emplace(plan.width, plan.height, plan.bit_depth, cpu_metrics, n_subsample, plan.threads,
-                     plan.frame_rate, plan.cambi);
+                     plan.frame_rate, plan.cambi, plan.extra_gpu);
     }
     if (hdr) {
         hdr_ = make_hdr_scorer(plan, n_subsample);
@@ -638,7 +638,7 @@ GpuAttempt::GpuAttempt(const GpuPlan& plan, int n_subsample) : state_(std::make_
             metrics.push_back(key);
         }
         s.scorer = std::make_unique<CpuScorer>(plan.width, plan.height, plan.bit_depth, metrics, n_subsample,
-                                               plan.threads, plan.frame_rate, plan.cambi);
+                                               plan.threads, plan.frame_rate, plan.cambi, plan.extra_gpu);
     } else if (plan.backend == "hdr") {
         s.scorer = make_hdr_scorer(plan, n_subsample);
     } else if (std::any_of(plan.models.begin(), plan.models.end(),

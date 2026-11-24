@@ -10,6 +10,7 @@
 #include <functional>
 #include <initializer_list>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <span>
@@ -27,7 +28,8 @@
 
 namespace vml {
 
-class GpuFrameStream;  // gpu_frames.h
+class GpuFrameStream;    // gpu_frames.h
+class GpuMetricsScorer;  // gpu_cpu_metrics.h
 
 // The libvmaf CPU extractor of each metric the app scores this way: the
 // extractor, the feature that is the metric's score, and the decimals kept.
@@ -110,9 +112,13 @@ public:
     // `metrics` are cpu_feature keys. Every `n_subsample`th frame is scored,
     // on `threads` libvmaf threads (0: libvmaf's own choice). `frame_rate`
     // is XPSNR's, as FFmpeg's filter takes it: whole frames per second.
-    // `cambi`: CAMBI's test video. Throws LibvmafError.
+    // `cambi`: CAMBI's test video. With `gpu` (Vulkan's number for the GPU,
+    // -1 for the one VMAF runs on), CIEDE2000 and CAMBI are calculated there
+    // where it can (gpu_cpu_metrics.h), from the same pictures; else, and
+    // where the GPU cannot, by libvmaf. Throws LibvmafError.
     CpuScorer(int width, int height, int bit_depth, std::vector<std::string> metrics, int n_subsample = 1,
-              int threads = 0, int frame_rate = 0, const CambiInput& cambi = {});
+              int threads = 0, int frame_rate = 0, const CambiInput& cambi = {},
+              std::optional<int> gpu = std::nullopt);
     ~CpuScorer() override;
     CpuScorer(const CpuScorer&) = delete;
     CpuScorer& operator=(const CpuScorer&) = delete;
@@ -149,6 +155,10 @@ public:
     PairScores finish() override;
 
 private:
+    // Starts CIEDE2000 and CAMBI on GPU `gpu` where it can (gpu_), and sets
+    // libvmaf_metrics_. `cambi_with`: CAMBI's libvmaf options.
+    void start_gpu(int width, int height, int bit_depth, std::optional<int> gpu,
+                   const std::vector<std::pair<std::string, std::string>>& cambi_with);
     VmafPicture take_picture();
     void give_back(VmafPicture& reference, VmafPicture& distorted);
     void score(VmafPicture& reference, VmafPicture& distorted);
@@ -165,6 +175,8 @@ private:
 
     const Libvmaf& library_;
     std::vector<std::string> metrics_;
+    std::vector<std::string> libvmaf_metrics_;  // those of metrics_ libvmaf calculates; the GPU the others
+    std::unique_ptr<GpuMetricsScorer> gpu_;     // CIEDE2000 and CAMBI on the GPU, or nullptr
     std::string cambi_feature_;  // CAMBI's score's name, which libvmaf builds from its options
     unsigned step_ = 1;
     unsigned count_ = 0;
@@ -231,7 +243,8 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
                              int width, int height, int bit_depth, const std::vector<std::string>& metrics,
                              int n_subsample, const FrameRange& range, long long total_frames,
                              const std::pair<std::string, std::string>& decoders, int threads, int frame_rate,
-                             const CambiInput& cambi, const std::string& scale_algorithm, const std::string& ffmpeg,
+                             const CambiInput& cambi, std::optional<int> gpu, const std::string& scale_algorithm,
+                             const std::string& ffmpeg,
                              const std::string& ffprobe, bool want_vvdec,
                              const std::function<void()>& on_vvdec_opening,
                              const std::function<void(long long, long long, double)>& on_progress,

@@ -745,7 +745,7 @@ ParsedScores score_decoded_here(const RunEnvironment& environment, const VideoIn
         plan.backend == "cpu"
             ? score_decoded_cpu(source, distorted, source_crop, distorted_crop, plan.width, plan.height,
                                 plan.bit_depth, keys, options.n_subsample, range, total_frames, decoders,
-                                plan.threads, plan.frame_rate, plan.cambi, options.scale_algorithm,
+                                plan.threads, plan.frame_rate, plan.cambi, plan.extra_gpu, options.scale_algorithm,
                                 environment.ffmpeg,
                                 environment.ffprobe, want_vvdec, on_vvdec_opening(on_status), on_progress, cancel)
         : plan.backend == "hdr"
@@ -976,6 +976,13 @@ std::optional<GpuPlan> cpu_metrics_plan(const VmafOptions& options, std::pair<in
     plan.threads = options.n_threads > 0 ? options.n_threads : static_cast<int>(cores);
     plan.frame_rate = frame_rate.value_or(0);
     plan.cambi = cambi_input(distorted, distorted_crop);
+    // CIEDE2000 and CAMBI on the GPU VMAF would run on, as VMAF is (CpuScorer falls back to libvmaf where the
+    // GPU cannot): with the GPU there they took a fraction of the time and memory libvmaf takes on the CPU.
+    if (options.vmaf_on_gpu && std::any_of(metrics.begin(), metrics.end(), [](const std::string& metric) {
+            return metric == "ciede2000" || metric == "cambi";
+        })) {
+        plan.extra_gpu = -1;
+    }
     return plan;
 }
 
@@ -1067,7 +1074,8 @@ nlohmann::json plan_json(const GpuPlan& plan) {
             {"cambi", {plan.cambi.width, plan.cambi.height, plan.cambi.bit_depth, plan.cambi.pq}},
             {"hdr_colours", colours},      {"hdr_model_file", plan.hdr_model_file},
             {"hdr_threads", plan.hdr_threads},
-            {"hdr_gpu", plan.hdr_gpu ? nlohmann::json(*plan.hdr_gpu) : nlohmann::json(nullptr)}};
+            {"hdr_gpu", plan.hdr_gpu ? nlohmann::json(*plan.hdr_gpu) : nlohmann::json(nullptr)},
+            {"extra_gpu", plan.extra_gpu ? nlohmann::json(*plan.extra_gpu) : nlohmann::json(nullptr)}};
 }
 
 VmafColor colour_from(const nlohmann::json& text) {
@@ -1097,6 +1105,9 @@ GpuPlan plan_from(const nlohmann::json& text) {
     text.at("hdr_threads").get_to(plan.hdr_threads);
     if (const nlohmann::json& gpu = text.at("hdr_gpu"); !gpu.is_null()) {
         plan.hdr_gpu = gpu.get<int>();
+    }
+    if (const nlohmann::json& gpu = text.at("extra_gpu"); !gpu.is_null()) {
+        plan.extra_gpu = gpu.get<int>();
     }
     return plan;
 }
@@ -1779,8 +1790,9 @@ MetricProvenance run_provenance(const std::string& key, const std::string& model
         // The same request as FFmpeg's libvmaf (the scores agree to
         // within 4e-5), made on the GPU by the bundled build: by its
         // CUDA code or the Vulkan port of it, and VMAF v1 with Vulkan on
-        // every GPU, as HDR VMAF's features (its pictures converted by libvmaf on the CPU).
-        const bool v1_engine = key == "vmaf_v1" || key == "vmaf_hdr";
+        // every GPU, as HDR VMAF's features (its pictures converted by libvmaf on the CPU), CIEDE2000 and
+        // CAMBI (VMAF v1's engine without VMAF's features).
+        const bool v1_engine = key == "vmaf_v1" || key == "vmaf_hdr" || key == "ciede2000" || key == "cambi";
         const std::string backend = v1_engine ? "vulkan" : gpu_backend;
         provenance.implementation = "libvmaf/" + backend;
         provenance.compute_backend = "gpu";
@@ -1820,6 +1832,18 @@ struct RunScores {
 void insert_keys(std::set<std::string, std::less<>>& keys, const GpuPlan& plan) {
     for (const auto& [key, model] : plan.models) {
         keys.insert(key);
+    }
+}
+
+// Files the CPU metrics the GPU calculated (CIEDE2000 and CAMBI, CpuScorer's features_on_gpu) under the GPU.
+void file_gpu_metrics(RunScores& scores) {
+    for (const ParsedScores& part : scores.parts) {
+        for (const std::string& key : part.features_on_gpu) {
+            if (key == "ciede2000" || key == "cambi") {
+                scores.cpu_keys.erase(key);
+                scores.gpu_keys.insert(key);
+            }
+        }
     }
 }
 
@@ -2011,6 +2035,15 @@ ParsedScores take_metrics(ParsedScores& scores, const std::vector<std::string>& 
     return taken;
 }
 
+// The GPU for the CPU metrics' CIEDE2000 and CAMBI (cpu.extra_gpu) when they are scored beside `pass`: the
+// GPU VMAF's own on Vulkan, else the one VMAF would run on.
+std::optional<int> beside_gpu(const GpuPlan& cpu, const GpuPlan& pass) {
+    if (cpu.extra_gpu && pass.backend == "vulkan" && pass.device >= 0) {
+        return pass.device;
+    }
+    return cpu.extra_gpu;
+}
+
 // The run's GPU metrics (`gpu`) with its CPU metrics (`cpu`) beside them in
 // one GPU pass, from one decode of each video (shares_pass). Throws what
 // score_on_gpu throws.
@@ -2021,6 +2054,7 @@ RunScores score_shared(const RunFrames& run, const VmafOptions& options, const G
     plan.threads = cpu.threads;
     plan.frame_rate = cpu.frame_rate;
     plan.cambi = cpu.cambi;
+    plan.extra_gpu = beside_gpu(cpu, gpu);
     ParsedScores scored = score_on_gpu(run.environment, run.source, run.distorted, options, run.source_crop,
                                        run.distorted_crop, plan, run.distorted.fps, run.total_frames, run.decoding,
                                        on_progress, on_status, run.cancel);
@@ -2270,6 +2304,7 @@ std::optional<RunScores> score_hdr_beside(const RunFrames& run, const VmafOption
         plan.threads = cpu->threads;
         plan.frame_rate = cpu->frame_rate;
         plan.cambi = cpu->cambi;
+        plan.extra_gpu = beside_gpu(*cpu, plan);
     }
     if (gpu) {
         plan.beside.push_back("vmaf_hdr");
@@ -2418,6 +2453,7 @@ ComparisonResult score_pair_once(const RunEnvironment& environment, const VideoI
         }
     }
 
+    file_gpu_metrics(*scores);
     ComparisonResult result =
         result_of_pair(source, distorted, options, model, source_crop, distorted_crop, total_frames);
     result.distorted = result_distorted_path.value_or(distorted.path);

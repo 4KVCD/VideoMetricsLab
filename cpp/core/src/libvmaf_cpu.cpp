@@ -6,14 +6,19 @@
 #include <cstring>
 #include <stdexcept>
 
+#include "vml/app_log.h"
+#include "vml/gpu_cpu_metrics.h"
 #include "vml/gpu_frames.h"
 #include "vml/host_frames.h"
+#include "vml/metrics.h"
 #include "vml/number_format.h"
 #include "vml/python_text.h"
 
 namespace vml {
 
 namespace {
+
+const app_log::Logger logger("vml.libvmaf_cpu");
 
 using Value = CpuFeature::Value;
 
@@ -276,17 +281,23 @@ std::map<std::string, std::string> cpu_metrics_unfit(const std::vector<std::stri
 std::string cpu_library_build() { return "libvmaf-fast " + libvmaf_fast_version() + " (CPU)"; }
 
 CpuScorer::CpuScorer(int width, int height, int bit_depth, std::vector<std::string> metrics, int n_subsample,
-                     int threads, int frame_rate, const CambiInput& cambi)
+                     int threads, int frame_rate, const CambiInput& cambi, std::optional<int> gpu)
     : library_(libvmaf()), metrics_(std::move(metrics)), step_(static_cast<unsigned>(std::max(1, n_subsample))) {
-    chroma_ = cpu_metrics_read_chroma(metrics_);
+    chroma_ = cpu_metrics_read_chroma(metrics_);  // the GPU's CIEDE2000 reads the chroma too
     odd_ = width % 2 != 0 || height % 2 != 0;
     sample_ = bytes_per_sample(bit_depth);
     packed_ = PackedFrame(width, height, bit_depth);
     frame_bytes_ = packed_.bytes();
     decoded_bytes_ = chroma_ ? frame_bytes_ : static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * sample_;
+    const ExtractorOptions cambi_with = cambi_options(cambi, width, height, bit_depth);
+    start_gpu(width, height, bit_depth, gpu, cambi_with);
     threads = std::max(0, threads);
-    const int pairs = cpu_pairs(width, height, bit_depth, threads, has(metrics_, "xpsnr"), chroma_,
-                                cpu_metrics_slow(metrics_));
+    // With libvmaf calculating nothing, each pair is given back as soon as the
+    // GPU has copied it: two pairs are all the decoders need.
+    const int pairs = libvmaf_metrics_.empty()
+                          ? 2
+                          : cpu_pairs(width, height, bit_depth, threads, has(libvmaf_metrics_, "xpsnr"), chroma_,
+                                      cpu_metrics_slow(libvmaf_metrics_));
     // No more libvmaf threads than pairs: a pair is scored by one thread, and
     // each thread that ever scores one keeps its own copy of every
     // extractor's buffers (MS-SSIM's and CAMBI's: about 100 MB each at 4K).
@@ -296,9 +307,8 @@ CpuScorer::CpuScorer(int width, int height, int bit_depth, std::vector<std::stri
     check_libvmaf(library_.init(&context, configuration), "Starting libvmaf");
     context_ = context;
     try {
-        const ExtractorOptions cambi_with = cambi_options(cambi, width, height, bit_depth);
         cambi_feature_ = cambi_feature(cambi_with);
-        for (const Extractor& extractor : extractors_for(metrics_, frame_rate, cambi_with)) {
+        for (const Extractor& extractor : extractors_for(libvmaf_metrics_, frame_rate, cambi_with)) {
             VmafFeatureDictionary* options = nullptr;
             for (const auto& [key, value] : extractor.options) {
                 if (library_.feature_dictionary_set(&options, key.c_str(), value.c_str()) != 0) {
@@ -322,6 +332,25 @@ CpuScorer::CpuScorer(int width, int height, int bit_depth, std::vector<std::stri
 }
 
 CpuScorer::~CpuScorer() { release(); }
+
+void CpuScorer::start_gpu(int width, int height, int bit_depth, std::optional<int> gpu,
+                          const ExtractorOptions& cambi_with) {
+    libvmaf_metrics_ = metrics_;
+    const std::vector<std::string> wanted = gpu ? gpu_metrics_of(metrics_, odd_, cambi_with) : std::vector<std::string>{};
+    if (wanted.empty()) {
+        return;
+    }
+    try {
+        gpu_ = std::make_unique<GpuMetricsScorer>(width, height, bit_depth, *gpu, wanted, cambi_with);
+    } catch (const LibvmafError& error) {  // VmafVulkanError among them
+        logger.warning(metric_labels(wanted, " and ") + " are calculated on the CPU: " + error.what());
+        return;
+    }
+    for (const std::string& key : gpu_->metrics()) {
+        std::erase(libvmaf_metrics_, key);
+    }
+    logger.info(metric_labels(gpu_->metrics(), " and ") + " on the GPU");
+}
 
 void CpuScorer::release() {
     // The page-locked memory is unregistered first, because vmaf_close frees
@@ -354,9 +383,21 @@ void CpuScorer::give_back(VmafPicture& reference, VmafPicture& distorted) {
 }
 
 void CpuScorer::score(VmafPicture& reference, VmafPicture& distorted) {
-    // libvmaf takes both pictures, even when it fails (pull request 1652).
-    check_libvmaf(library_.read_pictures(context_, &reference, &distorted, count_),
-                  "Scoring frame " + std::to_string(count_));
+    if (gpu_ && count_ % step_ == 0) {  // only the pairs scored go to the GPU
+        try {
+            gpu_->add(reference, distorted);  // copies the planes before it returns
+        } catch (...) {
+            give_back(reference, distorted);
+            throw;
+        }
+    }
+    if (libvmaf_metrics_.empty()) {
+        give_back(reference, distorted);
+    } else {
+        // libvmaf takes both pictures, even when it fails (pull request 1652).
+        check_libvmaf(library_.read_pictures(context_, &reference, &distorted, count_),
+                      "Scoring frame " + std::to_string(count_));
+    }
     ++count_;
 }
 
@@ -508,13 +549,25 @@ PairScores CpuScorer::finish() {
         }
         return result;
     }
-    check_libvmaf(library_.read_pictures(context_, nullptr, nullptr, 0), "Finishing");
+    if (!libvmaf_metrics_.empty()) {
+        check_libvmaf(library_.read_pictures(context_, nullptr, nullptr, 0), "Finishing");
+    }
+    // The GPU's values, one for each pair scored (every step_-th frame).
+    const std::map<std::string, std::vector<double>> on_gpu =
+        gpu_ ? gpu_->finish() : std::map<std::string, std::vector<double>>{};
     for (unsigned frame = 0; frame < count_; frame += step_) {
         result.frames.push_back(frame);
     }
     for (const std::string& metric : metrics_) {
         const CpuFeature& feature = *cpu_feature(metric);
+        const auto gpu_column = on_gpu.find(metric);
+        if (gpu_column != on_gpu.end()) {
+            result.features_on_gpu.push_back(metric);
+        }
         const auto read = [&](std::string_view feature_name, unsigned frame) {
+            if (gpu_column != on_gpu.end()) {
+                return gpu_column->second.at(frame / step_);
+            }
             const std::string name(feature_name);
             double value = 0;
             check_libvmaf(library_.feature_score_at_index(context_, name.c_str(), &value, frame),
@@ -582,7 +635,8 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
                              int width, int height, int bit_depth, const std::vector<std::string>& metrics,
                              int n_subsample, const FrameRange& range, long long total_frames,
                              const std::pair<std::string, std::string>& decoders, int threads, int frame_rate,
-                             const CambiInput& cambi, const std::string& scale_algorithm, const std::string& ffmpeg,
+                             const CambiInput& cambi, std::optional<int> gpu, const std::string& scale_algorithm,
+                             const std::string& ffmpeg,
                              const std::string& ffprobe, bool want_vvdec,
                              const std::function<void()>& on_vvdec_opening,
                              const std::function<void(long long, long long, double)>& on_progress,
@@ -605,7 +659,7 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
         open_pass_stream(source, plans[1], 4, source_backend, reference_vvdec, -1, ffmpeg, ffprobe);
     // Declared after the streams so that it goes first: it gives back the
     // memory their decoders page-locked.
-    CpuScorer scorer(width, height, bit_depth, metrics, n_subsample, threads, frame_rate, cambi);
+    CpuScorer scorer(width, height, bit_depth, metrics, n_subsample, threads, frame_rate, cambi, gpu);
     // vvdec-vulkan's GPU copies its pictures only into a buffer of its stream's, from which they are copied into the
     // scorer's pictures. Last, so that it goes first: its side thread's jobs use the scorer.
     std::optional<HostPairs> pairs;

@@ -60,6 +60,11 @@ inline constexpr const char* v1_speed = "Speed_chroma_feature_speed_chroma_uv_sc
 // provenance): "libvmaf-fast v1 (Vulkan: ADM3, motion3, CAMBI, SpEED)".
 std::string v1_library_build();
 
+// vv_v1_cambi's nine numbers for CAMBI with these libvmaf options (name,
+// value), or nothing when one is an option the GPU does not calculate (the
+// enc_* and src_* sizes among them): libvmaf then calculates CAMBI.
+std::optional<std::array<double, 9>> cambi_gpu_values(const std::vector<std::pair<std::string, std::string>>& options);
+
 // The frames scored, and each of the four features' values for them (by
 // the names above).
 struct V1Features {

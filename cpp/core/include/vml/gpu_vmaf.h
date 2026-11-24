@@ -124,6 +124,9 @@ struct GpuPlan {
     int threads = 0;     // the CPU extractors' libvmaf threads
     int frame_rate = 0;  // XPSNR's, in whole frames per second
     CambiInput cambi;    // CAMBI's test video (libvmaf_cpu.h)
+    // The GPU the CPU metrics' CIEDE2000 and CAMBI go on (CpuScorer's `gpu`:
+    // Vulkan's number, -1 for the one VMAF runs on), or nothing for libvmaf's.
+    std::optional<int> extra_gpu;
 };
 
 // HDR VMAF's scorer for a plan that scores it (GpuPlan::hdr_model_file,

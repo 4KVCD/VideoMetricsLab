@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "reference.h"
+#include "vml/gpu_cpu_metrics.h"
 #include "vml/libvmaf_cpu.h"
 #include "vml/pair_scorer.h"
 #include "vml/platform/system.h"
@@ -238,6 +239,21 @@ TEST(Libvmaf, CambiWithItsOptionsAndCiedeOfIdenticalPicturesAreScored) {
         EXPECT_GE(scores_of(scores, "cambi")[0], 0.0);
         EXPECT_EQ(scores_of(scores, "ciede2000"), std::vector<double>{0.0});
     }
+}
+
+// CIEDE2000 goes to the GPU unless the size is odd (the engine's chroma
+// planes are larger than libvmaf's), CAMBI unless its test video is scored at
+// another size or bit depth (options the GPU does not take); PQ goes.
+TEST(Libvmaf, OnlyTheCpuMetricsTheGpuCalculatesAsLibvmafGoToIt) {
+    using Options = std::vector<std::pair<std::string, std::string>>;
+    const std::vector<std::string> metrics{"psnr", "ciede2000", "ms_ssim", "cambi"};
+    EXPECT_EQ(gpu_metrics_of(metrics, false, Options{{"eotf", "pq"}}),
+              (std::vector<std::string>{"ciede2000", "cambi"}));
+    EXPECT_EQ(gpu_metrics_of(metrics, true, {}), std::vector<std::string>{"cambi"});
+    EXPECT_EQ(gpu_metrics_of(metrics, false, Options{{"enc_bitdepth", "8"}}), std::vector<std::string>{"ciede2000"});
+    EXPECT_EQ(gpu_metrics_of(metrics, false, Options{{"enc_height", "1080"}, {"enc_width", "1920"}}),
+              std::vector<std::string>{"ciede2000"});
+    EXPECT_TRUE(gpu_metrics_of({"psnr", "ms_ssim"}, false, {}).empty());
 }
 
 // A model libvmaf does not have is an error that says what failed.

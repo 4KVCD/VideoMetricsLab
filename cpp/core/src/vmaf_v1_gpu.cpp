@@ -428,6 +428,14 @@ std::string v1_library_build() {
     return "libvmaf-fast " + libvmaf_fast_version() + " (Vulkan: ADM3, motion3, CAMBI, SpEED)";
 }
 
+std::optional<std::array<double, 9>> cambi_gpu_values(const std::vector<std::pair<std::string, std::string>>& options) {
+    Options given = Options::object();
+    for (const auto& [key, value] : options) {
+        given[key] = value;
+    }
+    return cambi_gpu_options(given);
+}
+
 // ------------------------------------------------------------------ V1Scorer
 
 struct V1Scorer::State {
