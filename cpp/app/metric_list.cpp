@@ -259,9 +259,6 @@ void MetricList::set_specialized_open(bool open) {
     specialized_body_->setVisible(open);
     fold_->setArrowType(open ? Qt::DownArrow : Qt::RightArrow);
     refresh();
-    if (QWidget* top = window(); top != nullptr && top != this && place_ == Place::panel) {
-        top->adjustSize();  // the popup grows and shrinks with it
-    }
 }
 
 void MetricList::set_planes_shown(bool shown) {
@@ -327,6 +324,11 @@ MetricsPanel::MetricsPanel(QWidget* parent) : QFrame(parent, Qt::Popup) {
     theme::set_role(this, "card");
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(12, 10, 12, 10);
+    // The popup is always its content's size: it grows as Specialized opens
+    // and shrinks back as it folds. (An adjustSize as it folded came before
+    // the layout had taken the change in, and kept the open height, the room
+    // spread as gaps between the lines.)
+    layout->setSizeConstraint(QLayout::SetFixedSize);
     list_ = new MetricList(MetricList::Place::panel);
     // Wide enough for each metric's few words on one line, and its lines of
     // text on two or three.

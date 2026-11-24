@@ -12,6 +12,7 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <set>
 #include <string>
 
@@ -83,6 +84,33 @@ TEST(MetricList, PanelCountsTheMetricsShownAndKeepsThePlanesApart) {
     EXPECT_FALSE(list.box("ssim")->isEnabled());  // the last shown stays
     EXPECT_EQ(list.box("ssim")->toolTip(), "At least one metric must stay shown.");
     EXPECT_TRUE(list.box("psnr")->isEnabled());
+}
+
+// The panel grows as Specialized opens and shrinks back as it folds, its
+// content kept together under its heading: it kept its open height, the
+// room spread as gaps between its lines (#237).
+TEST(MetricList, PanelShrinksBackWhenSpecializedFolds) {
+    auto* panel = new MetricsPanel(nullptr);
+    const std::unique_ptr<MetricsPanel> owned(panel);
+    // A layout's change reaches the window one level per pass of the event
+    // loop, as it would with the app running.
+    const auto settle = [] {
+        for (int pass = 0; pass < 5; ++pass) {
+            QApplication::processEvents();
+        }
+    };
+    panel->list()->set_ticked(Keys{"vmaf"});
+    panel->show_at(QPoint(0, 0));
+    settle();
+    const int folded = panel->height();
+    panel->list()->set_specialized_open(true);
+    settle();
+    EXPECT_GT(panel->height(), folded);
+    panel->list()->set_specialized_open(false);
+    settle();
+    EXPECT_EQ(panel->height(), folded);
+    EXPECT_EQ(panel->list()->height(), panel->list()->sizeHint().height());
+    panel->hide();
 }
 
 // Settings: Specialized open, any number ticked, no switch for the planes.
