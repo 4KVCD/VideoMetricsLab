@@ -235,8 +235,9 @@ TEST(WorstFramesTab, DetailsTellsTheFrameUnderThePointerElseTheRowSelected) {
     tab.segments_table()->selectRow(1);  // 40 to 40
     EXPECT_TRUE(tab.details()->text().startsWith("Segment 40 to 40")) << tab.details()->text().toStdString();
 
-    // Another number of dips lists them again, the row selected gone: Details
-    // no longer tells it.
+    // Another number of dips lists them again, and the row selected is
+    // selected again (#225): Details tells it, as before. A row no longer
+    // listed is checked in DetailsForgetsARowNoLongerListed.
     tab.segments_table()->clearSelection();
     tab.worst_table()->selectRow(0);
     ASSERT_TRUE(tab.details()->text().startsWith("Frame 10 "));
@@ -248,10 +249,45 @@ TEST(WorstFramesTab, DetailsTellsTheFrameUnderThePointerElseTheRowSelected) {
     }
     ASSERT_NE(dips, nullptr);
     dips->setCurrentIndex(1);
-    EXPECT_TRUE(tab.details()->text().isEmpty()) << tab.details()->text().toStdString();
-    tab.set_worst_count(worst_frame_counts.front());
-    tab.worst_table()->selectRow(0);
+    EXPECT_TRUE(tab.details()->text().startsWith("Frame 10 ")) << tab.details()->text().toStdString();
     tab.set_worst_count(worst_frame_counts.back());
+    EXPECT_TRUE(tab.details()->text().startsWith("Frame 10 ")) << tab.details()->text().toStdString();
+}
+
+TEST(WorstFramesTab, DetailsForgetsARowNoLongerListed) {
+    // Twelve dips, a second apart: the 12th worst is listed among 25, not
+    // among 10. Selected, then the number of dips lowered (the box, or
+    // set_worst_count), it's gone, and Details no longer tells it.
+    std::vector<float> values(400, 95.0F);
+    for (int i = 0; i < 12; ++i) {
+        values[static_cast<std::size_t>(5 + i * 32)] = 30.0F + static_cast<float>(i);
+    }
+    Settings settings;
+    Bench bench(settings);
+    WorstFramesTab& tab = bench.tab;
+    tab.set_videos({{"row:a", "a", vmaf_result("a.mkv", values)}});
+    QComboBox* dips = nullptr;
+    for (QComboBox* combo : tab.findChildren<QComboBox*>()) {
+        if (combo->count() > 0 && combo->itemData(0).toInt() == worst_frame_counts.front()) {
+            dips = combo;
+        }
+    }
+    ASSERT_NE(dips, nullptr);
+    QTableWidget& worst = *tab.worst_table();
+    dips->setCurrentIndex(1);  // 25
+    ASSERT_EQ(worst.rowCount(), 12);
+    worst.selectRow(11);  // frame 357, the 12th worst
+    ASSERT_TRUE(tab.details()->text().startsWith("Frame 357 ")) << tab.details()->text().toStdString();
+    dips->setCurrentIndex(0);  // 10
+    ASSERT_EQ(worst.rowCount(), 10);
+    EXPECT_TRUE(worst.selectedItems().isEmpty());
+    EXPECT_TRUE(tab.details()->text().isEmpty()) << tab.details()->text().toStdString();
+
+    tab.set_worst_count(worst_frame_counts[1]);
+    worst.selectRow(11);
+    ASSERT_TRUE(tab.details()->text().startsWith("Frame 357 ")) << tab.details()->text().toStdString();
+    tab.set_worst_count(worst_frame_counts.front());
+    EXPECT_TRUE(worst.selectedItems().isEmpty());
     EXPECT_TRUE(tab.details()->text().isEmpty()) << tab.details()->text().toStdString();
 }
 
