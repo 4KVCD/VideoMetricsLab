@@ -75,7 +75,18 @@ enum class StatusKind {
     // Why the decode plan just made leaves each video it does in software (decoding_why_status): kept for the
     // results JSON (JobRun::report_status), neither logged nor shown.
     decoding_why,
+    // Which of a CPU scorer's metrics the GPU calculates, as it starts
+    // (GpuMetricsReport; the text is metrics_on_gpu_text's): they show as GPU
+    // metrics on the run line (TaskSnapshot::gpu_keys). The scorer logs it
+    // itself, so it is neither logged nor shown.
+    metrics_on_gpu,
 };
+
+// StatusKind::metrics_on_gpu's text, for a CPU scorer of `metrics` that
+// calculates `on_gpu` of them on the GPU ("psnr,cambi,ciede2000;cambi,ciede2000"),
+// and back.
+std::string metrics_on_gpu_text(const std::vector<std::string>& metrics, const std::vector<std::string>& on_gpu);
+std::pair<std::vector<std::string>, std::vector<std::string>> metrics_on_gpu_from(std::string_view text);
 
 // Whether a status says that a GPU route failed (or its check did) and its
 // metrics went elsewhere: to the CPU, or to stock Vship 5.1.2; or that the

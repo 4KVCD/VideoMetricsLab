@@ -359,6 +359,8 @@ CpuScorer::CpuScorer(int width, int height, int bit_depth, std::vector<std::stri
 
 CpuScorer::~CpuScorer() { release(); }
 
+std::vector<std::string> CpuScorer::gpu_metrics() const { return gpu_ ? gpu_->metrics() : std::vector<std::string>{}; }
+
 void CpuScorer::start_gpu(int width, int height, int bit_depth, std::optional<int> gpu,
                           const ExtractorOptions& cambi_with) {
     libvmaf_metrics_ = metrics_;
@@ -674,6 +676,7 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
                              const std::string& ffmpeg,
                              const std::string& ffprobe, bool want_vvdec,
                              const std::function<void()>& on_vvdec_opening,
+                             const GpuMetricsReport& on_gpu_metrics,
                              const std::function<void(long long, long long, double)>& on_progress,
                              const CancelToken& cancel) {
     const auto& [source_backend, test_backend] = decoders;
@@ -695,6 +698,9 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
     // Declared after the streams so that it goes first: it gives back the
     // memory their decoders page-locked.
     CpuScorer scorer(width, height, bit_depth, metrics, n_subsample, threads, frame_rate, cambi, gpu);
+    if (on_gpu_metrics) {
+        on_gpu_metrics(scorer.metric_keys(), scorer.gpu_metrics());
+    }
     // vvdec-vulkan's GPU copies its pictures only into a buffer of its stream's, from which they are copied into the
     // scorer's pictures. Last, so that it goes first: its side thread's jobs use the scorer.
     std::optional<HostPairs> pairs;

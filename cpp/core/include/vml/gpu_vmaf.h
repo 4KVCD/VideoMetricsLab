@@ -128,6 +128,10 @@ struct GpuPlan {
     // The GPU the CPU metrics' CIEDE2000 and CAMBI go on (CpuScorer's `gpu`:
     // Vulkan's number, -1 for the one VMAF runs on), or nothing for libvmaf's.
     std::optional<int> extra_gpu;
+    // Told, as each of the plan's CPU scorers starts (its own, the one beside),
+    // which of its metrics the GPU calculates. Set by the process that scores
+    // the plan, for its run line; not in the plan's JSON (plan_json).
+    GpuMetricsReport on_gpu_metrics;
 };
 
 // HDR VMAF's scorer for a plan that scores it (GpuPlan::hdr_model_file,
@@ -178,6 +182,9 @@ public:
     // The CPU extractors' scores, then HDR VMAF's. Throws LibvmafError when
     // the two were not scored for the same frames.
     PairScores finish() override;
+
+    // Its CPU metrics' scorer, where it has one (what start_beside reports).
+    const CpuScorer* cpu() const { return cpu_ ? &*cpu_ : nullptr; }
 
 private:
     CpuScorer& cpu_alone();

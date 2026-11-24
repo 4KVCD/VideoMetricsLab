@@ -223,6 +223,8 @@ private:
         // The task's metrics the CPU is calculating since the GPU failed;
         // its progress figures are then theirs.
         std::vector<std::string> cpu_keys;
+        // Those of its CPU scorers' metrics the GPU calculates (metrics_on_gpu).
+        std::vector<std::string> gpu_keys;
         // The metrics of each of its passes (Vship's: planned at the start,
         // then updated as each starts), and the pass under way: its number,
         // how many there are, and the progress count it started at.
@@ -673,6 +675,18 @@ void JobRun::report_status(std::size_t task, const RunStatus& status) {
         tasks_[task].plan_why = status.decoding_why;  // for the results JSON; the run's log says them itself
         return;
     }
+    if (status.kind == StatusKind::metrics_on_gpu) {
+        // A CPU scorer started (the scorer logs it): its metrics on the GPU
+        // replace what was said of them, as a pass made again on the CPU after
+        // the GPU failed says none.
+        const auto [metrics, on_gpu] = metrics_on_gpu_from(status.text);
+        const std::lock_guard lock(mutex_);
+        std::vector<std::string>& gpu_keys = tasks_[task].gpu_keys;
+        std::erase_if(gpu_keys, [&metrics](const std::string& key) { return contains(metrics, key); });
+        gpu_keys.insert(gpu_keys.end(), on_gpu.begin(), on_gpu.end());
+        send_snapshots();
+        return;
+    }
     logger.info(name() + ": " + status.text);
     if (status.kind == StatusKind::gpu_decoder_failed || status.kind == StatusKind::vvdec_used ||
         status.kind == StatusKind::vvdec_off) {
@@ -952,6 +966,11 @@ TaskSnapshot JobRun::snapshot_of(std::size_t task, const std::string& backend, c
     for (const std::string& key : state.cpu_keys) {
         if (contains(keys, key)) {
             snapshot.cpu_keys.push_back(key);
+        }
+    }
+    for (const std::string& key : state.gpu_keys) {
+        if (contains(keys, key)) {
+            snapshot.gpu_keys.push_back(key);
         }
     }
     snapshot.passes = state.passes.value_or(std::vector<std::vector<std::string>>{keys});

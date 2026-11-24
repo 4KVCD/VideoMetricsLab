@@ -156,6 +156,10 @@ struct TaskSnapshot {
     // The metrics the CPU is calculating since VMAF on the GPU failed; the
     // progress figures are then theirs.
     std::vector<std::string> cpu_keys;
+    // Of the metrics it calculates on the CPU, those the GPU calculates in
+    // the same pass (CIEDE2000 and CAMBI, as its CPU scorers say:
+    // StatusKind::metrics_on_gpu): shown as GPU metrics.
+    std::vector<std::string> gpu_keys;
     std::vector<std::string> done_keys;  // the metrics it has scores for
     // The metrics of each of its passes, in order: Vship's as planned, then
     // as each starts, with any retry after the others; any other task's

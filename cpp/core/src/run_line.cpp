@@ -114,7 +114,8 @@ void add_under_way(std::vector<MetricUnit>& units, const TaskSnapshot& task, con
 }
 
 // Adds the units of a task on the CPU, or one the CPU took over: its passes
-// on the GPU before (finished), then one pass of its metrics on the CPU.
+// on the GPU before (finished), then one pass of its metrics on the CPU, less
+// those the GPU calculates in it.
 void add_cpu_units(std::vector<MetricUnit>& units, const TaskSnapshot& task) {
     const bool ended = task.state == "done" || task.state == "failed";
     if (!task.cpu_keys.empty()) {
@@ -129,10 +130,22 @@ void add_cpu_units(std::vector<MetricUnit>& units, const TaskSnapshot& task) {
         }
     }
     const std::vector<std::string>& keys = task.cpu_keys.empty() ? task.metric_keys : task.cpu_keys;
-    if (ended) {
-        add_finished(units, task, keys, "CPU");
-    } else {
-        add_under_way(units, task, keys, "CPU");
+    // Those the GPU calculates in the same pass (CIEDE2000 and CAMBI, as its
+    // CPU scorer said: gpu_keys) are GPU metrics, with the pass's figures.
+    std::vector<std::string> on_cpu;
+    std::vector<std::string> on_gpu;
+    for (const std::string& key : keys) {
+        (contains(task.gpu_keys, key) ? on_gpu : on_cpu).push_back(key);
+    }
+    for (const auto& [group, place] : {std::pair{&on_cpu, "CPU"}, std::pair{&on_gpu, "GPU"}}) {
+        if (group->empty()) {
+            continue;
+        }
+        if (ended) {
+            add_finished(units, task, *group, place);
+        } else {
+            add_under_way(units, task, *group, place);
+        }
     }
 }
 
