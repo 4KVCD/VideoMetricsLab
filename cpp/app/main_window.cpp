@@ -673,6 +673,7 @@ void MainWindow::build_ui() {
     frame_compare_panel_ = new FrameComparePanel([this] { return tools_status_.ffmpeg.path; },
                                                  preview_color_mode_from(settings_.frame_preview_color_mode),
                                                  settings_.compare_decoded_videos);
+    connect(frame_compare_panel_, &FrameComparePanel::worst_stop_shown, worst_tab_, &WorstFramesTab::keep_worst_frame);
     connect(frame_compare_panel_, &FrameComparePanel::color_mode_changed, this, [this](const QString& mode) {
         settings_.frame_preview_color_mode = mode.toStdString();  // the colour mode chosen, next time too
         save_settings();

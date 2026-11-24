@@ -548,6 +548,57 @@ TEST(WorstFramesTab, KeepsTheChosenVideoWhenItIsScoredAgain) {
     EXPECT_EQ(tab.chosen_video()->identity, "run:6");
 }
 
+// The row opened in Video Compare is the one selected on the way back,
+// though the window fills the lists again whenever the tab is opened; after
+// Previous / Next worst there, the frame Video Compare stepped to.
+TEST(WorstFramesTab, KeepsTheRowOpenedInVideoCompare) {
+    std::vector<float> values(90, 95.0F);
+    values[10] = 40.0F;
+    values[50] = 45.0F;
+    values[89] = 50.0F;
+    Settings settings;
+    Bench bench(settings);
+    WorstFramesTab& tab = bench.tab;
+    const auto selected = [](const QTableWidget& table) {
+        const QList<QTableWidgetItem*> items = table.selectedItems();
+        return items.isEmpty() ? -1 : items.front()->row();
+    };
+    const WeakFramesVideo a{"row:a", "a", vmaf_result("a.mkv", values)};
+    tab.set_videos({a});
+    QTableWidget& worst = *tab.worst_table();
+    ASSERT_EQ(worst.rowCount(), 3);
+    worst.selectRow(1);
+    emit worst.cellDoubleClicked(1, 0);  // frame 50
+    tab.set_videos({a});  // back on the tab
+    EXPECT_EQ(selected(worst), 1);
+
+    // Next worst in Video Compare: frame 89, its row.
+    const QString vmaf = tab.shown_list().metric;
+    tab.keep_worst_frame("row:a", vmaf, 89);
+    EXPECT_EQ(selected(worst), 2);
+    tab.set_videos({a});
+    EXPECT_EQ(selected(worst), 2);
+    // Another video's list, or another metric's, leaves it as it is.
+    tab.keep_worst_frame("row:b", vmaf, 10);
+    tab.keep_worst_frame("row:a", "PSNR", 10);
+    EXPECT_EQ(selected(worst), 2);
+    tab.set_videos({a});
+    EXPECT_EQ(selected(worst), 2);
+
+    // A segment: its row, and none in Worst frames.
+    QTableWidget& segments = *tab.segments_table();
+    segments.selectRow(1);
+    tab.set_videos({a});
+    EXPECT_EQ(selected(segments), 1);
+    EXPECT_EQ(selected(worst), -1);
+
+    // Nothing selected by the user: nothing selected again.
+    segments.clearSelection();
+    tab.set_videos({a});
+    EXPECT_EQ(selected(segments), -1);
+    EXPECT_EQ(selected(worst), -1);
+}
+
 TEST(WorstFramesTab, NamesTheVideosAsMetricGraphsDoes) {
     // The videos list takes Metric Graphs' shown names (the Video names
     // setting), the whole name in the tooltip; without one, the whole name.

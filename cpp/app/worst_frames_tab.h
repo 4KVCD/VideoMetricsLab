@@ -94,6 +94,10 @@ public:
     const std::vector<WeakSegment>& segments() const { return segments_; }
     // Worst frames' list as shown, for Video Compare to step through.
     WorstFrameList shown_list() const;
+    // Video Compare stepped to `frame` of a Worst frames list (`identity`'s,
+    // of `metric`, as shown_list names them): where it is the list opened
+    // from here, that row is the one selected when the tab is next looked at.
+    void keep_worst_frame(const std::string& identity, const QString& metric, int frame);
 
     // For the tests.
     SegmentRulesEditor* editor() const { return editor_; }
@@ -193,6 +197,11 @@ private:
     void fit_videos_height();
     std::optional<int> worst_frame_of_row(int row) const;
     void open_selected();
+    // The row last selected in either list, selected again (and scrolled
+    // to) after the lists are filled again: they are on every refresh, as
+    // when the tab is opened, so a row opened in Video Compare was lost on
+    // the way back.
+    void select_kept();
 
     Dialogs dialogs_;
     std::vector<WeakFramesVideo> videos_;
@@ -220,6 +229,17 @@ private:
     std::vector<std::uint8_t> marks_;
     std::vector<QColor> mark_colors_;
     bool building_ = true;
+    // The row last selected: its video, its list (Worst frames' with its
+    // metric), and its frame (a segment's first). Kept while the lists are
+    // filled again (filling_).
+    struct Kept {
+        std::string identity;
+        bool segment = false;
+        QString metric;  // Worst frames': its metric's label, as shown_list names it
+        int frame = 0;
+    };
+    std::optional<Kept> kept_;
+    bool filling_ = false;
 
     QTableWidget* videos_table_ = nullptr;
     QTabBar* metric_bar_ = nullptr;

@@ -472,6 +472,7 @@ QWidget* WorstFramesTab::build_lists() {
             fill_worst();
             refresh_chart();
             show_details();  // the list made again: a row selected is gone
+            select_kept();
             emit count_changed(count_);
         }
     });
@@ -483,7 +484,14 @@ QWidget* WorstFramesTab::build_lists() {
     connect(worst_table_, &QTableWidget::itemSelectionChanged, this, [this] {
         const QList<QTableWidgetItem*> selected = worst_table_->selectedItems();
         if (selected.isEmpty()) {
+            if (!filling_ && segments_table_->selectedItems().isEmpty()) {
+                kept_.reset();  // the user's own: nothing to select again
+            }
             return;
+        }
+        if (const std::optional<int> frame = worst_frame_of_row(selected.front()->row());
+            frame && chosen_video() != nullptr && metric_ != nullptr) {
+            kept_ = Kept{chosen_video()->identity, false, qt_text(metric_->label), *frame};
         }
         {
             const QSignalBlocker blocker(segments_table_);
@@ -523,6 +531,9 @@ QWidget* WorstFramesTab::build_lists() {
     connect(segments_table_, &QTableWidget::itemSelectionChanged, this, [this] {
         const QList<QTableWidgetItem*> selected = segments_table_->selectedItems();
         if (selected.isEmpty()) {
+            if (!filling_ && worst_table_->selectedItems().isEmpty()) {
+                kept_.reset();
+            }
             return;
         }
         {
@@ -530,6 +541,9 @@ QWidget* WorstFramesTab::build_lists() {
             worst_table_->clearSelection();
         }
         const int row = selected.front()->row();
+        if (row >= 0 && static_cast<std::size_t>(row) < segments_.size() && chosen_video() != nullptr) {
+            kept_ = Kept{chosen_video()->identity, true, {}, segments_[static_cast<std::size_t>(row)].first_frame};
+        }
         if (row >= 0 && static_cast<std::size_t>(row) < segments_.size() && chart_ != nullptr) {
             const WeakSegment& segment = segments_[static_cast<std::size_t>(row)];
             chart_->set_highlight(std::pair(segment.start_time, segment.end_time));
@@ -682,6 +696,7 @@ void WorstFramesTab::set_worst_count(int count) {
     fill_worst();
     refresh_chart();
     show_details();  // the list made again: a row selected is gone
+    select_kept();
 }
 
 // ---------------------------------------------------------------- choosing
@@ -876,6 +891,7 @@ void WorstFramesTab::refresh() {
     refresh_videos_table();
     refresh_chart();
     show_details();
+    select_kept();
 }
 
 void WorstFramesTab::refresh_videos_table() {
@@ -966,7 +982,11 @@ void WorstFramesTab::refresh_chart() {
 
 void WorstFramesTab::fill_worst() {
     // Its columns fitted to what it shows, on every way out, emptied too.
-    const auto fitted = qScopeGuard([this] { fit_list(worst_table_, worst_width_); });
+    const auto fitted = qScopeGuard([this] {
+        fit_list(worst_table_, worst_width_);
+        filling_ = false;
+    });
+    filling_ = true;
     worst_table_->clearContents();
     worst_table_->setRowCount(0);
     worst_.clear();
@@ -1046,6 +1066,8 @@ void WorstFramesTab::fill_worst() {
 }
 
 void WorstFramesTab::fill_segments() {
+    filling_ = true;
+    const auto filled = qScopeGuard([this] { filling_ = false; });
     const SegmentRules current = rules();
     // As the dialog's table, without End (Last and Frames give it): it fits
     // beside Worst frames.
@@ -1348,6 +1370,46 @@ QString WorstFramesTab::segment_details(const WeakSegment& segment) const {
 std::optional<int> WorstFramesTab::worst_frame_of_row(int row) const {
     const QTableWidgetItem* item = worst_table_->item(row, 0);
     return item != nullptr ? std::optional(item->data(Qt::UserRole).toInt()) : std::nullopt;
+}
+
+void WorstFramesTab::keep_worst_frame(const std::string& identity, const QString& metric, int frame) {
+    // Only for the list opened from here (the same video and metric): a
+    // list of another metric, from Metric Graphs, leaves the row here as it is.
+    if (kept_ && !kept_->segment && kept_->identity == identity && kept_->metric == metric) {
+        kept_->frame = frame;
+        select_kept();
+    }
+}
+
+void WorstFramesTab::select_kept() {
+    const WeakFramesVideo* video = chosen_video();
+    if (!kept_ || video == nullptr || video->identity != kept_->identity) {
+        return;  // kept for when that video is chosen again
+    }
+    if (!kept_->segment && (metric_ == nullptr || qt_text(metric_->label) != kept_->metric)) {
+        return;  // another metric's list: kept for when that one is shown again
+    }
+    QTableWidget* table = kept_->segment ? segments_table_ : worst_table_;
+    int found = -1;
+    for (int row = 0; row < table->rowCount() && found < 0; ++row) {
+        if (kept_->segment) {
+            // The segment holding its first frame: the same one, or the one
+            // it became under rules changed since.
+            const WeakSegment& segment = segments_[static_cast<std::size_t>(row)];
+            if (segment.first_frame <= kept_->frame && kept_->frame <= segment.last_frame) {
+                found = row;
+            }
+        } else if (worst_frame_of_row(row) == kept_->frame) {
+            found = row;
+        }
+    }
+    if (found < 0) {
+        return;  // not listed now (another range or count, other rules): kept for later
+    }
+    const Kept kept = *kept_;
+    table->selectRow(found);
+    kept_ = kept;  // a segment found holding it keeps the frame asked for
+    table->scrollTo(table->model()->index(found, 0), QAbstractItemView::PositionAtCenter);
 }
 
 WorstFrameList WorstFramesTab::shown_list() const {
