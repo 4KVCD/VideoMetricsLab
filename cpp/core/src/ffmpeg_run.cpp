@@ -1032,13 +1032,6 @@ std::optional<GpuPlan> cpu_metrics_plan(const VmafOptions& options, std::pair<in
     plan.threads = options.n_threads > 0 ? options.n_threads : static_cast<int>(cores);
     plan.frame_rate = frame_rate.value_or(0);
     plan.cambi = cambi_input(distorted, distorted_crop);
-    // CIEDE2000 and CAMBI on the GPU VMAF would run on, as VMAF is (CpuScorer falls back to libvmaf where the
-    // GPU cannot): with the GPU there they took a fraction of the time and memory libvmaf takes on the CPU.
-    if (options.vmaf_on_gpu && std::any_of(metrics.begin(), metrics.end(), [](const std::string& metric) {
-            return metric == "ciede2000" || metric == "cambi";
-        })) {
-        plan.extra_gpu = -1;
-    }
     return plan;
 }
 
@@ -1983,20 +1976,29 @@ std::optional<GpuPlan> gpu_plan(const RunFrames& run, const VmafOptions& options
     return plan;
 }
 
-// The plan for the run's PSNR, SSIM and XPSNR in the app (cpu_metrics_plan).
-// VMAF YUV's U and V are scored with the run's VMAF model, on the GPU VMAF runs on where the Vulkan engine
-// scores VMAF there (on a GPU whose VMAF is libvmaf's CUDA code, the Vulkan engine's would not be checked).
+// The plan for the run's CPU metrics in the app (cpu_metrics_plan).
+// VMAF YUV's U and V are scored with the run's VMAF model. They, CIEDE2000 and CAMBI go to the GPU VMAF runs on
+// where the Vulkan engine scores VMAF there (CpuScorer falls back to libvmaf where the GPU cannot take them): with
+// the GPU there they took a fraction of the time and memory libvmaf takes on the CPU. On a GPU whose VMAF is
+// libvmaf's CUDA code the Vulkan engine's would not be checked, so they stay on the CPU there.
 std::optional<GpuPlan> cpu_plan(const RunFrames& run, const VmafOptions& options) {
     std::optional<GpuPlan> plan =
         cpu_metrics_plan(options, std::pair(run.width, run.height), run.source, run.distorted, run.decoding,
                          run.source_crop, run.distorted_crop, run.environment.cores, run.environment.ffmpeg);
-    if (plan && (options.metric_enabled(vmaf_u_key) || options.metric_enabled(vmaf_v_key))) {
+    if (!plan) {
+        return plan;
+    }
+    const bool chroma_vmaf = options.metric_enabled(vmaf_u_key) || options.metric_enabled(vmaf_v_key);
+    if (chroma_vmaf) {
         plan->vmaf_model = run_vmaf_model(options, run.width, run.height);
-        if (options.vmaf_on_gpu) {
-            if (const GpuVmafBackend backend = gpu_vmaf_backend(run.cancel); backend.backend == "vulkan") {
-                plan->vmaf_on_vulkan = true;
-                plan->extra_gpu = backend.device.value_or(-1);
-            }
+    }
+    const bool cie_cambi = std::any_of(plan->models.begin(), plan->models.end(), [](const auto& model) {
+        return model.first == "ciede2000" || model.first == "cambi";
+    });
+    if (options.vmaf_on_gpu && (chroma_vmaf || cie_cambi)) {
+        if (const GpuVmafBackend backend = gpu_vmaf_backend(run.cancel); backend.backend == "vulkan") {
+            plan->vmaf_on_vulkan = chroma_vmaf;
+            plan->extra_gpu = backend.device.value_or(-1);
         }
     }
     return plan;

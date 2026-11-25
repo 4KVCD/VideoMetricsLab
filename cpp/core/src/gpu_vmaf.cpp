@@ -13,6 +13,7 @@
 #include "vml/frame_sync.h"
 #include "vml/gpu_checks.h"
 #include "vml/gpu_choice.h"
+#include "vml/gpu_cpu_metrics.h"
 #include "vml/gpu_frames.h"
 #include "vml/host_frames.h"
 #include "vml/isolated.h"
@@ -667,10 +668,28 @@ struct GpuAttempt::State {
     std::thread feeder;
     std::exception_ptr error;  // the feeder's, set before it ends
     std::optional<PairScores> result;
+    bool gpu_vmaf = true;  // a GPU VMAF pass, not the CPU metrics' alone (backend "cpu")
 };
+
+namespace {
+
+// Whether `error` is CIEDE2000's or CAMBI's on the GPU failing partway, which score_plan answers by making the
+// pass again with them on the CPU: it must reach it as it is.
+bool gpu_metrics_failed(const std::exception_ptr& error) {
+    try {
+        std::rethrow_exception(error);
+    } catch (const GpuMetricsFailed&) {
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+}  // namespace
 
 GpuAttempt::GpuAttempt(const GpuPlan& plan, int n_subsample) : state_(std::make_unique<State>()) {
     State& s = *state_;
+    s.gpu_vmaf = plan.backend != "cpu";
     if (plan.backend == "cpu") {
         std::vector<std::string> metrics;
         for (const auto& [key, same] : plan.models) {
@@ -790,7 +809,10 @@ std::optional<PairScores> GpuAttempt::finish(bool ffmpeg_succeeded) {
     // Frames cut short where FFmpeg failed are that failure, which the
     // caller reports and tries another decode plan for.
     if (s.error && !(frames_cut(s.error) && !ffmpeg_succeeded)) {
-        throw LibvmafError("GPU VMAF failed: " + message_of(s.error));
+        if (gpu_metrics_failed(s.error)) {
+            std::rethrow_exception(s.error);
+        }
+        throw LibvmafError((s.gpu_vmaf ? "GPU VMAF failed: " : "") + message_of(s.error));
     }
     return ffmpeg_succeeded ? std::move(s.result) : std::nullopt;
 }

@@ -126,7 +126,8 @@ struct GpuPlan {
     int frame_rate = 0;  // XPSNR's, in whole frames per second
     CambiInput cambi;    // CAMBI's test video (libvmaf_cpu.h)
     // The GPU the CPU metrics' CIEDE2000 and CAMBI go on (CpuScorer's `gpu`:
-    // Vulkan's number, -1 for the one VMAF runs on), or nothing for libvmaf's.
+    // Vulkan's number, -1 for the one VMAF runs on) where the Vulkan engine
+    // scores this PC's GPU VMAF, or nothing (cpu_plan).
     std::optional<int> extra_gpu;
     // With VMAF YUV's U and V among the CPU metrics: the run's VMAF model
     // (its model= value), and whether they go on extra_gpu too, where the

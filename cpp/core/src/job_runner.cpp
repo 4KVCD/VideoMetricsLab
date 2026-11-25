@@ -1599,7 +1599,7 @@ std::optional<std::pair<int, int>> planned_size(const VideoInfo& source, const V
 // 2,233 MB and CIEDE2000 1,250 MB, the CPU-only metrics 92 to 1,684 MB. VMAF YUV's U
 // and V make one metric. `on_vulkan`: the task's CAMBI, CIEDE2000, U and V
 // and HDR VMAF's features go to the Vulkan engine (VMAF's place for the task
-// is the GPU and the engine scores VMAF here: cpu_metrics_plan, cpu_plan,
+// is the GPU and the engine scores VMAF here: cpu_plan,
 // hdr_plan); `chroma_on_gpu`: the engine takes the U and V too.
 std::string heavy_cpu_unit(const std::string& key, bool on_vulkan, bool chroma_on_gpu) {
     if (key == "vmaf" || key == "vmaf_neg" || key == "vmaf_v1") {
