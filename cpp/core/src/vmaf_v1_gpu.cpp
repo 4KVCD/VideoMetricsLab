@@ -1424,15 +1424,17 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
     // imported by the test video's, and the source's copies go into it. With
     // vvdec-vulkan's for one video and its own or NVIDIA's for the other,
     // each imports the scorers' memory (both_copy_on_gpu), where Vulkan
-    // scores and calculates every VMAF v1 feature (V1Scorer), but not beside
-    // the CPU's metrics (pass_may_hand_over_beside, `beside` not taking the
-    // decoders' pictures): they need both pictures in
-    // system memory anyway, and the extra copies on the GPU made the six
-    // metrics of a 1080p pair about 30 % slower on an RTX 5090.
+    // scores and calculates every VMAF v1 feature (V1Scorer), but only with
+    // nothing beside it, as for VMAF (score_decoded): the metrics beside
+    // (VMAF YUV's U and V, HDR VMAF, the CPU's) do not take vvdec-vulkan's
+    // pictures from the decoders, and read them in system memory only from
+    // buffers its stream pinned (HostPairs). Beside the CPU's metrics, the
+    // extra copies on the GPU also made the six metrics of a 1080p pair about
+    // 30 % slower on an RTX 5090.
     bool on_gpu = false;
     if (test_vvdec || reference_vvdec) {
-        if (!hand_over) {
-            logger.info("VMAF v1 with the GPU: vvdec-vulkan's pictures go through system memory (the CPU's metrics "
+        if (!hand_over || !plan.beside.empty()) {
+            logger.info("VMAF v1 with the GPU: vvdec-vulkan's pictures go through system memory (the metrics beside "
                         "read them)");
         } else if (plan.backend == "vulkan" && both_copy_on_gpu(test, reference)) {
             try {
