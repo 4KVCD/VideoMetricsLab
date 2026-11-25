@@ -1,15 +1,74 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "Zablokowane podczas obliczania metryk.",
+  "Remove {name} from the list": "Usuń {name} z listy",
   "Show {name} in Metric Graphs again": "Pokaż ponownie {name} na wykresach metryk",
   "{name} has no scores yet to show in Metric Graphs.": "{name} nie ma jeszcze wyników do pokazania na wykresach metryk.",
   "{name} is already in Metric Graphs.": "{name} jest już na wykresach metryk.",
   "{name} is back in Metric Graphs.": "{name} wrócił na wykresy metryk.",
-  "Locked while metrics are calculated.": "Zablokowane podczas obliczania metryk.",
-  "Remove {name} from the list": "Usuń {name} z listy",
+  "A card for each saved score, to pick the one used": "Karta dla każdej zapisanej oceny, aby wybrać używaną",
+  "CPU or GPU": "CPU lub GPU",
+  "Choose columns…": "Wybierz kolumny…",
+  "Click to use this score.": "Kliknij, aby użyć tej oceny.",
+  "Counting the saved results...": "Liczenie zapisanych wyników...",
+  "Delete:": "Usuń:",
+  "Deleting saved results...": "Usuwanie zapisanych wyników...",
+  "Each card shows when its score was saved; the round button on it picks the one used.": "Każda karta pokazuje, kiedy zapisano jej ocenę; okrągły przycisk na niej wybiera używaną.",
+  "Every saved result": "Każdy zapisany wynik",
+  "Every saved score of this comparison: its statistics, when it was saved and how it was made": "Każda zapisana ocena tego porównania: jej statystyki, kiedy ją zapisano i jak powstała",
+  "How far the frames' scores spread from their mean.": "Jak daleko oceny klatek odbiegają od ich średniej.",
+  "Made with": "Utworzono w",
+  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and deleting saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "Trwa obliczanie metryk: folder ffmpeg, folder zapisanych wyników i usuwanie zapisanych wyników są zablokowane do końca przebiegu, bo przebieg z nich korzysta. Wszystko inne można zmienić teraz.",
+  "Model or display": "Model lub ekran",
+  "No saved results in that range.": "Brak zapisanych wyników w tym zakresie.",
+  "No saved results in that range: nothing deleted.": "Brak zapisanych wyników w tym zakresie: nic nie usunięto.",
+  "No saved results in {directory}": "Brak zapisanych wyników w {directory}",
+  "Of the newest, or of those the newest version of the app made, these come first. The Videos tab's choice goes by the settings instead.": "Spośród najnowszych lub tych z najnowszej wersji aplikacji te mają pierwszeństwo. Wybór karty Wideo zależy natomiast od ustawień.",
+  "One card per metric, saying how many are saved": "Jedna karta na metrykę, z liczbą zapisanych",
+  "Saved results are already being deleted.": "Zapisane wyniki są już usuwane.",
+  "Score": "Ocena",
+  "Score bands": "Przedziały ocen",
+  "Settings > Saved Results": "Ustawienia > Zapisane wyniki",
+  "Show:": "Pokaż:",
+  "The bitrate readings and black-bar answers kept with them are deleted too.": "Odczyty przepływności i wyniki wykrywania czarnych pasów zapisane razem z nimi też zostaną usunięte.",
+  "The card shows the score used; the details panel, opened by the button over the scores, lists them all, and a click on another uses it.": "Karta pokazuje używaną ocenę; panel szczegółów, otwierany przyciskiem nad ocenami, wymienia je wszystkie, a kliknięcie innej sprawia, że jest używana.",
+  "The details panel, opened by the button over the scores, shows each score's metric and score, and:": "Panel szczegółów, otwierany przyciskiem nad ocenami, pokazuje metrykę i wartość każdej oceny oraz:",
+  "The highest frame's score.": "Najwyższa ocena klatki.",
+  "The lowest frame's score.": "Najniższa ocena klatki.",
+  "The middle frame's score.": "Środkowa ocena klatki.",
+  "The score Open in Metric Graphs and the exports take, where a metric has several. Click another of its rows to use that one.": "Ocena, której używają Otwórz w Wykresach metryk i eksporty, gdy metryka ma ich kilka. Kliknij inny jej wiersz, aby użyć tamtej.",
+  "The score the card shows and Open in Metric Graphs and the exports take, unless you pick another in the details panel. The Videos tab's: the one a run would use again with the settings as they are (where it would use none, the newest).": "Ocena, którą pokazuje karta i której używają Otwórz w Wykresach metryk i eksporty, chyba że wybierzesz inną w panelu szczegółów. Ta z karty Wideo: ta, której przebieg użyłby ponownie przy obecnych ustawieniach (gdy nie użyłby żadnej, najnowsza).",
+  "The score {share} of the frames are worse than: the low end where a higher score is better, the high end where a lower one is (Metric Graphs' {share} Low or High).": "Ocena, od której {share} klatek jest gorszych: dolna granica, gdy wyższa ocena jest lepsza, górna, gdy lepsza jest niższa ({share} nis. lub wys. w Wykresach metryk).",
+  "The share of the frames in each of the metric's score bands, as Metric Graphs' table has them (≥ 95, < 70, ...).": "Udział klatek w każdym przedziale ocen metryki, jak w tabeli Wykresów metryk (≥ 95, < 70, ...).",
+  "The whole video's score, as Metric Graphs shows it.": "Ocena całego wideo, tak jak pokazują ją Wykresy metryk.",
+  "Their videos are scored again the next time they are compared.": "Ich wideo zostaną ocenione ponownie przy następnym porównaniu.",
+  "Those saved from": "Zapisane od",
+  "Those saved more than": "Zapisane ponad",
+  "Use this score": "Użyj tej oceny",
+  "Use:": "Użyj:",
+  "Used": "Używana",
+  "VMAF's model, or the display CVVDP modelled.": "Model VMAF lub ekran modelowany przez CVVDP.",
+  "What calculated the score, and its version.": "Czym obliczono ocenę i w jakiej wersji.",
+  "When a metric has several saved scores:": "Gdy metryka ma kilka zapisanych ocen:",
+  "When the score was saved.": "Kiedy zapisano ocenę.",
+  "Whether the score was calculated on the CPU or the GPU.": "Czy ocenę obliczono na CPU, czy na GPU.",
+  "Worst {share}": "Najgorsze {share}",
+  "by FFmpeg first": "najpierw z FFmpeg",
+  "by any engine": "z dowolnego silnika",
+  "by the app's own first": "najpierw z własnego silnika aplikacji",
+  "on any device": "na dowolnym urządzeniu",
+  "on the CPU first": "najpierw na CPU",
+  "on the GPU first": "najpierw na GPU",
+  "the newest": "najnowszej",
+  "the one made by the newest version of the app": "tej z najnowszej wersji aplikacji",
+  "the one the Videos tab would use": "tej, której użyłaby karta Wideo",
+  "{size}, last saved {date}, in {directory}.": "{size}, ostatnio zapisano {date}, w {directory}.",
+  "{size}, last saved {first} to {last}, in {directory}.": "{size}, ostatnio zapisano od {first} do {last}, w {directory}.",
+  "Folder:": "Folder:",
+  "Saved results": "Zapisane wyniki",
   "Start over": "Zacznij od nowa",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Czyści wideo referencyjne i usuwa wszystkie wideo testowe, aby rozpocząć nowe porównanie. Zapisane wyniki zostają.",
   "Click Start over again to clear the reference.": "Kliknij ponownie „Zacznij od nowa”, aby wyczyścić wideo referencyjne.",
-  "Every saved score in this folder is deleted. This can't be undone.": "Wszystkie zapisane wyniki w tym folderze zostaną usunięte. Tej operacji nie można cofnąć.",
   "Show details": "Pokaż szczegóły",
   "Hide details": "Ukryj szczegóły",
   "OK": "OK",
@@ -343,8 +402,6 @@
   "Storage": "Przechowywanie",
   "blank = shared user-profile folder": "puste = wspólny folder w profilu użytkownika",
   "Open": "Otwórz",
-  "Saved results:": "Zapisane wyniki:",
-  "Clear saved results": "Wyczyść zapisane wyniki",
   "Export folder:": "Folder eksportu:",
   "Reuse a saved result when a video is added again": "Używaj zapisanego wyniku po ponownym dodaniu wideo",
   "Each session's setup, every run and its steps, and every failure with its full text. Send these files along when reporting a problem.": "Ustawienia każdej sesji, każde uruchomienie z jego krokami i każdy błąd z pełną treścią. Dołącz te pliki, zgłaszając problem.",
@@ -396,9 +453,6 @@
   "Could not export the log: {error}": "Nie można wyeksportować logu: {error}",
   "There is no log to export yet.": "Nie ma jeszcze logu do eksportu.",
   "Log exported to {path}": "Log wyeksportowano do {path}",
-  "There are no saved results to clear.": "Brak zapisanych wyników do wyczyszczenia.",
-  "Saved results are already being cleared.": "Zapisane wyniki są już czyszczone.",
-  "Clearing saved results...": "Czyszczenie zapisanych wyników...",
   "Reference video:": "Wideo referencyjne:",
   "No reference selected.": "Nie wybrano referencji.",
   "Add/remove metrics": "Dodaj/usuń metryki",
@@ -634,7 +688,6 @@
   "This saved run was measured against:\n    {source}\n\nbut the selected reference is:\n    {path}\n\nScores from two different references cannot be compared. Switch the reference to the one this run used?": "Ten zapisany przebieg mierzono względem:\n    {source}\n\nale wybrana referencja to:\n    {path}\n\nWyników względem dwóch różnych referencji nie można porównywać. Przełączyć referencję na tę użytą w tym przebiegu?",
   "Choose folder to save runs into": "Wybierz folder na zapisane przebiegi",
   "Could not {description}: {error}": "Nie można: {description}: {error}",
-  "clear saved results": "czyszczenie zapisanych wyników",
   "delete saved results": "usuwanie zapisanych wyników",
   "save {name}": "zapis {name}",
   "export {name}": "eksport {name}",
@@ -1264,7 +1317,6 @@
   "Automatic (a discrete GPU first)": "Automatycznie (najpierw dedykowany GPU)",
   "{name} (not found)": "{name} (nie znaleziono)",
   "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU, który na komputerze z więcej niż jednym GPU oblicza VMAF, VMAF v1, SSIMULACRA2, Butteraugli i CVVDP, i którego dekoder producenta jest próbowany jako pierwszy, gdy dekodowanie na GPU jest automatyczne. Metryka, której jego GPU nie potrafi obliczyć, jest obliczana na CPU, a nie na innym GPU. Tryb automatyczny najpierw używa dedykowanego GPU.\n\nObowiązuje od następnego uruchomienia aplikacji; opcja --gpu w wierszu poleceń wybiera dla jednego uruchomienia.",
-  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and Clear saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "Trwa obliczanie metryk: folder ffmpeg, folder zapisanych wyników i Wyczyść zapisane wyniki są zablokowane do końca przebiegu, bo przebieg z nich korzysta. Wszystko inne można zmienić teraz.",
   "Locked while metrics are calculated: the run uses it.": "Zablokowane podczas obliczania metryk: przebieg z tego korzysta.",
   "This video has {test:,} frames, but the reference has {source:,}, even though both are the same length. From the first point where they differ, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "Ten film ma {test:,} klatek, a film referencyjny {source:,}, choć oba są tej samej długości. Od pierwszego miejsca, w którym się różnią, każda klatka jest porównywana z niewłaściwą klatką referencyjną, więc każdy wynik od tego miejsca jest błędny. Zwykle dzieje się tak, gdy przy kodowaniu klatki zostają zduplikowane lub pominięte. Zapobiega temu kodowanie ze zmienną liczbą klatek na sekundę zgodną ze źródłem.",
   "This video may be out of sync with the reference. Only {compared:,} frames were compared, but videos of this length should have {length:,}. If the scores drop suddenly partway through and stay low, this is the likely cause. To find out for sure, turn on {setting}, then right-click this video and choose {recalculate}.": "Ten film może nie być zsynchronizowany z filmem referencyjnym. Porównano tylko {compared:,} klatek, a film tej długości powinien mieć ich {length:,}. Jeśli wyniki nagle spadają w trakcie i pozostają niskie, to prawdopodobna przyczyna. Aby mieć pewność, włącz {setting}, a potem kliknij ten film prawym przyciskiem i wybierz {recalculate}.",
@@ -1337,7 +1389,6 @@
   "Saved scores of {name}": "Zapisane oceny: {name}",
   "Select a comparison to see its saved scores.": "Zaznacz porównanie, aby zobaczyć jego zapisane oceny.",
   "Select one comparison to see its saved scores.": "Zaznacz tylko jedno porównanie, aby zobaczyć jego zapisane oceny.",
-  "Several scores of this metric are saved: the newest is used unless another is picked.": "Zapisano kilka ocen tej metryki: używana jest najnowsza, chyba że wybrano inną.",
   "Size": "Rozmiar",
   "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "Wybrany profil nie ma warunków: ustaw je w Ustawienia > Słabe odcinki lub wybierz szablon.",
   "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "Reguły, według których wyszukiwane są słabe odcinki: nie są zapisywane z ocenami, lecz stosowane do nich teraz.",
@@ -1347,8 +1398,6 @@
   "{name} (saved)": "{name} (zapisane)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "Usunąć zapisane wyniki z {directory}?\n\nJuż ocenione wideo trzeba będzie przeliczyć. Wyniki, których wideo referencyjne nie jest już tam, gdzie było, zostaną zachowane: ich wyników nie dałoby się ponownie obliczyć. Usuń je na karcie Zapisane wyniki.",
-  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Niektórych z nich nie dałoby się ponownie ocenić: ich wideo referencyjne nie jest już tam, gdzie było (oznaczone jako „nie znaleziono”).",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nNie znaleziono tam: bez niego tych wyników nie dałoby się ponownie obliczyć.",
   "Recognize test videos remuxed after scoring (reads each one again)": "Rozpoznawaj wideo testowe przemuksowane po ocenie (czyta każde ponownie)",
   "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "Wideo testowe zmuksowane lub przemuksowane po ocenie (jego surowy strumień do MKV, MKV do MP4) zachowuje zapisane wyniki: jest rozpoznawane po zakodowanych obrazach.\n\nWymaga to przeczytania każdego wideo testowego jeszcze raz po zapisaniu wyników, tak długo, jak trwa czytanie pliku (kilka minut dla filmu w udziale sieciowym), w tle i nigdy podczas obliczeń; a wideo, którego strumień zaczyna się jak strumień ocenionego wideo, jest czytane w całości, by ustalić, czy to to samo wideo, po znalezieniu zapisanych wyników pozostałych wideo.\n\nWyłączone: wideo testowe są rozpoznawane tylko po plikach.",
@@ -1424,6 +1473,51 @@
   "{low} to {high} metrics": "od {low} do {high} metryk"
  },
  "plurals": {
+  "Deleted the saved scores of {count} comparison.": [
+   "Usunięto zapisane oceny {count} porównania.",
+   "Usunięto zapisane oceny {count} porównań.",
+   "Usunięto zapisane oceny {count} porównań."
+  ],
+  "The saved scores of {count} comparison are deleted. This can't be undone.": [
+   "Zapisane oceny {count} porównania zostaną usunięte. Tej operacji nie można cofnąć.",
+   "Zapisane oceny {count} porównań zostaną usunięte. Tej operacji nie można cofnąć.",
+   "Zapisane oceny {count} porównań zostaną usunięte. Tej operacji nie można cofnąć."
+  ],
+  "Would delete {count} comparison's saved scores, {size}.": [
+   "Zostałyby usunięte zapisane oceny {count} porównania, {size}.",
+   "Zostałyby usunięte zapisane oceny {count} porównań, {size}.",
+   "Zostałyby usunięte zapisane oceny {count} porównań, {size}."
+  ],
+  "day ago": [
+   "dzień temu",
+   "dni temu",
+   "dni temu"
+  ],
+  "{count} of them can't be scored again: its reference video is no longer where it was scored from (marked \"not found\" in the Saved Results tab).": [
+   "{count} z nich nie da się ponownie ocenić: jego wideo referencyjne nie jest już tam, skąd było oceniane (oznaczone jako „nie znaleziono” na karcie Zapisane wyniki).",
+   "{count} z nich nie da się ponownie ocenić: ich wideo referencyjne nie jest już tam, skąd były oceniane (oznaczone jako „nie znaleziono” na karcie Zapisane wyniki).",
+   "{count} z nich nie da się ponownie ocenić: ich wideo referencyjne nie jest już tam, skąd były oceniane (oznaczone jako „nie znaleziono” na karcie Zapisane wyniki)."
+  ],
+  "{count} saved": [
+   "{count} zapisana",
+   "{count} zapisane",
+   "{count} zapisanych"
+  ],
+  "{count} saved result, {size}, saved {first} to {last}, in {directory}": [
+   "{count} zapisany wynik, {size}, zapisano od {first} do {last}, w {directory}",
+   "{count} zapisane wyniki, {size}, zapisano od {first} do {last}, w {directory}",
+   "{count} zapisanych wyników, {size}, zapisano od {first} do {last}, w {directory}"
+  ],
+  "{count} saved result, {size}, saved {first}, in {directory}": [
+   "{count} zapisany wynik, {size}, zapisano {first}, w {directory}",
+   "{count} zapisane wyniki, {size}, zapisano {first}, w {directory}",
+   "{count} zapisanych wyników, {size}, zapisano {first}, w {directory}"
+  ],
+  "{count} score of this metric is saved: choose the one used in the details, opened by the button above.": [
+   "Zapisano {count} ocenę tej metryki: wybierz używaną w szczegółach, otwieranych przyciskiem powyżej.",
+   "Zapisano {count} oceny tej metryki: wybierz używaną w szczegółach, otwieranych przyciskiem powyżej.",
+   "Zapisano {count} ocen tej metryki: wybierz używaną w szczegółach, otwieranych przyciskiem powyżej."
+  ],
   "Click Remove all again to remove {count} video. Saved results are kept.": ["Kliknij ponownie „Usuń wszystkie”, aby usunąć {count} wideo. Zapisane wyniki zostają.", "Kliknij ponownie „Usuń wszystkie”, aby usunąć wszystkie {count} wideo. Zapisane wyniki zostają.", "Kliknij ponownie „Usuń wszystkie”, aby usunąć wszystkie {count} wideo. Zapisane wyniki zostają."],
   "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["Kliknij ponownie „Zacznij od nowa”, aby wyczyścić wideo referencyjne i usunąć {count} wideo. Zapisane wyniki zostają.", "Kliknij ponownie „Zacznij od nowa”, aby wyczyścić wideo referencyjne i usunąć wszystkie {count} wideo. Zapisane wyniki zostają.", "Kliknij ponownie „Zacznij od nowa”, aby wyczyścić wideo referencyjne i usunąć wszystkie {count} wideo. Zapisane wyniki zostają."],
   "{count} test video does not last as long as the reference ({length}).": ["{count} wideo testowe nie trwa tyle co wideo referencyjne ({length}).", "{count} wideo testowe nie trwają tyle co wideo referencyjne ({length}).", "{count} wideo testowych nie trwa tyle co wideo referencyjne ({length})."],
@@ -1449,11 +1543,6 @@
    "około {count} minuty",
    "około {count} minut",
    "około {count} minut"
-  ],
-  "{count} saved result, {size:.1f} MB in {directory}": [
-   "{count} zapisany wynik, {size:.1f} MB w {directory}",
-   "{count} zapisane wyniki, {size:.1f} MB w {directory}",
-   "{count} zapisanych wyników, {size:.1f} MB w {directory}"
   ],
   "Copied the log to the clipboard ({count} line, the middle left out -- Export log saves all of it).": [
    "Skopiowano log do schowka ({count} wiersz, środek pominięty — Eksportuj log zapisuje całość).",
@@ -1520,11 +1609,6 @@
    "{count} wideo: {counts}",
    "{count} wideo: {counts}"
   ],
-  "Removed {count} saved result.": [
-   "Usunięto {count} zapisany wynik.",
-   "Usunięto {count} zapisane wyniki.",
-   "Usunięto {count} zapisanych wyników."
-  ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "{count} zaznaczone wideo ma już wyniki bitrate.\n\nPrzeliczyć je? Wybierz Nie, aby zachować wyniki i liczyć tylko pliki bez wyników.",
    "{count} zaznaczone wideo mają już wyniki bitrate.\n\nPrzeliczyć te pliki? Wybierz Nie, aby zachować wyniki i liczyć tylko pliki bez wyników.",
@@ -1565,11 +1649,6 @@
    "łącznie {count} klatki.",
    "łącznie {count} klatek."
   ],
-  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
-   "Usunąć zapisane oceny {count} porównania? Nie da się ich przywrócić: wideo zostaną ocenione ponownie przy następnym porównaniu.",
-   "Usunąć zapisane oceny {count} porównań? Nie da się ich przywrócić: wideo zostaną ocenione ponownie przy następnym porównaniu.",
-   "Usunąć zapisane oceny {count} porównań? Nie da się ich przywrócić: wideo zostaną ocenione ponownie przy następnym porównaniu."
-  ],
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "Nie udało się usunąć zapisanych ocen {count} porównania: jeden z ich plików może być otwarty.",
    "Nie udało się usunąć zapisanych ocen {count} porównań: jeden z ich plików może być otwarty.",
@@ -1579,11 +1658,6 @@
    "{count} zapisane porównanie w {directory}",
    "{count} zapisane porównania w {directory}",
    "{count} zapisanych porównań w {directory}"
-  ],
-  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
-   "Zachowano {count} wynik, którego wideo referencyjnego brakuje: usuń go na karcie Zapisane wyniki.",
-   "Zachowano {count} wyniki, których wideo referencyjnych brakuje: usuń je na karcie Zapisane wyniki.",
-   "Zachowano {count} wyników, których wideo referencyjnych brakuje: usuń je na karcie Zapisane wyniki."
   ],
   "Saved {count} file": [
    "Zapisano {count} plik",

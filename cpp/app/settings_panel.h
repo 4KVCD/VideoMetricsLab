@@ -12,10 +12,12 @@
 #include <QString>
 #include <QWidget>
 
+#include <chrono>
 #include <filesystem>
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -27,7 +29,9 @@
 
 class QButtonGroup;
 class QCheckBox;
+class QRadioButton;
 class QComboBox;
+class QDateEdit;
 class QGroupBox;
 class QHBoxLayout;
 class QLabel;
@@ -39,12 +43,14 @@ class QSpinBox;
 class QStackedWidget;
 class QTabWidget;
 class QTimer;
+class QVariantAnimation;
 template <typename T>
 class QFutureWatcher;
 
 namespace vml {
 struct CacheSummary;
 struct ClearedResults;
+struct SavedComparison;
 }
 
 namespace vml::app {
@@ -99,14 +105,23 @@ public:
     // has already saved (from the table's column heading), without treating
     // it as an edit.
     void show_default_metric(const std::string& key, bool checked);
+    // Settings > Saved Results shown (the details panel's link).
+    void show_saved_results_section();
     // Shows the film grain default the window has already saved (answered
     // "Don't ask again"), without treating it as an edit.
     void show_film_grain_default();
     // Settings' "Ask before closing the window during a run", after the
     // window's question was told not to ask again.
     void show_confirm_close();
-    // Deletes the saved results, after asking.
-    void clear_saved_results();
+    // Delete...: the saved results delete_scope names (every one, those last
+    // saved more than delete_days ago, or from delete_from to delete_to),
+    // after the question every deletion of them asks (saved_deletion.h),
+    // which says what goes; read first on a thread of its own, the question
+    // asked once it is (or at once, by the tests' wait_for_deletion_count).
+    void delete_saved_results();
+    void wait_for_deletion_count();
+    // Waits for the saved results' count (refresh_status), and shows it.
+    void wait_for_count();
     // Shows the weak segment profiles the window has already saved (Weak
     // segments' Save to profile), without treating it as an edit.
     void show_weak_segment_rules();
@@ -131,6 +146,22 @@ public:
     QLabel* ffmpeg_status = nullptr;
     QLineEdit* cache_edit = nullptr;
     QLabel* cache_summary = nullptr;
+    // Settings > Saved Results' Saved scores box: a card for the score used
+    // or for each, and the details panel's columns by their keys.
+    QComboBox* saved_pick = nullptr;    // Use: which score (Settings::saved_score_pick)
+    QComboBox* saved_device = nullptr;  // ...on which device first
+    QComboBox* saved_engine = nullptr;  // ...by which engine first
+    QRadioButton* saved_versions_used = nullptr;
+    QRadioButton* saved_versions_each = nullptr;
+    std::map<std::string, QCheckBox*> saved_details_boxes;
+    // Delete...'s row: its scope ("all", "older", "between"), the days or
+    // the dates it takes, what it would delete, and the button.
+    QComboBox* delete_scope = nullptr;
+    QSpinBox* delete_days = nullptr;
+    QDateEdit* delete_from = nullptr;
+    QDateEdit* delete_to = nullptr;
+    QLabel* delete_preview = nullptr;
+    QPushButton* delete_button = nullptr;
     QLineEdit* export_edit = nullptr;
     // Exported graphs' colours: the palette, and a chosen background and
     // text colour, each button's in its "chosen" property ("#rrggbb", or
@@ -259,12 +290,17 @@ signals:
     // The weak segment profiles, or the one in use, were edited and saved:
     // the Worst Frames tab starts from them.
     void weak_segment_rules_changed();
+    // How Saved Results shows a comparison's scores changed (a card for the
+    // score used, or for each).
+    void saved_scores_changed();
     // How test videos' names are shown changed (Video names).
     void video_names_changed();
 
 private:
     QGroupBox* build_ffmpeg_box();
     QGroupBox* build_storage_box();
+    QGroupBox* build_saved_results_box();
+    QGroupBox* build_saved_scores_box();
     QGroupBox* build_defaults_box();
     QGroupBox* build_weak_segments_box();
     // Settings > Storage > Exports include, and After each run.
@@ -341,9 +377,27 @@ private:
     // newer count replaces an older one before it is shown.
     QFutureWatcher<CacheSummary>* counting_ = nullptr;
     std::filesystem::path counted_folder_;
-    // How many saved results clearing them removed and kept, while it is
-    // under way.
+    // How many saved results deleting them removed, while it is under way.
     std::shared_ptr<ClearedResults> cleared_;
+    // The saved comparisons read for Delete...'s question, and the folder.
+    QFutureWatcher<std::vector<SavedComparison>>* deletion_listing_ = nullptr;
+    std::filesystem::path deletion_folder_;
+    bool dates_chosen_ = false;  // the dates edited: the count no longer sets them
+    QString deleted_note_;  // what the last deletion deleted, said once under Delete...
+    QVariantAnimation* delete_pulse_ = nullptr;  // that line fading from bold to muted
+    void pulse_delete_preview();
+    // The range delete_scope names: the saved times from (none: no bound) up
+    // to, not including, the second; everything with "all".
+    std::pair<std::optional<std::chrono::system_clock::time_point>,
+              std::optional<std::chrono::system_clock::time_point>>
+    deletion_range() const;
+    bool deleting_everything() const;
+    // What Delete... would delete, from the count (cache_summary), under its row.
+    void show_delete_preview();
+    // The scope's own controls shown (the days, or the dates).
+    void show_delete_scope();
+    // The question, once the comparisons are read, and the deletion queued.
+    void ask_and_delete(const std::vector<SavedComparison>& listed);
     bool filling_profiles_ = false;  // fill_weak_profiles: not an edit
     // Send test's sender; the templates' edits saved a moment after typing
     // stops; the template a field is inserted into.

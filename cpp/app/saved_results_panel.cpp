@@ -1,6 +1,7 @@
 #include "saved_results_panel.h"
 
 #include <QAction>
+#include <QButtonGroup>
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDateTime>
@@ -10,6 +11,7 @@
 #include <QFutureWatcher>
 #include <QGridLayout>
 #include <QGroupBox>
+#include <QIcon>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QItemSelection>
@@ -17,14 +19,17 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMouseEvent>
+#include <QPainter>
+#include <QPixmap>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QScopedValueRollback>
 #include <QScrollArea>
 #include <QStandardItemModel>
 #include <QResizeEvent>
 #include <QStyle>
-#include <QTextLayout>
 #include <QTableWidget>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrentRun>
 
@@ -37,8 +42,10 @@
 
 #include "i18n.h"
 #include "results_export.h"
+#include "saved_deletion.h"
 #include "stay_open_menu.h"
 #include "theme.h"
+#include "widgets.h"
 #include "window_helpers.h"
 #include "vml/cvvdp.h"
 #include "vml/metric_cache.h"
@@ -48,50 +55,11 @@
 #include "vml/results_summary.h"
 #include "vml/segment_presets.h"
 #include "vml/segment_profiles.h"
+#include "vml/stats.h"
 
 namespace vml::app {
 
 namespace {
-
-// How a tile's score was made: at most the two lines the tile has room for
-// (tile_height), the rest cut to "…", the whole text in the tooltip when
-// it is cut. Wrapped as a QLabel wraps, a long line (VMAF v1's names the
-// features of its Vulkan run and the model) ran past the tile's bottom.
-class MadeLabel : public QLabel {
-public:
-    explicit MadeLabel(const QString& text) : full_(text) {
-        setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);  // asks for no width
-        fit();
-    }
-    QSize sizeHint() const override { return {0, 2 * fontMetrics().lineSpacing()}; }
-    QSize minimumSizeHint() const override { return sizeHint(); }
-
-protected:
-    void resizeEvent(QResizeEvent* event) override {
-        QLabel::resizeEvent(event);
-        fit();
-    }
-
-private:
-    void fit() {
-        const int width = std::max(contentsRect().width(), 1);
-        QTextLayout layout(full_, font());
-        QTextOption option;
-        option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);  // a word too long for the tile, broken
-        layout.setTextOption(option);
-        layout.beginLayout();
-        QTextLine first = layout.createLine();
-        first.setLineWidth(width);
-        layout.endLayout();
-        const QString first_text = full_.left(first.textLength()).trimmed();
-        const QString rest = full_.mid(first.textLength()).trimmed();
-        const QString second = fontMetrics().elidedText(rest, Qt::ElideRight, width);
-        setText(rest.isEmpty() ? first_text : first_text + QLatin1Char('\n') + second);
-        setToolTip(second != rest ? full_ : QString());
-    }
-
-    QString full_;
-};
 
 enum Column : int { col_test, col_reference, col_saved, col_metrics, col_size, column_count };
 
@@ -101,13 +69,6 @@ constexpr const char* column_keys[column_count] = {"test", "reference", "saved",
 QString time_text(std::chrono::system_clock::time_point when) {
     const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(when.time_since_epoch()).count();
     return QLocale().toString(QDateTime::fromSecsSinceEpoch(seconds), QLocale::ShortFormat);
-}
-
-QString size_text(std::uintmax_t bytes) {
-    // A comparison's scores are often under a megabyte.
-    const ShownSize size = shown_size(bytes);
-    return size.megabytes ? app::tr("{size:.1f} MB", {{"size", size.value}})
-                          : app::tr("{size:.0f} KB", {{"size", size.value}});
 }
 
 // A saved score's one number for the whole video, at its metric's
@@ -245,7 +206,7 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
         fill_column_menu(*menu);
         menu->popup(header->viewport()->mapToGlobal(position));
     });
-    table_->setMinimumHeight(260);
+    table_->setMinimumHeight(200);
     connect(table_, &QTableWidget::itemSelectionChanged, this, [this] {
         show_details();
         update_buttons();
@@ -259,22 +220,37 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
             menu.exec(table_->viewport()->mapToGlobal(position));
         }
     });
-    layout->addWidget(table_, 1);
 
-    // The selected comparison's scores, in VML Modern a tile a metric
-    // (tiles_a_row of them a row), in Classic two metrics a row, in a box as
-    // tall as every metric needs whatever is selected: were it to grow when a
-    // row is clicked, the table would shrink under the pointer and scroll to
-    // keep the row in view.
+    // The selected comparison's scores, in a column on the table's left
+    // (as Worst Frames' Videos, Conditions and Details): in VML Modern a card
+    // a score, tiles_a_row of them a row, in Classic a row each; scrolled
+    // where they are more than it holds. Its ⓘ button opens every detail
+    // of them (open_details).
     details_ = new QGroupBox(app::tr("Saved scores"));
+    details_->setObjectName(QStringLiteral("savedScoresColumn"));
+    details_->setFixedWidth(scores_column_width());
     auto* details_layout = new QVBoxLayout(details_);
+    auto* details_head = new QHBoxLayout;
+    details_name_ = new ElidedLabel;
+    theme::style(details_name_, "color: {muted};");
+    details_head->addWidget(details_name_, 1);
+    details_button_ = new QToolButton;
+    details_button_->setObjectName(QStringLiteral("savedScoresDetailsButton"));
+    details_button_->setAutoRaise(true);
+    details_button_->setToolTip(app::tr("Every saved score of this comparison: its statistics, when it was saved and "
+                                        "how it was made"));
+    details_button_->setAccessibleName(app::tr("Details"));
+    draw_details_icon();
+    PopupPanel::open_on_press(details_button_, [this] { open_details(); });
+    details_head->addWidget(details_button_);
+    details_layout->addLayout(details_head);
     auto* scroll = new QScrollArea;
     details_scroll_ = scroll;
     scroll->setFrameShape(QFrame::NoFrame);
     scroll->setWidgetResizable(true);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     auto* grid_holder = new QWidget;
-    // The rows at the top, the box's spare height under them: a comparison
-    // of few metrics would otherwise have its rows spread down the box.
+    // The cards at the top, the column's spare height under them.
     auto* holder_layout = new QVBoxLayout(grid_holder);
     holder_layout->setContentsMargins(0, 0, 0, 0);
     details_grid_ = new QGridLayout;
@@ -284,17 +260,11 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     scroll->setWidget(grid_holder);
     scroll->viewport()->setAutoFillBackground(false);  // the box's own background
     grid_holder->setAutoFillBackground(false);
-    details_layout->addWidget(scroll);
-    const int spacing = details_grid_->verticalSpacing() >= 0 ? details_grid_->verticalSpacing()
-                                                               : style()->pixelMetric(QStyle::PM_LayoutVerticalSpacing);
-    const int count = static_cast<int>(metrics().size());
-    const int tile_rows = (count + tiles_a_row - 1) / tiles_a_row;
-    tiles_height_ = tile_rows * tile_height() + (tile_rows - 1) * std::max(spacing, 0) + 2;
-    const int rows = (count + 1) / 2;
-    rows_height_ = rows * QComboBox().sizeHint().height() + (rows - 1) * std::max(spacing, 0) + 2;
-    scroll->setFixedHeight(showing_tiles() ? tiles_height_ : rows_height_);
-    details_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
-    layout->addWidget(details_);
+    details_layout->addWidget(scroll, 1);
+    auto* middle = new QHBoxLayout;
+    middle->addWidget(details_);
+    middle->addWidget(table_, 1);
+    layout->addLayout(middle, 1);
 
     auto* buttons = new QHBoxLayout;
     open_button_ = new QPushButton(app::tr("Open in Metric Graphs"));
@@ -321,6 +291,19 @@ SavedResultsPanel::~SavedResultsPanel() {
     details_reading_->waitForFinished();
 }
 
+void SavedResultsPanel::clear_layout(QLayout* layout) {
+    // Every widget in it, those of layouts within it too (Classic's rows
+    // are one each): deleting a layout leaves its widgets where they were,
+    // drawn under the next comparison's.
+    while (QLayoutItem* item = layout->takeAt(0)) {
+        if (QLayout* inner = item->layout()) {
+            clear_layout(inner);
+        }
+        delete item->widget();
+        delete item;
+    }
+}
+
 std::filesystem::path SavedResultsPanel::base() const {
     return settings_.cache_dir_path().value_or(default_cache_dir());
 }
@@ -340,6 +323,7 @@ void SavedResultsPanel::refresh() {
 void SavedResultsPanel::show_list(std::vector<SavedComparison> list) {
     list_ = std::move(list);
     details_read_ = {};  // its files may have changed since: read again
+    emit listed();
     ++listing_;
     stop_details_read();
     folder_label_->setText(ntr("{count} saved comparison in {directory}", "{count} saved comparisons in {directory}",
@@ -375,7 +359,7 @@ void SavedResultsPanel::show_list(std::vector<SavedComparison> list) {
             metrics.append(metric_label(key));
         }
         table_->setItem(row, col_metrics, new QTableWidgetItem(metrics.join(", ")));
-        table_->setItem(row, col_size, new SortItem(size_text(saved.bytes), static_cast<double>(saved.bytes)));
+        table_->setItem(row, col_size, new SortItem(saved_size_text(saved.bytes), static_cast<double>(saved.bytes)));
     }
     table_->setSortingEnabled(true);
     fit_columns();
@@ -538,34 +522,29 @@ std::vector<const SavedComparison*> SavedResultsPanel::selected() const {
 }
 
 void SavedResultsPanel::show_details() {
-    while (QLayoutItem* item = details_grid_->takeAt(0)) {
-        delete item->widget();
-        delete item;
-    }
-    score_combos_.clear();
-    // Tiles alike across the box, or Classic's two metrics a row (a metric's
-    // label, then its score or the list to pick one from).
+    clear_layout(details_grid_);
+    // Cards alike across the column, or Classic's rows (a metric's label,
+    // then its score and how it was made).
     const bool tiles = showing_tiles();
-    for (int column = 0; column < std::max(tiles_a_row, 6); ++column) {
-        details_grid_->setColumnStretch(column, tiles && column < tiles_a_row ? 1 : 0);
-        details_grid_->setColumnMinimumWidth(column, 0);
+    for (int column = 0; column < tiles_a_row; ++column) {
+        details_grid_->setColumnStretch(column, tiles || column == 1 ? 1 : 0);
     }
-    if (!tiles) {
-        details_grid_->setColumnMinimumWidth(2, 24);  // between the two metrics of a row
-        details_grid_->setColumnStretch(5, 1);
-    }
-    details_scroll_->setFixedHeight(tiles ? tiles_height_ : rows_height_);
     const std::vector<const SavedComparison*> chosen = selected();
-    if (chosen.size() != 1) {
-        details_->setTitle(app::tr("Saved scores"));
-        details_grid_->addWidget(new QLabel(chosen.empty() ? app::tr("Select a comparison to see its saved scores.")
-                                                           : app::tr("Select one comparison to see its saved scores.")),
-                                 0, 0, 1, -1, Qt::AlignLeft | Qt::AlignTop);
+    const bool one = chosen.size() == 1;
+    details_name_->clear_text();
+    details_button_->setEnabled(false);  // until its scores are read
+    if (!one) {
+        auto* none = new QLabel(chosen.empty() ? app::tr("Select a comparison to see its saved scores.")
+                                               : app::tr("Select one comparison to see its saved scores."));
+        none->setWordWrap(true);
+        // As wide as the column, wrapped: aligned, it kept its one line's width.
+        details_grid_->addWidget(none, 0, 0, 1, -1);
         return;
     }
     const SavedComparison& saved = *chosen.front();
-    details_->setTitle(app::tr("Saved scores of {name}", {{"name", qt_text(saved.label)}}));
+    details_name_->set_text(qt_text(saved.label), qt_text(saved.label));
     if (details_read_.folder == saved.folder) {
+        details_button_->setEnabled(true);
         fill_details(saved);
         return;
     }
@@ -580,12 +559,21 @@ void SavedResultsPanel::show_details() {
     details_stop_ = std::make_shared<std::atomic<bool>>(false);
     details_reading_folder_ = saved.folder;
     details_reading_->setFuture(QtConcurrent::run([saved, listing = listing_, stop = details_stop_] {
-        ReadScores read{saved.folder, {}, listing};
+        ReadScores read{saved.folder, {}, {}, listing};
         for (const SavedScoreFile& file : saved.scores) {
             if (*stop) {
                 return read;  // not complete: not used
             }
             read.scores[file.file] = read_saved_score(file.file);
+            if (const std::optional<SavedScore>& score = read.scores[file.file]) {
+                if (const MetricDefinition* metric = find_metric(file.key)) {
+                    const std::vector<float>& values = std::visit(
+                        [](const auto& result) -> const std::vector<float>& { return result.values; }, score->metric);
+                    const std::vector<double> scores(values.begin(), values.end());
+                    read.stats[file.file] =
+                        compute_stats(scores, metric->thresholds, metric->aggregation, metric->direction);
+                }
+            }
         }
         read.complete = true;
         return read;
@@ -603,15 +591,7 @@ void SavedResultsPanel::wait_for_details() {
     QCoreApplication::sendPostedEvents(details_reading_);
 }
 
-void SavedResultsPanel::fill_details(const SavedComparison& saved) {
-    // The scores read (details_read_), as tiles (VML Modern's) or as rows
-    // (Classic's).
-    if (showing_tiles()) {
-        show_tiles(saved);
-    } else {
-        show_rows(saved);
-    }
-}
+void SavedResultsPanel::fill_details(const SavedComparison& saved) { show_scores(saved); }
 
 bool SavedResultsPanel::showing_tiles() const {
     return tiles_.value_or(theme::current_interface() == theme::Interface::modern);
@@ -627,228 +607,374 @@ const SavedScore* SavedResultsPanel::read_score(const std::filesystem::path& fil
     return read != details_read_.scores.end() && read->second ? &*read->second : nullptr;
 }
 
-void SavedResultsPanel::show_rows(const SavedComparison& saved) {
-    // Two metrics a row: a metric's label, then its score or the list to pick
-    // one from (VML Classic's).
-    int placed = 0;
-    const auto add_row = [this, &placed](const QString& label, QWidget* field) {
-        const int row = placed / 2;
-        const int column = (placed % 2) * 3;
-        details_grid_->addWidget(new QLabel(label), row, column);
-        details_grid_->addWidget(field, row, column + 1, Qt::AlignLeft);
-        ++placed;
-    };
-    for (const std::string& key : saved.keys()) {
-        auto* combo = new QComboBox;
-        int first_usable = -1;  // the score used unless another is picked
-        for (const SavedScoreFile& file : saved.scores) {
-            if (file.key != key) {
-                continue;
-            }
-            bool usable = true;
-            // The score, as Metric Graphs' table shows it, then how it was
-            // made, as its file records it.
-            QStringList made{time_text(file.saved)};
-            if (const SavedScore* score = read_score(file.file)) {
-                made.prepend(score_text(key, score->metric));
-                made.append(made_of(score->metric));
-                if (score->outdated) {
-                    // As the Videos tab has it: not used, but scored again.
-                    made.append(app::tr("out of date: scored again when compared"));
-                    usable = false;
-                }
-            } else {
-                made.append(app::tr("can't be read"));
-                usable = false;
-            }
-            combo->addItem(made.join(QStringLiteral(" · ")), text_of(file.file));
-            if (!usable) {
-                if (auto* items = qobject_cast<QStandardItemModel*>(combo->model())) {
-                    items->item(combo->count() - 1)->setEnabled(false);
-                }
-            } else if (first_usable < 0) {
-                first_usable = combo->count() - 1;
-            }
-        }
-        combo->setCurrentIndex(std::max(first_usable, 0));
-        if (const auto picked = picked_.find(saved.folder); picked != picked_.end()) {
-            if (const auto file = picked->second.find(key); file != picked->second.end()) {
-                if (const int index = combo->findData(text_of(file->second)); index >= 0) {
-                    combo->setCurrentIndex(index);
-                }
-            }
-        }
-        if (combo->count() == 1) {
-            // Nothing to pick: its one score, as text (a disabled list is hard to read).
-            add_row(metric_label(key) + ":", new QLabel(combo->itemText(0)));
-            delete combo;
-            continue;
-        }
-        combo->setToolTip(app::tr("Several scores of this metric are saved: the newest is used unless another is "
-                                  "picked."));
-        connect(combo, &QComboBox::currentIndexChanged, this, [this, combo, folder = saved.folder, key] {
-            picked_[folder][key] = path_of(combo->currentData().toString());
-        });
-        add_row(metric_label(key) + ":", combo);
-        score_combos_[key] = combo;
+QString SavedResultsPanel::unusable_note(const std::filesystem::path& file) const {
+    const SavedScore* score = read_score(file);
+    if (score == nullptr) {
+        return app::tr("can't be read");
     }
+    // As the Videos tab has it: not used, but scored again.
+    return score->outdated ? app::tr("out of date: scored again when compared") : QString();
 }
 
-QStringList SavedResultsPanel::made_of(const std::variant<FrameMetricResult, SequenceMetricResult>& score) const {
-    // How a score was made, as its file records it: CPU or GPU, the
-    // implementation, the model, CVVDP's display.
-    QStringList made;
+std::optional<std::filesystem::path> SavedResultsPanel::used_file(const SavedComparison& saved, const std::string& key,
+                                                                  ScoreReads* reads) const {
+    if (const auto picked = picked_.find(saved.folder); picked != picked_.end()) {
+        if (const auto file = picked->second.find(key);
+            file != picked->second.end() && unusable_note(file->second).isEmpty()) {
+            return file->second;
+        }
+    }
+    // By Settings > Saved Results' rule (pick_saved_score), among the files
+    // read: those of the comparison shown, or else read now (only where the
+    // metric has several, whose choice needs how each was made).
+    std::vector<SavedScoreChoice> choices;
+    std::optional<std::filesystem::path> first;
+    for (const SavedScoreFile& file : saved.scores) {
+        if (file.key != key) {
+            continue;
+        }
+        first = first.value_or(file.file);
+        choices.push_back({file.file, file.saved, std::nullopt});
+    }
+    if (choices.size() < 2) {
+        return first;  // nothing to choose; usable or not, it's the one there is
+    }
+    const bool shown = details_read_.folder == saved.folder;
+    for (SavedScoreChoice& choice : choices) {
+        std::optional<SavedScore> read;
+        const SavedScore* score = shown ? read_score(choice.file) : nullptr;
+        if (!shown && reads != nullptr) {
+            const auto [kept, first_read] = reads->try_emplace(choice.file);
+            if (first_read) {
+                kept->second = read_saved_score(choice.file);
+            }
+            score = kept->second ? &*kept->second : nullptr;
+        } else if (!shown) {
+            read = read_saved_score(choice.file);
+            score = read ? &*read : nullptr;
+        }
+        if (score != nullptr && !score->outdated) {
+            choice.provenance =
+                std::visit([](const auto& metric) { return metric.provenance; }, score->metric);
+        }
+    }
+    const SavedScoreRule rule{settings_.saved_score_pick, settings_.saved_score_device, settings_.saved_score_engine};
+    std::function<bool(const SavedScoreChoice&)> videos;
+    if (videos_would_use) {
+        videos = [this, &saved, &key](const SavedScoreChoice& choice) { return videos_would_use(saved, key, choice); };
+    }
+    return pick_saved_score(choices, rule, videos).value_or(*first);
+}
+
+std::optional<std::filesystem::path> SavedResultsPanel::used_score(const std::string& key) const {
+    const std::vector<const SavedComparison*> chosen = selected();
+    if (chosen.size() != 1 || details_read_.folder != chosen.front()->folder) {
+        return std::nullopt;
+    }
+    return used_file(*chosen.front(), key);
+}
+
+void SavedResultsPanel::pick_score(const std::string& key, const std::filesystem::path& file) {
+    const std::vector<const SavedComparison*> chosen = selected();
+    if (chosen.size() != 1) {
+        return;
+    }
+    picked_[chosen.front()->folder][key] = file;
+    show_details();
+}
+
+SavedResultsPanel::Made SavedResultsPanel::made_of(
+    const std::variant<FrameMetricResult, SequenceMetricResult>& score) const {
+    Made made;
     const MetricProvenance& provenance =
         std::visit([](const auto& metric) -> const MetricProvenance& { return metric.provenance; }, score);
-    made.append(provenance.compute_backend == "gpu" ? QStringLiteral("GPU") : QStringLiteral("CPU"));
-    made.append(qt_text(provenance.implementation + " " + provenance.implementation_version).trimmed());
+    made.device = provenance.compute_backend == "gpu" ? QStringLiteral("GPU") : QStringLiteral("CPU");
+    made.made = qt_text(provenance.implementation + " " + provenance.implementation_version).trimmed();
     if (const auto model = provenance.parameters.find("model"); model != provenance.parameters.end()) {
         // The model's own name for a bundled model, not its file's path
         // ("path=C:/.../vmaf_v1.0.16_3d0h.json").
-        made.append(qt_text(model_shown(qt_text(model->second).remove(QLatin1Char('"')).toStdString())));
+        made.model = qt_text(model_shown(qt_text(model->second).remove(QLatin1Char('"')).toStdString()));
     }
     if (const auto* cvvdp = std::get_if<SequenceMetricResult>(&score)) {
         if (const std::optional<CvvdpSettings> display = cvvdp_display_of(*cvvdp)) {
             const std::optional<CvvdpPreset> preset = matching_cvvdp_preset(*display, settings_.cvvdp_presets_json, "");
-            made.append(preset ? app::tr(qt_text(preset->name)) : app::tr("a display of its own"));
+            made.model = preset ? app::tr(qt_text(preset->name)) : app::tr("a display of its own");
         }
     }
     return made;
 }
 
-void SavedResultsPanel::show_tiles(const SavedComparison& saved) {
-    // A tile a metric (make_tile): its name, its score large, and how it was
-    // made, or, with several saved, the list to pick one from (VML Modern's).
-    int placed = 0;
+std::vector<SavedScoreRow> SavedResultsPanel::detail_rows(const SavedComparison& saved) const {
+    std::vector<SavedScoreRow> rows;
     for (const std::string& key : saved.keys()) {
-        auto* combo = new QComboBox;
-        int first_usable = -1;  // the score used unless another is picked
-        QStringList scores;  // each file's score, in the list's order
+        const std::optional<std::filesystem::path> used = used_file(saved, key);
+        const int versions = static_cast<int>(std::count_if(
+            saved.scores.begin(), saved.scores.end(), [&key](const SavedScoreFile& file) { return file.key == key; }));
         for (const SavedScoreFile& file : saved.scores) {
             if (file.key != key) {
                 continue;
             }
-            // How it was made, as its file records it; its score, as Metric
-            // Graphs' table shows it, shown large above (in the list, first).
-            QStringList made{time_text(file.saved)};
-            QString score_shown = QStringLiteral("\u2014");
-            bool usable = true;
+            SavedScoreRow row;
+            row.key = key;
+            row.file = file.file;
+            row.saved = time_text(file.saved);
+            row.note = unusable_note(file.file);
+            row.used = used && *used == file.file;
+            row.versions = versions;
+            row.score = QStringLiteral("\u2014");
             if (const SavedScore* score = read_score(file.file)) {
-                score_shown = score_text(key, score->metric);
-                made.append(made_of(score->metric));
-                if (score->outdated) {
-                    // As the Videos tab has it: not used, but scored again.
-                    made.append(app::tr("out of date: scored again when compared"));
-                    usable = false;
+                row.score = score_text(key, score->metric);
+                const Made made = made_of(score->metric);
+                row.device = made.device;
+                row.made = made.made;
+                row.model = made.model;
+                if (const auto stats = details_read_.stats.find(file.file); stats != details_read_.stats.end()) {
+                    row.stats = stats->second;
                 }
+            }
+            rows.push_back(std::move(row));
+        }
+    }
+    return rows;
+}
+
+SavedScoresPanel* SavedResultsPanel::open_details() {
+    const std::vector<const SavedComparison*> chosen = selected();
+    if (chosen.size() != 1 || details_read_.folder != chosen.front()->folder) {
+        return nullptr;
+    }
+    const SavedComparison& saved = *chosen.front();
+    auto* panel = new SavedScoresPanel(app::tr("Saved scores of {name}", {{"name", qt_text(saved.label)}}),
+                                       detail_rows(saved), settings_.saved_details_columns, this);
+    panel->setAttribute(Qt::WA_DeleteOnClose);
+    panel->set_anchor(details_button_);
+    panel->picked = [this, folder = saved.folder](const std::string& key, const std::filesystem::path& file) {
+        picked_[folder][key] = file;
+        show_details();  // the cards follow; the panel stays open
+    };
+    connect(panel, &SavedScoresPanel::settings_requested, this, [this] { emit scores_settings_requested(); });
+    panel->show_under(details_button_);
+    return panel;
+}
+
+void SavedResultsPanel::show_scores(const SavedComparison& saved) {
+    // A card (VML Modern) or a row (Classic) for each metric's score used,
+    // or for each score saved; with several of a metric, a radio button on
+    // each picks the one used.
+    const bool tiles = showing_tiles();
+    const bool each = settings_.saved_score_versions == "each";
+    int placed = 0;
+    for (const std::string& key : saved.keys()) {
+        const std::optional<std::filesystem::path> used = used_file(saved, key);
+        std::vector<const SavedScoreFile*> files;
+        for (const SavedScoreFile& file : saved.scores) {
+            if (file.key == key && (each || (used && file.file == *used))) {
+                files.push_back(&file);
+            }
+        }
+        const int versions = static_cast<int>(std::count_if(
+            saved.scores.begin(), saved.scores.end(), [&key](const SavedScoreFile& file) { return file.key == key; }));
+        const bool picks = each && files.size() > 1;
+        QButtonGroup* group = nullptr;  // the metric's radio buttons', owned by its first: gone with the cards
+        for (const SavedScoreFile* file : files) {
+            const SavedScore* score = read_score(file->file);
+            const QString value = score != nullptr ? score_text(key, score->metric) : QStringLiteral("\u2014");
+            const QString note = unusable_note(file->file);
+            QString line = note.isEmpty() && score != nullptr ? made_of(score->metric).device : note;
+            QString tip;
+            QString badge;  // "2 saved", drawn to catch the eye
+            if (each && files.size() > 1) {
+                line += QStringLiteral(" \u00B7 ") + time_text(file->saved);
+            } else if (versions > 1) {
+                badge = ntr("{count} saved", "{count} saved", versions);
+                tip = ntr("{count} score of this metric is saved: choose the one used in the details, opened by "
+                          "the button above.",
+                          "{count} scores of this metric are saved: choose the one used in the details, opened by "
+                          "the button above.",
+                          versions);
+            }
+            QWidget* name = nullptr;
+            const QString label = metric_label(key) + (tiles ? QString() : QStringLiteral(":"));
+            if (picks) {
+                auto* pick = new QRadioButton(label);
+                pick->setObjectName("pick_" + QString::fromStdString(key));
+                pick->setChecked(used && *used == file->file);
+                pick->setEnabled(note.isEmpty());
+                pick->setToolTip(app::tr("Use this score"));
+                group = group != nullptr ? group : new QButtonGroup(pick);
+                group->addButton(pick);
+                connect(pick, &QRadioButton::toggled, this,
+                        [this, key, folder = saved.folder, path = file->file](bool on) {
+                            if (on) {
+                                // Shown again once this button's own signal
+                                // is done: showing them deletes it.
+                                picked_[folder][key] = path;
+                                QMetaObject::invokeMethod(this, [this] { show_details(); }, Qt::QueuedConnection);
+                            }
+                        });
+                name = pick;
             } else {
-                made.append(app::tr("can't be read"));
-                usable = false;
+                name = new QLabel(label);
             }
-            scores.append(score_shown);
-            combo->addItem(score_shown + QStringLiteral(" · ") + made.join(QStringLiteral(" · ")), text_of(file.file));
-            combo->setItemData(combo->count() - 1, made.join(QStringLiteral(" · ")), Qt::ToolTipRole);
-            if (!usable) {
-                if (auto* items = qobject_cast<QStandardItemModel*>(combo->model())) {
-                    items->item(combo->count() - 1)->setEnabled(false);
+            if (tiles) {
+                details_grid_->addWidget(make_tile(key, name, value, line, badge, tip), placed / tiles_a_row,
+                                         placed % tiles_a_row);
+            } else {
+                auto* shown = new QLabel(value + QStringLiteral(" \u00B7 ") + line);
+                details_grid_->addWidget(name, placed, 0);
+                auto* value_row = new QHBoxLayout;
+                value_row->addWidget(shown);
+                if (!badge.isEmpty()) {
+                    value_row->addWidget(saved_badge(key, badge, tip));
                 }
-            } else if (first_usable < 0) {
-                first_usable = combo->count() - 1;
+                value_row->addStretch(1);
+                details_grid_->addLayout(value_row, placed, 1);
             }
+            ++placed;
         }
-        combo->setCurrentIndex(std::max(first_usable, 0));
-        if (const auto picked = picked_.find(saved.folder); picked != picked_.end()) {
-            if (const auto file = picked->second.find(key); file != picked->second.end()) {
-                if (const int index = combo->findData(text_of(file->second)); index >= 0) {
-                    combo->setCurrentIndex(index);
-                }
-            }
-        }
-        QLabel* score_label = nullptr;
-        QWidget* tile = make_tile(key, scores.value(combo->currentIndex()), score_label);
-        if (combo->count() == 1) {
-            // Nothing to pick: how its one score was made, as text (a disabled
-            // list is hard to read).
-            auto* made = new MadeLabel(combo->itemData(0, Qt::ToolTipRole).toString());
-            made->setObjectName("made_" + QString::fromStdString(key));
-            theme::style(made, "color: {muted};");
-            tile->layout()->addWidget(made);
-            delete combo;
-        } else {
-            combo->setToolTip(app::tr("Several scores of this metric are saved: the newest is used unless another "
-                                      "is picked."));
-            combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-            combo->setMinimumContentsLength(8);  // fits its tile; the list shows the rest
-            connect(combo, &QComboBox::currentIndexChanged, this,
-                    [this, combo, score_label, scores, folder = saved.folder, key](int index) {
-                        picked_[folder][key] = path_of(combo->currentData().toString());
-                        score_label->setText(scores.value(index));
-                    });
-            tile->layout()->addWidget(combo);
-            score_combos_[key] = combo;
-        }
-        static_cast<QVBoxLayout*>(tile->layout())->addStretch(1);
-        details_grid_->addWidget(tile, placed / tiles_a_row, placed % tiles_a_row);
-        ++placed;
     }
 }
 
-QWidget* SavedResultsPanel::make_tile(const std::string& key, const QString& score, QLabel*& score_label) const {
+QLabel* SavedResultsPanel::saved_badge(const std::string& key, const QString& text, const QString& tip) {
+    // How many scores of a metric are saved, bold in the link's colour: a
+    // choice to make, where a muted line went unseen (the user, 2026-11-25).
+    auto* badge = new QLabel(text);
+    badge->setObjectName("saved_" + QString::fromStdString(key));
+    badge->setToolTip(tip);
+    theme::style(badge, "color: {link}; font-weight: bold;");
+    return badge;
+}
+
+QWidget* SavedResultsPanel::make_tile(const std::string& key, QWidget* name, const QString& score,
+                                      const QString& line, const QString& badge, const QString& badge_tip) const {
     // A frame of its own (a card's tile in VML Modern); its name small and
-    // muted, its score large, as Metric Graphs' table shows it.
+    // muted, its score large, as Metric Graphs' table shows it, then CPU or
+    // GPU and how many are saved.
     auto* tile = new QFrame;
     tile->setObjectName("tile_" + QString::fromStdString(key));
     tile->setFrameShape(QFrame::StyledPanel);
     theme::set_role(tile, "tile");
     tile->setFixedHeight(tile_height());
     auto* tile_layout = new QVBoxLayout(tile);
-    tile_layout->setContentsMargins(10, 6, 10, 6);
+    tile_layout->setContentsMargins(8, 5, 8, 5);
     tile_layout->setSpacing(1);
-    auto* name = new QLabel(metric_label(key));
-    theme::style(name, "color: {muted};");
-    tile_layout->addWidget(name);
-    score_label = new QLabel(score);
+    if (qobject_cast<QLabel*>(name) != nullptr) {
+        theme::style(name, "color: {muted};");
+    }
+    auto* name_row = new QHBoxLayout;
+    name_row->setSpacing(4);
+    name_row->addWidget(name);
+    name_row->addStretch(1);
+    if (!badge.isEmpty()) {
+        name_row->addWidget(saved_badge(key, badge, badge_tip));
+    }
+    tile_layout->addLayout(name_row);
+    auto* score_label = new QLabel(score);
     score_label->setObjectName("score_" + QString::fromStdString(key));
     QFont large = score_label->font();
-    large.setPointSizeF(large.pointSizeF() * 1.6);
+    large.setPointSizeF(large.pointSizeF() * 1.4);
     large.setWeight(QFont::DemiBold);
     score_label->setFont(large);
     tile_layout->addWidget(score_label);
+    auto* made = new ElidedLabel;
+    made->setObjectName("made_" + QString::fromStdString(key));
+    made->set_text(line);
+    theme::style(made, "color: {muted};");
+    tile_layout->addWidget(made);
+    tile_layout->addStretch(1);
     return tile;
 }
 
 int SavedResultsPanel::tile_height() const {
-    // Its name, its score large, and two lines of how it was made (or the
-    // list to pick from), with the frame's margins.
+    // Its name (a radio button's height, where it picks), its score large,
+    // and one line, with the frame's margins.
     const QFontMetrics text = fontMetrics();
     QFont large = font();
-    large.setPointSizeF(large.pointSizeF() * 1.6);
-    const int lines = text.height() + QFontMetrics(large).height() +
-                      std::max(2 * text.lineSpacing(), QComboBox().sizeHint().height());
-    return lines + 12 + 2 * 1 + 4;
+    large.setPointSizeF(large.pointSizeF() * 1.4);
+    const int name = std::max(text.height(), style()->pixelMetric(QStyle::PM_ExclusiveIndicatorHeight) + 2);
+    return name + QFontMetrics(large).height() + text.height() + 10 + 2 * 1 + 4;
 }
 
-QComboBox* SavedResultsPanel::score_choice(const std::string& key) const {
-    const auto found = score_combos_.find(key);
-    return found != score_combos_.end() ? found->second : nullptr;
+int SavedResultsPanel::scores_column_width() const {
+    // Three cards a row, each as wide as the widest metric's name or a long
+    // score large; Classic's rows fit in the same.
+    const QFontMetrics text = fontMetrics();
+    QFont large = font();
+    large.setPointSizeF(large.pointSizeF() * 1.4);
+    large.setWeight(QFont::DemiBold);
+    int card = QFontMetrics(large).horizontalAdvance(QStringLiteral("100.0000"));
+    const int radio = style()->pixelMetric(QStyle::PM_ExclusiveIndicatorWidth) +
+                      style()->pixelMetric(QStyle::PM_RadioButtonLabelSpacing);  // a name after its radio button
+    for (const MetricDefinition& metric : metrics()) {
+        card = std::max(card, text.horizontalAdvance(qt_text(metric.short_label)) + radio);
+    }
+    card += 16 + 2;
+    const int spacing = std::max(style()->pixelMetric(QStyle::PM_LayoutHorizontalSpacing), 6);
+    return tiles_a_row * card + (tiles_a_row - 1) * spacing + 2 * 12 + style()->pixelMetric(QStyle::PM_ScrollBarExtent);
+}
+
+void SavedResultsPanel::scores_settings_changed() { show_details(); }
+
+void SavedResultsPanel::draw_details_icon() {
+    // A circled "i" in the text's colour (U+24D8 is not in every font).
+    const qreal ratio = devicePixelRatioF();
+    const int size = 16;
+    QPixmap pixmap(QSize(size, size) * ratio);
+    pixmap.setDevicePixelRatio(ratio);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    QPen pen(palette().color(QPalette::WindowText));
+    pen.setWidthF(1.3);
+    painter.setPen(pen);
+    painter.drawEllipse(QRectF(1, 1, size - 2, size - 2));
+    pen.setWidthF(1.6);
+    pen.setCapStyle(Qt::RoundCap);
+    painter.setPen(pen);
+    painter.drawLine(QPointF(size / 2.0, 7.0), QPointF(size / 2.0, 11.5));
+    painter.drawPoint(QPointF(size / 2.0, 4.6));
+    painter.end();
+    details_button_->setIcon(QIcon(pixmap));
+}
+
+void SavedResultsPanel::changeEvent(QEvent* event) {
+    QWidget::changeEvent(event);
+    if ((event->type() == QEvent::PaletteChange || event->type() == QEvent::StyleChange) &&
+        details_button_ != nullptr) {
+        draw_details_icon();  // the theme's text colour
+    }
 }
 
 std::vector<LoadedSavedResult> SavedResultsPanel::selected_results() const {
     std::vector<LoadedSavedResult> results;
     for (const SavedComparison* saved : selected()) {
         const auto picked = picked_.find(saved->folder);
-        // The scores the box has read, where it has: not read again.
-        const auto read = [this, saved](const std::filesystem::path& file) -> std::optional<SavedScore> {
+        // The scores the details or the choice among several have read, where
+        // they have: each file read once (on the window's thread, as before).
+        ScoreReads reads;
+        const auto read = [this, saved, &reads](const std::filesystem::path& file) -> std::optional<SavedScore> {
             if (details_read_.folder == saved->folder) {
                 if (const auto found = details_read_.scores.find(file); found != details_read_.scores.end()) {
                     return found->second;
                 }
             }
+            if (const auto kept = reads.find(file); kept != reads.end()) {
+                return std::move(kept->second);  // read once (readable or not), and needed no more
+            }
             return read_saved_score(file);
         };
-        const std::optional<std::pair<ComparisonResult, std::string>> loaded = load_saved_comparison(
-            *saved, picked != picked_.end() ? picked->second : std::map<std::string, std::filesystem::path>{},
-            read);
+        // Each metric's score by the rule (used_file), the one picked first.
+        std::map<std::string, std::filesystem::path> chosen =
+            picked != picked_.end() ? picked->second : std::map<std::string, std::filesystem::path>{};
+        for (const std::string& key : saved->keys()) {
+            if (!chosen.contains(key)) {
+                if (const std::optional<std::filesystem::path> used = used_file(*saved, key, &reads)) {
+                    chosen[key] = *used;
+                }
+            }
+        }
+        const std::optional<std::pair<ComparisonResult, std::string>> loaded =
+            load_saved_comparison(*saved, chosen, read);
         if (loaded) {
             results.push_back({std::make_shared<const ComparisonResult>(loaded->first), qt_text(loaded->second),
                                saved->folder});
@@ -1077,21 +1203,13 @@ void SavedResultsPanel::delete_selected() {
     if (chosen.empty() || locked()) {
         return;
     }
-    QString question =
-        ntr("Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored "
-            "again the next time they are compared.",
-            "Delete the saved scores of {count} comparisons? They can't be brought back: the videos are scored "
-            "again the next time they are compared.",
-            static_cast<long long>(chosen.size()));
-    if (std::any_of(chosen.begin(), chosen.end(), [](const SavedComparison& saved) { return !saved.reference_found; })) {
-        question += "\n\n" + app::tr("Some of them could not be scored again: their reference video is no longer "
-                                      "where it was (marked \"not found\").");
-    }
-    if (!dialogs_.ask_no_default(app::tr("Delete saved results"), question) || locked()) {
+    // The question every deletion of saved results asks (saved_deletion.h),
+    // Settings' Delete... too: what goes, and what can't be scored again.
+    if (dialogs_.message(saved_deletion_message(saved_deletion(chosen, base()))).button != 0 || locked()) {
         return;
     }
     // Through the window's queue of writes, after what is queued there, as
-    // Settings' Clear: a run's saves still queued would otherwise bring a
+    // Settings' Delete...: a run's saves still queued would otherwise bring a
     // folder deleted back, or leave one without its context.json, which the
     // tab can neither list nor delete (issue #133).
     deleting_ = std::make_shared<Deleting>();

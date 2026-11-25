@@ -1,15 +1,74 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "지표를 계산하는 동안 잠김.",
+  "Remove {name} from the list": "목록에서 {name} 제거",
   "Show {name} in Metric Graphs again": "{name}을(를) 지표 그래프에 다시 표시",
   "{name} has no scores yet to show in Metric Graphs.": "{name}에는 아직 지표 그래프에 표시할 점수가 없습니다.",
   "{name} is already in Metric Graphs.": "{name}은(는) 이미 지표 그래프에 있습니다.",
   "{name} is back in Metric Graphs.": "{name}이(가) 지표 그래프에 다시 표시됩니다.",
-  "Locked while metrics are calculated.": "지표를 계산하는 동안 잠김.",
-  "Remove {name} from the list": "목록에서 {name} 제거",
+  "A card for each saved score, to pick the one used": "저장된 점수마다 카드 하나, 사용할 점수를 선택",
+  "CPU or GPU": "CPU 또는 GPU",
+  "Choose columns…": "열 선택…",
+  "Click to use this score.": "클릭하여 이 점수 사용.",
+  "Counting the saved results...": "저장된 결과를 세는 중...",
+  "Delete:": "삭제:",
+  "Deleting saved results...": "저장된 결과를 삭제하는 중...",
+  "Each card shows when its score was saved; the round button on it picks the one used.": "각 카드에는 점수를 저장한 시각이 표시되며, 카드의 둥근 버튼으로 사용할 점수를 선택합니다.",
+  "Every saved result": "저장된 모든 결과",
+  "Every saved score of this comparison: its statistics, when it was saved and how it was made": "이 비교의 모든 저장된 점수: 통계, 저장 시각, 계산 방식",
+  "How far the frames' scores spread from their mean.": "프레임 점수가 평균에서 얼마나 퍼져 있는지.",
+  "Made with": "만든 도구",
+  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and deleting saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "지표를 계산하는 중입니다. ffmpeg 폴더, 저장된 결과 폴더, 저장된 결과 삭제는 실행이 사용하므로 실행이 끝날 때까지 잠깁니다. 나머지는 지금 바꿀 수 있습니다.",
+  "Model or display": "모델 또는 디스플레이",
+  "No saved results in that range.": "그 범위에 저장된 결과가 없습니다.",
+  "No saved results in that range: nothing deleted.": "그 범위에 저장된 결과가 없습니다. 삭제된 항목이 없습니다.",
+  "No saved results in {directory}": "{directory}에 저장된 결과가 없습니다",
+  "Of the newest, or of those the newest version of the app made, these come first. The Videos tab's choice goes by the settings instead.": "가장 최근 것, 또는 앱의 최신 버전이 만든 것 가운데 이것이 먼저입니다. 영상 탭의 선택은 대신 설정을 따릅니다.",
+  "One card per metric, saying how many are saved": "지표마다 카드 하나, 저장된 개수 표시",
+  "Saved results are already being deleted.": "저장된 결과를 이미 삭제하는 중입니다.",
+  "Score": "점수",
+  "Score bands": "점수 구간",
+  "Settings > Saved Results": "설정 > 저장된 결과",
+  "Show:": "표시:",
+  "The bitrate readings and black-bar answers kept with them are deleted too.": "함께 보관된 비트레이트 측정값과 검은 띠 감지 결과도 삭제됩니다.",
+  "The card shows the score used; the details panel, opened by the button over the scores, lists them all, and a click on another uses it.": "카드에는 사용하는 점수가 표시됩니다. 점수 위의 버튼으로 여는 세부 정보 패널에 모두 나열되며, 다른 점수를 클릭하면 그 점수를 사용합니다.",
+  "The details panel, opened by the button over the scores, shows each score's metric and score, and:": "점수 위의 버튼으로 여는 세부 정보 패널에는 각 점수의 지표와 점수, 그리고 다음이 표시됩니다:",
+  "The highest frame's score.": "가장 높은 프레임 점수.",
+  "The lowest frame's score.": "가장 낮은 프레임 점수.",
+  "The middle frame's score.": "중앙값에 해당하는 프레임 점수.",
+  "The score Open in Metric Graphs and the exports take, where a metric has several. Click another of its rows to use that one.": "한 지표에 점수가 여러 개일 때 지표 그래프에서 열기와 내보내기가 사용하는 점수입니다. 다른 행을 클릭하면 그 점수를 사용합니다.",
+  "The score the card shows and Open in Metric Graphs and the exports take, unless you pick another in the details panel. The Videos tab's: the one a run would use again with the settings as they are (where it would use none, the newest).": "카드에 표시되고 지표 그래프에서 열기와 내보내기가 사용하는 점수입니다. 세부 정보 패널에서 다른 것을 선택하지 않으면 이 점수를 씁니다. 영상 탭의 선택: 현재 설정으로 실행하면 다시 사용할 점수(사용할 것이 없으면 가장 최근 것).",
+  "The score {share} of the frames are worse than: the low end where a higher score is better, the high end where a lower one is (Metric Graphs' {share} Low or High).": "프레임의 {share}가 그보다 나쁜 점수: 높을수록 좋은 지표는 아래쪽 끝, 낮을수록 좋은 지표는 위쪽 끝(지표 그래프의 {share} 낮음 또는 높음).",
+  "The share of the frames in each of the metric's score bands, as Metric Graphs' table has them (≥ 95, < 70, ...).": "지표의 각 점수 구간에 속한 프레임 비율로, 지표 그래프의 표와 같습니다(≥ 95, < 70, ...).",
+  "The whole video's score, as Metric Graphs shows it.": "영상 전체의 점수로, 지표 그래프에 표시되는 값과 같습니다.",
+  "Their videos are scored again the next time they are compared.": "다음에 비교할 때 해당 영상의 점수를 다시 계산합니다.",
+  "Those saved from": "저장 기간",
+  "Those saved more than": "저장한 지",
+  "Use this score": "이 점수 사용",
+  "Use:": "사용:",
+  "Used": "사용",
+  "VMAF's model, or the display CVVDP modelled.": "VMAF의 모델, 또는 CVVDP가 모델링한 디스플레이.",
+  "What calculated the score, and its version.": "점수를 계산한 도구와 그 버전.",
+  "When a metric has several saved scores:": "한 지표에 저장된 점수가 여러 개일 때:",
+  "When the score was saved.": "점수를 저장한 시각.",
+  "Whether the score was calculated on the CPU or the GPU.": "점수를 CPU와 GPU 중 어디에서 계산했는지.",
+  "Worst {share}": "가장 나쁜 {share}",
+  "by FFmpeg first": "FFmpeg 우선",
+  "by any engine": "모든 엔진",
+  "by the app's own first": "앱 자체 우선",
+  "on any device": "모든 장치",
+  "on the CPU first": "CPU 우선",
+  "on the GPU first": "GPU 우선",
+  "the newest": "가장 최근 것",
+  "the one made by the newest version of the app": "앱의 최신 버전이 만든 것",
+  "the one the Videos tab would use": "영상 탭이 사용할 것",
+  "{size}, last saved {date}, in {directory}.": "{size}, 마지막 저장 {date}, {directory}.",
+  "{size}, last saved {first} to {last}, in {directory}.": "{size}, 마지막 저장 {first}~{last}, {directory}.",
+  "Folder:": "폴더:",
+  "Saved results": "저장된 결과",
   "Start over": "새로 시작",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "참조 영상을 비우고 모든 테스트 영상을 제거하여 새 비교를 시작합니다. 저장된 결과는 유지됩니다.",
   "Click Start over again to clear the reference.": "'새로 시작'을 한 번 더 클릭하면 참조 영상을 비웁니다.",
-  "Every saved score in this folder is deleted. This can't be undone.": "이 폴더에 저장된 모든 점수가 삭제됩니다. 되돌릴 수 없습니다.",
   "Show details": "세부 정보 표시",
   "Hide details": "세부 정보 숨기기",
   "OK": "확인",
@@ -338,8 +397,6 @@
   "Storage": "저장소",
   "blank = shared user-profile folder": "비워 두면 사용자 프로필의 공유 폴더",
   "Open": "열기",
-  "Saved results:": "저장된 결과:",
-  "Clear saved results": "저장된 결과 지우기",
   "Export folder:": "내보내기 폴더:",
   "Reuse a saved result when a video is added again": "영상을 다시 추가할 때 저장된 결과 재사용",
   "Each session's setup, every run and its steps, and every failure with its full text. Send these files along when reporting a problem.": "각 세션의 설정, 각 실행과 단계, 각 실패의 전체 내용입니다. 문제를 신고할 때 이 파일을 함께 보내 주세요.",
@@ -391,9 +448,6 @@
   "Could not export the log: {error}": "로그를 내보낼 수 없습니다: {error}",
   "There is no log to export yet.": "아직 내보낼 로그가 없습니다.",
   "Log exported to {path}": "로그를 {path}(으)로 내보냈습니다",
-  "There are no saved results to clear.": "지울 저장된 결과가 없습니다.",
-  "Saved results are already being cleared.": "저장된 결과를 이미 지우는 중입니다.",
-  "Clearing saved results...": "저장된 결과를 지우는 중...",
   "Reference video:": "참조 영상:",
   "No reference selected.": "참조 영상이 선택되지 않았습니다.",
   "Add/remove metrics": "지표 추가/제거",
@@ -633,7 +687,6 @@
   "Run files (*{suffix})": "실행 결과 파일 (*{suffix})",
   "Choose folder to save runs into": "실행 결과를 저장할 폴더 선택",
   "Could not {description}: {error}": "{description}할 수 없습니다: {error}",
-  "clear saved results": "저장된 결과 지우기",
   "delete saved results": "저장된 결과 삭제",
   "save {name}": "{name} 저장",
   "export {name}": "{name} 내보내기",
@@ -1264,7 +1317,6 @@
   "Automatic (a discrete GPU first)": "자동 (외장 GPU 우선)",
   "{name} (not found)": "{name} (찾을 수 없음)",
   "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU가 여러 개인 PC에서 VMAF, VMAF v1, SSIMULACRA2, Butteraugli, CVVDP를 계산하는 GPU이며, GPU 디코딩이 자동일 때 이 GPU 제조사의 디코더를 먼저 시도합니다. 이 GPU가 계산할 수 없는 지표는 다른 GPU가 아닌 CPU에서 계산합니다. 자동은 외장 GPU를 먼저 사용합니다.\n\n다음에 앱을 시작할 때 적용됩니다. 명령줄의 --gpu는 한 번의 실행에 대해 선택합니다.",
-  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and Clear saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "지표를 계산하는 중입니다. ffmpeg 폴더, 저장된 결과 폴더, 저장된 결과 지우기는 실행이 사용하므로 실행이 끝날 때까지 잠깁니다. 나머지는 지금 바꿀 수 있습니다.",
   "Locked while metrics are calculated: the run uses it.": "지표를 계산하는 동안 잠김: 실행이 사용합니다.",
   "This video has {test:,} frames, but the reference has {source:,}, even though both are the same length. From the first point where they differ, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "이 동영상은 {test:,}프레임이지만 기준 동영상은 {source:,}프레임입니다. 길이는 같은데도 그렇습니다. 둘이 처음 달라지는 지점부터 각 프레임이 잘못된 기준 프레임과 비교되므로, 그 이후의 모든 점수가 틀립니다. 대개 인코딩 중에 프레임이 복제되거나 빠졌을 때 일어납니다. 소스와 같은 가변 프레임 레이트로 인코딩하면 피할 수 있습니다.",
   "This video may be out of sync with the reference. Only {compared:,} frames were compared, but videos of this length should have {length:,}. If the scores drop suddenly partway through and stay low, this is the likely cause. To find out for sure, turn on {setting}, then right-click this video and choose {recalculate}.": "이 동영상이 기준 동영상과 맞지 않을 수 있습니다. {compared:,}프레임만 비교되었지만, 이 길이의 동영상이라면 {length:,}프레임이어야 합니다. 점수가 중간에 갑자기 떨어져 낮게 유지된다면 이것이 원인일 가능성이 큽니다. 확실히 알아보려면 {setting}을(를) 켜고, 이 동영상을 마우스 오른쪽 버튼으로 클릭한 뒤 {recalculate}을(를) 선택하세요.",
@@ -1337,7 +1389,6 @@
   "Saved scores of {name}": "{name}의 저장된 점수",
   "Select a comparison to see its saved scores.": "비교를 선택하면 저장된 점수를 볼 수 있습니다.",
   "Select one comparison to see its saved scores.": "비교를 하나만 선택하면 저장된 점수를 볼 수 있습니다.",
-  "Several scores of this metric are saved: the newest is used unless another is picked.": "이 지표의 점수가 여러 개 저장되어 있습니다. 다른 것을 선택하지 않으면 가장 최근 것이 사용됩니다.",
   "Size": "크기",
   "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "선택한 프로필에 조건이 없습니다. 설정 > 약한 구간에서 조건을 설정하거나 사전 설정을 선택하세요.",
   "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "약한 구간을 찾는 규칙입니다. 점수와 함께 저장되지 않으며, 지금 점수에서 찾습니다.",
@@ -1347,8 +1398,6 @@
   "{name} (saved)": "{name}(저장됨)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "{directory}의 저장된 결과를 삭제할까요?\n\n이미 채점한 영상은 다시 계산해야 합니다. 참조 영상이 원래 위치에 없는 결과는 유지됩니다. 그 점수는 다시 계산할 수 없기 때문입니다. 이 결과는 저장된 결과 탭에서 삭제하세요.",
-  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "일부는 다시 채점할 수 없습니다. 참조 영상이 원래 위치에 없습니다(\"찾을 수 없음\"으로 표시).",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\n그 위치에 없습니다. 참조 영상이 없으면 이 점수는 다시 계산할 수 없습니다.",
   "Recognize test videos remuxed after scoring (reads each one again)": "채점 후 다시 먹싱한 테스트 영상 인식(각 영상을 다시 읽음)",
   "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "채점 후 먹싱하거나 다시 먹싱한 테스트 영상(원시 스트림을 MKV로, MKV를 MP4로)은 저장된 점수를 유지합니다. 인코딩된 화면으로 식별됩니다.\n\n이를 위해 점수를 저장한 뒤 각 테스트 영상을 한 번 더 읽으며, 파일을 읽는 만큼 시간이 걸립니다(네트워크 공유의 영화는 몇 분). 백그라운드에서 진행되며 계산 중에는 하지 않습니다. 스트림의 시작이 채점한 영상과 같은 영상은 다른 영상의 저장된 점수를 찾은 뒤, 같은 영상인지 확인하기 위해 전체를 읽습니다.\n\n끔: 테스트 영상은 파일로만 식별됩니다.",
@@ -1424,6 +1473,33 @@
   "{low} to {high} metrics": "지표 {low}~{high}개"
  },
  "plurals": {
+  "Deleted the saved scores of {count} comparison.": [
+   "비교 {count}개의 저장된 점수를 삭제했습니다."
+  ],
+  "The saved scores of {count} comparison are deleted. This can't be undone.": [
+   "비교 {count}개의 저장된 점수가 삭제됩니다. 되돌릴 수 없습니다."
+  ],
+  "Would delete {count} comparison's saved scores, {size}.": [
+   "비교 {count}개의 저장된 점수({size})가 삭제됩니다."
+  ],
+  "day ago": [
+   "일이 넘은 결과"
+  ],
+  "{count} of them can't be scored again: its reference video is no longer where it was scored from (marked \"not found\" in the Saved Results tab).": [
+   "그중 {count}개는 다시 채점할 수 없습니다. 채점할 때의 위치에 참조 영상이 더 이상 없습니다(저장된 결과 탭에 \"찾을 수 없음\"으로 표시)."
+  ],
+  "{count} saved": [
+   "{count}개 저장됨"
+  ],
+  "{count} saved result, {size}, saved {first} to {last}, in {directory}": [
+   "저장된 결과 {count}개, {size}, 저장 {first}~{last}, {directory}"
+  ],
+  "{count} saved result, {size}, saved {first}, in {directory}": [
+   "저장된 결과 {count}개, {size}, 저장 {first}, {directory}"
+  ],
+  "{count} score of this metric is saved: choose the one used in the details, opened by the button above.": [
+   "이 지표의 점수가 {count}개 저장되어 있습니다. 위의 버튼으로 여는 세부 정보에서 사용할 점수를 선택하세요."
+  ],
   "Click Remove all again to remove {count} video. Saved results are kept.": ["'모두 제거'를 한 번 더 클릭하면 영상 {count}개를 제거합니다. 저장된 결과는 유지됩니다."],
   "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["'새로 시작'을 한 번 더 클릭하면 참조 영상을 비우고 영상 {count}개를 제거합니다. 저장된 결과는 유지됩니다."],
   "{count} test video does not last as long as the reference ({length}).": ["테스트 동영상 {count}개의 길이가 참조 동영상({length})과 다릅니다."],
@@ -1443,9 +1519,6 @@
   ],
   "about {count} minute": [
    "약 {count}분"
-  ],
-  "{count} saved result, {size:.1f} MB in {directory}": [
-   "저장된 결과 {count}개, {size:.1f}MB, {directory}"
   ],
   "Copied the log to the clipboard ({count} line, the middle left out -- Export log saves all of it).": [
    "로그를 클립보드에 복사했습니다({count}줄, 가운데 생략 — [로그 내보내기]는 전부 저장합니다)."
@@ -1486,9 +1559,6 @@
   "{count} video: {counts}": [
    "영상 {count}개: {counts}"
   ],
-  "Removed {count} saved result.": [
-   "저장된 결과 {count}개를 제거했습니다."
-  ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "체크한 영상 {count}개에 이미 비트레이트 결과가 있습니다.\n\n다시 계산할까요? 결과를 유지하고 결과가 없는 파일만 계산하려면 [아니요]를 선택하세요."
   ],
@@ -1513,17 +1583,11 @@
   "{count} frame in all.": [
    "모두 {count}프레임."
   ],
-  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
-   "비교 {count}개의 저장된 점수를 삭제할까요? 되돌릴 수 없습니다. 다음에 비교할 때 영상의 점수를 다시 계산합니다."
-  ],
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "비교 {count}개의 저장된 점수를 삭제하지 못했습니다. 해당 파일이 열려 있을 수 있습니다."
   ],
   "{count} saved comparison in {directory}": [
    "저장된 비교 {count}개, {directory}"
-  ],
-  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
-   "참조 영상이 없는 결과 {count}개를 유지했습니다. 저장된 결과 탭에서 삭제하세요."
   ],
   "Saved {count} file": [
    "파일 {count}개 저장됨"

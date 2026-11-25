@@ -1,15 +1,74 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "Dikunci selama metrik dihitung.",
+  "Remove {name} from the list": "Hapus {name} dari daftar",
   "Show {name} in Metric Graphs again": "Tampilkan lagi {name} di Grafik metrik",
   "{name} has no scores yet to show in Metric Graphs.": "{name} belum punya skor untuk ditampilkan di Grafik metrik.",
   "{name} is already in Metric Graphs.": "{name} sudah ada di Grafik metrik.",
   "{name} is back in Metric Graphs.": "{name} kembali ada di Grafik metrik.",
-  "Locked while metrics are calculated.": "Dikunci selama metrik dihitung.",
-  "Remove {name} from the list": "Hapus {name} dari daftar",
+  "A card for each saved score, to pick the one used": "Satu kartu untuk setiap skor tersimpan, untuk memilih yang dipakai",
+  "CPU or GPU": "CPU atau GPU",
+  "Choose columns…": "Pilih kolom…",
+  "Click to use this score.": "Klik untuk memakai skor ini.",
+  "Counting the saved results...": "Menghitung hasil tersimpan...",
+  "Delete:": "Hapus:",
+  "Deleting saved results...": "Menghapus hasil tersimpan...",
+  "Each card shows when its score was saved; the round button on it picks the one used.": "Setiap kartu menampilkan kapan skornya disimpan; tombol bulat di kartu memilih yang dipakai.",
+  "Every saved result": "Semua hasil tersimpan",
+  "Every saved score of this comparison: its statistics, when it was saved and how it was made": "Setiap skor tersimpan dari perbandingan ini: statistiknya, kapan disimpan, dan cara pembuatannya",
+  "How far the frames' scores spread from their mean.": "Seberapa jauh skor bingkai menyebar dari rata-ratanya.",
+  "Made with": "Dibuat dengan",
+  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and deleting saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "Metrik sedang dihitung: folder ffmpeg, folder hasil tersimpan, dan penghapusan hasil tersimpan dikunci sampai proses selesai, karena proses memakainya. Yang lain bisa diubah sekarang.",
+  "Model or display": "Model atau layar",
+  "No saved results in that range.": "Tidak ada hasil tersimpan dalam rentang itu.",
+  "No saved results in that range: nothing deleted.": "Tidak ada hasil tersimpan dalam rentang itu: tidak ada yang dihapus.",
+  "No saved results in {directory}": "Tidak ada hasil tersimpan di {directory}",
+  "Of the newest, or of those the newest version of the app made, these come first. The Videos tab's choice goes by the settings instead.": "Di antara yang terbaru, atau yang dibuat versi aplikasi terbaru, ini didahulukan. Pilihan tab Video mengikuti pengaturan sebagai gantinya.",
+  "One card per metric, saying how many are saved": "Satu kartu per metrik, menyebutkan berapa yang tersimpan",
+  "Saved results are already being deleted.": "Hasil tersimpan sudah sedang dihapus.",
+  "Score": "Skor",
+  "Score bands": "Rentang skor",
+  "Settings > Saved Results": "Pengaturan > Hasil tersimpan",
+  "Show:": "Tampilkan:",
+  "The bitrate readings and black-bar answers kept with them are deleted too.": "Pembacaan bitrate dan hasil deteksi bilah hitam yang disimpan bersamanya juga dihapus.",
+  "The card shows the score used; the details panel, opened by the button over the scores, lists them all, and a click on another uses it.": "Kartu menampilkan skor yang dipakai; panel detail, yang dibuka dengan tombol di atas skor, mencantumkan semuanya, dan mengklik yang lain akan memakainya.",
+  "The details panel, opened by the button over the scores, shows each score's metric and score, and:": "Panel detail, yang dibuka dengan tombol di atas skor, menampilkan metrik dan nilai setiap skor, serta:",
+  "The highest frame's score.": "Skor bingkai tertinggi.",
+  "The lowest frame's score.": "Skor bingkai terendah.",
+  "The middle frame's score.": "Skor bingkai tengah (median).",
+  "The score Open in Metric Graphs and the exports take, where a metric has several. Click another of its rows to use that one.": "Skor yang diambil Buka di Grafik metrik dan ekspor, bila satu metrik punya beberapa. Klik baris lainnya untuk memakai yang itu.",
+  "The score the card shows and Open in Metric Graphs and the exports take, unless you pick another in the details panel. The Videos tab's: the one a run would use again with the settings as they are (where it would use none, the newest).": "Skor yang ditampilkan kartu dan diambil Buka di Grafik metrik serta ekspor, kecuali Anda memilih yang lain di panel detail. Milik tab Video: skor yang akan dipakai lagi oleh proses dengan pengaturan saat ini (bila tidak ada, yang terbaru).",
+  "The score {share} of the frames are worse than: the low end where a higher score is better, the high end where a lower one is (Metric Graphs' {share} Low or High).": "Skor yang {share} bingkai lebih buruk darinya: ujung bawah bila skor lebih tinggi lebih baik, ujung atas bila skor lebih rendah yang lebih baik ({share} terbawah atau teratas di Grafik metrik).",
+  "The share of the frames in each of the metric's score bands, as Metric Graphs' table has them (≥ 95, < 70, ...).": "Bagian bingkai di setiap rentang skor metrik, seperti pada tabel Grafik metrik (≥ 95, < 70, ...).",
+  "The whole video's score, as Metric Graphs shows it.": "Skor seluruh video, seperti yang ditampilkan Grafik metrik.",
+  "Their videos are scored again the next time they are compared.": "Videonya akan diberi skor lagi saat dibandingkan berikutnya.",
+  "Those saved from": "Yang disimpan dari",
+  "Those saved more than": "Yang disimpan lebih dari",
+  "Use this score": "Pakai skor ini",
+  "Use:": "Pakai:",
+  "Used": "Dipakai",
+  "VMAF's model, or the display CVVDP modelled.": "Model VMAF, atau layar yang disimulasikan CVVDP.",
+  "What calculated the score, and its version.": "Apa yang menghitung skor, dan versinya.",
+  "When a metric has several saved scores:": "Bila satu metrik punya beberapa skor tersimpan:",
+  "When the score was saved.": "Kapan skor disimpan.",
+  "Whether the score was calculated on the CPU or the GPU.": "Apakah skor dihitung di CPU atau GPU.",
+  "Worst {share}": "{share} terburuk",
+  "by FFmpeg first": "oleh FFmpeg lebih dulu",
+  "by any engine": "oleh mesin apa pun",
+  "by the app's own first": "oleh milik aplikasi lebih dulu",
+  "on any device": "di perangkat apa pun",
+  "on the CPU first": "di CPU lebih dulu",
+  "on the GPU first": "di GPU lebih dulu",
+  "the newest": "yang terbaru",
+  "the one made by the newest version of the app": "yang dibuat versi aplikasi terbaru",
+  "the one the Videos tab would use": "yang akan dipakai tab Video",
+  "{size}, last saved {date}, in {directory}.": "{size}, terakhir disimpan {date}, di {directory}.",
+  "{size}, last saved {first} to {last}, in {directory}.": "{size}, terakhir disimpan {first} sampai {last}, di {directory}.",
+  "Folder:": "Folder:",
+  "Saved results": "Hasil tersimpan",
   "Start over": "Mulai ulang",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Mengosongkan referensi dan menghapus semua video uji, untuk perbandingan baru. Hasil tersimpan tetap ada.",
   "Click Start over again to clear the reference.": "Klik \"Mulai ulang\" lagi untuk mengosongkan referensi.",
-  "Every saved score in this folder is deleted. This can't be undone.": "Semua skor tersimpan di folder ini dihapus. Tindakan ini tidak dapat dibatalkan.",
   "Show details": "Tampilkan detail",
   "Hide details": "Sembunyikan detail",
   "OK": "OK",
@@ -343,8 +402,6 @@
   "Storage": "Penyimpanan",
   "blank = shared user-profile folder": "Kosong = folder bersama di profil pengguna",
   "Open": "Buka",
-  "Saved results:": "Hasil tersimpan:",
-  "Clear saved results": "Hapus hasil tersimpan",
   "Export folder:": "Folder ekspor:",
   "Reuse a saved result when a video is added again": "Gunakan ulang hasil tersimpan saat video ditambahkan lagi",
   "Each session's setup, every run and its steps, and every failure with its full text. Send these files along when reporting a problem.": "Pengaturan tiap sesi, setiap proses dan langkahnya, serta setiap kegagalan beserta teks lengkapnya. Kirim file ini saat melaporkan masalah.",
@@ -396,9 +453,6 @@
   "Could not export the log: {error}": "Tidak dapat mengekspor log: {error}",
   "There is no log to export yet.": "Belum ada log untuk diekspor.",
   "Log exported to {path}": "Log diekspor ke {path}",
-  "There are no saved results to clear.": "Tidak ada hasil tersimpan untuk dihapus.",
-  "Saved results are already being cleared.": "Hasil tersimpan sedang dihapus.",
-  "Clearing saved results...": "Menghapus hasil tersimpan...",
   "Reference video:": "Video referensi:",
   "No reference selected.": "Belum ada referensi yang dipilih.",
   "Add/remove metrics": "Tambah/hapus metrik",
@@ -634,7 +688,6 @@
   "This saved run was measured against:\n    {source}\n\nbut the selected reference is:\n    {path}\n\nScores from two different references cannot be compared. Switch the reference to the one this run used?": "Proses tersimpan ini diukur terhadap:\n    {source}\n\ntetapi referensi yang dipilih adalah:\n    {path}\n\nSkor terhadap referensi yang berbeda tidak dapat dibandingkan. Beralih ke referensi yang dipakai proses ini?",
   "Choose folder to save runs into": "Pilih folder untuk menyimpan proses",
   "Could not {description}: {error}": "Tidak dapat {description}: {error}",
-  "clear saved results": "menghapus hasil tersimpan",
   "delete saved results": "menghapus hasil tersimpan",
   "save {name}": "menyimpan {name}",
   "export {name}": "mengekspor {name}",
@@ -1264,7 +1317,6 @@
   "Automatic (a discrete GPU first)": "Otomatis (GPU terpisah lebih dulu)",
   "{name} (not found)": "{name} (tidak ditemukan)",
   "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU yang menghitung VMAF, VMAF v1, SSIMULACRA2, Butteraugli, dan CVVDP pada PC yang punya lebih dari satu, dan dekoder buatan pabrikannya dicoba lebih dulu saat dekode GPU otomatis. Metrik yang tidak bisa dihitung GPU-nya dihitung di CPU, bukan di GPU lain. Otomatis memakai GPU terpisah lebih dulu.\n\nBerlaku saat aplikasi dijalankan berikutnya; --gpu di baris perintah memilih untuk satu kali jalan.",
-  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and Clear saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "Metrik sedang dihitung: folder ffmpeg, folder hasil tersimpan, dan Hapus hasil tersimpan dikunci sampai proses selesai, karena proses memakainya. Yang lain bisa diubah sekarang.",
   "Locked while metrics are calculated: the run uses it.": "Dikunci selama metrik dihitung: proses memakainya.",
   "This video has {test:,} frames, but the reference has {source:,}, even though both are the same length. From the first point where they differ, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "Video ini punya {test:,} frame, tetapi referensinya punya {source:,}, padahal panjang keduanya sama. Mulai dari titik pertama keduanya berbeda, setiap frame dibandingkan dengan frame referensi yang salah, jadi semua skor setelah titik itu salah. Biasanya ini terjadi saat frame diduplikasi atau dibuang ketika encoding. Encoding dengan frame rate variabel yang sama dengan sumbernya mencegahnya.",
   "This video may be out of sync with the reference. Only {compared:,} frames were compared, but videos of this length should have {length:,}. If the scores drop suddenly partway through and stay low, this is the likely cause. To find out for sure, turn on {setting}, then right-click this video and choose {recalculate}.": "Video ini mungkin tidak sinkron dengan referensi. Hanya {compared:,} frame yang dibandingkan, padahal video sepanjang ini seharusnya punya {length:,}. Jika skor tiba-tiba turun di tengah jalan dan tetap rendah, inilah kemungkinan penyebabnya. Untuk memastikannya, aktifkan {setting}, lalu klik kanan video ini dan pilih {recalculate}.",
@@ -1337,7 +1389,6 @@
   "Saved scores of {name}": "Skor tersimpan {name}",
   "Select a comparison to see its saved scores.": "Pilih perbandingan untuk melihat skor tersimpannya.",
   "Select one comparison to see its saved scores.": "Pilih satu perbandingan saja untuk melihat skor tersimpannya.",
-  "Several scores of this metric are saved: the newest is used unless another is picked.": "Ada beberapa skor tersimpan untuk metrik ini: yang terbaru dipakai kecuali dipilih yang lain.",
   "Size": "Ukuran",
   "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "Profil yang dipilih tidak punya syarat: atur di Pengaturan > Segmen lemah, atau pilih preset.",
   "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "Aturan untuk menemukan segmen lemah: aturan ini tidak disimpan bersama skor, tetapi diterapkan pada skor sekarang.",
@@ -1347,8 +1398,6 @@
   "{name} (saved)": "{name} (tersimpan)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "Hapus hasil tersimpan dari {directory}?\n\nVideo yang sudah dinilai harus dihitung ulang. Hasil yang video referensinya tidak lagi berada di tempat semula tetap disimpan: skornya tidak dapat dihitung ulang. Hapus hasil tersebut di tab Hasil tersimpan.",
-  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Beberapa di antaranya tidak dapat dinilai ulang: video referensinya tidak lagi berada di tempat semula (bertanda \"tidak ditemukan\").",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nTidak ditemukan di sana: tanpanya, skor ini tidak dapat dihitung ulang.",
   "Recognize test videos remuxed after scoring (reads each one again)": "Kenali video uji yang di-remux setelah dinilai (membaca masing-masing lagi)",
   "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "Video uji yang di-mux atau di-remux setelah dinilai (stream mentahnya ke MKV, MKV ke MP4) tetap memakai skor tersimpannya: video dikenali dari gambar terkodenya.\n\nUntuk itu setiap video uji dibaca sekali lagi setelah skornya disimpan, selama waktu membaca filenya (beberapa menit untuk film di share jaringan), di latar belakang dan tidak pernah saat perhitungan; dan video yang stream-nya diawali seperti stream video yang sudah dinilai dibaca seluruhnya untuk mengetahui apakah itu video yang sama, setelah skor tersimpan video lain ditemukan.\n\nNonaktif: video uji hanya dikenali dari filenya.",
@@ -1424,6 +1473,33 @@
   "{low} to {high} metrics": "{low} hingga {high} metrik"
  },
  "plurals": {
+  "Deleted the saved scores of {count} comparison.": [
+   "Skor tersimpan dari {count} perbandingan dihapus."
+  ],
+  "The saved scores of {count} comparison are deleted. This can't be undone.": [
+   "Skor tersimpan dari {count} perbandingan dihapus. Ini tidak dapat dibatalkan."
+  ],
+  "Would delete {count} comparison's saved scores, {size}.": [
+   "Akan menghapus skor tersimpan dari {count} perbandingan, {size}."
+  ],
+  "day ago": [
+   "hari lalu"
+  ],
+  "{count} of them can't be scored again: its reference video is no longer where it was scored from (marked \"not found\" in the Saved Results tab).": [
+   "{count} di antaranya tidak dapat dinilai lagi: video referensinya tidak lagi berada di tempat asal penilaiannya (ditandai \"tidak ditemukan\" di tab Hasil tersimpan)."
+  ],
+  "{count} saved": [
+   "{count} tersimpan"
+  ],
+  "{count} saved result, {size}, saved {first} to {last}, in {directory}": [
+   "{count} hasil tersimpan, {size}, disimpan {first} sampai {last}, di {directory}"
+  ],
+  "{count} saved result, {size}, saved {first}, in {directory}": [
+   "{count} hasil tersimpan, {size}, disimpan {first}, di {directory}"
+  ],
+  "{count} score of this metric is saved: choose the one used in the details, opened by the button above.": [
+   "{count} skor metrik ini tersimpan: pilih yang dipakai di detail, yang dibuka dengan tombol di atas."
+  ],
   "Click Remove all again to remove {count} video. Saved results are kept.": ["Klik \"Hapus semua\" lagi untuk menghapus {count} video. Hasil tersimpan tetap ada."],
   "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["Klik \"Mulai ulang\" lagi untuk mengosongkan referensi dan menghapus {count} video. Hasil tersimpan tetap ada."],
   "{count} test video does not last as long as the reference ({length}).": ["{count} video uji tidak sama panjang dengan referensi ({length})."],
@@ -1443,9 +1519,6 @@
   ],
   "about {count} minute": [
    "sekitar {count} menit"
-  ],
-  "{count} saved result, {size:.1f} MB in {directory}": [
-   "{count} hasil tersimpan, {size:.1f} MB di {directory}"
   ],
   "Copied the log to the clipboard ({count} line, the middle left out -- Export log saves all of it).": [
    "Log disalin ke papan klip ({count} baris, bagian tengah dihilangkan — Ekspor log menyimpan semuanya)."
@@ -1486,9 +1559,6 @@
   "{count} video: {counts}": [
    "{count} video: {counts}"
   ],
-  "Removed {count} saved result.": [
-   "{count} hasil tersimpan dihapus."
-  ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "{count} video yang dipilih sudah memiliki hasil bitrate.\n\nHitung ulang? Pilih Tidak untuk mempertahankan hasilnya dan hanya menghitung file yang belum punya hasil."
   ],
@@ -1513,17 +1583,11 @@
   "{count} frame in all.": [
    "total {count} bingkai."
   ],
-  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
-   "Hapus skor tersimpan dari {count} perbandingan? Skor tidak dapat dikembalikan: video akan diberi skor lagi saat dibandingkan berikutnya."
-  ],
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "Skor tersimpan dari {count} perbandingan tidak dapat dihapus: salah satu filenya mungkin sedang terbuka."
   ],
   "{count} saved comparison in {directory}": [
    "{count} perbandingan tersimpan di {directory}"
-  ],
-  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
-   "{count} hasil yang video referensinya hilang tetap disimpan: hapus di tab Hasil tersimpan."
   ],
   "Saved {count} file": [
    "{count} file disimpan"

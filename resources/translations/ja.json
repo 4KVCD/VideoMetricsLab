@@ -1,15 +1,74 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "指標の計算中はロックされます。",
+  "Remove {name} from the list": "{name} をリストから削除",
   "Show {name} in Metric Graphs again": "{name} を指標グラフに再表示",
   "{name} has no scores yet to show in Metric Graphs.": "{name} には指標グラフに表示するスコアがまだありません。",
   "{name} is already in Metric Graphs.": "{name} はすでに指標グラフにあります。",
   "{name} is back in Metric Graphs.": "{name} を指標グラフに戻しました。",
-  "Locked while metrics are calculated.": "指標の計算中はロックされます。",
-  "Remove {name} from the list": "{name} をリストから削除",
+  "A card for each saved score, to pick the one used": "保存済みのスコアごとに 1 枚のカード。使うものを選べます",
+  "CPU or GPU": "CPU または GPU",
+  "Choose columns…": "列を選択…",
+  "Click to use this score.": "クリックするとこのスコアを使います。",
+  "Counting the saved results...": "保存済みの結果を数えています...",
+  "Delete:": "削除：",
+  "Deleting saved results...": "保存済みの結果を削除しています...",
+  "Each card shows when its score was saved; the round button on it picks the one used.": "各カードにはスコアを保存した日時が表示されます。カード上の丸いボタンで、使うスコアを選びます。",
+  "Every saved result": "すべての保存済みの結果",
+  "Every saved score of this comparison: its statistics, when it was saved and how it was made": "この比較のすべての保存済みスコア：統計、保存日時、作成方法",
+  "How far the frames' scores spread from their mean.": "各フレームのスコアが平均からどれだけばらつくか。",
+  "Made with": "作成ツール",
+  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and deleting saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "指標を計算中です。ffmpeg のフォルダー、保存済み結果のフォルダー、保存済みの結果の削除は実行が使うため、実行が終わるまでロックされます。それ以外はいま変更できます。",
+  "Model or display": "モデルまたはディスプレイ",
+  "No saved results in that range.": "その範囲に保存済みの結果はありません。",
+  "No saved results in that range: nothing deleted.": "その範囲に保存済みの結果はありません。何も削除されませんでした。",
+  "No saved results in {directory}": "{directory} に保存済みの結果はありません",
+  "Of the newest, or of those the newest version of the app made, these come first. The Videos tab's choice goes by the settings instead.": "最新のもの、またはアプリの最新バージョンで作成されたものの中で、これらが優先されます。動画タブの選択は、代わりに設定に従います。",
+  "One card per metric, saying how many are saved": "指標ごとに 1 枚のカード。保存数を表示します",
+  "Saved results are already being deleted.": "保存済みの結果はすでに削除中です。",
+  "Score": "スコア",
+  "Score bands": "スコア帯",
+  "Settings > Saved Results": "設定 > 保存済みの結果",
+  "Show:": "表示：",
+  "The bitrate readings and black-bar answers kept with them are deleted too.": "一緒に保存されているビットレートの読み取り結果と黒帯の検出結果も削除されます。",
+  "The card shows the score used; the details panel, opened by the button over the scores, lists them all, and a click on another uses it.": "カードには使うスコアが表示されます。スコアの上のボタンで開く詳細パネルにはすべてが一覧表示され、別のスコアをクリックするとそれが使われます。",
+  "The details panel, opened by the button over the scores, shows each score's metric and score, and:": "スコアの上のボタンで開く詳細パネルには、各スコアの指標とスコアに加えて、次の項目が表示されます：",
+  "The highest frame's score.": "最も高いフレームのスコア。",
+  "The lowest frame's score.": "最も低いフレームのスコア。",
+  "The middle frame's score.": "中央値にあたるフレームのスコア。",
+  "The score Open in Metric Graphs and the exports take, where a metric has several. Click another of its rows to use that one.": "1 つの指標に複数ある場合に、「指標グラフで開く」とエクスポートが使うスコア。別の行をクリックするとそちらを使います。",
+  "The score the card shows and Open in Metric Graphs and the exports take, unless you pick another in the details panel. The Videos tab's: the one a run would use again with the settings as they are (where it would use none, the newest).": "カードに表示され、「指標グラフで開く」とエクスポートが使うスコア。詳細パネルで別のものを選ばない限り、これが使われます。動画タブの選択：現在の設定で実行したときに再び使われるスコア（使われるものがない場合は最新のもの）。",
+  "The score {share} of the frames are worse than: the low end where a higher score is better, the high end where a lower one is (Metric Graphs' {share} Low or High).": "フレームの {share} がそれより悪いスコア：高いほど良い指標では下端、低いほど良い指標では上端（指標グラフの {share} 低 または 高）。",
+  "The share of the frames in each of the metric's score bands, as Metric Graphs' table has them (≥ 95, < 70, ...).": "指標の各スコア帯に入るフレームの割合。指標グラフの表と同じ区分です（≥ 95、< 70、...）。",
+  "The whole video's score, as Metric Graphs shows it.": "動画全体のスコア（指標グラフの表示と同じ）。",
+  "Their videos are scored again the next time they are compared.": "次に比較するときに、それらの動画が再びスコア計算されます。",
+  "Those saved from": "保存期間",
+  "Those saved more than": "保存が",
+  "Use this score": "このスコアを使う",
+  "Use:": "使用：",
+  "Used": "使用中",
+  "VMAF's model, or the display CVVDP modelled.": "VMAF のモデル、または CVVDP がモデル化したディスプレイ。",
+  "What calculated the score, and its version.": "スコアを計算したものとそのバージョン。",
+  "When a metric has several saved scores:": "1 つの指標に複数の保存済みスコアがあるとき：",
+  "When the score was saved.": "スコアを保存した日時。",
+  "Whether the score was calculated on the CPU or the GPU.": "スコアを CPU と GPU のどちらで計算したか。",
+  "Worst {share}": "最悪 {share}",
+  "by FFmpeg first": "FFmpeg を優先",
+  "by any engine": "エンジンを問わず",
+  "by the app's own first": "アプリ独自のものを優先",
+  "on any device": "デバイスを問わず",
+  "on the CPU first": "CPU を優先",
+  "on the GPU first": "GPU を優先",
+  "the newest": "最新のもの",
+  "the one made by the newest version of the app": "アプリの最新バージョンで作成したもの",
+  "the one the Videos tab would use": "動画タブが使うもの",
+  "{size}, last saved {date}, in {directory}.": "{size}、最終保存 {date}（{directory}）。",
+  "{size}, last saved {first} to {last}, in {directory}.": "{size}、最終保存 {first}～{last}（{directory}）。",
+  "Folder:": "フォルダー：",
+  "Saved results": "保存済みの結果",
   "Start over": "最初からやり直す",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "参照動画をクリアし、すべてのテスト動画を削除して、新しい比較を始めます。保存済みの結果は残ります。",
   "Click Start over again to clear the reference.": "もう一度「最初からやり直す」をクリックすると参照動画をクリアします。",
-  "Every saved score in this folder is deleted. This can't be undone.": "このフォルダーに保存されたスコアはすべて削除されます。元に戻すことはできません。",
   "Show details": "詳細を表示",
   "Hide details": "詳細を隠す",
   "OK": "OK",
@@ -338,8 +397,6 @@
   "Storage": "保存場所",
   "blank = shared user-profile folder": "空欄 = ユーザープロファイルの共有フォルダー",
   "Open": "開く",
-  "Saved results:": "保存済みの結果：",
-  "Clear saved results": "保存済みの結果を消去",
   "Export folder:": "エクスポート先：",
   "Reuse a saved result when a video is added again": "動画を再び追加したときに保存済みの結果を再利用する",
   "Each session's setup, every run and its steps, and every failure with its full text. Send these files along when reporting a problem.": "各セッションの設定、各実行とその手順、各失敗の全文。問題を報告するときはこれらのファイルを送ってください。",
@@ -391,9 +448,6 @@
   "Could not export the log: {error}": "ログをエクスポートできませんでした：{error}",
   "There is no log to export yet.": "エクスポートできるログはまだありません。",
   "Log exported to {path}": "ログを {path} にエクスポートしました",
-  "There are no saved results to clear.": "消去できる保存済みの結果はありません。",
-  "Saved results are already being cleared.": "保存済みの結果はすでに消去中です。",
-  "Clearing saved results...": "保存済みの結果を消去しています...",
   "Reference video:": "参照動画：",
   "No reference selected.": "参照動画が選択されていません。",
   "Add/remove metrics": "指標の追加と削除",
@@ -633,7 +687,6 @@
   "Run files (*{suffix})": "実行結果ファイル (*{suffix})",
   "Choose folder to save runs into": "実行結果を保存するフォルダーを選択",
   "Could not {description}: {error}": "{description}できませんでした：{error}",
-  "clear saved results": "保存済みの結果を消去",
   "delete saved results": "保存済みの結果を削除",
   "save {name}": "{name} を保存",
   "export {name}": "{name} をエクスポート",
@@ -1264,7 +1317,6 @@
   "Automatic (a discrete GPU first)": "自動 (単体 GPU を優先)",
   "{name} (not found)": "{name} (見つかりません)",
   "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU が複数ある PC で VMAF、VMAF v1、SSIMULACRA2、Butteraugli、CVVDP を計算する GPU です。GPU デコードが自動のときは、この GPU のメーカーのデコーダーが最初に試されます。この GPU で計算できない指標は、別の GPU ではなく CPU で計算されます。自動では単体 GPU が優先されます。\n\n次回アプリを起動したときに反映されます。コマンドラインの --gpu は 1 回の実行に対して選びます。",
-  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and Clear saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "指標を計算中です。ffmpeg のフォルダー、保存済み結果のフォルダー、「保存済みの結果を消去」は実行が使うため、実行が終わるまでロックされます。それ以外はいま変更できます。",
   "Locked while metrics are calculated: the run uses it.": "指標の計算中はロックされます。実行がこれを使います。",
   "This video has {test:,} frames, but the reference has {source:,}, even though both are the same length. From the first point where they differ, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "この動画は {test:,} フレームですが、基準動画は {source:,} フレームです。長さは同じです。両者が最初に食い違う位置から、各フレームは誤った基準フレームと比較されるため、それ以降のスコアはすべて誤りです。多くはエンコード時にフレームが複製されたり落とされたりしたことが原因です。ソースに合わせた可変フレームレートでエンコードすれば防げます。",
   "This video may be out of sync with the reference. Only {compared:,} frames were compared, but videos of this length should have {length:,}. If the scores drop suddenly partway through and stay low, this is the likely cause. To find out for sure, turn on {setting}, then right-click this video and choose {recalculate}.": "この動画は基準動画とずれている可能性があります。比較されたのは {compared:,} フレームだけですが、この長さの動画なら {length:,} フレームあるはずです。スコアが途中で急に下がり、そのまま低いなら、これが原因と考えられます。確かめるには {setting} をオンにしてから、この動画を右クリックして「{recalculate}」を選んでください。",
@@ -1337,7 +1389,6 @@
   "Saved scores of {name}": "{name} の保存済みのスコア",
   "Select a comparison to see its saved scores.": "比較を選択すると、保存済みのスコアが表示されます。",
   "Select one comparison to see its saved scores.": "比較を 1 つだけ選択すると、保存済みのスコアが表示されます。",
-  "Several scores of this metric are saved: the newest is used unless another is picked.": "この指標には複数のスコアが保存されています。別のものを選ばない限り、最新のものが使われます。",
   "Size": "サイズ",
   "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "選択したプロファイルには条件がありません。設定 > 弱い区間 で条件を設定するか、プリセットを選んでください。",
   "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "弱い区間を見つけるためのルール。スコアと一緒には保存されず、今スコアから求められます。",
@@ -1347,8 +1398,6 @@
   "{name} (saved)": "{name}（保存済み）",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "{directory} の保存済みの結果を削除しますか？\n\n採点済みの動画は再計算が必要になります。参照動画が元の場所にない結果は残されます。そのスコアは再計算できないためです。それらは「保存済みの結果」タブで削除してください。",
-  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "一部は再採点できません。参照動画が元の場所にありません（「見つかりません」と表示）。",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nそこに見つかりません。参照動画がないと、これらのスコアは再計算できません。",
   "Recognize test videos remuxed after scoring (reads each one again)": "採点後に再多重化されたテスト動画を認識する（各動画をもう一度読み込みます）",
   "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "採点後に多重化または再多重化されたテスト動画（生ストリームを MKV に、MKV を MP4 に）は、保存済みのスコアを引き継ぎます。符号化された画像によって識別されます。\n\nそのため、スコアの保存後に各テスト動画をもう一度読み込みます。ファイルの読み込みと同じ時間がかかり（ネットワーク共有上の映画で数分）、バックグラウンドで行われ、計算中には行われません。また、ストリームの先頭が採点済みの動画と同じ動画は、他の動画の保存済みスコアが見つかった後、同じ動画かどうかを判定するためにすべて読み込まれます。\n\nオフ：テスト動画はファイルによってのみ識別されます。",
@@ -1424,6 +1473,33 @@
   "{low} to {high} metrics": "{low}〜{high} 個の指標"
  },
  "plurals": {
+  "Deleted the saved scores of {count} comparison.": [
+   "{count} 件の比較の保存済みスコアを削除しました。"
+  ],
+  "The saved scores of {count} comparison are deleted. This can't be undone.": [
+   "{count} 件の比較の保存済みスコアを削除します。元に戻せません。"
+  ],
+  "Would delete {count} comparison's saved scores, {size}.": [
+   "{count} 件の比較の保存済みスコア（{size}）が削除されます。"
+  ],
+  "day ago": [
+   "日より前のもの"
+  ],
+  "{count} of them can't be scored again: its reference video is no longer where it was scored from (marked \"not found\" in the Saved Results tab).": [
+   "そのうち {count} 件は再びスコア計算できません。採点したときの場所に参照動画がもうありません（保存済みの結果タブで「見つかりません」と表示）。"
+  ],
+  "{count} saved": [
+   "保存 {count} 件"
+  ],
+  "{count} saved result, {size}, saved {first} to {last}, in {directory}": [
+   "保存済みの結果 {count} 件、{size}、保存 {first}～{last}（{directory}）"
+  ],
+  "{count} saved result, {size}, saved {first}, in {directory}": [
+   "保存済みの結果 {count} 件、{size}、保存 {first}（{directory}）"
+  ],
+  "{count} score of this metric is saved: choose the one used in the details, opened by the button above.": [
+   "この指標には {count} 件のスコアが保存されています。上のボタンで開く詳細で、使うものを選んでください。"
+  ],
   "Click Remove all again to remove {count} video. Saved results are kept.": ["もう一度「すべて削除」をクリックすると {count} 本の動画を削除します。保存済みの結果は残ります。"],
   "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["もう一度「最初からやり直す」をクリックすると参照動画をクリアし、{count} 本の動画を削除します。保存済みの結果は残ります。"],
   "{count} test video does not last as long as the reference ({length}).": ["{count} 本のテスト動画の長さがリファレンス（{length}）と異なります。"],
@@ -1443,9 +1519,6 @@
   ],
   "about {count} minute": [
    "約 {count} 分"
-  ],
-  "{count} saved result, {size:.1f} MB in {directory}": [
-   "保存済みの結果 {count} 件、{size:.1f} MB（{directory}）"
   ],
   "Copied the log to the clipboard ({count} line, the middle left out -- Export log saves all of it).": [
    "ログをクリップボードにコピーしました（{count} 行、中間は省略。［ログをエクスポート］ならすべて保存されます）。"
@@ -1486,9 +1559,6 @@
   "{count} video: {counts}": [
    "動画 {count} 本：{counts}"
   ],
-  "Removed {count} saved result.": [
-   "保存済みの結果を {count} 件削除しました。"
-  ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "チェックを入れた {count} 本の動画には、すでにビットレートの結果があります。\n\nそれらを再計算しますか？ 結果を残して結果のないファイルだけを計算するには［いいえ］を選んでください。"
   ],
@@ -1513,17 +1583,11 @@
   "{count} frame in all.": [
    "合計 {count} フレーム。"
   ],
-  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
-   "{count} 件の比較の保存済みスコアを削除しますか？元に戻せません。次に比較するときに動画が再びスコア計算されます。"
-  ],
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "{count} 件の比較の保存済みスコアを削除できませんでした。そのファイルが開かれている可能性があります。"
   ],
   "{count} saved comparison in {directory}": [
    "保存済みの比較 {count} 件（{directory}）"
-  ],
-  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
-   "参照動画がない {count} 件の結果を残しました。「保存済みの結果」タブで削除してください。"
   ],
   "Saved {count} file": [
    "{count} 個のファイルを保存しました"

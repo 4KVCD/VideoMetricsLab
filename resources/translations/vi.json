@@ -1,15 +1,74 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "Bị khóa khi đang tính chỉ số.",
+  "Remove {name} from the list": "Bỏ {name} khỏi danh sách",
   "Show {name} in Metric Graphs again": "Hiện lại {name} trong Biểu đồ chỉ số",
   "{name} has no scores yet to show in Metric Graphs.": "{name} chưa có điểm để hiển thị trong Biểu đồ chỉ số.",
   "{name} is already in Metric Graphs.": "{name} đã có trong Biểu đồ chỉ số.",
   "{name} is back in Metric Graphs.": "{name} đã trở lại Biểu đồ chỉ số.",
-  "Locked while metrics are calculated.": "Bị khóa khi đang tính chỉ số.",
-  "Remove {name} from the list": "Bỏ {name} khỏi danh sách",
+  "A card for each saved score, to pick the one used": "Một thẻ cho mỗi điểm đã lưu, để chọn điểm được dùng",
+  "CPU or GPU": "CPU hay GPU",
+  "Choose columns…": "Chọn cột…",
+  "Click to use this score.": "Nhấp để dùng điểm này.",
+  "Counting the saved results...": "Đang đếm kết quả đã lưu...",
+  "Delete:": "Xóa:",
+  "Deleting saved results...": "Đang xóa kết quả đã lưu...",
+  "Each card shows when its score was saved; the round button on it picks the one used.": "Mỗi thẻ cho biết điểm của nó được lưu khi nào; nút tròn trên thẻ chọn điểm được dùng.",
+  "Every saved result": "Mọi kết quả đã lưu",
+  "Every saved score of this comparison: its statistics, when it was saved and how it was made": "Mọi điểm đã lưu của phép so sánh này: thống kê, thời điểm lưu và cách tạo ra",
+  "How far the frames' scores spread from their mean.": "Mức độ điểm các khung hình phân tán quanh giá trị trung bình.",
+  "Made with": "Tạo bằng",
+  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and deleting saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "Đang tính chỉ số: thư mục ffmpeg, thư mục kết quả đã lưu và việc xóa kết quả đã lưu bị khóa đến khi lượt chạy kết thúc, vì lượt chạy đang dùng chúng. Mọi thứ khác có thể thay đổi ngay.",
+  "Model or display": "Mô hình hoặc màn hình",
+  "No saved results in that range.": "Không có kết quả đã lưu trong khoảng đó.",
+  "No saved results in that range: nothing deleted.": "Không có kết quả đã lưu trong khoảng đó: không xóa gì.",
+  "No saved results in {directory}": "Không có kết quả đã lưu trong {directory}",
+  "Of the newest, or of those the newest version of the app made, these come first. The Videos tab's choice goes by the settings instead.": "Trong các điểm mới nhất, hoặc các điểm do phiên bản mới nhất của ứng dụng tạo, những điểm này được ưu tiên. Lựa chọn của thẻ Video thì theo cài đặt.",
+  "One card per metric, saying how many are saved": "Mỗi chỉ số một thẻ, cho biết đã lưu bao nhiêu",
+  "Saved results are already being deleted.": "Kết quả đã lưu đang được xóa rồi.",
+  "Score": "Điểm",
+  "Score bands": "Các mức điểm",
+  "Settings > Saved Results": "Cài đặt > Kết quả đã lưu",
+  "Show:": "Hiện:",
+  "The bitrate readings and black-bar answers kept with them are deleted too.": "Số đo bitrate và kết quả dò viền đen lưu kèm chúng cũng bị xóa.",
+  "The card shows the score used; the details panel, opened by the button over the scores, lists them all, and a click on another uses it.": "Thẻ hiện điểm được dùng; bảng chi tiết, mở bằng nút phía trên các điểm, liệt kê tất cả, và nhấp vào điểm khác sẽ dùng điểm đó.",
+  "The details panel, opened by the button over the scores, shows each score's metric and score, and:": "Bảng chi tiết, mở bằng nút phía trên các điểm, hiện chỉ số và điểm của từng điểm, cùng với:",
+  "The highest frame's score.": "Điểm khung hình cao nhất.",
+  "The lowest frame's score.": "Điểm khung hình thấp nhất.",
+  "The middle frame's score.": "Điểm khung hình trung vị.",
+  "The score Open in Metric Graphs and the exports take, where a metric has several. Click another of its rows to use that one.": "Điểm mà Mở trong Biểu đồ chỉ số và các lần xuất dùng, khi một chỉ số có nhiều điểm. Nhấp vào một hàng khác của nó để dùng điểm đó.",
+  "The score the card shows and Open in Metric Graphs and the exports take, unless you pick another in the details panel. The Videos tab's: the one a run would use again with the settings as they are (where it would use none, the newest).": "Điểm mà thẻ hiện và Mở trong Biểu đồ chỉ số cùng các lần xuất dùng, trừ khi bạn chọn điểm khác trong bảng chi tiết. Lựa chọn của thẻ Video: điểm mà một lượt chạy sẽ dùng lại với cài đặt hiện tại (nếu không dùng điểm nào thì là điểm mới nhất).",
+  "The score {share} of the frames are worse than: the low end where a higher score is better, the high end where a lower one is (Metric Graphs' {share} Low or High).": "Điểm mà {share} khung hình kém hơn: đầu thấp khi điểm cao hơn là tốt hơn, đầu cao khi điểm thấp hơn là tốt hơn ({share} thấp nhất hoặc cao nhất trong Biểu đồ chỉ số).",
+  "The share of the frames in each of the metric's score bands, as Metric Graphs' table has them (≥ 95, < 70, ...).": "Tỉ lệ khung hình trong mỗi mức điểm của chỉ số, như bảng của Biểu đồ chỉ số (≥ 95, < 70, ...).",
+  "The whole video's score, as Metric Graphs shows it.": "Điểm của cả video, như Biểu đồ chỉ số hiện.",
+  "Their videos are scored again the next time they are compared.": "Các video của chúng sẽ được chấm lại vào lần so sánh tiếp theo.",
+  "Those saved from": "Những kết quả lưu từ",
+  "Those saved more than": "Những kết quả lưu hơn",
+  "Use this score": "Dùng điểm này",
+  "Use:": "Dùng:",
+  "Used": "Đang dùng",
+  "VMAF's model, or the display CVVDP modelled.": "Mô hình của VMAF, hoặc màn hình mà CVVDP mô phỏng.",
+  "What calculated the score, and its version.": "Thứ đã tính điểm, và phiên bản của nó.",
+  "When a metric has several saved scores:": "Khi một chỉ số có nhiều điểm đã lưu:",
+  "When the score was saved.": "Thời điểm lưu điểm.",
+  "Whether the score was calculated on the CPU or the GPU.": "Điểm được tính trên CPU hay GPU.",
+  "Worst {share}": "{share} tệ nhất",
+  "by FFmpeg first": "ưu tiên FFmpeg",
+  "by any engine": "bởi bộ máy bất kỳ",
+  "by the app's own first": "ưu tiên bộ máy riêng của ứng dụng",
+  "on any device": "trên thiết bị bất kỳ",
+  "on the CPU first": "ưu tiên CPU",
+  "on the GPU first": "ưu tiên GPU",
+  "the newest": "điểm mới nhất",
+  "the one made by the newest version of the app": "điểm do phiên bản mới nhất của ứng dụng tạo",
+  "the one the Videos tab would use": "điểm mà thẻ Video sẽ dùng",
+  "{size}, last saved {date}, in {directory}.": "{size}, lưu lần cuối {date}, trong {directory}.",
+  "{size}, last saved {first} to {last}, in {directory}.": "{size}, lưu lần cuối từ {first} đến {last}, trong {directory}.",
+  "Folder:": "Thư mục:",
+  "Saved results": "Kết quả đã lưu",
   "Start over": "Bắt đầu lại",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Xóa video tham chiếu và gỡ mọi video thử, để bắt đầu một so sánh mới. Kết quả đã lưu vẫn còn.",
   "Click Start over again to clear the reference.": "Nhấp \"Bắt đầu lại\" lần nữa để xóa video tham chiếu.",
-  "Every saved score in this folder is deleted. This can't be undone.": "Mọi điểm đã lưu trong thư mục này sẽ bị xóa. Không thể hoàn tác.",
   "Show details": "Hiện chi tiết",
   "Hide details": "Ẩn chi tiết",
   "OK": "OK",
@@ -343,8 +402,6 @@
   "Storage": "Lưu trữ",
   "blank = shared user-profile folder": "Để trống = thư mục chung trong hồ sơ người dùng",
   "Open": "Mở",
-  "Saved results:": "Kết quả đã lưu:",
-  "Clear saved results": "Xóa kết quả đã lưu",
   "Export folder:": "Thư mục xuất:",
   "Reuse a saved result when a video is added again": "Dùng lại kết quả đã lưu khi thêm lại video",
   "Each session's setup, every run and its steps, and every failure with its full text. Send these files along when reporting a problem.": "Thiết lập của từng phiên, mọi lần chạy và các bước của nó, mọi lỗi kèm toàn văn. Hãy gửi các tệp này khi báo lỗi.",
@@ -396,9 +453,6 @@
   "Could not export the log: {error}": "Không xuất được nhật ký: {error}",
   "There is no log to export yet.": "Chưa có nhật ký để xuất.",
   "Log exported to {path}": "Đã xuất nhật ký ra {path}",
-  "There are no saved results to clear.": "Không có kết quả đã lưu để xóa.",
-  "Saved results are already being cleared.": "Đang xóa kết quả đã lưu.",
-  "Clearing saved results...": "Đang xóa kết quả đã lưu...",
   "Reference video:": "Video tham chiếu:",
   "No reference selected.": "Chưa chọn video tham chiếu.",
   "Add/remove metrics": "Thêm/bớt chỉ số",
@@ -634,7 +688,6 @@
   "This saved run was measured against:\n    {source}\n\nbut the selected reference is:\n    {path}\n\nScores from two different references cannot be compared. Switch the reference to the one this run used?": "Lần chạy đã lưu này được đo so với:\n    {source}\n\nnhưng video tham chiếu đang chọn là:\n    {path}\n\nKhông thể so sánh điểm đo với các video tham chiếu khác nhau. Chuyển sang video tham chiếu mà lần chạy này đã dùng?",
   "Choose folder to save runs into": "Chọn thư mục để lưu các lần chạy",
   "Could not {description}: {error}": "Không thể {description}: {error}",
-  "clear saved results": "xóa các kết quả đã lưu",
   "delete saved results": "xóa các kết quả đã lưu",
   "save {name}": "lưu {name}",
   "export {name}": "xuất {name}",
@@ -1264,7 +1317,6 @@
   "Automatic (a discrete GPU first)": "Tự động (ưu tiên GPU rời)",
   "{name} (not found)": "{name} (không tìm thấy)",
   "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU tính VMAF, VMAF v1, SSIMULACRA2, Butteraugli và CVVDP trên máy có nhiều GPU, và bộ giải mã của hãng GPU này được thử trước khi giải mã bằng GPU ở chế độ tự động. Chỉ số mà GPU này không tính được sẽ được tính trên CPU chứ không trên GPU khác. Tự động sẽ dùng GPU rời trước.\n\nÁp dụng khi ứng dụng khởi động lần sau; --gpu trên dòng lệnh chọn cho một lần chạy.",
-  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and Clear saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "Đang tính chỉ số: thư mục ffmpeg, thư mục kết quả đã lưu và Xóa kết quả đã lưu bị khóa đến khi lần chạy kết thúc, vì lần chạy đang dùng chúng. Mọi thứ khác có thể đổi ngay.",
   "Locked while metrics are calculated: the run uses it.": "Bị khóa khi đang tính chỉ số: lần chạy đang dùng mục này.",
   "This video has {test:,} frames, but the reference has {source:,}, even though both are the same length. From the first point where they differ, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "Video này có {test:,} khung hình, nhưng video tham chiếu có {source:,}, dù cả hai dài như nhau. Từ điểm đầu tiên chúng khác nhau, mỗi khung hình được so với sai khung hình tham chiếu, nên mọi điểm sau đó đều sai. Việc này thường xảy ra khi khung hình bị nhân đôi hoặc bị bỏ trong lúc mã hóa. Mã hóa với tốc độ khung hình thay đổi khớp với nguồn sẽ tránh được.",
   "This video may be out of sync with the reference. Only {compared:,} frames were compared, but videos of this length should have {length:,}. If the scores drop suddenly partway through and stay low, this is the likely cause. To find out for sure, turn on {setting}, then right-click this video and choose {recalculate}.": "Video này có thể không đồng bộ với video tham chiếu. Chỉ {compared:,} khung hình được so sánh, nhưng video dài như vậy phải có {length:,}. Nếu điểm đột ngột giảm giữa chừng và vẫn thấp, đây có lẽ là nguyên nhân. Để biết chắc, hãy bật {setting}, rồi nhấp chuột phải vào video này và chọn {recalculate}.",
@@ -1337,7 +1389,6 @@
   "Saved scores of {name}": "Điểm đã lưu của {name}",
   "Select a comparison to see its saved scores.": "Chọn một so sánh để xem điểm đã lưu.",
   "Select one comparison to see its saved scores.": "Chỉ chọn một so sánh để xem điểm đã lưu.",
-  "Several scores of this metric are saved: the newest is used unless another is picked.": "Có nhiều điểm đã lưu cho chỉ số này: điểm mới nhất được dùng trừ khi chọn điểm khác.",
   "Size": "Kích thước",
   "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "Hồ sơ đã chọn không có điều kiện: hãy đặt trong Cài đặt > Đoạn yếu, hoặc chọn một cài đặt sẵn.",
   "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "Các quy tắc dùng để tìm đoạn yếu: chúng không được lưu cùng điểm mà được áp dụng lên điểm ngay bây giờ.",
@@ -1347,8 +1398,6 @@
   "{name} (saved)": "{name} (đã lưu)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "Xóa kết quả đã lưu khỏi {directory}?\n\nCác video đã chấm sẽ cần tính lại. Những kết quả có video tham chiếu không còn ở chỗ cũ sẽ được giữ lại: không thể tính lại điểm của chúng. Hãy xóa chúng trong thẻ Kết quả đã lưu.",
-  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Một số kết quả không thể chấm lại: video tham chiếu của chúng không còn ở chỗ cũ (được đánh dấu \"không tìm thấy\").",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nKhông tìm thấy ở đó: không có nó, không thể tính lại các điểm này.",
   "Recognize test videos remuxed after scoring (reads each one again)": "Nhận ra video kiểm tra đã remux sau khi chấm (đọc lại từng video)",
   "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "Video kiểm tra được mux hoặc remux sau khi chấm (luồng thô vào MKV, MKV vào MP4) vẫn giữ điểm đã lưu: nó được nhận ra qua các ảnh đã mã hóa.\n\nĐể làm vậy, mỗi video kiểm tra được đọc thêm một lần sau khi lưu điểm, mất thời gian bằng việc đọc tệp (vài phút với phim trên thư mục chia sẻ mạng), chạy nền và không bao giờ trong lúc tính; và video có luồng bắt đầu giống một video đã chấm sẽ được đọc toàn bộ để biết có phải cùng video không, sau khi tìm thấy điểm đã lưu của các video khác.\n\nTắt: video kiểm tra chỉ được nhận ra qua tệp của chúng.",
@@ -1424,6 +1473,33 @@
   "{low} to {high} metrics": "{low} đến {high} chỉ số"
  },
  "plurals": {
+  "Deleted the saved scores of {count} comparison.": [
+   "Đã xóa điểm đã lưu của {count} phép so sánh."
+  ],
+  "The saved scores of {count} comparison are deleted. This can't be undone.": [
+   "Điểm đã lưu của {count} phép so sánh sẽ bị xóa. Không thể hoàn tác."
+  ],
+  "Would delete {count} comparison's saved scores, {size}.": [
+   "Sẽ xóa điểm đã lưu của {count} phép so sánh, {size}."
+  ],
+  "day ago": [
+   "ngày trước"
+  ],
+  "{count} of them can't be scored again: its reference video is no longer where it was scored from (marked \"not found\" in the Saved Results tab).": [
+   "{count} trong số đó không thể chấm lại: video tham chiếu không còn ở chỗ đã dùng để chấm (được đánh dấu \"không tìm thấy\" trong thẻ Kết quả đã lưu)."
+  ],
+  "{count} saved": [
+   "{count} đã lưu"
+  ],
+  "{count} saved result, {size}, saved {first} to {last}, in {directory}": [
+   "{count} kết quả đã lưu, {size}, lưu từ {first} đến {last}, trong {directory}"
+  ],
+  "{count} saved result, {size}, saved {first}, in {directory}": [
+   "{count} kết quả đã lưu, {size}, lưu {first}, trong {directory}"
+  ],
+  "{count} score of this metric is saved: choose the one used in the details, opened by the button above.": [
+   "Đã lưu {count} điểm của chỉ số này: chọn điểm được dùng trong phần chi tiết, mở bằng nút phía trên."
+  ],
   "Click Remove all again to remove {count} video. Saved results are kept.": ["Nhấp \"Xóa tất cả\" lần nữa để xóa cả {count} video. Kết quả đã lưu vẫn còn."],
   "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["Nhấp \"Bắt đầu lại\" lần nữa để xóa video tham chiếu và cả {count} video. Kết quả đã lưu vẫn còn."],
   "{count} test video does not last as long as the reference ({length}).": ["{count} video thử không dài bằng video tham chiếu ({length})."],
@@ -1443,9 +1519,6 @@
   ],
   "about {count} minute": [
    "khoảng {count} phút"
-  ],
-  "{count} saved result, {size:.1f} MB in {directory}": [
-   "{count} kết quả đã lưu, {size:.1f} MB trong {directory}"
   ],
   "Copied the log to the clipboard ({count} line, the middle left out -- Export log saves all of it).": [
    "Đã sao chép nhật ký vào bộ nhớ tạm ({count} dòng, lược bỏ phần giữa — Xuất nhật ký lưu toàn bộ)."
@@ -1486,9 +1559,6 @@
   "{count} video: {counts}": [
    "{count} video: {counts}"
   ],
-  "Removed {count} saved result.": [
-   "Đã xóa {count} kết quả đã lưu."
-  ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "{count} video đã chọn đã có kết quả bitrate.\n\nTính lại? Chọn Không để giữ kết quả và chỉ tính các tệp chưa có kết quả."
   ],
@@ -1513,17 +1583,11 @@
   "{count} frame in all.": [
    "tổng cộng {count} khung."
   ],
-  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
-   "Xóa điểm đã lưu của {count} so sánh? Không thể khôi phục: video sẽ được chấm điểm lại vào lần so sánh tiếp theo."
-  ],
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "Không thể xóa điểm đã lưu của {count} so sánh: có thể một tệp của chúng đang mở."
   ],
   "{count} saved comparison in {directory}": [
    "{count} so sánh đã lưu trong {directory}"
-  ],
-  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
-   "Đã giữ {count} kết quả có video tham chiếu bị mất: hãy xóa trong thẻ Kết quả đã lưu."
   ],
   "Saved {count} file": [
    "Đã lưu {count} tệp"

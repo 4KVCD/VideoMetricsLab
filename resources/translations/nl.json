@@ -1,15 +1,74 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "Vergrendeld terwijl metrieken worden berekend.",
+  "Remove {name} from the list": "{name} uit de lijst verwijderen",
   "Show {name} in Metric Graphs again": "{name} weer tonen in de metriekgrafieken",
   "{name} has no scores yet to show in Metric Graphs.": "{name} heeft nog geen scores om in de metriekgrafieken te tonen.",
   "{name} is already in Metric Graphs.": "{name} staat al in de metriekgrafieken.",
   "{name} is back in Metric Graphs.": "{name} staat weer in de metriekgrafieken.",
-  "Locked while metrics are calculated.": "Vergrendeld terwijl metrieken worden berekend.",
-  "Remove {name} from the list": "{name} uit de lijst verwijderen",
+  "A card for each saved score, to pick the one used": "Een kaart per opgeslagen score, om de gebruikte te kiezen",
+  "CPU or GPU": "CPU of GPU",
+  "Choose columns…": "Kolommen kiezen…",
+  "Click to use this score.": "Klik om deze score te gebruiken.",
+  "Counting the saved results...": "Opgeslagen resultaten tellen...",
+  "Delete:": "Verwijderen:",
+  "Deleting saved results...": "Opgeslagen resultaten verwijderen...",
+  "Each card shows when its score was saved; the round button on it picks the one used.": "Elke kaart toont wanneer de score is opgeslagen; de ronde knop erop kiest de gebruikte.",
+  "Every saved result": "Elk opgeslagen resultaat",
+  "Every saved score of this comparison: its statistics, when it was saved and how it was made": "Elke opgeslagen score van deze vergelijking: de statistieken, wanneer hij is opgeslagen en hoe hij is gemaakt",
+  "How far the frames' scores spread from their mean.": "Hoe ver de scores van de frames van hun gemiddelde afwijken.",
+  "Made with": "Gemaakt met",
+  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and deleting saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "Er worden metrieken berekend: de ffmpeg-map, de map met opgeslagen resultaten en het verwijderen van opgeslagen resultaten zijn vergrendeld tot de run klaar is, omdat de run ze gebruikt. Al het andere kan nu worden gewijzigd.",
+  "Model or display": "Model of scherm",
+  "No saved results in that range.": "Geen opgeslagen resultaten in die periode.",
+  "No saved results in that range: nothing deleted.": "Geen opgeslagen resultaten in die periode: niets verwijderd.",
+  "No saved results in {directory}": "Geen opgeslagen resultaten in {directory}",
+  "Of the newest, or of those the newest version of the app made, these come first. The Videos tab's choice goes by the settings instead.": "Van de nieuwste, of van die de nieuwste versie van de app heeft gemaakt, gaan deze voor. De keuze van het tabblad Video's volgt in plaats daarvan de instellingen.",
+  "One card per metric, saying how many are saved": "Eén kaart per metriek, met hoeveel er zijn opgeslagen",
+  "Saved results are already being deleted.": "Opgeslagen resultaten worden al verwijderd.",
+  "Score": "Score",
+  "Score bands": "Scorebanden",
+  "Settings > Saved Results": "Instellingen > Opgeslagen resultaten",
+  "Show:": "Tonen:",
+  "The bitrate readings and black-bar answers kept with them are deleted too.": "De bitratemetingen en zwarte-balkenresultaten die erbij zijn bewaard, worden ook verwijderd.",
+  "The card shows the score used; the details panel, opened by the button over the scores, lists them all, and a click on another uses it.": "De kaart toont de gebruikte score; het detailpaneel, geopend met de knop boven de scores, toont ze allemaal, en een klik op een andere gebruikt die.",
+  "The details panel, opened by the button over the scores, shows each score's metric and score, and:": "Het detailpaneel, geopend met de knop boven de scores, toont van elke score de metriek en de score, en:",
+  "The highest frame's score.": "De hoogste framescore.",
+  "The lowest frame's score.": "De laagste framescore.",
+  "The middle frame's score.": "De middelste framescore.",
+  "The score Open in Metric Graphs and the exports take, where a metric has several. Click another of its rows to use that one.": "De score die Openen in Metriekgrafieken en de exports nemen, als een metriek er meerdere heeft. Klik op een andere rij ervan om die te gebruiken.",
+  "The score the card shows and Open in Metric Graphs and the exports take, unless you pick another in the details panel. The Videos tab's: the one a run would use again with the settings as they are (where it would use none, the newest).": "De score die de kaart toont en die Openen in Metriekgrafieken en de exports nemen, tenzij je een andere kiest in het detailpaneel. Die van het tabblad Video's: de score die een run met de huidige instellingen opnieuw zou gebruiken (waar die er geen zou gebruiken, de nieuwste).",
+  "The score {share} of the frames are worse than: the low end where a higher score is better, the high end where a lower one is (Metric Graphs' {share} Low or High).": "De score waar {share} van de frames slechter dan is: de lage kant als een hogere score beter is, de hoge kant als een lagere beter is (Laagste of Hoogste {share} in Metriekgrafieken).",
+  "The share of the frames in each of the metric's score bands, as Metric Graphs' table has them (≥ 95, < 70, ...).": "Het aandeel van de frames in elke scoreband van de metriek, zoals de tabel van Metriekgrafieken ze heeft (≥ 95, < 70, ...).",
+  "The whole video's score, as Metric Graphs shows it.": "De score van de hele video, zoals Metriekgrafieken die toont.",
+  "Their videos are scored again the next time they are compared.": "Hun video's worden opnieuw gescoord wanneer ze weer worden vergeleken.",
+  "Those saved from": "Die opgeslagen van",
+  "Those saved more than": "Die opgeslagen zijn meer dan",
+  "Use this score": "Deze score gebruiken",
+  "Use:": "Gebruiken:",
+  "Used": "Gebruikt",
+  "VMAF's model, or the display CVVDP modelled.": "Het model van VMAF, of het scherm dat CVVDP nabootste.",
+  "What calculated the score, and its version.": "Wat de score heeft berekend, en de versie daarvan.",
+  "When a metric has several saved scores:": "Als een metriek meerdere opgeslagen scores heeft:",
+  "When the score was saved.": "Wanneer de score is opgeslagen.",
+  "Whether the score was calculated on the CPU or the GPU.": "Of de score op de CPU of de GPU is berekend.",
+  "Worst {share}": "Slechtste {share}",
+  "by FFmpeg first": "eerst met FFmpeg",
+  "by any engine": "met elke engine",
+  "by the app's own first": "eerst met die van de app zelf",
+  "on any device": "op elk apparaat",
+  "on the CPU first": "eerst op de CPU",
+  "on the GPU first": "eerst op de GPU",
+  "the newest": "de nieuwste",
+  "the one made by the newest version of the app": "die van de nieuwste versie van de app",
+  "the one the Videos tab would use": "die het tabblad Video's zou gebruiken",
+  "{size}, last saved {date}, in {directory}.": "{size}, laatst opgeslagen {date}, in {directory}.",
+  "{size}, last saved {first} to {last}, in {directory}.": "{size}, laatst opgeslagen {first} tot {last}, in {directory}.",
+  "Folder:": "Map:",
+  "Saved results": "Opgeslagen resultaten",
   "Start over": "Opnieuw beginnen",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Maakt de referentie leeg en verwijdert alle testvideo's, voor een nieuwe vergelijking. Opgeslagen resultaten blijven bewaard.",
   "Click Start over again to clear the reference.": "Klik nogmaals op 'Opnieuw beginnen' om de referentie leeg te maken.",
-  "Every saved score in this folder is deleted. This can't be undone.": "Alle opgeslagen scores in deze map worden verwijderd. Dit kan niet ongedaan worden gemaakt.",
   "Show details": "Details weergeven",
   "Hide details": "Details verbergen",
   "OK": "OK",
@@ -343,8 +402,6 @@
   "Storage": "Opslag",
   "blank = shared user-profile folder": "Leeg = gedeelde map in het gebruikersprofiel",
   "Open": "Openen",
-  "Saved results:": "Opgeslagen resultaten:",
-  "Clear saved results": "Opgeslagen resultaten wissen",
   "Export folder:": "Exportmap:",
   "Reuse a saved result when a video is added again": "Een opgeslagen resultaat hergebruiken als een video opnieuw wordt toegevoegd",
   "Each session's setup, every run and its steps, and every failure with its full text. Send these files along when reporting a problem.": "De instellingen van elke sessie, elke run en de stappen ervan, en elke fout met de volledige tekst. Stuur deze bestanden mee als u een probleem meldt.",
@@ -396,9 +453,6 @@
   "Could not export the log: {error}": "Kan het logboek niet exporteren: {error}",
   "There is no log to export yet.": "Nog geen logboek om te exporteren.",
   "Log exported to {path}": "Logboek geëxporteerd naar {path}",
-  "There are no saved results to clear.": "Geen opgeslagen resultaten om te wissen.",
-  "Saved results are already being cleared.": "Opgeslagen resultaten worden al gewist.",
-  "Clearing saved results...": "Opgeslagen resultaten wissen...",
   "Reference video:": "Referentievideo:",
   "No reference selected.": "Geen referentie geselecteerd.",
   "Add/remove metrics": "Metrieken toevoegen/verwijderen",
@@ -634,7 +688,6 @@
   "This saved run was measured against:\n    {source}\n\nbut the selected reference is:\n    {path}\n\nScores from two different references cannot be compared. Switch the reference to the one this run used?": "Deze opgeslagen run is gemeten tegen:\n    {source}\n\nmaar de geselecteerde referentie is:\n    {path}\n\nScores tegen verschillende referenties zijn niet te vergelijken. Overschakelen naar de referentie die deze run gebruikte?",
   "Choose folder to save runs into": "Kies een map om de runs in op te slaan",
   "Could not {description}: {error}": "Kan niet {description}: {error}",
-  "clear saved results": "opgeslagen resultaten wissen",
   "delete saved results": "opgeslagen resultaten verwijderen",
   "save {name}": "{name} opslaan",
   "export {name}": "{name} exporteren",
@@ -1264,7 +1317,6 @@
   "Automatic (a discrete GPU first)": "Automatisch (eerst een losse GPU)",
   "{name} (not found)": "{name} (niet gevonden)",
   "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "De GPU die op een pc met meer dan één GPU VMAF, VMAF v1, SSIMULACRA2, Butteraugli en CVVDP berekent, en waarvan de decoder van de fabrikant eerst wordt geprobeerd als GPU-decodering automatisch is. Een metriek die de GPU niet kan berekenen, wordt op de CPU berekend en niet op een andere GPU. Automatisch gebruikt eerst een losse GPU.\n\nGeldt bij de volgende start van de app; --gpu op de opdrachtregel kiest voor één run.",
-  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and Clear saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "Er worden metrieken berekend: de ffmpeg-map, de map met opgeslagen resultaten en Opgeslagen resultaten wissen zijn vergrendeld tot de run klaar is, omdat de run ze gebruikt. Al het andere kan nu worden gewijzigd.",
   "Locked while metrics are calculated: the run uses it.": "Vergrendeld terwijl metrieken worden berekend: de run gebruikt het.",
   "This video has {test:,} frames, but the reference has {source:,}, even though both are the same length. From the first point where they differ, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "Deze video heeft {test:,} frames, maar de referentie heeft er {source:,}, terwijl ze even lang zijn. Vanaf het eerste punt waar ze verschillen, wordt elk frame met het verkeerde referentieframe vergeleken, dus elke score daarna is fout. Dit gebeurt meestal als er bij het coderen frames worden verdubbeld of weggelaten. Coderen met een variabele framerate die gelijk is aan die van de bron voorkomt het.",
   "This video may be out of sync with the reference. Only {compared:,} frames were compared, but videos of this length should have {length:,}. If the scores drop suddenly partway through and stay low, this is the likely cause. To find out for sure, turn on {setting}, then right-click this video and choose {recalculate}.": "Deze video loopt mogelijk niet gelijk met de referentie. Er zijn maar {compared:,} frames vergeleken, terwijl een video van deze lengte er {length:,} zou moeten hebben. Als de scores halverwege plotseling dalen en laag blijven, is dit waarschijnlijk de oorzaak. Om het zeker te weten: zet {setting} aan, klik dan met de rechtermuisknop op deze video en kies {recalculate}.",
@@ -1337,7 +1389,6 @@
   "Saved scores of {name}": "Opgeslagen scores van {name}",
   "Select a comparison to see its saved scores.": "Selecteer een vergelijking om de opgeslagen scores te zien.",
   "Select one comparison to see its saved scores.": "Selecteer één vergelijking om de opgeslagen scores te zien.",
-  "Several scores of this metric are saved: the newest is used unless another is picked.": "Er zijn meerdere scores van deze metriek opgeslagen: de nieuwste wordt gebruikt, tenzij een andere is gekozen.",
   "Size": "Grootte",
   "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "Het gekozen profiel heeft geen voorwaarden: stel ze in bij Instellingen > Zwakke segmenten, of kies een voorinstelling.",
   "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "De regels waarmee de zwakke segmenten worden gevonden: ze worden niet met de scores opgeslagen, maar nu daarop toegepast.",
@@ -1347,8 +1398,6 @@
   "{name} (saved)": "{name} (opgeslagen)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "Opgeslagen resultaten verwijderen uit {directory}?\n\nVideo's die al zijn beoordeeld, moeten opnieuw worden berekend. Resultaten waarvan de referentievideo niet meer staat waar hij stond, blijven bewaard: hun scores zouden niet opnieuw te berekenen zijn. Verwijder ze op het tabblad Opgeslagen resultaten.",
-  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Sommige ervan zouden niet opnieuw te beoordelen zijn: hun referentievideo staat niet meer waar hij stond (gemarkeerd als \"niet gevonden\").",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nDaar niet gevonden: zonder deze video zouden deze scores niet opnieuw te berekenen zijn.",
   "Recognize test videos remuxed after scoring (reads each one again)": "Na het scoren opnieuw gemuxte testvideo's herkennen (leest elke opnieuw)",
   "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "Een testvideo die na het scoren is gemuxt of opnieuw gemuxt (de ruwe stream in een MKV, een MKV in een MP4) houdt zijn opgeslagen scores: hij wordt herkend aan zijn gecodeerde beelden.\n\nDaarvoor wordt elke testvideo na het opslaan van de scores nog één keer gelezen, zo lang als het lezen van het bestand duurt (een paar minuten voor een film op een netwerkshare), op de achtergrond en nooit tijdens een berekening; en een video waarvan de stream begint zoals die van een gescoorde video, wordt helemaal gelezen om te bepalen of het dezelfde is, nadat de opgeslagen scores van de andere video's zijn gevonden.\n\nUit: testvideo's worden alleen aan hun bestanden herkend.",
@@ -1424,6 +1473,42 @@
   "{low} to {high} metrics": "{low} tot {high} metrieken"
  },
  "plurals": {
+  "Deleted the saved scores of {count} comparison.": [
+   "De opgeslagen scores van {count} vergelijking verwijderd.",
+   "De opgeslagen scores van {count} vergelijkingen verwijderd."
+  ],
+  "The saved scores of {count} comparison are deleted. This can't be undone.": [
+   "De opgeslagen scores van {count} vergelijking worden verwijderd. Dit kan niet ongedaan worden gemaakt.",
+   "De opgeslagen scores van {count} vergelijkingen worden verwijderd. Dit kan niet ongedaan worden gemaakt."
+  ],
+  "Would delete {count} comparison's saved scores, {size}.": [
+   "Zou de opgeslagen scores van {count} vergelijking verwijderen, {size}.",
+   "Zou de opgeslagen scores van {count} vergelijkingen verwijderen, {size}."
+  ],
+  "day ago": [
+   "dag geleden",
+   "dagen geleden"
+  ],
+  "{count} of them can't be scored again: its reference video is no longer where it was scored from (marked \"not found\" in the Saved Results tab).": [
+   "{count} ervan kan niet opnieuw worden gescoord: de referentievideo staat niet meer waar hij vandaan werd gescoord (gemarkeerd als \"niet gevonden\" op het tabblad Opgeslagen resultaten).",
+   "{count} ervan kunnen niet opnieuw worden gescoord: hun referentievideo staat niet meer waar hij vandaan werd gescoord (gemarkeerd als \"niet gevonden\" op het tabblad Opgeslagen resultaten)."
+  ],
+  "{count} saved": [
+   "{count} opgeslagen",
+   "{count} opgeslagen"
+  ],
+  "{count} saved result, {size}, saved {first} to {last}, in {directory}": [
+   "{count} opgeslagen resultaat, {size}, opgeslagen {first} tot {last}, in {directory}",
+   "{count} opgeslagen resultaten, {size}, opgeslagen {first} tot {last}, in {directory}"
+  ],
+  "{count} saved result, {size}, saved {first}, in {directory}": [
+   "{count} opgeslagen resultaat, {size}, opgeslagen {first}, in {directory}",
+   "{count} opgeslagen resultaten, {size}, opgeslagen {first}, in {directory}"
+  ],
+  "{count} score of this metric is saved: choose the one used in the details, opened by the button above.": [
+   "{count} score van deze metriek is opgeslagen: kies de gebruikte in de details, geopend met de knop hierboven.",
+   "{count} scores van deze metriek zijn opgeslagen: kies de gebruikte in de details, geopend met de knop hierboven."
+  ],
   "Click Remove all again to remove {count} video. Saved results are kept.": ["Klik nogmaals op 'Alles verwijderen' om {count} video te verwijderen. Opgeslagen resultaten blijven bewaard.", "Klik nogmaals op 'Alles verwijderen' om alle {count} video's te verwijderen. Opgeslagen resultaten blijven bewaard."],
   "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["Klik nogmaals op 'Opnieuw beginnen' om de referentie leeg te maken en {count} video te verwijderen. Opgeslagen resultaten blijven bewaard.", "Klik nogmaals op 'Opnieuw beginnen' om de referentie leeg te maken en alle {count} video's te verwijderen. Opgeslagen resultaten blijven bewaard."],
   "{count} test video does not last as long as the reference ({length}).": ["{count} testvideo duurt niet even lang als de referentie ({length}).", "{count} testvideo's duren niet even lang als de referentie ({length})."],
@@ -1446,10 +1531,6 @@
   "about {count} minute": [
    "ongeveer {count} minuut",
    "ongeveer {count} minuten"
-  ],
-  "{count} saved result, {size:.1f} MB in {directory}": [
-   "{count} opgeslagen resultaat, {size:.1f} MB in {directory}",
-   "{count} opgeslagen resultaten, {size:.1f} MB in {directory}"
   ],
   "Copied the log to the clipboard ({count} line, the middle left out -- Export log saves all of it).": [
    "Logboek naar het klembord gekopieerd ({count} regel, middenstuk weggelaten — Logboek exporteren bewaart alles).",
@@ -1503,10 +1584,6 @@
    "{count} video: {counts}",
    "{count} video's: {counts}"
   ],
-  "Removed {count} saved result.": [
-   "{count} opgeslagen resultaat verwijderd.",
-   "{count} opgeslagen resultaten verwijderd."
-  ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "De {count} geselecteerde video heeft al bitrateresultaten.\n\nOpnieuw berekenen? Kies Nee om de resultaten te houden en alleen bestanden zonder resultaten te berekenen.",
    "De {count} geselecteerde video's hebben al bitrateresultaten.\n\nDeze bestanden opnieuw berekenen? Kies Nee om de resultaten te houden en alleen bestanden zonder resultaten te berekenen."
@@ -1539,10 +1616,6 @@
    "{count} frame in totaal.",
    "{count} frames in totaal."
   ],
-  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
-   "De opgeslagen scores van {count} vergelijking verwijderen? Ze kunnen niet worden teruggehaald: de video's worden opnieuw gescoord wanneer ze weer worden vergeleken.",
-   "De opgeslagen scores van {count} vergelijkingen verwijderen? Ze kunnen niet worden teruggehaald: de video's worden opnieuw gescoord wanneer ze weer worden vergeleken."
-  ],
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "De opgeslagen scores van {count} vergelijking konden niet worden verwijderd: een van de bestanden is mogelijk geopend.",
    "De opgeslagen scores van {count} vergelijkingen konden niet worden verwijderd: een van de bestanden is mogelijk geopend."
@@ -1550,10 +1623,6 @@
   "{count} saved comparison in {directory}": [
    "{count} opgeslagen vergelijking in {directory}",
    "{count} opgeslagen vergelijkingen in {directory}"
-  ],
-  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
-   "{count} resultaat bewaard waarvan de referentievideo ontbreekt: verwijder het op het tabblad Opgeslagen resultaten.",
-   "{count} resultaten bewaard waarvan de referentievideo's ontbreken: verwijder ze op het tabblad Opgeslagen resultaten."
   ],
   "Saved {count} file": [
    "{count} bestand opgeslagen",

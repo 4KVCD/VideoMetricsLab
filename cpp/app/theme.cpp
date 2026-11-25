@@ -78,6 +78,7 @@ const std::map<QString, std::pair<QString, QString>> modern_colours = {
     {"scroll", {"#c0c0c8", "#4a4a52"}},
     {"danger", {"#b3261e", "#ff9a8f"}},
     {"danger_border", {"#e3a9a3", "#6b3530"}},
+    {"tile_edge", {"transparent", "transparent"}},  // a tile's edge: none where it is raised off its card
 };
 
 // A look: VML Modern's colours for Light or Dark, in part replaced. Light's
@@ -158,6 +159,7 @@ const std::map<QString, QString> desert_colours = {
     {"border", "#808080"},     {"border_strong", "#3d3d3d"}, {"text", "#202020"},     {"text_soft", "#3d3d3d"},
     {"text_muted", "#676767"}, {"disabled", "#676767"},      {"scroll", "#808080"},   {"danger", "#a4262c"},
     {"danger_border", "#a4262c"},
+    {"tile_edge", "#808080"},  // its tiles are its cards' colour: an edge, as a contrast theme draws one
 };
 const std::map<QString, QString> desert_window_colours = {
     {"muted", "#676767"},         {"faint", "#676767"},         {"dimmed", "#808080"},
@@ -1043,7 +1045,7 @@ QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
 QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
 QWidget[vmlRole="card"] { background: {card}; border: 1px solid {border}; border-radius: 8px; }
 QFrame[vmlRole="separator"] { background: {border_strong}; border: 0; min-width: 1px; max-width: 1px; margin: 4px 6px; }
-QWidget[vmlRole="tile"] { background: {raised}; border: 0; border-radius: 8px; }
+QWidget[vmlRole="tile"] { background: {raised}; border: 1px solid {tile_edge}; border-radius: 8px; }
 QWidget[vmlRole="toolbar"] { background: {raised}; border: 1px solid {border}; border-radius: 8px; }
 )");
     const QColor accent_hover = dark ? accent.lighter(112) : accent.darker(108);
@@ -1057,7 +1059,9 @@ QWidget[vmlRole="toolbar"] { background: {raised}; border: 1px solid {border}; b
         {"danger_tint", rgba(modern_colour("danger", dark), 0.12)},
     };
     for (const auto& [name, pair] : modern_colours) {
-        values.emplace_back(name, modern_colour(name.toUtf8().constData(), dark).name());
+        // #rrggbb, or #aarrggbb where see-through ("transparent"): name() alone drops the alpha.
+        const QColor colour = modern_colour(name.toUtf8().constData(), dark);
+        values.emplace_back(name, colour.name(colour.alpha() == 255 ? QColor::HexRgb : QColor::HexArgb));
     }
     // Longest names first: {card_alt} before {card}.
     std::sort(values.begin(), values.end(), [](const auto& a, const auto& b) { return a.first.size() > b.first.size(); });

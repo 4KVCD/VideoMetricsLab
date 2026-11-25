@@ -1,15 +1,74 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "Заблоковано під час обчислення метрик.",
+  "Remove {name} from the list": "Прибрати {name} зі списку",
   "Show {name} in Metric Graphs again": "Знову показати {name} на графіках метрик",
   "{name} has no scores yet to show in Metric Graphs.": "{name} ще не має оцінок для графіків метрик.",
   "{name} is already in Metric Graphs.": "{name} уже є на графіках метрик.",
   "{name} is back in Metric Graphs.": "{name} знову на графіках метрик.",
-  "Locked while metrics are calculated.": "Заблоковано під час обчислення метрик.",
-  "Remove {name} from the list": "Прибрати {name} зі списку",
+  "A card for each saved score, to pick the one used": "Картка для кожної збереженої оцінки, щоб вибрати використовувану",
+  "CPU or GPU": "CPU чи GPU",
+  "Choose columns…": "Вибрати стовпці…",
+  "Click to use this score.": "Клацніть, щоб використати цю оцінку.",
+  "Counting the saved results...": "Підрахунок збережених результатів...",
+  "Delete:": "Видалити:",
+  "Deleting saved results...": "Видалення збережених результатів...",
+  "Each card shows when its score was saved; the round button on it picks the one used.": "Кожна картка показує, коли збережено її оцінку; кругла кнопка на ній вибирає використовувану.",
+  "Every saved result": "Усі збережені результати",
+  "Every saved score of this comparison: its statistics, when it was saved and how it was made": "Усі збережені оцінки цього порівняння: їхня статистика, коли їх збережено і як отримано",
+  "How far the frames' scores spread from their mean.": "Наскільки оцінки кадрів відхиляються від свого середнього.",
+  "Made with": "Чим створено",
+  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and deleting saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "Обчислюються метрики: тека ffmpeg, тека збережених результатів і видалення збережених результатів заблоковані до завершення запуску, бо запуск їх використовує. Усе інше можна змінити зараз.",
+  "Model or display": "Модель або дисплей",
+  "No saved results in that range.": "У цьому проміжку немає збережених результатів.",
+  "No saved results in that range: nothing deleted.": "У цьому проміжку немає збережених результатів: нічого не видалено.",
+  "No saved results in {directory}": "У {directory} немає збережених результатів",
+  "Of the newest, or of those the newest version of the app made, these come first. The Videos tab's choice goes by the settings instead.": "Серед найновіших або серед тих, що створила найновіша версія застосунку, ці йдуть першими. Вибір вкладки «Відео» натомість залежить від налаштувань.",
+  "One card per metric, saying how many are saved": "Одна картка на метрику, з кількістю збережених",
+  "Saved results are already being deleted.": "Збережені результати вже видаляються.",
+  "Score": "Оцінка",
+  "Score bands": "Діапазони оцінок",
+  "Settings > Saved Results": "Налаштування > Збережені результати",
+  "Show:": "Показувати:",
+  "The bitrate readings and black-bar answers kept with them are deleted too.": "Збережені разом із ними виміри бітрейту й дані про чорні смуги також видаляються.",
+  "The card shows the score used; the details panel, opened by the button over the scores, lists them all, and a click on another uses it.": "Картка показує використовувану оцінку; панель подробиць, що відкривається кнопкою над оцінками, перелічує їх усі, а клацання на іншій вибирає її.",
+  "The details panel, opened by the button over the scores, shows each score's metric and score, and:": "Панель подробиць, що відкривається кнопкою над оцінками, показує метрику й значення кожної оцінки, а також:",
+  "The highest frame's score.": "Найвища оцінка кадру.",
+  "The lowest frame's score.": "Найнижча оцінка кадру.",
+  "The middle frame's score.": "Медіанна оцінка кадру.",
+  "The score Open in Metric Graphs and the exports take, where a metric has several. Click another of its rows to use that one.": "Оцінка, яку беруть «Відкрити в „Графіках метрик“» та експорт, коли метрика має їх кілька. Клацніть інший її рядок, щоб використати його.",
+  "The score the card shows and Open in Metric Graphs and the exports take, unless you pick another in the details panel. The Videos tab's: the one a run would use again with the settings as they are (where it would use none, the newest).": "Оцінка, яку показує картка і беруть «Відкрити в „Графіках метрик“» та експорт, якщо ви не виберете іншу на панелі подробиць. Вибір вкладки «Відео»: та, яку запуск використав би знову з поточними налаштуваннями (якщо жодну — найновіша).",
+  "The score {share} of the frames are worse than: the low end where a higher score is better, the high end where a lower one is (Metric Graphs' {share} Low or High).": "Оцінка, гіршими за яку є {share} кадрів: нижній край, де краща вища оцінка, верхній — де краща нижча («Нижні» чи «Верхні {share}» у «Графіках метрик»).",
+  "The share of the frames in each of the metric's score bands, as Metric Graphs' table has them (≥ 95, < 70, ...).": "Частка кадрів у кожному діапазоні оцінок метрики, як у таблиці «Графіків метрик» (≥ 95, < 70, ...).",
+  "The whole video's score, as Metric Graphs shows it.": "Оцінка всього відео, як її показують «Графіки метрик».",
+  "Their videos are scored again the next time they are compared.": "Їхні відео буде оцінено знову під час наступного порівняння.",
+  "Those saved from": "Збережені від",
+  "Those saved more than": "Збережені понад",
+  "Use this score": "Використати цю оцінку",
+  "Use:": "Використовувати:",
+  "Used": "Використано",
+  "VMAF's model, or the display CVVDP modelled.": "Модель VMAF або дисплей, який моделював CVVDP.",
+  "What calculated the score, and its version.": "Що обчислило оцінку, і його версія.",
+  "When a metric has several saved scores:": "Коли метрика має кілька збережених оцінок:",
+  "When the score was saved.": "Коли оцінку збережено.",
+  "Whether the score was calculated on the CPU or the GPU.": "Чи оцінку обчислено на CPU, чи на GPU.",
+  "Worst {share}": "Найгірші {share}",
+  "by FFmpeg first": "спершу FFmpeg",
+  "by any engine": "будь-яким рушієм",
+  "by the app's own first": "спершу власним рушієм застосунку",
+  "on any device": "на будь-якому пристрої",
+  "on the CPU first": "спершу на CPU",
+  "on the GPU first": "спершу на GPU",
+  "the newest": "найновішу",
+  "the one made by the newest version of the app": "ту, що створила найновіша версія застосунку",
+  "the one the Videos tab would use": "ту, яку взяла б вкладка «Відео»",
+  "{size}, last saved {date}, in {directory}.": "{size}, востаннє збережено {date}, у {directory}.",
+  "{size}, last saved {first} to {last}, in {directory}.": "{size}, востаннє збережено з {first} до {last}, у {directory}.",
+  "Folder:": "Тека:",
+  "Saved results": "Збережені результати",
   "Start over": "Почати знову",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Очищує еталон і прибирає всі тестові відео, щоб почати нове порівняння. Збережені результати лишаються.",
   "Click Start over again to clear the reference.": "Натисніть «Почати знову» ще раз, щоб очистити еталон.",
-  "Every saved score in this folder is deleted. This can't be undone.": "Усі збережені оцінки в цій теці буде видалено. Цю дію не можна скасувати.",
   "Show details": "Показати подробиці",
   "Hide details": "Сховати подробиці",
   "OK": "OK",
@@ -343,8 +402,6 @@
   "Storage": "Сховище",
   "blank = shared user-profile folder": "Порожньо = спільна тека в профілі користувача",
   "Open": "Відкрити",
-  "Saved results:": "Збережені результати:",
-  "Clear saved results": "Очистити збережені результати",
   "Export folder:": "Тека експорту:",
   "Reuse a saved result when a video is added again": "Використовувати збережений результат, коли відео додано знову",
   "Each session's setup, every run and its steps, and every failure with its full text. Send these files along when reporting a problem.": "Параметри кожного сеансу, кожен запуск і його кроки, кожна помилка з повним текстом. Надсилайте ці файли, повідомляючи про проблему.",
@@ -396,9 +453,6 @@
   "Could not export the log: {error}": "Не вдалося експортувати журнал: {error}",
   "There is no log to export yet.": "Поки немає журналу для експорту.",
   "Log exported to {path}": "Журнал експортовано до {path}",
-  "There are no saved results to clear.": "Немає збережених результатів для очищення.",
-  "Saved results are already being cleared.": "Збережені результати вже очищуються.",
-  "Clearing saved results...": "Очищення збережених результатів...",
   "Reference video:": "Еталонне відео:",
   "No reference selected.": "Еталон не вибрано.",
   "Add/remove metrics": "Додати/прибрати метрики",
@@ -634,7 +688,6 @@
   "This saved run was measured against:\n    {source}\n\nbut the selected reference is:\n    {path}\n\nScores from two different references cannot be compared. Switch the reference to the one this run used?": "Цей збережений запуск виміряно відносно:\n    {source}\n\nале вибраний еталон:\n    {path}\n\nОцінки відносно різних еталонів не можна порівнювати. Перейти на еталон, використаний цим запуском?",
   "Choose folder to save runs into": "Виберіть теку для збереження запусків",
   "Could not {description}: {error}": "Не вдалося {description}: {error}",
-  "clear saved results": "очистити збережені результати",
   "delete saved results": "видалити збережені результати",
   "save {name}": "зберегти {name}",
   "export {name}": "експортувати {name}",
@@ -1264,7 +1317,6 @@
   "Automatic (a discrete GPU first)": "Автоматично (спершу дискретний GPU)",
   "{name} (not found)": "{name} (не знайдено)",
   "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU, який обчислює VMAF, VMAF v1, SSIMULACRA2, Butteraugli і CVVDP на ПК з кількома GPU і декодер виробника якого пробується першим, коли декодування на GPU автоматичне. Метрика, яку цей GPU обчислити не може, обчислюється на CPU, а не на іншому GPU. Автоматичний вибір спершу бере дискретний GPU.\n\nДіє з наступного запуску застосунку; --gpu у командному рядку вибирає для одного запуску.",
-  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and Clear saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "Обчислюються метрики: папка ffmpeg, папка збережених результатів і «Очистити збережені результати» заблоковані до кінця запуску, бо запуск їх використовує. Усе інше можна змінювати зараз.",
   "Locked while metrics are calculated: the run uses it.": "Заблоковано під час обчислення метрик: запуск це використовує.",
   "This video has {test:,} frames, but the reference has {source:,}, even though both are the same length. From the first point where they differ, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "У цьому відео {test:,} кадрів, а в еталоні {source:,}, хоча тривалість у них однакова. Починаючи з першого місця, де вони розходяться, кожен кадр порівнюється не з тим кадром еталона, тож усі оцінки після цього місця хибні. Зазвичай так буває, коли під час кодування кадри дублюються або викидаються. Кодування зі змінною частотою кадрів, як у джерела, цьому запобігає.",
   "This video may be out of sync with the reference. Only {compared:,} frames were compared, but videos of this length should have {length:,}. If the scores drop suddenly partway through and stay low, this is the likely cause. To find out for sure, turn on {setting}, then right-click this video and choose {recalculate}.": "Можливо, це відео не синхронізоване з еталоном. Порівняно лише {compared:,} кадрів, хоча відео такої тривалості має мати {length:,}. Якщо оцінки посередині раптово падають і лишаються низькими, причина, найімовірніше, в цьому. Щоб знати напевно, увімкніть {setting}, потім клацніть це відео правою кнопкою й виберіть «{recalculate}».",
@@ -1337,7 +1389,6 @@
   "Saved scores of {name}": "Збережені оцінки: {name}",
   "Select a comparison to see its saved scores.": "Виберіть порівняння, щоб побачити його збережені оцінки.",
   "Select one comparison to see its saved scores.": "Виберіть одне порівняння, щоб побачити його збережені оцінки.",
-  "Several scores of this metric are saved: the newest is used unless another is picked.": "Для цієї метрики збережено кілька оцінок: використовується найновіша, якщо не вибрано іншу.",
   "Size": "Розмір",
   "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "У вибраному профілі немає умов: задайте їх у Налаштування > Слабкі ділянки або виберіть пресет.",
   "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "Правила, за якими знаходяться слабкі ділянки: вони не зберігаються разом з оцінками, а застосовуються до них зараз.",
@@ -1347,8 +1398,6 @@
   "{name} (saved)": "{name} (збережено)",
   "{size:.0f} KB": "{size:.0f} КБ",
   "{size:.1f} MB": "{size:.1f} МБ",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "Видалити збережені результати з {directory}?\n\nУже оцінені відео доведеться обчислити заново. Результати, еталонне відео яких більше не там, де було, зберігаються: їхні оцінки не можна було б обчислити заново. Видаліть їх на вкладці «Збережені результати».",
-  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Деякі з них не можна було б оцінити заново: їхнє еталонне відео більше не там, де було (позначено «не знайдено»).",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nТам не знайдено: без нього ці оцінки не можна було б обчислити заново.",
   "Recognize test videos remuxed after scoring (reads each one again)": "Розпізнавати тестові відео, перепаковані після оцінювання (читає кожне ще раз)",
   "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "Тестове відео, запаковане чи перепаковане після оцінювання (його сирий потік у MKV, MKV у MP4), зберігає свої збережені оцінки: його розпізнають за закодованими кадрами.\n\nДля цього кожне тестове відео читається ще раз після збереження оцінок, стільки, скільки триває читання файлу (кілька хвилин для фільму в мережевій папці), у фоні й ніколи під час обчислення; а відео, потік якого починається як потік оціненого, читається повністю, щоб з'ясувати, чи це те саме відео, після того як знайдено збережені оцінки інших відео.\n\nВимкнено: тестові відео розпізнаються лише за файлами.",
@@ -1424,6 +1473,51 @@
   "{low} to {high} metrics": "від {low} до {high} метрик"
  },
  "plurals": {
+  "Deleted the saved scores of {count} comparison.": [
+   "Видалено збережені оцінки {count} порівняння.",
+   "Видалено збережені оцінки {count} порівнянь.",
+   "Видалено збережені оцінки {count} порівнянь."
+  ],
+  "The saved scores of {count} comparison are deleted. This can't be undone.": [
+   "Збережені оцінки {count} порівняння буде видалено. Це не можна скасувати.",
+   "Збережені оцінки {count} порівнянь буде видалено. Це не можна скасувати.",
+   "Збережені оцінки {count} порівнянь буде видалено. Це не можна скасувати."
+  ],
+  "Would delete {count} comparison's saved scores, {size}.": [
+   "Буде видалено збережені оцінки {count} порівняння, {size}.",
+   "Буде видалено збережені оцінки {count} порівнянь, {size}.",
+   "Буде видалено збережені оцінки {count} порівнянь, {size}."
+  ],
+  "day ago": [
+   "день тому",
+   "дні тому",
+   "днів тому"
+  ],
+  "{count} of them can't be scored again: its reference video is no longer where it was scored from (marked \"not found\" in the Saved Results tab).": [
+   "{count} з них не можна оцінити знову: його еталонне відео більше не там, звідки його оцінювали (позначено «не знайдено» на вкладці «Збережені результати»).",
+   "{count} з них не можна оцінити знову: їхнє еталонне відео більше не там, звідки їх оцінювали (позначено «не знайдено» на вкладці «Збережені результати»).",
+   "{count} з них не можна оцінити знову: їхнє еталонне відео більше не там, звідки їх оцінювали (позначено «не знайдено» на вкладці «Збережені результати»)."
+  ],
+  "{count} saved": [
+   "{count} збережена",
+   "{count} збережені",
+   "{count} збережених"
+  ],
+  "{count} saved result, {size}, saved {first} to {last}, in {directory}": [
+   "{count} збережений результат, {size}, збережено з {first} до {last}, у {directory}",
+   "{count} збережені результати, {size}, збережено з {first} до {last}, у {directory}",
+   "{count} збережених результатів, {size}, збережено з {first} до {last}, у {directory}"
+  ],
+  "{count} saved result, {size}, saved {first}, in {directory}": [
+   "{count} збережений результат, {size}, збережено {first}, у {directory}",
+   "{count} збережені результати, {size}, збережено {first}, у {directory}",
+   "{count} збережених результатів, {size}, збережено {first}, у {directory}"
+  ],
+  "{count} score of this metric is saved: choose the one used in the details, opened by the button above.": [
+   "Збережено {count} оцінку цієї метрики: виберіть використовувану в подробицях, що відкриваються кнопкою вище.",
+   "Збережено {count} оцінки цієї метрики: виберіть використовувану в подробицях, що відкриваються кнопкою вище.",
+   "Збережено {count} оцінок цієї метрики: виберіть використовувану в подробицях, що відкриваються кнопкою вище."
+  ],
   "Click Remove all again to remove {count} video. Saved results are kept.": ["Натисніть «Прибрати всі» ще раз, щоб прибрати {count} відео. Збережені результати лишаються.", "Натисніть «Прибрати всі» ще раз, щоб прибрати всі {count} відео. Збережені результати лишаються.", "Натисніть «Прибрати всі» ще раз, щоб прибрати всі {count} відео. Збережені результати лишаються."],
   "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["Натисніть «Почати знову» ще раз, щоб очистити еталон і прибрати {count} відео. Збережені результати лишаються.", "Натисніть «Почати знову» ще раз, щоб очистити еталон і прибрати всі {count} відео. Збережені результати лишаються.", "Натисніть «Почати знову» ще раз, щоб очистити еталон і прибрати всі {count} відео. Збережені результати лишаються."],
   "{count} test video does not last as long as the reference ({length}).": ["{count} тестове відео відрізняється за тривалістю від еталона ({length}).", "{count} тестові відео відрізняються за тривалістю від еталона ({length}).", "{count} тестових відео відрізняються за тривалістю від еталона ({length})."],
@@ -1449,11 +1543,6 @@
    "близько {count} хвилини",
    "близько {count} хвилин",
    "близько {count} хвилин"
-  ],
-  "{count} saved result, {size:.1f} MB in {directory}": [
-   "{count} збережений результат, {size:.1f} МБ у {directory}",
-   "{count} збережені результати, {size:.1f} МБ у {directory}",
-   "{count} збережених результатів, {size:.1f} МБ у {directory}"
   ],
   "Copied the log to the clipboard ({count} line, the middle left out -- Export log saves all of it).": [
    "Журнал скопійовано в буфер обміну ({count} рядок, середину пропущено — «Експорт журналу» зберігає все).",
@@ -1520,11 +1609,6 @@
    "{count} відео: {counts}",
    "{count} відео: {counts}"
   ],
-  "Removed {count} saved result.": [
-   "Видалено {count} збережений результат.",
-   "Видалено {count} збережені результати.",
-   "Видалено {count} збережених результатів."
-  ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "{count} вибране відео вже має результати бітрейту.\n\nПерерахувати його? Виберіть «Ні», щоб зберегти результати й обчислити лише файли без результатів.",
    "{count} вибрані відео вже мають результати бітрейту.\n\nПерерахувати ці файли? Виберіть «Ні», щоб зберегти результати й обчислити лише файли без результатів.",
@@ -1565,11 +1649,6 @@
    "усього {count} кадри.",
    "усього {count} кадрів."
   ],
-  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
-   "Видалити збережені оцінки {count} порівняння? Їх не можна повернути: відео буде оцінено знову під час наступного порівняння.",
-   "Видалити збережені оцінки {count} порівнянь? Їх не можна повернути: відео буде оцінено знову під час наступного порівняння.",
-   "Видалити збережені оцінки {count} порівнянь? Їх не можна повернути: відео буде оцінено знову під час наступного порівняння."
-  ],
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "Не вдалося видалити збережені оцінки {count} порівняння: можливо, один з їхніх файлів відкрито.",
    "Не вдалося видалити збережені оцінки {count} порівнянь: можливо, один з їхніх файлів відкрито.",
@@ -1579,11 +1658,6 @@
    "{count} збережене порівняння в {directory}",
    "{count} збережені порівняння в {directory}",
    "{count} збережених порівнянь у {directory}"
-  ],
-  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
-   "Збережено {count} результат, еталонне відео якого зникло: видаліть його на вкладці «Збережені результати».",
-   "Збережено {count} результати, еталонні відео яких зникли: видаліть їх на вкладці «Збережені результати».",
-   "Збережено {count} результатів, еталонні відео яких зникли: видаліть їх на вкладці «Збережені результати»."
   ],
   "Saved {count} file": [
    "Збережено {count} файл",

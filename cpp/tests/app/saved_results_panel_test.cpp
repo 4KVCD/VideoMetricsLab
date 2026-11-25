@@ -7,10 +7,14 @@
 #include <QGroupBox>
 #include <QCoreApplication>
 #include <QLabel>
+#include <QGridLayout>
 #include <QLayout>
 #include <QLineEdit>
 #include <QMenu>
 #include <QPushButton>
+#include <QRadioButton>
+#include <QToolButton>
+#include <QScrollArea>
 #include <QScrollBar>
 #include <QSignalSpy>
 #include <QTableWidget>
@@ -27,7 +31,9 @@
 
 #include "dialogs.h"
 #include "saved_results_panel.h"
+#include "saved_score_details.h"
 #include "test_videos.h"
+#include "widgets.h"
 #include "vml/analysis_request.h"
 #include "vml/metric_cache.h"
 #include "vml/metrics.h"
@@ -66,7 +72,7 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
         store_result(folder / "cache", result.source, result.distorted, request.recipe, result, "t", request.metrics);
 
     Dialogs dialogs = standard_dialogs(nullptr);
-    dialogs.ask_no_default = [](const QString&, const QString&) { return true; };
+    dialogs.message = [](const Message&) { return MessageAnswer{0, false}; };  // Delete saved results
     FileWrites writes;
     SavedResultsPanel panel(settings, dialogs, writes);
     panel.show_list(list_saved_comparisons(folder / "cache"));
@@ -91,40 +97,30 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
     panel.wait_for_details();
     panel.layout()->activate();
     EXPECT_EQ(table.height(), height);
-    EXPECT_EQ(panel.score_choice("vmaf"), nullptr);  // one score: nothing to pick
+    EXPECT_TRUE(panel.used_score("vmaf"));
+    EXPECT_EQ(panel.findChild<QRadioButton*>("pick_vmaf"), nullptr);  // one score: nothing to pick
+    // The scores are in a column on the table's left.
+    const QWidget* column = panel.findChild<QWidget*>("savedScoresColumn");
+    ASSERT_NE(column, nullptr);
+    EXPECT_LT(column->geometry().right(), table.geometry().left());
     // In VML Modern a tile a metric: its score itself, large, as Metric
     // Graphs shows it, and how it was made under it.
     panel.set_tiles(true);
     for (const std::string key : {"vmaf", "psnr"}) {
         const QString name = QString::fromStdString(key);
         const auto* score = panel.findChild<QLabel*>("score_" + name);
-        const auto* made = panel.findChild<QLabel*>("made_" + name);
+        const auto* made = panel.findChild<ElidedLabel*>("made_" + name);
         ASSERT_NE(score, nullptr) << key;
         ASSERT_NE(made, nullptr) << key;
         EXPECT_EQ(score->text().toStdString(),
                   find_metric(key)->format_value(result.metric_results.frame(key)->aggregate()));
         EXPECT_GT(score->font().pointSizeF(), made->font().pointSizeF());
-        EXPECT_TRUE(made->text().contains("CPU") || made->text().contains("GPU")) << made->text().toStdString();
+        EXPECT_TRUE(made->toolTip().isEmpty());  // nothing more to say of one score
+        EXPECT_TRUE(made->full_text().contains("CPU") || made->full_text().contains("GPU"))
+            << made->full_text().toStdString();
         EXPECT_TRUE(panel.findChild<QWidget*>("tile_" + name)->isAncestorOf(score));
     }
-    // A tile too narrow for how its score was made: two lines at most, the
-    // rest cut to "…", the whole in the tooltip (VMAF v1's ran past the
-    // tile's bottom).
-    {
-        const int width = panel.width();
-        panel.resize(420, panel.height());
-        panel.layout()->activate();
-        QCoreApplication::processEvents();
-        const auto* made = panel.findChild<QLabel*>("made_vmaf");
-        ASSERT_NE(made, nullptr);
-        EXPECT_LE(made->text().count('\n'), 1) << made->text().toStdString();
-        EXPECT_TRUE(made->text().endsWith(QChar(0x2026))) << made->text().toStdString();
-        EXPECT_TRUE(made->toolTip().contains("CPU") || made->toolTip().contains("GPU"));
-        EXPECT_LE(made->geometry().bottom(), made->parentWidget()->contentsRect().bottom());
-        panel.resize(width, panel.height());
-    }
-    // In VML Classic two metrics a row, as before: each line starts with the
-    // score itself, before how it was made.
+    // In VML Classic a row a metric: its score itself, then how it was made.
     panel.set_tiles(false);
     for (const std::string key : {"vmaf", "psnr"}) {
         const std::string score =
@@ -139,6 +135,20 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
         }
         EXPECT_TRUE(found) << key << ": no line starts with " << score << " in " << seen;
         EXPECT_EQ(panel.findChild<QWidget*>("tile_" + QString::fromStdString(key)), nullptr);
+    }
+    // Shown again (another row, the same row clicked again): the rows before
+    // are gone, not left under the new ones (each row is a layout of its
+    // own, whose labels deleting it left behind).
+    panel.scores_settings_changed();
+    panel.scores_settings_changed();
+    {
+        const std::string score =
+            find_metric("vmaf")->format_value(result.metric_results.frame("vmaf")->aggregate()) + " \xC2\xB7 ";
+        int lines = 0;
+        for (const QLabel* label : panel.findChildren<QLabel*>()) {
+            lines += label->text().startsWith(QString::fromStdString(score)) ? 1 : 0;
+        }
+        EXPECT_EQ(lines, 1);
     }
     const std::vector<LoadedSavedResult> read = panel.selected_results();
     ASSERT_EQ(read.size(), 1U);
@@ -398,12 +408,13 @@ TEST(SavedResultsPanel, ARowTheFilterHidesIsNoLongerSelected) {
         }
         return static_cast<QPushButton*>(nullptr);
     };
+    // The comparison the scores' column names, over its cards.
     const auto title = [&panel] {
-        QStringList titles;
-        for (const QGroupBox* box : panel.findChildren<QGroupBox*>()) {
-            titles << box->title();
+        QStringList names;
+        for (const ElidedLabel* name : panel.findChildren<ElidedLabel*>()) {
+            names << "Saved scores of " + name->full_text();
         }
-        return titles.join(QStringLiteral(" | "));
+        return names.join(QStringLiteral(" | "));
     };
     ASSERT_NE(button("Open in Metric Graphs"), nullptr);
 
@@ -458,9 +469,9 @@ TEST(SavedResultsPanel, DeleteDeletesWhatWasSelectedWhenTheListChangesUnderItsQu
     }
     Dialogs dialogs = standard_dialogs(nullptr);
     SavedResultsPanel* shown = nullptr;
-    dialogs.ask_no_default = [&shown, &list](const QString&, const QString&) {
+    dialogs.message = [&shown, &list](const Message&) {
         shown->show_list({list[1], list[0]});  // the listing done while asked
-        return true;
+        return MessageAnswer{0, false};
     };
     FileWrites writes;
     SavedResultsPanel panel(settings, dialogs, writes);
@@ -486,7 +497,7 @@ TEST(SavedResultsPanel, DeleteWaitsForTheSavesQueuedBeforeIt) {
     std::filesystem::create_directories(saved.folder);
     std::ofstream(saved.folder / "context.json") << "{}";
     Dialogs dialogs = standard_dialogs(nullptr);
-    dialogs.ask_no_default = [](const QString&, const QString&) { return true; };
+    dialogs.message = [](const Message&) { return MessageAnswer{0, false}; };
     FileWrites writes;
     SavedResultsPanel panel(settings, dialogs, writes);
     panel.show_list({saved});
@@ -541,47 +552,170 @@ TEST(SavedResultsPanel, ClickingARowKeepsTheListWhereItWas) {
     panel.wait_for_details();
     panel.layout()->activate();
     QCoreApplication::processEvents();
-    EXPECT_NE(panel.score_choice("vmaf"), nullptr);
+    EXPECT_TRUE(panel.used_score("vmaf"));
     EXPECT_EQ(table.height(), height);
     EXPECT_EQ(bar.value(), scrolled);
     EXPECT_EQ(table.rowAt(table.visualItemRect(table.item(last, 0)).center().y()), last);
 }
 
-TEST(SavedResultsPanel, AFewScoresSitAtTheTopOfTheBox) {
-    // The box is as tall as every metric needs: a comparison of one metric
-    // has its tile at the top, not spread down the spare height. With two
-    // scores of it, the tile's list picks one, and its score shown large
-    // follows.
-    SavedComparison one;
-    one.folder = std::filesystem::path("saved") / "one";
-    one.label = "one";
-    for (int copy = 0; copy < 2; ++copy) {
-        one.scores.push_back({one.folder / ("vmaf" + std::to_string(copy)), "vmaf", {}, 0});
+// Two saved scores of VMAF (two models), and one of PSNR, of one comparison.
+struct TwoOfVmaf {
+    test::Folder folder;
+    Settings settings;
+    std::filesystem::path older;  // VMAF's first score
+    std::filesystem::path newer;  // its second, saved later: the one used unless another is picked
+
+    TwoOfVmaf() {
+        std::ofstream(folder / "s.mkv") << "s";
+        std::ofstream(folder / "t.mkv") << "t";
+        settings.cache_dir = (folder / "cache").string();
+        // Saved twice, the first VMAF score kept as a file of its own, saved
+        // a day earlier (a score made another way has a file of its own).
+        for (const bool first : {true, false}) {
+            ComparisonResult result;
+            result.source = folder / "s.mkv";
+            result.distorted = folder / "t.mkv";
+            result.fps = 24.0;
+            result.metric_results.add(
+                frame_metric("vmaf", first ? std::vector<float>{90.0F, 80.0F} : std::vector<float>{70.0F, 60.0F}));
+            result.metric_results.add(frame_metric("psnr", {40.0F, 30.0F}));
+            const AnalysisRequest request =
+                analysis_request(VmafOptions{}, {"vmaf", "psnr"}, {}, CvvdpSettings{}, VideoInfo{}, VideoInfo{});
+            const std::filesystem::path stored = store_result(folder / "cache", result.source, result.distorted,
+                                                              request.recipe, result, "t", request.metrics);
+            if (first) {
+                for (const auto& file : std::filesystem::directory_iterator(stored)) {
+                    const std::string name = file.path().filename().string();
+                    if (name.starts_with("vmaf_") && name.ends_with(".npz")) {
+                        const std::filesystem::path copy = stored / "vmaf_0000000000000000.npz";
+                        std::filesystem::copy_file(file.path(), copy);
+                        const auto saved_at = std::filesystem::last_write_time(file.path());
+                        std::filesystem::last_write_time(copy, saved_at - std::chrono::hours(24));
+                    }
+                }
+            }
+        }
+        const std::vector<SavedComparison> list = list_saved_comparisons(folder / "cache");
+        EXPECT_EQ(list.size(), 1U);
+        std::vector<std::filesystem::path> vmaf;
+        for (const SavedScoreFile& file : list.at(0).scores) {
+            if (file.key == "vmaf") {
+                vmaf.push_back(file.file);  // newest first
+            }
+        }
+        EXPECT_EQ(vmaf.size(), 2U);
+        if (vmaf.size() == 2) {
+            newer = vmaf[0];
+            older = vmaf[1];
+        }
+    }
+};
+
+// Where a metric has several saved scores, its card says how many and uses
+// the newest; Settings' "each" shows a card for each, whose radio buttons
+// pick the one used. The details panel lists every score file with its
+// statistics, marks the one used, and a click on another row picks it.
+TEST(SavedResultsPanel, SeveralScoresOfAMetricAreCountedAndPicked) {
+    TwoOfVmaf saved;
+    const Dialogs dialogs = standard_dialogs(nullptr);
+    FileWrites writes;
+    SavedResultsPanel panel(saved.settings, dialogs, writes);
+    panel.set_tiles(true);
+    panel.show_list(list_saved_comparisons(saved.folder / "cache"));
+    panel.resize(1200, 800);
+    panel.show();
+    panel.table()->selectRow(0);
+    panel.wait_for_details();
+    EXPECT_EQ(panel.used_score("vmaf"), saved.newer);
+    const auto* badge = panel.findChild<QLabel*>("saved_vmaf");  // in the link's colour, bold
+    ASSERT_NE(badge, nullptr);
+    EXPECT_EQ(badge->text(), "2 saved");
+    EXPECT_EQ(panel.findChild<QLabel*>("saved_psnr"), nullptr);  // one score: no badge
+    EXPECT_EQ(panel.findChild<QRadioButton*>("pick_vmaf"), nullptr);
+    EXPECT_TRUE(panel.details_button()->isEnabled());
+
+    // The details: a row a file, the statistics Settings chooses, the one
+    // used marked, a click on the other picking it.
+    SavedScoresPanel* details = panel.open_details();
+    ASSERT_NE(details, nullptr);
+    QTableWidget& rows = *details->table();
+    ASSERT_EQ(rows.rowCount(), 3);  // VMAF's two, PSNR's one
+    QStringList headings;
+    for (int column = 0; column < rows.columnCount(); ++column) {
+        headings << rows.horizontalHeaderItem(column)->text();
+    }
+    EXPECT_EQ(headings, (QStringList{"Metric", "Score", "Min", "Max", "Worst 1%", "Model or display", "Made with",
+                                     "CPU or GPU", "Saved", "Used"}));
+    EXPECT_EQ(rows.item(0, 0)->text().toStdString(), find_metric("vmaf")->short_label);
+    EXPECT_EQ(rows.item(1, 0)->text(), "");  // its second score, under it
+    EXPECT_EQ(rows.item(0, 2)->text().toStdString(), find_metric("vmaf")->format_value(60.0));  // the newer's minimum
+    EXPECT_EQ(rows.item(0, 9)->text(), "\u25CF");
+    EXPECT_EQ(rows.item(1, 9)->text(), "");
+    emit rows.cellClicked(1, 0);
+    EXPECT_EQ(panel.used_score("vmaf"), saved.older);
+    EXPECT_EQ(rows.item(1, 9)->text(), "\u25CF");
+    const std::vector<LoadedSavedResult> read = panel.selected_results();
+    ASSERT_EQ(read.size(), 1U);
+    EXPECT_EQ(read[0].result->metric_results.frame("vmaf")->values, (std::vector<float>{90.0F, 80.0F}));
+    details->close();
+
+    // "each": a card for each, the one used ticked; the other ticked uses it.
+    saved.settings.saved_score_versions = "each";
+    panel.scores_settings_changed();
+    const QList<QRadioButton*> picks = panel.findChildren<QRadioButton*>("pick_vmaf");
+    ASSERT_EQ(picks.size(), 2);
+    EXPECT_TRUE(picks[1]->isChecked());  // the older, picked above
+    picks[0]->setChecked(true);
+    EXPECT_EQ(panel.used_score("vmaf"), saved.newer);
+    QCoreApplication::processEvents();  // shown again: the newer ticked
+    const QList<QRadioButton*> again = panel.findChildren<QRadioButton*>("pick_vmaf");
+    ASSERT_EQ(again.size(), 2);
+    EXPECT_TRUE(again[0]->isChecked());
+}
+
+// The column is as wide as three cards and keeps every score, however many:
+// a comparison of many metrics scrolls in it, and the table beside it keeps
+// its height whatever is selected.
+TEST(SavedResultsPanel, TheScoresColumnHoldsEveryScoreThreeCardsARow) {
+    SavedComparison many;
+    many.folder = std::filesystem::path("saved") / "many";
+    many.label = "many";
+    for (const MetricDefinition& metric : metrics()) {
+        if (!metric.is_plane()) {
+            many.scores.push_back({many.folder / std::string(metric.key), std::string(metric.key), {}, 0});
+        }
     }
     Settings settings;
     const Dialogs dialogs = standard_dialogs(nullptr);
     FileWrites writes;
     SavedResultsPanel panel(settings, dialogs, writes);
-    panel.show_list({one});
-    panel.resize(900, 700);
+    panel.set_tiles(true);
+    panel.show_list({many});
+    panel.resize(1200, 700);
     panel.show();
+    panel.layout()->activate();
+    const int height = panel.table()->height();
     panel.table()->selectRow(0);
     panel.wait_for_details();
     panel.layout()->activate();
     QCoreApplication::processEvents();
-    QComboBox* combo = panel.score_choice("vmaf");
-    ASSERT_NE(combo, nullptr);
-    EXPECT_LE(combo->geometry().top(), 2);  // VML Classic's row
-    panel.set_tiles(true);
-    panel.layout()->activate();
-    QCoreApplication::processEvents();
-    combo = panel.score_choice("vmaf");
-    ASSERT_NE(combo, nullptr);
-    const QWidget* tile = panel.findChild<QWidget*>("tile_vmaf");
-    ASSERT_NE(tile, nullptr);
-    EXPECT_TRUE(tile->isAncestorOf(combo));
-    EXPECT_LE(tile->geometry().top(), 2);
-    EXPECT_GE(tile->width(), 100);  // a fifth of the box, not squeezed
+    EXPECT_EQ(panel.table()->height(), height);
+    const QWidget* first = panel.findChild<QWidget*>("tile_vmaf");
+    ASSERT_NE(first, nullptr);
+    EXPECT_LE(first->geometry().top(), 2);  // at the column's top
+    int in_first_row = 0;
+    for (const MetricDefinition& metric : metrics()) {
+        if (metric.is_plane()) {
+            continue;
+        }
+        const QWidget* tile = panel.findChild<QWidget*>("tile_" + QString::fromStdString(std::string(metric.key)));
+        ASSERT_NE(tile, nullptr) << metric.key;  // none left out
+        in_first_row += tile->geometry().top() == first->geometry().top() ? 1 : 0;
+    }
+    EXPECT_EQ(in_first_row, SavedResultsPanel::tiles_a_row);
+    for (const QLabel* name : first->findChildren<QLabel*>()) {
+        EXPECT_LE(name->sizeHint().width(), first->contentsRect().width()) << name->text().toStdString();
+    }
 }
 
 // The header's menu: every column ticked, unticking one hides it and ticking

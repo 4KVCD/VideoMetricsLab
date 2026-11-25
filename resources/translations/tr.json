@@ -1,15 +1,74 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "Metrikler hesaplanırken kilitli.",
+  "Remove {name} from the list": "Listeden kaldır: {name}",
   "Show {name} in Metric Graphs again": "{name} metrik grafiklerinde yeniden gösterilsin",
   "{name} has no scores yet to show in Metric Graphs.": "{name} için metrik grafiklerinde gösterilecek puan henüz yok.",
   "{name} is already in Metric Graphs.": "{name} zaten metrik grafiklerinde.",
   "{name} is back in Metric Graphs.": "{name} yeniden metrik grafiklerinde.",
-  "Locked while metrics are calculated.": "Metrikler hesaplanırken kilitli.",
-  "Remove {name} from the list": "Listeden kaldır: {name}",
+  "A card for each saved score, to pick the one used": "Her kayıtlı puan için bir kart, kullanılacak olanı seçmek için",
+  "CPU or GPU": "CPU veya GPU",
+  "Choose columns…": "Sütunları seç…",
+  "Click to use this score.": "Bu puanı kullanmak için tıklayın.",
+  "Counting the saved results...": "Kaydedilen sonuçlar sayılıyor...",
+  "Delete:": "Sil:",
+  "Deleting saved results...": "Kaydedilen sonuçlar siliniyor...",
+  "Each card shows when its score was saved; the round button on it picks the one used.": "Her kart, puanının ne zaman kaydedildiğini gösterir; üzerindeki yuvarlak düğme kullanılacak olanı seçer.",
+  "Every saved result": "Tüm kaydedilen sonuçlar",
+  "Every saved score of this comparison: its statistics, when it was saved and how it was made": "Bu karşılaştırmanın tüm kayıtlı puanları: istatistikleri, ne zaman kaydedildiği ve nasıl elde edildiği",
+  "How far the frames' scores spread from their mean.": "Kare puanlarının ortalamalarından ne kadar saptığı.",
+  "Made with": "Hesaplayan",
+  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and deleting saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "Metrikler hesaplanıyor: ffmpeg klasörü, kaydedilen sonuçların klasörü ve kaydedilen sonuçları silme, çalıştırma bunları kullandığı için çalıştırma bitene kadar kilitli. Diğer her şey şimdi değiştirilebilir.",
+  "Model or display": "Model veya ekran",
+  "No saved results in that range.": "Bu aralıkta kaydedilen sonuç yok.",
+  "No saved results in that range: nothing deleted.": "Bu aralıkta kaydedilen sonuç yok: hiçbir şey silinmedi.",
+  "No saved results in {directory}": "{directory} içinde kaydedilen sonuç yok",
+  "Of the newest, or of those the newest version of the app made, these come first. The Videos tab's choice goes by the settings instead.": "En yeniler veya uygulamanın en yeni sürümünün yaptıkları arasında önce bunlar gelir. Videolar sekmesinin seçimi ise ayarlara göre yapılır.",
+  "One card per metric, saying how many are saved": "Metrik başına bir kart, kaç tane kaydedildiğini gösterir",
+  "Saved results are already being deleted.": "Kaydedilen sonuçlar zaten siliniyor.",
+  "Score": "Puan",
+  "Score bands": "Puan aralıkları",
+  "Settings > Saved Results": "Ayarlar > Kaydedilen sonuçlar",
+  "Show:": "Göster:",
+  "The bitrate readings and black-bar answers kept with them are deleted too.": "Bunlarla birlikte tutulan bit hızı ölçümleri ve siyah bant sonuçları da silinir.",
+  "The card shows the score used; the details panel, opened by the button over the scores, lists them all, and a click on another uses it.": "Kart kullanılan puanı gösterir; puanların üstündeki düğmeyle açılan ayrıntılar paneli hepsini listeler ve başka birine tıklamak onu kullanır.",
+  "The details panel, opened by the button over the scores, shows each score's metric and score, and:": "Puanların üstündeki düğmeyle açılan ayrıntılar paneli her puanın metriğini ve puanını, ayrıca şunları gösterir:",
+  "The highest frame's score.": "En yüksek kare puanı.",
+  "The lowest frame's score.": "En düşük kare puanı.",
+  "The middle frame's score.": "Ortadaki kare puanı.",
+  "The score Open in Metric Graphs and the exports take, where a metric has several. Click another of its rows to use that one.": "Bir metriğin birden fazla puanı olduğunda Metrik grafiklerinde aç ve dışa aktarmaların aldığı puan. Onu kullanmak için metriğin başka bir satırına tıklayın.",
+  "The score the card shows and Open in Metric Graphs and the exports take, unless you pick another in the details panel. The Videos tab's: the one a run would use again with the settings as they are (where it would use none, the newest).": "Ayrıntılar panelinde başkasını seçmediğiniz sürece kartın gösterdiği ve Metrik grafiklerinde aç ile dışa aktarmaların aldığı puan. Videolar sekmesininki: ayarlar şimdiki haliyle bir çalıştırmanın yeniden kullanacağı puan (hiçbirini kullanmayacaksa en yenisi).",
+  "The score {share} of the frames are worse than: the low end where a higher score is better, the high end where a lower one is (Metric Graphs' {share} Low or High).": "Karelerin {share} kadarının kendisinden kötü olduğu puan: yüksek puanın daha iyi olduğu yerde alt uç, düşük puanın daha iyi olduğu yerde üst uç (Metrik grafiklerindeki {share} düşük veya yüksek).",
+  "The share of the frames in each of the metric's score bands, as Metric Graphs' table has them (≥ 95, < 70, ...).": "Metrik grafiklerinin tablosundaki gibi, metriğin her puan aralığındaki karelerin payı (≥ 95, < 70, ...).",
+  "The whole video's score, as Metric Graphs shows it.": "Metrik grafiklerinin gösterdiği gibi, videonun tamamının puanı.",
+  "Their videos are scored again the next time they are compared.": "Videoları bir sonraki karşılaştırmada yeniden puanlanır.",
+  "Those saved from": "Şu tarihler arasında kaydedilenler:",
+  "Those saved more than": "Şundan önce kaydedilenler:",
+  "Use this score": "Bu puanı kullan",
+  "Use:": "Kullan:",
+  "Used": "Kullanılan",
+  "VMAF's model, or the display CVVDP modelled.": "VMAF'ın modeli veya CVVDP'nin modellediği ekran.",
+  "What calculated the score, and its version.": "Puanı neyin hesapladığı ve sürümü.",
+  "When a metric has several saved scores:": "Bir metriğin birden fazla kayıtlı puanı olduğunda:",
+  "When the score was saved.": "Puanın ne zaman kaydedildiği.",
+  "Whether the score was calculated on the CPU or the GPU.": "Puanın CPU'da mı GPU'da mı hesaplandığı.",
+  "Worst {share}": "En kötü {share}",
+  "by FFmpeg first": "önce FFmpeg ile",
+  "by any engine": "herhangi bir motorla",
+  "by the app's own first": "önce uygulamanın kendisiyle",
+  "on any device": "herhangi bir cihazda",
+  "on the CPU first": "önce CPU'da",
+  "on the GPU first": "önce GPU'da",
+  "the newest": "en yenisi",
+  "the one made by the newest version of the app": "uygulamanın en yeni sürümünün yaptığı",
+  "the one the Videos tab would use": "Videolar sekmesinin kullanacağı",
+  "{size}, last saved {date}, in {directory}.": "{size}, son kayıt {date}, {directory} içinde.",
+  "{size}, last saved {first} to {last}, in {directory}.": "{size}, son kayıtlar {first} - {last}, {directory} içinde.",
+  "Folder:": "Klasör:",
+  "Saved results": "Kaydedilen sonuçlar",
   "Start over": "Baştan başla",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Referansı temizler ve yeni bir karşılaştırma için tüm test videolarını kaldırır. Kaydedilen sonuçlar korunur.",
   "Click Start over again to clear the reference.": "Referansı temizlemek için \"Baştan başla\"ya tekrar tıklayın.",
-  "Every saved score in this folder is deleted. This can't be undone.": "Bu klasördeki tüm kayıtlı puanlar silinir. Bu işlem geri alınamaz.",
   "Show details": "Ayrıntıları göster",
   "Hide details": "Ayrıntıları gizle",
   "OK": "Tamam",
@@ -343,8 +402,6 @@
   "Storage": "Depolama",
   "blank = shared user-profile folder": "boş = kullanıcı profilindeki ortak klasör",
   "Open": "Aç",
-  "Saved results:": "Kaydedilen sonuçlar:",
-  "Clear saved results": "Kaydedilen sonuçları temizle",
   "Export folder:": "Dışa aktarma klasörü:",
   "Reuse a saved result when a video is added again": "Bir video yeniden eklendiğinde kaydedilen sonucu yeniden kullan",
   "Each session's setup, every run and its steps, and every failure with its full text. Send these files along when reporting a problem.": "Her oturumun ayarları, her çalıştırma ve adımları ve her hatanın tam metni. Bir sorun bildirirken bu dosyaları gönderin.",
@@ -396,9 +453,6 @@
   "Could not export the log: {error}": "Günlük dışa aktarılamadı: {error}",
   "There is no log to export yet.": "Henüz dışa aktarılacak günlük yok.",
   "Log exported to {path}": "Günlük dışa aktarıldı: {path}",
-  "There are no saved results to clear.": "Temizlenecek kaydedilmiş sonuç yok.",
-  "Saved results are already being cleared.": "Kaydedilen sonuçlar zaten temizleniyor.",
-  "Clearing saved results...": "Kaydedilen sonuçlar temizleniyor...",
   "Reference video:": "Referans video:",
   "No reference selected.": "Referans seçilmedi.",
   "Add/remove metrics": "Metrik ekle/kaldır",
@@ -634,7 +688,6 @@
   "This saved run was measured against:\n    {source}\n\nbut the selected reference is:\n    {path}\n\nScores from two different references cannot be compared. Switch the reference to the one this run used?": "Bu kayıtlı çalıştırma şuna göre ölçüldü:\n    {source}\n\nama seçili referans şu:\n    {path}\n\nİki farklı referansa göre puanlar karşılaştırılamaz. Referans, bu çalıştırmanın kullandığıyla değiştirilsin mi?",
   "Choose folder to save runs into": "Çalıştırmaların kaydedileceği klasörü seçin",
   "Could not {description}: {error}": "Yapılamadı ({description}): {error}",
-  "clear saved results": "kayıtlı sonuçları temizleme",
   "delete saved results": "kayıtlı sonuçları silme",
   "save {name}": "{name} kaydetme",
   "export {name}": "{name} dışa aktarma",
@@ -1264,7 +1317,6 @@
   "Automatic (a discrete GPU first)": "Otomatik (önce harici GPU)",
   "{name} (not found)": "{name} (bulunamadı)",
   "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "Birden fazla GPU'su olan bir bilgisayarda VMAF, VMAF v1, SSIMULACRA2, Butteraugli ve CVVDP'yi hesaplayan GPU; GPU ile kod çözme otomatikken önce bu GPU'nun üreticisinin kod çözücüsü denenir. Bu GPU'nun hesaplayamadığı bir metrik başka bir GPU'da değil, CPU'da hesaplanır. Otomatik seçenek önce harici bir GPU kullanır.\n\nUygulama bir sonraki başlatılışında geçerli olur; komut satırındaki --gpu tek bir çalıştırma için seçer.",
-  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and Clear saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "Metrikler hesaplanıyor: ffmpeg klasörü, kaydedilen sonuçlar klasörü ve Kaydedilen sonuçları temizle, çalıştırma bunları kullandığı için çalıştırma bitene kadar kilitli. Geri kalan her şey şimdi değiştirilebilir.",
   "Locked while metrics are calculated: the run uses it.": "Metrikler hesaplanırken kilitli: çalıştırma bunu kullanıyor.",
   "This video has {test:,} frames, but the reference has {source:,}, even though both are the same length. From the first point where they differ, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "Bu videoda {test:,} kare var, ama referansta {source:,} kare var; oysa ikisi aynı uzunlukta. Farklılaştıkları ilk noktadan itibaren her kare yanlış referans karesiyle karşılaştırılır, bu yüzden o noktadan sonraki tüm puanlar yanlıştır. Bu genellikle kodlama sırasında kareler çoğaltıldığında ya da atıldığında olur. Kaynağa uyan değişken kare hızıyla kodlamak bunu önler.",
   "This video may be out of sync with the reference. Only {compared:,} frames were compared, but videos of this length should have {length:,}. If the scores drop suddenly partway through and stay low, this is the likely cause. To find out for sure, turn on {setting}, then right-click this video and choose {recalculate}.": "Bu video referansla senkron olmayabilir. Yalnızca {compared:,} kare karşılaştırıldı, ama bu uzunluktaki bir videoda {length:,} kare olmalı. Puanlar ortada aniden düşüp düşük kalıyorsa olası neden budur. Kesin öğrenmek için {setting} seçeneğini açın, ardından bu videoya sağ tıklayıp {recalculate} seçeneğini seçin.",
@@ -1337,7 +1389,6 @@
   "Saved scores of {name}": "{name} için kayıtlı puanlar",
   "Select a comparison to see its saved scores.": "Kayıtlı puanlarını görmek için bir karşılaştırma seçin.",
   "Select one comparison to see its saved scores.": "Kayıtlı puanlarını görmek için yalnızca bir karşılaştırma seçin.",
-  "Several scores of this metric are saved: the newest is used unless another is picked.": "Bu metriğin birden çok puanı kayıtlı: başkası seçilmedikçe en yenisi kullanılır.",
   "Size": "Boyut",
   "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "Seçilen profilde koşul yok: koşulları Ayarlar > Zayıf bölümler içinde belirleyin veya bir ön ayar seçin.",
   "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "Zayıf bölümlerin bulunduğu kurallar: puanlarla birlikte kaydedilmez, şimdi puanlara uygulanır.",
@@ -1347,8 +1398,6 @@
   "{name} (saved)": "{name} (kayıtlı)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "Şu konumdaki kaydedilen sonuçlar silinsin mi: {directory}\n\nZaten puanlanmış videoların yeniden hesaplanması gerekecek. Referans videosu artık eski yerinde olmayanlar saklanır: puanları yeniden hesaplanamaz. Bunları Kaydedilen sonuçlar sekmesinde silin.",
-  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Bazıları yeniden puanlanamaz: referans videoları artık eski yerinde değil (\"bulunamadı\" olarak işaretli).",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nOrada bulunamadı: o olmadan bu puanlar yeniden hesaplanamaz.",
   "Recognize test videos remuxed after scoring (reads each one again)": "Puanlamadan sonra yeniden muxlanan test videolarını tanı (her birini yeniden okur)",
   "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "Puanlandıktan sonra muxlanan ya da yeniden muxlanan bir test videosu (ham akışı bir MKV'ye, bir MKV bir MP4'e) kaydedilen puanlarını korur: kodlanmış görüntülerinden tanınır.\n\nBunun için her test videosu puanları kaydedildikten sonra bir kez daha okunur; dosyayı okumak ne kadar sürerse o kadar sürer (ağ paylaşımındaki bir film için birkaç dakika), arka planda yapılır ve hesaplama sırasında asla yapılmaz; akışı puanlanmış bir videonunki gibi başlayan bir video ise diğer videoların kaydedilen puanları bulunduktan sonra aynı video olup olmadığını anlamak için baştan sona okunur.\n\nKapalı: test videoları yalnızca dosyalarından tanınır.",
@@ -1424,6 +1473,42 @@
   "{low} to {high} metrics": "{low} ile {high} arası metrik"
  },
  "plurals": {
+  "Deleted the saved scores of {count} comparison.": [
+   "{count} karşılaştırmanın kayıtlı puanları silindi.",
+   "{count} karşılaştırmanın kayıtlı puanları silindi."
+  ],
+  "The saved scores of {count} comparison are deleted. This can't be undone.": [
+   "{count} karşılaştırmanın kayıtlı puanları silinir. Bu geri alınamaz.",
+   "{count} karşılaştırmanın kayıtlı puanları silinir. Bu geri alınamaz."
+  ],
+  "Would delete {count} comparison's saved scores, {size}.": [
+   "{count} karşılaştırmanın kayıtlı puanları silinecek, {size}.",
+   "{count} karşılaştırmanın kayıtlı puanları silinecek, {size}."
+  ],
+  "day ago": [
+   "gün önce",
+   "gün önce"
+  ],
+  "{count} of them can't be scored again: its reference video is no longer where it was scored from (marked \"not found\" in the Saved Results tab).": [
+   "Bunlardan {count} tanesi yeniden puanlanamaz: referans videosu artık puanlandığı yerde değil (Kaydedilen sonuçlar sekmesinde \"bulunamadı\" olarak işaretli).",
+   "Bunlardan {count} tanesi yeniden puanlanamaz: referans videosu artık puanlandığı yerde değil (Kaydedilen sonuçlar sekmesinde \"bulunamadı\" olarak işaretli)."
+  ],
+  "{count} saved": [
+   "{count} kayıtlı",
+   "{count} kayıtlı"
+  ],
+  "{count} saved result, {size}, saved {first} to {last}, in {directory}": [
+   "{count} kaydedilen sonuç, {size}, {first} - {last} arasında kaydedildi, {directory} içinde",
+   "{count} kaydedilen sonuç, {size}, {first} - {last} arasında kaydedildi, {directory} içinde"
+  ],
+  "{count} saved result, {size}, saved {first}, in {directory}": [
+   "{count} kaydedilen sonuç, {size}, {first} tarihinde kaydedildi, {directory} içinde",
+   "{count} kaydedilen sonuç, {size}, {first} tarihinde kaydedildi, {directory} içinde"
+  ],
+  "{count} score of this metric is saved: choose the one used in the details, opened by the button above.": [
+   "Bu metriğin {count} puanı kayıtlı: kullanılacak olanı yukarıdaki düğmeyle açılan ayrıntılarda seçin.",
+   "Bu metriğin {count} puanı kayıtlı: kullanılacak olanı yukarıdaki düğmeyle açılan ayrıntılarda seçin."
+  ],
   "Click Remove all again to remove {count} video. Saved results are kept.": ["{count} videoyu kaldırmak için \"Tümünü kaldır\"a tekrar tıklayın. Kaydedilen sonuçlar korunur.", "{count} videonun tümünü kaldırmak için \"Tümünü kaldır\"a tekrar tıklayın. Kaydedilen sonuçlar korunur."],
   "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["Referansı temizleyip {count} videoyu kaldırmak için \"Baştan başla\"ya tekrar tıklayın. Kaydedilen sonuçlar korunur.", "Referansı temizleyip {count} videonun tümünü kaldırmak için \"Baştan başla\"ya tekrar tıklayın. Kaydedilen sonuçlar korunur."],
   "{count} test video does not last as long as the reference ({length}).": ["{count} test videosu referansla aynı uzunlukta değil ({length}).", "{count} test videosu referansla aynı uzunlukta değil ({length})."],
@@ -1446,10 +1531,6 @@
   "about {count} minute": [
    "yaklaşık {count} dakika",
    "yaklaşık {count} dakika"
-  ],
-  "{count} saved result, {size:.1f} MB in {directory}": [
-   "{count} kayıtlı sonuç, {size:.1f} MB, konum: {directory}",
-   "{count} kayıtlı sonuç, {size:.1f} MB, konum: {directory}"
   ],
   "Copied the log to the clipboard ({count} line, the middle left out -- Export log saves all of it).": [
    "Günlük panoya kopyalandı ({count} satır, ortası çıkarıldı — Günlüğü dışa aktar tamamını kaydeder).",
@@ -1503,10 +1584,6 @@
    "{count} video: {counts}",
    "{count} video: {counts}"
   ],
-  "Removed {count} saved result.": [
-   "{count} kayıtlı sonuç kaldırıldı.",
-   "{count} kayıtlı sonuç kaldırıldı."
-  ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "İşaretli {count} videonun zaten bit hızı sonuçları var.\n\nYeniden hesaplansın mı? Sonuçlarını koruyup yalnızca sonucu olmayan dosyaları hesaplamak için Hayır'ı seçin.",
    "İşaretli {count} videonun zaten bit hızı sonuçları var.\n\nBu dosyalar yeniden hesaplansın mı? Sonuçlarını koruyup yalnızca sonucu olmayan dosyaları hesaplamak için Hayır'ı seçin."
@@ -1539,10 +1616,6 @@
    "toplam {count} kare.",
    "toplam {count} kare."
   ],
-  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
-   "{count} karşılaştırmanın kayıtlı puanları silinsin mi? Geri getirilemezler: videolar bir sonraki karşılaştırmada yeniden puanlanır.",
-   "{count} karşılaştırmanın kayıtlı puanları silinsin mi? Geri getirilemezler: videolar bir sonraki karşılaştırmada yeniden puanlanır."
-  ],
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "{count} karşılaştırmanın kayıtlı puanları silinemedi: dosyalarından biri açık olabilir.",
    "{count} karşılaştırmanın kayıtlı puanları silinemedi: dosyalarından biri açık olabilir."
@@ -1550,10 +1623,6 @@
   "{count} saved comparison in {directory}": [
    "{directory} içinde {count} kayıtlı karşılaştırma",
    "{directory} içinde {count} kayıtlı karşılaştırma"
-  ],
-  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
-   "Referans videosu kaybolan {count} sonuç saklandı: Kaydedilen sonuçlar sekmesinde silin.",
-   "Referans videoları kaybolan {count} sonuç saklandı: Kaydedilen sonuçlar sekmesinde silin."
   ],
   "Saved {count} file": [
    "{count} dosya kaydedildi",

@@ -332,10 +332,6 @@ bool compatible(const MetricRequestSpec& spec, const MetricProvenance& provenanc
     return compatibility == spec.implementation_compatibility_id;
 }
 
-std::filesystem::path metric_path(const std::filesystem::path& directory, const MetricRequestSpec& spec) {
-    return directory / platform::path_from_text(spec.key + "_" + metric_identity_hash(spec) + ".npz");
-}
-
 // Writes `bytes` to `path` through a temporary file that is then renamed
 // over it, so that a crash never leaves half a file.
 void write_atomically(const std::filesystem::path& path, const std::string& bytes) {
@@ -1948,6 +1944,17 @@ bool made_as_chosen(const std::string& key, const std::optional<std::string>& ch
     return true;
 }
 
+std::filesystem::path metric_path(const std::filesystem::path& directory, const MetricRequestSpec& spec) {
+    return directory / platform::path_from_text(spec.key + "_" + metric_identity_hash(spec) + ".npz");
+}
+
+bool run_takes(const std::filesystem::path& folder, const MetricRequestSpec& spec, const std::filesystem::path& file,
+               const MetricProvenance& made, const std::optional<std::string>& choice,
+               const std::function<bool(const std::string&)>& gpu_can_score, const std::vector<ColourTags>& infos) {
+    return file.filename() == metric_path(folder, spec).filename() &&
+           made_as_chosen(spec.key, choice, made.compute_backend, gpu_can_score) && answers(spec, made, infos);
+}
+
 std::vector<std::string> reusable_keys(const ComparisonResult& result, const std::vector<MetricRequestSpec>& specs,
                                        const std::map<std::string, std::string>& backends,
                                        const std::function<bool(const std::string&)>& gpu_can_score,
@@ -2119,9 +2126,12 @@ std::string lookup_token(const std::filesystem::path& source, const std::filesys
 }
 
 CacheSummary cache_summary(const std::filesystem::path& base) {
-    // Walked by directory entries, which come with their sizes on Windows:
-    // asking each file for its size takes about ten times as long.
+    // Walked by directory entries, which come with their sizes and times on
+    // Windows: asking each file for them takes about ten times as long.
     CacheSummary summary;
+    std::map<std::filesystem::path, CacheSummary::Comparison> comparisons;
+    const auto file_now = std::filesystem::file_time_type::clock::now();
+    const auto system_now = std::chrono::system_clock::now();
     std::error_code error;
     std::filesystem::recursive_directory_iterator walk(
         base / format_folder, std::filesystem::directory_options::skip_permission_denied, error);
@@ -2130,14 +2140,37 @@ CacheSummary cache_summary(const std::filesystem::path& base) {
         if (!walk->is_regular_file(ignored)) {
             continue;
         }
-        if (const std::uintmax_t size = walk->file_size(ignored); !ignored) {
+        const std::uintmax_t size = walk->file_size(ignored);
+        if (!ignored) {
             summary.bytes += size;
         }
-        // A comparison's folder holds its context.json (<base>/v2/<hash>).
-        if (walk.depth() == 1 && walk->path().filename() == "context.json") {
-            ++summary.comparisons;
+        // A comparison's folder holds its context.json (<base>/v2/<hash>),
+        // and its saved time is its newest file's.
+        if (walk.depth() == 1) {
+            CacheSummary::Comparison& comparison = comparisons[walk->path().parent_path()];
+            comparison.bytes += ignored ? 0 : size;
+            std::error_code untimed;
+            const std::filesystem::file_time_type when = walk->last_write_time(untimed);
+            if (!untimed) {
+                // On the system clock, file_time_type's not being it everywhere
+                // (as list_saved_comparisons carries a file's age over).
+                comparison.saved = std::max(
+                    comparison.saved,
+                    system_now - std::chrono::duration_cast<std::chrono::system_clock::duration>(file_now - when));
+            }
+            if (walk->path().filename() == "context.json") {
+                ++summary.comparisons;
+                comparison.folder = walk->path().parent_path();  // a comparison, not a folder half-written
+            }
         }
     }
+    for (auto& [folder, comparison] : comparisons) {
+        if (!comparison.folder.empty()) {
+            summary.saved.push_back(std::move(comparison));
+        }
+    }
+    std::sort(summary.saved.begin(), summary.saved.end(),
+              [](const CacheSummary::Comparison& a, const CacheSummary::Comparison& b) { return a.saved > b.saved; });
     // The bitrate saved beside them (bitrate_store.h) is saved results too.
     std::filesystem::directory_iterator bitrate(bitrate_store_folder(base), error);
     for (; !error && bitrate != std::filesystem::directory_iterator(); bitrate.increment(error)) {

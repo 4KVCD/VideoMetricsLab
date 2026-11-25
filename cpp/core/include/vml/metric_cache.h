@@ -10,6 +10,7 @@
 // metric score, named by the metric and a hash of its request.
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -154,6 +155,19 @@ bool answers(const MetricRequestSpec& spec, const MetricProvenance& provenance, 
 bool made_as_chosen(const std::string& key, const std::optional<std::string>& choice, const std::string& produced,
                     const std::function<bool(const std::string&)>& gpu_can_score);
 
+// The file of a comparison's `folder` that holds the score of `spec`: its
+// request, VMAF's model included, names it (metric_identity_hash).
+std::filesystem::path metric_path(const std::filesystem::path& directory, const MetricRequestSpec& spec);
+
+// Whether a run asking for `spec` takes the saved score `file` of the
+// comparison `folder`, made with `made`: the one file the run reads for it
+// (metric_path), answering the request, made where the metric is set to be
+// calculated (`choice`, made_as_chosen). Saved Results' "the one the Videos
+// tab would use".
+bool run_takes(const std::filesystem::path& folder, const MetricRequestSpec& spec, const std::filesystem::path& file,
+               const MetricProvenance& made, const std::optional<std::string>& choice,
+               const std::function<bool(const std::string&)>& gpu_can_score, const std::vector<ColourTags>& infos);
+
 // The scores of `result` that a run asking for `specs` keeps instead of
 // calculating them again: those that exist, were made where their metric
 // is set to be calculated (`backends`), and answer the request.
@@ -278,10 +292,20 @@ std::string saved_content_hash(const std::filesystem::path& folder, bool referen
 bool saved_file_at(const std::filesystem::path& folder, bool reference, const std::filesystem::path& path);
 
 // How many comparisons are saved under `base`, and the bytes their files
-// and the saved bitrate (bitrate_store.h) take, for Settings.
+// and the saved bitrate (bitrate_store.h) take, for Settings; and each
+// comparison's folder, when it was last saved (its newest file's time, as
+// list_saved_comparisons has it) and its files' bytes, which the same walk
+// reads at no cost (a directory entry carries its size and time): what a
+// deletion by date would delete, said before it is asked for.
 struct CacheSummary {
+    struct Comparison {
+        std::filesystem::path folder;
+        std::chrono::system_clock::time_point saved;
+        std::uintmax_t bytes = 0;
+    };
     int comparisons = 0;
     std::uintmax_t bytes = 0;
+    std::vector<Comparison> saved;  // newest first
 };
 CacheSummary cache_summary(const std::filesystem::path& base);
 

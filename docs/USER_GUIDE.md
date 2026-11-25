@@ -247,7 +247,7 @@ Classic has the **Progress** button alone, there too: **Export** is always the
 last button of the tab bar.
 
 While metrics are calculated, Settings stays open, but the ffmpeg folder, the
-saved results' folder and **Clear saved results** are locked until the run
+saved results' folder and deleting saved results are locked until the run
 ends, as a note at the top of the tab says, above the sub-tabs: the run uses
 them. Everything else can be changed; the GPU metrics' choices apply from the
 next run.
@@ -815,7 +815,7 @@ $run.videos[0].metrics.vmaf.score
 | `--cancel-on-stdin-eof` | Cancel the run, as Ctrl+C does, when the standard input ends. For a program that starts this one and cannot send it Ctrl+C: it keeps the input open, and closes it to cancel. Not with an input that is empty from the start (`< NUL`), which would cancel at once. Once the results are given, its end cancels nothing: the command ends as the run did. |
 | `--settings FILE` | Read the settings from FILE (a `settings.json`, such as a copy of the app's, kept with a script) in place of the app's. Every option left out takes its value from it, as it would from the app's. It is never written; a FILE that is not there or is not JSON is an input not read (exit code 4). |
 | `--no-settings` | Take every setting at its default, as a new install has them, whatever the app's settings say: the same command gives the same run on any PC. |
-| `--cache-dir FOLDER` | Read and save the saved scores (and the black bars found) in FOLDER, in place of the folder Settings > Storage names. |
+| `--cache-dir FOLDER` | Read and save the saved scores (and the black bars found) in FOLDER, in place of the folder Settings > Saved Results names. |
 | `--no-save` | Read the saved scores, but save nothing to them: no scores, black bars or records of remuxes or moved files. For a trial whose scores should not be kept. |
 | `--no-cache` | Neither read nor save the saved scores: every metric is calculated, and nothing is kept. Not with `--no-save` or `--cache-dir`. |
 
@@ -1169,7 +1169,7 @@ took. [The results file](RESULTS_JSON.md) describes every key.
 ### The Saved Results tab
 
 **Saved Results** lists every comparison whose scores the app has saved (its
-results cache, Settings > Storage > Saved results), newest first, with its
+results cache, Settings > Saved Results > Folder), newest first, with its
 test video, reference, when it was saved, its metrics and its size; **Filter**
 narrows it by name or folder. Select one or more to use them without adding the
 videos again:
@@ -1199,8 +1199,10 @@ videos again:
     they are exported;
   - **Run file (.metrics.json)...**: each comparison as a run file, which
     **Import run file...** reads back, as the Videos tab's.
-- **Delete...** removes their saved scores, after asking: the videos are
-  scored again the next time they are compared. While metrics are
+- **Delete...** deletes their saved scores, after the question Settings'
+  Delete... asks too: how many, their size and dates, and how many of them
+  can't be scored again; the videos are scored again the next time they are
+  compared. While metrics are
   calculated, it is locked for the comparisons the run is calculating (its
   reference with each of its test videos, also where one was saved under a
   file's old name or folder), whose scores the run reads and saves; others
@@ -1218,22 +1220,57 @@ app opens.
 A comparison whose reference video is no longer where its scores were saved
 from (deleted, moved, unreachable, or another file there now) shows its
 reference as "*name* (not found)", in italics: its saved scores are the only
-ones there are, and could not be calculated again without it. **Delete...**
-says so when it would delete any such, and **Settings > Storage > Clear saved
-results** keeps them, with their videos' saved bitrate, saying how many it
-kept; delete them here.
+ones there are, and could not be calculated again without it. Both
+**Delete...** buttons, here and in Settings > Saved Results, say how many
+such they would delete before they do.
 
-**Saved scores** shows the selected comparison's scores: each metric's score
-for the whole video, as Metric Graphs' table shows it, and when and how it was
-made (GPU or CPU, the program, the VMAF model by its version, the CVVDP
-display). In VML Modern each metric is a tile, five to a row, its score in
-large type; in VML Classic a line each, two metrics a row.
-Where a metric has more than one (CVVDP for two displays; SSIMULACRA2 on the
-GPU and the CPU), a list picks one: the newest is used unless another is
-picked (in VML Modern the tile's score follows the pick). A score
-the Videos tab would not use, and would calculate again (one made by an
-older version that read these videos wrongly, say), is marked "out of date"
-and is not used: not opened, exported or offered to pick.
+**Saved scores**, in a column on the list's left, shows the selected
+comparison's scores: each metric's score for the whole video, as Metric
+Graphs' table shows it, and whether the GPU or the CPU calculated it. In VML
+Modern each is a card, three to a row, its score in large type; in VML
+Classic a line each. Every score is there; the column scrolls where there
+are more than it holds.
+
+The button at the column's top right (a circled *i*) opens the details: a
+row for each saved score, with the statistics of its frames (any of Metric
+Graphs': Median, StDev, Min, Max, the worst 10% to 0.1%, and the share in
+each score band, as "> 90: 98.3%") and the facts of how it was made that
+**Settings > Saved Results** chooses (at first Min, Max,
+Worst 1%, when it was saved, CPU or GPU, the program and its version, and the
+VMAF model or CVVDP display). **Choose columns...** at its foot opens that
+setting. Esc, a click outside it or another click on its button closes it.
+
+Where a metric has more than one saved score (CVVDP for two displays;
+SSIMULACRA2 on the GPU and the CPU), **Settings > Saved Results > Use**
+decides which one is used, unless you pick another:
+- **the one the Videos tab would use** (the default): the score a run would
+  use again with the settings as they are, the same checks it makes; where it
+  would use none, the newest;
+- **the newest**, or **the one made by the newest version of the app**, each
+  with a device (**on the GPU first**, **on the CPU first**) and an engine
+  (**by the app's own first**, **by FFmpeg first**) put first if you choose.
+
+Its card says how many are saved ("2 saved", in the link color); click another
+of its rows in the details to use that one, marked ● there. With **Show: A
+card for each saved score, to pick the one used**, the column shows a card for
+each, with when it was saved, and a round button on each picks the one used.
+A score the Videos tab would not use, and would calculate again (one made by
+an older version that read these videos wrongly, say), is marked "out of
+date" and is not used: not opened, exported or offered to pick.
+
+**Settings > Saved Results** has how the tab shows several saved scores of
+a metric, the details' columns, and the saved results themselves: where they
+are kept (**Folder**), how many there are, their size and the dates they were
+saved between, **Reuse a saved result when a video is added again** and
+**Recognize test videos remuxed after scoring**.
+
+**Delete:** deletes saved results: **Every saved result** (the bitrate
+readings and the black-bar answers kept with them too), **Those saved more
+than** a number of days ago, or **Those saved from** one date to another
+(both days whole). What it deleted is said there too, under it. Under it, before you click, it says how many
+comparisons that would delete and their size. **Delete...** then asks, as
+the tab's Delete... does, saying how many of them can't be scored again
+because their reference video is gone; it deletes those too.
 
 ### Saving from the Videos tab
 
@@ -1450,7 +1487,7 @@ tags, or a re-encode, is another video and is scored again. Scores found
 this way belong to the files where they are now: Video Compare plays those,
 and a run file exported from the row names them.
 
-With **Settings > Storage > Recognize test videos remuxed after scoring**
+With **Settings > Saved Results > Recognize test videos remuxed after scoring**
 (off by default; the command line's `--test-remuxes on`), a test video
 remuxed (its raw stream, `.264`, `.265`, `.266` or `.obu`, muxed into MKV or
 MP4 with its audio, an MKV remuxed to MP4, a title tag edited) keeps its scores

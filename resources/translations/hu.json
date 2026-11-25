@@ -1,15 +1,74 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "Zárolva a metrikák számítása alatt.",
+  "Remove {name} from the list": "Eltávolítás a listáról: {name}",
   "Show {name} in Metric Graphs again": "{name} újra megjelenítése a metrikagrafikonokon",
   "{name} has no scores yet to show in Metric Graphs.": "{name} még nem rendelkezik a metrikagrafikonokon megjeleníthető pontszámokkal.",
   "{name} is already in Metric Graphs.": "{name} már szerepel a metrikagrafikonokon.",
   "{name} is back in Metric Graphs.": "{name} ismét szerepel a metrikagrafikonokon.",
-  "Locked while metrics are calculated.": "Zárolva a metrikák számítása alatt.",
-  "Remove {name} from the list": "Eltávolítás a listáról: {name}",
+  "A card for each saved score, to pick the one used": "Minden mentett pontszámhoz egy kártya, a használt kiválasztásához",
+  "CPU or GPU": "CPU vagy GPU",
+  "Choose columns…": "Oszlopok kiválasztása…",
+  "Click to use this score.": "Kattintson e pontszám használatához.",
+  "Counting the saved results...": "Mentett eredmények megszámolása...",
+  "Delete:": "Törlés:",
+  "Deleting saved results...": "Mentett eredmények törlése...",
+  "Each card shows when its score was saved; the round button on it picks the one used.": "Minden kártya mutatja, mikor mentették a pontszámát; a rajta lévő kerek gomb választja ki a használtat.",
+  "Every saved result": "Minden mentett eredmény",
+  "Every saved score of this comparison: its statistics, when it was saved and how it was made": "Ennek az összehasonlításnak minden mentett pontszáma: a statisztikái, a mentés ideje és az, hogy hogyan készült",
+  "How far the frames' scores spread from their mean.": "Mennyire szóródnak a képkockák pontszámai az átlaguk körül.",
+  "Made with": "Készítette",
+  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and deleting saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "Metrikák számítása folyik: az ffmpeg mappája, a mentett eredmények mappája és a mentett eredmények törlése a futás végéig zárolva van, mert a futás használja őket. Minden más most is módosítható.",
+  "Model or display": "Modell vagy kijelző",
+  "No saved results in that range.": "Ebben a tartományban nincs mentett eredmény.",
+  "No saved results in that range: nothing deleted.": "Ebben a tartományban nincs mentett eredmény: semmi sem törlődött.",
+  "No saved results in {directory}": "Nincs mentett eredmény itt: {directory}",
+  "Of the newest, or of those the newest version of the app made, these come first. The Videos tab's choice goes by the settings instead.": "A legújabbak, illetve az alkalmazás legújabb verziójával készültek közül ezek kerülnek előre. A Videók lap választása ehelyett a beállításokat követi.",
+  "One card per metric, saying how many are saved": "Metrikánként egy kártya, amely mutatja, hány van mentve",
+  "Saved results are already being deleted.": "A mentett eredmények törlése már folyamatban van.",
+  "Score": "Pontszám",
+  "Score bands": "Pontszámsávok",
+  "Settings > Saved Results": "Beállítások > Mentett eredmények",
+  "Show:": "Megjelenítés:",
+  "The bitrate readings and black-bar answers kept with them are deleted too.": "A velük tárolt bitráta-mérések és fekete sáv-eredmények is törlődnek.",
+  "The card shows the score used; the details panel, opened by the button over the scores, lists them all, and a click on another uses it.": "A kártya a használt pontszámot mutatja; a pontszámok fölötti gombbal megnyitott részletek panel mindet felsorolja, és egy másikra kattintva az lesz használva.",
+  "The details panel, opened by the button over the scores, shows each score's metric and score, and:": "A pontszámok fölötti gombbal megnyitott részletek panel minden pontszám metrikáját és értékét mutatja, továbbá:",
+  "The highest frame's score.": "A legmagasabb képkocka-pontszám.",
+  "The lowest frame's score.": "A legalacsonyabb képkocka-pontszám.",
+  "The middle frame's score.": "A középső (medián) képkocka pontszáma.",
+  "The score Open in Metric Graphs and the exports take, where a metric has several. Click another of its rows to use that one.": "Az a pontszám, amelyet a Megnyitás a Metrikagrafikonokban és az exportok használnak, ha egy metrikának több is van. Kattintson egy másik sorára annak használatához.",
+  "The score the card shows and Open in Metric Graphs and the exports take, unless you pick another in the details panel. The Videos tab's: the one a run would use again with the settings as they are (where it would use none, the newest).": "Az a pontszám, amelyet a kártya mutat, és amelyet a Megnyitás a Metrikagrafikonokban és az exportok használnak, hacsak nem választ másikat a részletek panelen. A Videók lapé: az, amelyet egy futás újra használna a jelenlegi beállításokkal (ha egyiket sem, a legújabb).",
+  "The score {share} of the frames are worse than: the low end where a higher score is better, the high end where a lower one is (Metric Graphs' {share} Low or High).": "Az a pontszám, amelynél a képkockák {share} része rosszabb: az alsó szél, ahol a magasabb pontszám a jobb, a felső, ahol az alacsonyabb (a Metrikagrafikonok Alsó vagy Felső {share} értéke).",
+  "The share of the frames in each of the metric's score bands, as Metric Graphs' table has them (≥ 95, < 70, ...).": "A képkockák aránya a metrika egyes pontszámsávjaiban, ahogy a Metrikagrafikonok táblázata mutatja (≥ 95, < 70, ...).",
+  "The whole video's score, as Metric Graphs shows it.": "A teljes videó pontszáma, ahogy a Metrikagrafikonok mutatja.",
+  "Their videos are scored again the next time they are compared.": "A videóik pontozása újra megtörténik, amikor legközelebb összehasonlítja őket.",
+  "Those saved from": "Az ekkor mentettek:",
+  "Those saved more than": "A több mint",
+  "Use this score": "E pontszám használata",
+  "Use:": "Használja:",
+  "Used": "Használt",
+  "VMAF's model, or the display CVVDP modelled.": "A VMAF modellje, vagy a kijelző, amelyet a CVVDP szimulált.",
+  "What calculated the score, and its version.": "Mi számolta a pontszámot, és annak verziója.",
+  "When a metric has several saved scores:": "Ha egy metrikának több mentett pontszáma van:",
+  "When the score was saved.": "Mikor mentették a pontszámot.",
+  "Whether the score was calculated on the CPU or the GPU.": "A pontszámot a CPU vagy a GPU számolta.",
+  "Worst {share}": "Legrosszabb {share}",
+  "by FFmpeg first": "elsőként az FFmpeggel",
+  "by any engine": "bármely motorral",
+  "by the app's own first": "elsőként az alkalmazás sajátjával",
+  "on any device": "bármely eszközön",
+  "on the CPU first": "elsőként a CPU-n",
+  "on the GPU first": "elsőként a GPU-n",
+  "the newest": "a legújabbat",
+  "the one made by the newest version of the app": "az alkalmazás legújabb verziójával készültet",
+  "the one the Videos tab would use": "azt, amelyet a Videók lap használna",
+  "{size}, last saved {date}, in {directory}.": "{size}, utoljára mentve: {date}, helye: {directory}.",
+  "{size}, last saved {first} to {last}, in {directory}.": "{size}, utoljára mentve: {first} – {last}, helye: {directory}.",
+  "Folder:": "Mappa:",
+  "Saved results": "Mentett eredmények",
   "Start over": "Újrakezdés",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Törli a referenciát és eltávolítja az összes tesztvideót egy új összehasonlításhoz. A mentett eredmények megmaradnak.",
   "Click Start over again to clear the reference.": "Kattintson ismét az „Újrakezdés” gombra a referencia törléséhez.",
-  "Every saved score in this folder is deleted. This can't be undone.": "A mappában lévő összes mentett pontszám törlődik. Ez nem vonható vissza.",
   "Show details": "Részletek megjelenítése",
   "Hide details": "Részletek elrejtése",
   "OK": "OK",
@@ -343,8 +402,6 @@
   "Storage": "Tárolás",
   "blank = shared user-profile folder": "Üres = megosztott mappa a felhasználói profilban",
   "Open": "Megnyitás",
-  "Saved results:": "Mentett eredmények:",
-  "Clear saved results": "Mentett eredmények törlése",
   "Export folder:": "Exportálási mappa:",
   "Reuse a saved result when a video is added again": "Mentett eredmény újrahasználata, ha a videót újra hozzáadja",
   "Each session's setup, every run and its steps, and every failure with its full text. Send these files along when reporting a problem.": "Minden munkamenet beállításai, minden futtatás és lépései, minden hiba a teljes szövegével. Hibabejelentéskor küldje el ezeket a fájlokat.",
@@ -396,9 +453,6 @@
   "Could not export the log: {error}": "A napló nem exportálható: {error}",
   "There is no log to export yet.": "Még nincs exportálható napló.",
   "Log exported to {path}": "Napló exportálva ide: {path}",
-  "There are no saved results to clear.": "Nincsenek törölhető mentett eredmények.",
-  "Saved results are already being cleared.": "A mentett eredmények törlése már folyamatban van.",
-  "Clearing saved results...": "Mentett eredmények törlése...",
   "Reference video:": "Referenciavideó:",
   "No reference selected.": "Nincs kiválasztva referencia.",
   "Add/remove metrics": "Metrikák hozzáadása/eltávolítása",
@@ -634,7 +688,6 @@
   "This saved run was measured against:\n    {source}\n\nbut the selected reference is:\n    {path}\n\nScores from two different references cannot be compared. Switch the reference to the one this run used?": "Ennek a mentett futtatásnak a referenciája:\n    {source}\n\na kiválasztott referencia viszont:\n    {path}\n\nEltérő referenciákhoz mért pontszámok nem hasonlíthatók össze. Átvált a futtatás által használt referenciára?",
   "Choose folder to save runs into": "Válasszon mappát a futtatások mentéséhez",
   "Could not {description}: {error}": "Sikertelen: {description}: {error}",
-  "clear saved results": "a mentett eredmények törlése",
   "delete saved results": "a mentett eredmények eltávolítása",
   "save {name}": "{name} mentése",
   "export {name}": "{name} exportálása",
@@ -1264,7 +1317,6 @@
   "Automatic (a discrete GPU first)": "Automatikus (először dedikált GPU)",
   "{name} (not found)": "{name} (nem található)",
   "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "Az a GPU, amely több GPU-val rendelkező gépen a VMAF, VMAF v1, SSIMULACRA2, Butteraugli és CVVDP értékeket számolja, és amelynek gyártói dekódere kerül először sorra, ha a GPU-s dekódolás automatikus. Az a metrika, amelyet a GPU-ja nem tud kiszámolni, a CPU-n számolódik, nem egy másik GPU-n. Az automatikus mód először dedikált GPU-t használ.\n\nAz alkalmazás következő indításakor lép érvénybe; a parancssor --gpu kapcsolója egy futtatásra választ.",
-  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and Clear saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "Metrikák számítása folyik: az ffmpeg mappája, a mentett eredmények mappája és a Mentett eredmények törlése a futás végéig zárolva van, mert a futás használja őket. Minden más most is módosítható.",
   "Locked while metrics are calculated: the run uses it.": "Zárolva a metrikák számítása alatt: a futás használja.",
   "This video has {test:,} frames, but the reference has {source:,}, even though both are the same length. From the first point where they differ, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "Ennek a videónak {test:,} képkockája van, a referenciának viszont {source:,}, pedig a kettő ugyanolyan hosszú. Az első eltérés helyétől minden képkocka a rossz referencia-képkockával kerül összehasonlításra, így onnantól minden pontszám hibás. Ez általában akkor fordul elő, ha kódoláskor képkockák megkettőződnek vagy kimaradnak. A forrásnak megfelelő változó képkockasebességű kódolás megelőzi.",
   "This video may be out of sync with the reference. Only {compared:,} frames were compared, but videos of this length should have {length:,}. If the scores drop suddenly partway through and stay low, this is the likely cause. To find out for sure, turn on {setting}, then right-click this video and choose {recalculate}.": "Lehet, hogy ez a videó nincs szinkronban a referenciával. Csak {compared:,} képkockát hasonlítottak össze, de egy ilyen hosszú videónak {length:,} képkockája kellene legyen. Ha a pontszámok valahol hirtelen leesnek és alacsonyak maradnak, valószínűleg ez az oka. A biztos válaszhoz kapcsolja be ezt: {setting}, majd kattintson a videóra a jobb gombbal, és válassza ezt: {recalculate}.",
@@ -1337,7 +1389,6 @@
   "Saved scores of {name}": "{name} mentett pontszámai",
   "Select a comparison to see its saved scores.": "Jelöljön ki egy összehasonlítást a mentett pontszámai megtekintéséhez.",
   "Select one comparison to see its saved scores.": "Csak egy összehasonlítást jelöljön ki a mentett pontszámai megtekintéséhez.",
-  "Several scores of this metric are saved: the newest is used unless another is picked.": "Ennek a metrikának több pontszáma is el van mentve: a legújabbat használja, hacsak nem választ másikat.",
   "Size": "Méret",
   "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "A kiválasztott profilnak nincsenek feltételei: adja meg őket a Beállítások > Gyenge szakaszok pontban, vagy válasszon előbeállítást.",
   "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "A szabályok, amelyek alapján a gyenge szakaszok meghatározhatók: nem a pontszámokkal együtt vannak mentve, hanem most kerülnek alkalmazásra rajtuk.",
@@ -1347,8 +1398,6 @@
   "{name} (saved)": "{name} (mentett)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "Törli a mentett eredményeket innen: {directory}?\n\nA már pontozott videókat újra kell számolni. Azok megmaradnak, amelyek referenciavideója már nincs ott, ahol volt: a pontszámaikat nem lehetne újra kiszámolni. Ezeket a Mentett eredmények lapon törölheti.",
-  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Némelyiküket nem lehetne újra pontozni: a referenciavideójuk már nincs ott, ahol volt („nem található” jelöléssel).",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nOtt nem található: nélküle ezeket a pontszámokat nem lehetne újra kiszámolni.",
   "Recognize test videos remuxed after scoring (reads each one again)": "A pontozás után újramuxolt tesztvideók felismerése (mindegyiket újra beolvassa)",
   "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "A pontozás után muxolt vagy újramuxolt tesztvideó (nyers streamje MKV-be, egy MKV MP4-be) megtartja a mentett pontszámait: kódolt képeiről ismerhető fel.\n\nEhhez minden tesztvideót még egyszer be kell olvasni a pontszámai mentése után, annyi ideig, amennyi a fájl beolvasása (hálózati megosztáson lévő filmnél néhány perc), a háttérben és soha nem számítás közben; és az a videó, amelynek streamje úgy kezdődik, mint egy pontozotté, teljes egészében beolvasásra kerül, hogy kiderüljön, ugyanaz-e, miután a többi videó mentett pontszámai megvannak.\n\nKikapcsolva: a tesztvideók csak a fájljaikról ismerhetők fel.",
@@ -1424,6 +1473,42 @@
   "{low} to {high} metrics": "{low}–{high} metrika"
  },
  "plurals": {
+  "Deleted the saved scores of {count} comparison.": [
+   "{count} összehasonlítás mentett pontszámai törölve.",
+   "{count} összehasonlítás mentett pontszámai törölve."
+  ],
+  "The saved scores of {count} comparison are deleted. This can't be undone.": [
+   "{count} összehasonlítás mentett pontszámai törlődnek. Ez nem vonható vissza.",
+   "{count} összehasonlítás mentett pontszámai törlődnek. Ez nem vonható vissza."
+  ],
+  "Would delete {count} comparison's saved scores, {size}.": [
+   "{count} összehasonlítás mentett pontszámai törlődnének, {size}.",
+   "{count} összehasonlítás mentett pontszámai törlődnének, {size}."
+  ],
+  "day ago": [
+   "napja mentettek",
+   "napja mentettek"
+  ],
+  "{count} of them can't be scored again: its reference video is no longer where it was scored from (marked \"not found\" in the Saved Results tab).": [
+   "Közülük {count} nem pontozható újra: a referenciavideója már nincs ott, ahonnan pontozták (a Mentett eredmények lapon „nem található” jelöléssel).",
+   "Közülük {count} nem pontozható újra: a referenciavideója már nincs ott, ahonnan pontozták (a Mentett eredmények lapon „nem található” jelöléssel)."
+  ],
+  "{count} saved": [
+   "{count} mentve",
+   "{count} mentve"
+  ],
+  "{count} saved result, {size}, saved {first} to {last}, in {directory}": [
+   "{count} mentett eredmény, {size}, mentve: {first} – {last}, helye: {directory}",
+   "{count} mentett eredmény, {size}, mentve: {first} – {last}, helye: {directory}"
+  ],
+  "{count} saved result, {size}, saved {first}, in {directory}": [
+   "{count} mentett eredmény, {size}, mentve: {first}, helye: {directory}",
+   "{count} mentett eredmény, {size}, mentve: {first}, helye: {directory}"
+  ],
+  "{count} score of this metric is saved: choose the one used in the details, opened by the button above.": [
+   "Ennek a metrikának {count} pontszáma van mentve: a használtat a fenti gombbal megnyitott részleteknél válassza ki.",
+   "Ennek a metrikának {count} pontszáma van mentve: a használtat a fenti gombbal megnyitott részleteknél válassza ki."
+  ],
   "Click Remove all again to remove {count} video. Saved results are kept.": ["Kattintson ismét az „Összes eltávolítása” gombra {count} videó eltávolításához. A mentett eredmények megmaradnak.", "Kattintson ismét az „Összes eltávolítása” gombra mind a(z) {count} videó eltávolításához. A mentett eredmények megmaradnak."],
   "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["Kattintson ismét az „Újrakezdés” gombra a referencia törléséhez és {count} videó eltávolításához. A mentett eredmények megmaradnak.", "Kattintson ismét az „Újrakezdés” gombra a referencia törléséhez és mind a(z) {count} videó eltávolításához. A mentett eredmények megmaradnak."],
   "{count} test video does not last as long as the reference ({length}).": ["{count} tesztvideó nem olyan hosszú, mint a referencia ({length}).", "{count} tesztvideó nem olyan hosszú, mint a referencia ({length})."],
@@ -1446,10 +1531,6 @@
   "about {count} minute": [
    "kb. {count} perc",
    "kb. {count} perc"
-  ],
-  "{count} saved result, {size:.1f} MB in {directory}": [
-   "{count} mentett eredmény, {size:.1f} MB, helye: {directory}",
-   "{count} mentett eredmény, {size:.1f} MB, helye: {directory}"
   ],
   "Copied the log to the clipboard ({count} line, the middle left out -- Export log saves all of it).": [
    "Napló a vágólapra másolva ({count} sor, a közepe kihagyva — a Napló exportálása mindent ment).",
@@ -1503,10 +1584,6 @@
    "{count} videó: {counts}",
    "{count} videó: {counts}"
   ],
-  "Removed {count} saved result.": [
-   "{count} mentett eredmény eltávolítva.",
-   "{count} mentett eredmény eltávolítva."
-  ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "A kijelölt videónak ({count}) már van bitrátaeredménye.\n\nÚjraszámolja? Válassza a Nem lehetőséget az eredmények megtartásához, és csak az eredmény nélküli fájlok számításához.",
    "A kijelölt {count} videónak már van bitrátaeredménye.\n\nÚjraszámolja ezeket a fájlokat? Válassza a Nem lehetőséget az eredmények megtartásához, és csak az eredmény nélküli fájlok számításához."
@@ -1539,10 +1616,6 @@
    "összesen {count} képkocka.",
    "összesen {count} képkocka."
   ],
-  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
-   "Törli {count} összehasonlítás mentett pontszámait? Nem állíthatók vissza: a videók pontozása újra megtörténik, amikor legközelebb összehasonlítja őket.",
-   "Törli {count} összehasonlítás mentett pontszámait? Nem állíthatók vissza: a videók pontozása újra megtörténik, amikor legközelebb összehasonlítja őket."
-  ],
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "{count} összehasonlítás mentett pontszámait nem sikerült törölni: lehet, hogy valamelyik fájljuk meg van nyitva.",
    "{count} összehasonlítás mentett pontszámait nem sikerült törölni: lehet, hogy valamelyik fájljuk meg van nyitva."
@@ -1550,10 +1623,6 @@
   "{count} saved comparison in {directory}": [
    "{count} mentett összehasonlítás itt: {directory}",
    "{count} mentett összehasonlítás itt: {directory}"
-  ],
-  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
-   "{count} eredmény megmaradt, amelynek hiányzik a referenciavideója: törölje a Mentett eredmények lapon.",
-   "{count} eredmény megmaradt, amelyeknek hiányzik a referenciavideója: törölje őket a Mentett eredmények lapon."
   ],
   "Saved {count} file": [
    "{count} fájl mentve",
