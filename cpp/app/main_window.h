@@ -124,6 +124,7 @@ enum Column : int {
     col_psnr_hvs,
     col_cambi,
     col_ciede2000,
+    col_vmaf_yuv,
     // The planes of the metrics of the three planes (MetricDefinition::
     // plane_of), shown beside their metric with Add/remove metrics' "Y, U
     // and V of the YUV metrics".
@@ -139,6 +140,9 @@ enum Column : int {
     col_psnr_hvs_y,
     col_psnr_hvs_u,
     col_psnr_hvs_v,
+    col_vmaf_yuv_y,
+    col_vmaf_yuv_u,
+    col_vmaf_yuv_v,
     column_count,
 };
 

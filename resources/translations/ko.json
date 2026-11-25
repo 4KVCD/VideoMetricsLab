@@ -35,6 +35,8 @@
   "PSNR with color, as JVET weighs it": "색을 포함한 PSNR(JVET 가중 방식)",
   "PSNR with color, as MSU reports it": "색을 포함한 PSNR(MSU 방식)",
   "PSNR of the three planes' squared errors weighted (6 x Y + Cb + Cr) / 8 and averaged over the frames before turning into dB, as MSU's codec comparisons report YUV-PSNR (avg. MSE). A little below PSNR YUV, more so where a few frames or one plane are much worse. In dB, higher is better.": "세 평면의 제곱 오차를 (6 × Y + Cb + Cr) / 8로 가중하고 프레임 전체에서 평균한 뒤 dB로 바꾼 PSNR로, MSU 코덱 비교가 보고하는 YUV-PSNR (avg. MSE) 방식입니다. PSNR YUV보다 조금 낮으며, 일부 프레임이나 한 평면이 훨씬 나쁠수록 더 낮습니다. 단위는 dB이며 높을수록 좋습니다.",
+  "VMAF with color, as MSU reports it": "색을 포함한 VMAF(MSU 방식)",
+  "(6 x Y + U + V) / 8 of VMAF's model applied to each plane, as MSU's codec comparisons report YUV-VMAF. Its Y is the VMAF score, so VMAF is calculated with it. 0 to 100, higher is better.": "VMAF 모델을 각 평면에 적용한 값의 (6 × Y + U + V) / 8로, MSU 코덱 비교가 YUV-VMAF로 보고하는 방식입니다. Y는 VMAF 점수이므로 VMAF도 함께 계산합니다. 0~100, 높을수록 좋습니다.",
   "Peak signal-to-noise ratio of the luma (Y) plane: the pixels' mean squared error, in dB. Higher is better.": "휘도(Y) 평면의 최대 신호 대 잡음비: 픽셀의 평균 제곱 오차를 dB로 나타낸 값입니다. 높을수록 좋습니다.",
   "SSIM at five scales, as MSU reports it": "다섯 스케일의 SSIM(MSU 방식)",
   "SSIM of the luma (Y) plane at five scales (Wang et al. 2003), as MSU's codec comparisons report it. Up to 1, higher is better.": "휘도(Y) 평면의 다섯 스케일 SSIM(Wang et al. 2003)으로, MSU 코덱 비교에서 보고하는 방식입니다. 최대 1이며 높을수록 좋습니다.",

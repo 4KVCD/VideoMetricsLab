@@ -13,7 +13,7 @@ namespace vml {
 namespace {
 
 // The planes' options (MetricDefinition::plane_of), by their names.
-constexpr std::array<std::pair<std::string_view, bool VmafOptions::*>, 12> plane_options{{
+constexpr std::array<std::pair<std::string_view, bool VmafOptions::*>, 15> plane_options{{
     {"compute_psnr_yuv_y", &VmafOptions::compute_psnr_yuv_y},
     {"compute_psnr_yuv_u", &VmafOptions::compute_psnr_yuv_u},
     {"compute_psnr_yuv_v", &VmafOptions::compute_psnr_yuv_v},
@@ -26,6 +26,9 @@ constexpr std::array<std::pair<std::string_view, bool VmafOptions::*>, 12> plane
     {"compute_psnr_hvs_y", &VmafOptions::compute_psnr_hvs_y},
     {"compute_psnr_hvs_u", &VmafOptions::compute_psnr_hvs_u},
     {"compute_psnr_hvs_v", &VmafOptions::compute_psnr_hvs_v},
+    {"compute_vmaf_yuv_y", &VmafOptions::compute_vmaf_yuv_y},
+    {"compute_vmaf_yuv_u", &VmafOptions::compute_vmaf_yuv_u},
+    {"compute_vmaf_yuv_v", &VmafOptions::compute_vmaf_yuv_v},
 }};
 
 // The option that switches an on/off metric on, by its name in the Python
@@ -74,6 +77,9 @@ bool VmafOptions::*bool_option(std::string_view name) {
     }
     if (name == "compute_ciede2000") {
         return &VmafOptions::compute_ciede2000;
+    }
+    if (name == "compute_vmaf_yuv") {
+        return &VmafOptions::compute_vmaf_yuv;
     }
     throw std::logic_error("no option called " + std::string(name));
 }

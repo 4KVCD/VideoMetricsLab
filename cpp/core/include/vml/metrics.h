@@ -105,6 +105,15 @@ const MetricDefinition& metric_definition(std::string_view key);
 // metric itself. Throws std::out_of_range for an unknown key.
 std::string_view scored_by(std::string_view key);
 
+// Whether `key` is scored with the run's VMAF model, VMAF's own: VMAF, and
+// VMAF YUV with its planes (chroma_vmaf.h). Their saved scores are kept by
+// the same model choice.
+bool uses_vmaf_model(std::string_view key);
+
+// `keys` (in the registry's order) with the metrics those made from others
+// need: VMAF for VMAF YUV and its Y, which are made from VMAF's score.
+std::vector<std::string> with_metric_inputs(std::vector<std::string> keys);
+
 // Why pictures compared at `width` x `height` cannot be scored with the
 // metrics of `keys`, naming those they are too small for and the size each
 // needs (MetricDefinition::smallest_side); nothing when all can be.
@@ -121,8 +130,9 @@ std::string metric_labels(const std::vector<std::string>& keys, std::string_view
 // ticked but hidden (Settings::hidden_metrics), so showing one is enough to
 // calculate it. HDR VMAF is General purpose, shown but unticked at first
 // (Settings::default_compute_vmaf_hdr).
-inline constexpr std::array<std::string_view, 8> metrics_hidden_at_first{
-    "psnr_yuv", "psnr_yuv_mse", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000"};
+inline constexpr std::array<std::string_view, 9> metrics_hidden_at_first{
+    "psnr_yuv", "psnr_yuv_mse", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000",
+    "vmaf_yuv"};
 
 // The two sections Add/remove metrics and Settings > Metrics list the
 // metrics in.

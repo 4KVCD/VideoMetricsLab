@@ -42,7 +42,7 @@ using enum MetricAggregation;
 // In the order the app shows them. Key "vmaf" is the v0.6.1 family (its
 // standard and 4K models), as it always was: saved scores, settings and
 // exports keep the key; only the label names the version.
-const std::array<MetricDefinition, 30> registry{{
+const std::array<MetricDefinition, 34> registry{{
     {"vmaf", "VMAF v0.6.1", "VMAF v0.6.1", "VMAF v0.6.1", "VMAF v0.6.1", 2, "", frame, higher_is_better,
      arithmetic, 100.0, vmaf_thresholds, bool_option("compute_vmaf"), {}, vmaf_smallest_side},
     {"vmaf_neg", "VMAF NEG", "VMAF NEG", "VMAF NEG", "VMAF NEG", 2, "", frame, higher_is_better, arithmetic,
@@ -132,6 +132,20 @@ const std::array<MetricDefinition, 30> registry{{
     // (0 identical, about 1 just noticeable).
     {"ciede2000", "CIEDE2000 (ΔE)", "CIEDE2000", "CIEDE2000 (ΔE)", "CIEDE2000 (ΔE)", 3, "", frame,
      lower_is_better, arithmetic, std::nullopt, {}, bool_option("compute_ciede2000"), {}, 0},
+    // MSU's YUV-VMAF: (6 Y + U + V) / 8 of the run's VMAF model applied to
+    // each plane as to a luma plane. Y is the run's VMAF (asking for VMAF YUV
+    // turns VMAF on: with_metric_inputs); U and V are scored as the app's CPU
+    // metrics are (chroma_vmaf.h), and the job combines the three
+    // (JobRun::merged). Chroma planes under VMAF's smallest side fail the
+    // metric alone (cpu_metrics_unfit).
+    {"vmaf_yuv", "VMAF YUV (6:1:1)", "VMAF YUV", "VMAF YUV", "VMAF YUV", 2, "", frame, higher_is_better,
+     arithmetic, 100.0, vmaf_thresholds, bool_option("compute_vmaf_yuv"), {}, 0},
+    {"vmaf_yuv_y", "VMAF YUV: Y", "VMAF Y", "Y", "VMAF Y", 2, "", frame, higher_is_better, arithmetic, 100.0, {},
+     bool_option("compute_vmaf_yuv_y"), {}, 0, "vmaf_yuv"},
+    {"vmaf_yuv_u", "VMAF YUV: U", "VMAF U", "U", "VMAF U", 2, "", frame, higher_is_better, arithmetic, 100.0, {},
+     bool_option("compute_vmaf_yuv_u"), {}, 0, "vmaf_yuv"},
+    {"vmaf_yuv_v", "VMAF YUV: V", "VMAF V", "V", "VMAF V", 2, "", frame, higher_is_better, arithmetic, 100.0, {},
+     bool_option("compute_vmaf_yuv_v"), {}, 0, "vmaf_yuv"},
     {"ssimulacra2", "SSIMULACRA2", "SSIMULACRA2", "SSIMULACRA2", "SSIMULACRA2", 2, "", frame, higher_is_better,
      arithmetic, 100.0, ssimulacra2_thresholds, std::nullopt, "perceptual", 8},
     {"butteraugli", "Butteraugli", "Butteraugli", "Butteraugli", "Butteraugli", 4, "", frame, lower_is_better,
@@ -213,6 +227,16 @@ std::string_view scored_by(std::string_view key) {
     return metric.is_plane() ? metric.plane_of : metric.key;
 }
 
+bool uses_vmaf_model(std::string_view key) { return key == "vmaf" || scored_by(key) == "vmaf_yuv"; }
+
+std::vector<std::string> with_metric_inputs(std::vector<std::string> keys) {
+    const auto has = [&keys](std::string_view key) { return std::find(keys.begin(), keys.end(), key) != keys.end(); };
+    if ((has("vmaf_yuv") || has("vmaf_yuv_y")) && !has("vmaf")) {
+        keys.insert(keys.begin(), "vmaf");  // first in the registry
+    }
+    return keys;
+}
+
 std::optional<std::string> too_small_problem(const std::vector<std::string>& keys, int width, int height) {
     // The metrics the pictures are too small for, by the size each needs,
     // largest first: "VMAF v0.6.1 and VMAF NEG (at least 32x32); SSIM (...)".
@@ -248,7 +272,7 @@ struct KeyedGuide {
     std::string_view key;
     MetricGuide guide;
 };
-const std::array<KeyedGuide, 18> guides{{
+const std::array<KeyedGuide, 19> guides{{
     {"vmaf",
      {N_("Netflix's score, trained on viewers"),
       N_("Netflix's VMAF: how viewers would rate the test video against the reference, by a model trained on their ratings. 0 to 100, higher is better."),
@@ -312,6 +336,10 @@ const std::array<KeyedGuide, 18> guides{{
       N_("The mean color difference (CIEDE2000 ΔE) of the pixels. Lower is better."),
       N_("CIEDE2000's scale: 0 is identical, and about 1 is just noticeable."),
       "the CIEDE2000 (ΔE00) scale, as the user guide and the registry's CIEDE2000 entry give it"}},
+    {"vmaf_yuv",
+     {N_("VMAF with color, as MSU reports it"),
+      N_("(6 x Y + U + V) / 8 of VMAF's model applied to each plane, as MSU's codec comparisons report YUV-VMAF. Its Y is the VMAF score, so VMAF is calculated with it. 0 to 100, higher is better."),
+      vmaf_ranges, "the app's VMAF bands, vmaf_thresholds above"}},
     {"ssimulacra2",
      {N_("JPEG XL's perceptual score"),
       N_("SSIMULACRA2, from the JPEG XL project: a perceptual score of the structure, color and edge errors at several scales. 100 is identical, higher is better."),

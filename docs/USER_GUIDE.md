@@ -493,13 +493,13 @@ app's own bands, or the metric's authors' scale). *General purpose* (VMAF
 v0.6.1, VMAF NEG, VMAF v1, HDR VMAF, PSNR, SSIM, XPSNR, SSIMULACRA2,
 Butteraugli and CVVDP) is what a new install shows, HDR VMAF unticked.
 *Specialized* (PSNR YUV, PSNR YUV avg. MSE, SSIM YUV, MS-SSIM, MS-SSIM YUV,
-PSNR-HVS-M, CAMBI and CIEDE2000) is folded away
+PSNR-HVS-M, CAMBI, CIEDE2000 and VMAF YUV) is folded away
 until one of them is shown. A tick there shows or hides a metric's column,
 nothing more; the tick in a column says whether that row calculates it, and a
 run calculates what is ticked and shown. The Specialized metrics start
 ticked but hidden, so showing one is enough to calculate it (settings already
 saved keep the ticks they have). Settings > Metrics' **Default
-metrics**, what new videos start with ticked, lists the same 18 in the same
+metrics**, what new videos start with ticked, lists the same 19 in the same
 two sections, side by side.
 
 PSNR, SSIM and XPSNR are of the luma (Y) plane alone: PSNR is what an
@@ -534,6 +534,19 @@ the same planes' PSNR as PSNR YUV, in the same pass: beside PSNR YUV it costs
 nothing more, alone it costs what PSNR YUV does. A plane at libvmaf's ceiling
 counts as the ceiling (MSU gives an identical frame 100 dB), so near-lossless
 frames score a little lower than MSU's.
+
+VMAF YUV (6:1:1) is the YUV-VMAF MSU's codec comparisons report: the VMAF
+column's model applied to each of the three planes as if it were a luma
+plane, and each frame's (6 x Y + U + V) / 8 of the three scores. Its Y is
+the VMAF score itself, so showing VMAF YUV calculates VMAF too (its column
+is shown with it). Only the app calculates the U and V, with its
+libvmaf-fast, from the same pictures as the run's other metrics: on the GPU
+where VMAF runs on the app's Vulkan engine, else on the CPU (a custom model,
+videos above 10 bits and chroma planes of an odd size also go to the CPU).
+Each chroma plane has a
+quarter of the luma's pixels, so the two add about half of VMAF's own work.
+It needs pictures of at least 64x64 (chroma planes of 32x32); a smaller one
+fails VMAF YUV alone, with the reason.
 
 MS-SSIM, MS-SSIM YUV (6:1:1), PSNR-HVS-M, CAMBI and CIEDE2000 are the other
 metrics codec comparisons such as MSU's and Xiph's report. Only the app

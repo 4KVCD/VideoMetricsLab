@@ -35,6 +35,8 @@
   "PSNR with color, as JVET weighs it": "色を含む PSNR（JVET の重み付け）",
   "PSNR with color, as MSU reports it": "色を含む PSNR（MSU の方式）",
   "PSNR of the three planes' squared errors weighted (6 x Y + Cb + Cr) / 8 and averaged over the frames before turning into dB, as MSU's codec comparisons report YUV-PSNR (avg. MSE). A little below PSNR YUV, more so where a few frames or one plane are much worse. In dB, higher is better.": "3 つのプレーンの二乗誤差を (6 × Y + Cb + Cr) / 8 で重み付けし、フレーム全体で平均してから dB に変換した PSNR。MSU のコーデック比較が報告する YUV-PSNR (avg. MSE) と同じ方式です。PSNR YUV より少し低く、一部のフレームや 1 つのプレーンが大きく劣るほど差が広がります。単位は dB、高いほど良好です。",
+  "VMAF with color, as MSU reports it": "色を含む VMAF（MSU の方式）",
+  "(6 x Y + U + V) / 8 of VMAF's model applied to each plane, as MSU's codec comparisons report YUV-VMAF. Its Y is the VMAF score, so VMAF is calculated with it. 0 to 100, higher is better.": "VMAF のモデルを各プレーンに適用した値の (6 × Y + U + V) / 8。MSU のコーデック比較が YUV-VMAF として報告する値です。Y は VMAF のスコアなので、VMAF も一緒に計算します。0～100、高いほど良好です。",
   "Peak signal-to-noise ratio of the luma (Y) plane: the pixels' mean squared error, in dB. Higher is better.": "輝度（Y）プレーンのピーク信号対雑音比：画素の平均二乗誤差を dB で表したもの。高いほど良好です。",
   "SSIM at five scales, as MSU reports it": "5 つのスケールでの SSIM（MSU の方式）",
   "SSIM of the luma (Y) plane at five scales (Wang et al. 2003), as MSU's codec comparisons report it. Up to 1, higher is better.": "輝度（Y）プレーンの 5 つのスケールでの SSIM（Wang et al. 2003）。MSU のコーデック比較と同じ方式です。最大 1、高いほど良好です。",

@@ -241,6 +241,7 @@ nlohmann::json options_json(const VmafOptions& options) {
         {"compute_xpsnr", options.compute_xpsnr},
         {"compute_psnr_yuv", options.compute_psnr_yuv},
         {"compute_psnr_yuv_mse", options.compute_psnr_yuv_mse},
+        {"compute_vmaf_yuv", options.compute_vmaf_yuv},
         {"compute_ssim_yuv", options.compute_ssim_yuv},
         {"compute_ms_ssim", options.compute_ms_ssim},
         {"compute_ms_ssim_yuv", options.compute_ms_ssim_yuv},
@@ -290,6 +291,7 @@ VmafOptions options_from(const nlohmann::json& text) {
     text.at("compute_xpsnr").get_to(options.compute_xpsnr);
     options.compute_psnr_yuv = text.value("compute_psnr_yuv", false);
     options.compute_psnr_yuv_mse = text.value("compute_psnr_yuv_mse", false);
+    options.compute_vmaf_yuv = text.value("compute_vmaf_yuv", false);
     options.compute_ssim_yuv = text.value("compute_ssim_yuv", false);
     options.compute_ms_ssim = text.value("compute_ms_ssim", false);
     options.compute_ms_ssim_yuv = text.value("compute_ms_ssim_yuv", false);

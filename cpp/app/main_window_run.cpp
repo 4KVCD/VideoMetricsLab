@@ -336,6 +336,9 @@ std::variant<VmafJob, QString> MainWindow::job_for(const RowData& row_data) cons
     const PerceptualBackends backends(automatic_perceptual_backends.begin(), automatic_perceptual_backends.end());
     VmafOptions options = row_data.options;
     options.vvc_on_gpu = settings_.vvc_decode_on_gpu;  // Settings' VVC decoder, as the run starts
+    if (std::find(metric_keys.begin(), metric_keys.end(), "vmaf") != metric_keys.end()) {
+        options.compute_vmaf = true;  // asked for with VMAF YUV, the row's VMAF unticked (with_metric_inputs)
+    }
     for (const MetricDefinition& metric : metrics()) {
         if (metric.is_plane()) {  // asked for by the window, not by the row's options
             options.set_metric_enabled(metric.key, std::find(metric_keys.begin(), metric_keys.end(), metric.key) !=

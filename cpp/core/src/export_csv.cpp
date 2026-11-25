@@ -32,8 +32,9 @@ constexpr std::array<std::string_view, 5> first_columns{"vmaf", "vmaf_neg", "psn
 // Columns only exports that have their scores get, so that every other
 // export keeps the columns it always had: HDR VMAF scores PQ videos only, and
 // the app's own metrics and their planes are off unless asked for.
-constexpr std::array<std::string_view, 9> scored_only_columns{
-    "vmaf_hdr", "psnr_yuv", "psnr_yuv_mse", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000"};
+constexpr std::array<std::string_view, 10> scored_only_columns{
+    "vmaf_hdr", "psnr_yuv", "psnr_yuv_mse", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000",
+    "vmaf_yuv"};
 
 template <std::size_t N>
 bool is_one_of(const std::array<std::string_view, N>& keys, std::string_view key) {

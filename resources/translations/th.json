@@ -35,6 +35,8 @@
   "PSNR with color, as JVET weighs it": "PSNR พร้อมสี ตามการถ่วงน้ำหนักของ JVET",
   "PSNR with color, as MSU reports it": "PSNR พร้อมสี แบบที่ MSU รายงาน",
   "PSNR of the three planes' squared errors weighted (6 x Y + Cb + Cr) / 8 and averaged over the frames before turning into dB, as MSU's codec comparisons report YUV-PSNR (avg. MSE). A little below PSNR YUV, more so where a few frames or one plane are much worse. In dB, higher is better.": "PSNR ของค่าความผิดพลาดกำลังสองของทั้งสามระนาบ ถ่วงน้ำหนัก (6 × Y + Cb + Cr) / 8 และเฉลี่ยทุกเฟรมก่อนแปลงเป็น dB แบบที่การเปรียบเทียบตัวเข้ารหัสของ MSU รายงาน YUV-PSNR (avg. MSE) ต่ำกว่า PSNR YUV เล็กน้อย และต่ำลงอีกเมื่อบางเฟรมหรือระนาบหนึ่งแย่กว่ามาก หน่วย dB ยิ่งสูงยิ่งดี",
+  "VMAF with color, as MSU reports it": "VMAF พร้อมสี แบบที่ MSU รายงาน",
+  "(6 x Y + U + V) / 8 of VMAF's model applied to each plane, as MSU's codec comparisons report YUV-VMAF. Its Y is the VMAF score, so VMAF is calculated with it. 0 to 100, higher is better.": "(6 × Y + U + V) / 8 ของโมเดล VMAF ที่ใช้กับแต่ละระนาบ ตามที่การเปรียบเทียบโคเดกของ MSU รายงาน YUV-VMAF ค่า Y คือคะแนน VMAF จึงคำนวณ VMAF ไปพร้อมกัน ตั้งแต่ 0 ถึง 100 ยิ่งสูงยิ่งดี",
   "Peak signal-to-noise ratio of the luma (Y) plane: the pixels' mean squared error, in dB. Higher is better.": "Peak signal-to-noise ratio ของระนาบความสว่าง (Y): ค่าความผิดพลาดกำลังสองเฉลี่ยของพิกเซล หน่วย dB ยิ่งสูงยิ่งดี",
   "SSIM at five scales, as MSU reports it": "SSIM ที่ห้าสเกล แบบที่ MSU รายงาน",
   "SSIM of the luma (Y) plane at five scales (Wang et al. 2003), as MSU's codec comparisons report it. Up to 1, higher is better.": "SSIM ของระนาบความสว่าง (Y) ที่ห้าสเกล (Wang et al. 2003) ตามที่การเปรียบเทียบโคเดกของ MSU รายงาน สูงสุด 1 ยิ่งสูงยิ่งดี",

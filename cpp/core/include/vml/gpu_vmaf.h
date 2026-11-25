@@ -128,6 +128,11 @@ struct GpuPlan {
     // The GPU the CPU metrics' CIEDE2000 and CAMBI go on (CpuScorer's `gpu`:
     // Vulkan's number, -1 for the one VMAF runs on), or nothing for libvmaf's.
     std::optional<int> extra_gpu;
+    // With VMAF YUV's U and V among the CPU metrics: the run's VMAF model
+    // (its model= value), and whether they go on extra_gpu too, where the
+    // Vulkan engine scores this PC's GPU VMAF (not libvmaf's CUDA code).
+    std::string vmaf_model;
+    bool vmaf_on_vulkan = false;
     // Told, as each of the plan's CPU scorers starts (its own, the one beside),
     // which of its metrics the GPU calculates. Set by the process that scores
     // the plan, for its run line; not in the plan's JSON (plan_json).
@@ -145,9 +150,12 @@ std::unique_ptr<HdrScorer> make_hdr_scorer(const GpuPlan& plan, int n_subsample,
 // `n_subsample`th pair, as the pass's own scorers do.
 class BesideScorer : public PairScorer {
 public:
-    // `shared` is HDR VMAF's (HdrScorer). Throws LibvmafError, and
-    // std::invalid_argument for a size HDR VMAF's model refuses.
-    BesideScorer(const GpuPlan& plan, int n_subsample, GpuFrameStream* shared = nullptr);
+    // `shared` is HDR VMAF's (HdrScorer), `chroma_from_decoders` VMAF YUV's
+    // (CpuScorer's, for a pass that gives every pair to add_decoded). Throws
+    // LibvmafError, and std::invalid_argument for a size HDR VMAF's model
+    // refuses.
+    BesideScorer(const GpuPlan& plan, int n_subsample, GpuFrameStream* shared = nullptr,
+                 std::optional<ChromaFromDecoders> chroma_from_decoders = std::nullopt);
     ~BesideScorer() override;
     BesideScorer(const BesideScorer&) = delete;
     BesideScorer& operator=(const BesideScorer&) = delete;
@@ -210,9 +218,10 @@ bool both_copy_on_gpu(const GpuFrameStream& test, const GpuFrameStream& referenc
 
 // The scorer of a plan's metrics beside its own (GpuPlan::beside), made in
 // `scorer` where the plan has any (and logged, with the pass it joins), with
-// BesideScorer's `shared`. Throws as BesideScorer does.
+// BesideScorer's `shared` and `chroma_from_decoders`. Throws as BesideScorer
+// does.
 void start_beside(std::optional<BesideScorer>& scorer, const GpuPlan& plan, int n_subsample,
-                  GpuFrameStream* shared = nullptr);
+                  GpuFrameStream* shared = nullptr, std::optional<ChromaFromDecoders> chroma_from_decoders = std::nullopt);
 
 // The pass's `scores` with those of the metrics scored beside them (if any)
 // added after theirs. Throws LibvmafError when the two were not scored for

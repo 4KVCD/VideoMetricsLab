@@ -35,6 +35,8 @@
   "PSNR with color, as JVET weighs it": "PSNR s barvou, jak ho váží JVET",
   "PSNR with color, as MSU reports it": "PSNR s barvou, jak ho uvádí MSU",
   "PSNR of the three planes' squared errors weighted (6 x Y + Cb + Cr) / 8 and averaged over the frames before turning into dB, as MSU's codec comparisons report YUV-PSNR (avg. MSE). A little below PSNR YUV, more so where a few frames or one plane are much worse. In dB, higher is better.": "PSNR kvadratických chyb tří rovin vážených (6 × Y + Cb + Cr) / 8 a zprůměrovaných přes snímky před převodem na dB, jak srovnání kodeků MSU uvádějí YUV-PSNR (avg. MSE). O něco nižší než PSNR YUV, víc tam, kde je pár snímků nebo jedna rovina mnohem horší. V dB, vyšší je lepší.",
+  "VMAF with color, as MSU reports it": "VMAF s barvou, jak ho uvádí MSU",
+  "(6 x Y + U + V) / 8 of VMAF's model applied to each plane, as MSU's codec comparisons report YUV-VMAF. Its Y is the VMAF score, so VMAF is calculated with it. 0 to 100, higher is better.": "(6 × Y + U + V) / 8 z modelu VMAF použitého na každou rovinu, jak srovnání kodeků MSU uvádí YUV-VMAF. Jeho Y je skóre VMAF, proto se s ním počítá i VMAF. 0 až 100, vyšší je lepší.",
   "Peak signal-to-noise ratio of the luma (Y) plane: the pixels' mean squared error, in dB. Higher is better.": "Špičkový poměr signálu k šumu jasové roviny (Y): střední kvadratická chyba pixelů, v dB. Vyšší je lepší.",
   "SSIM at five scales, as MSU reports it": "SSIM v pěti měřítkách, jak ho uvádí MSU",
   "SSIM of the luma (Y) plane at five scales (Wang et al. 2003), as MSU's codec comparisons report it. Up to 1, higher is better.": "SSIM jasové roviny (Y) v pěti měřítkách (Wang et al. 2003), jak ho uvádějí srovnání kodeků MSU. Nejvýše 1, vyšší je lepší.",

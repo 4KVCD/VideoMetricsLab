@@ -20,6 +20,7 @@
 
 #include "ffmpeg_run_parts.h"
 #include "vml/app_log.h"
+#include "vml/chroma_vmaf.h"
 #include "vml/crop_detect.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/frame_sync.h"
@@ -326,9 +327,9 @@ const char* const xpsnr_refusal =
 // FFmpeg's filters: the 6:1:1 metrics (PSNR YUV, SSIM YUV: FFmpeg's filters
 // have no SSIM of the chroma planes), and MS-SSIM, MS-SSIM YUV, PSNR-HVS-M,
 // CAMBI and CIEDE2000; and the planes of those that have them.
-constexpr std::array<std::string_view, 8> app_scored_metrics{"psnr_yuv", "psnr_yuv_mse", "ssim_yuv",
+constexpr std::array<std::string_view, 9> app_scored_metrics{"psnr_yuv", "psnr_yuv_mse", "ssim_yuv",
                                                              "ms_ssim",  "ms_ssim_yuv",  "psnr_hvs",
-                                                             "cambi",    "ciede2000"};
+                                                             "cambi",    "ciede2000",    "vmaf_yuv"};
 
 bool app_scored(std::string_view key) {
     const std::string_view metric = scored_by(key);
@@ -765,8 +766,8 @@ ParsedScores score_decoded_here(const RunEnvironment& environment, const VideoIn
         plan.backend == "cpu"
             ? score_decoded_cpu(source, distorted, source_crop, distorted_crop, plan.width, plan.height,
                                 plan.bit_depth, keys, options.n_subsample, range, total_frames, decoders,
-                                plan.threads, plan.frame_rate, plan.cambi, plan.extra_gpu, options.scale_algorithm,
-                                environment.ffmpeg,
+                                plan.threads, plan.frame_rate, plan.cambi, plan.extra_gpu, plan.vmaf_model,
+                                plan.vmaf_on_vulkan, options.scale_algorithm, environment.ffmpeg,
                                 environment.ffprobe, want_vvdec, on_vvdec_opening(on_status), plan.on_gpu_metrics,
                                 on_progress, cancel)
         : plan.backend == "hdr"
@@ -1130,7 +1131,8 @@ nlohmann::json plan_json(const GpuPlan& plan) {
             {"hdr_colours", colours},      {"hdr_model_file", plan.hdr_model_file},
             {"hdr_threads", plan.hdr_threads},
             {"hdr_gpu", plan.hdr_gpu ? nlohmann::json(*plan.hdr_gpu) : nlohmann::json(nullptr)},
-            {"extra_gpu", plan.extra_gpu ? nlohmann::json(*plan.extra_gpu) : nlohmann::json(nullptr)}};
+            {"extra_gpu", plan.extra_gpu ? nlohmann::json(*plan.extra_gpu) : nlohmann::json(nullptr)},
+            {"vmaf_model", plan.vmaf_model}, {"vmaf_on_vulkan", plan.vmaf_on_vulkan}};
 }
 
 VmafColor colour_from(const nlohmann::json& text) {
@@ -1164,6 +1166,8 @@ GpuPlan plan_from(const nlohmann::json& text) {
     if (const nlohmann::json& gpu = text.at("extra_gpu"); !gpu.is_null()) {
         plan.extra_gpu = gpu.get<int>();
     }
+    text.at("vmaf_model").get_to(plan.vmaf_model);
+    text.at("vmaf_on_vulkan").get_to(plan.vmaf_on_vulkan);
     return plan;
 }
 
@@ -1521,6 +1525,11 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
 // is known only once black bars are: Auto's model comes from it, while an
 // explicit or custom choice is the user's. VMAF v1's and HDR VMAF's models
 // are resolved into `options` the same way.
+// The model= value of the run's VMAF at the size compared: the one chosen, or, for Auto, the one for that size.
+std::string run_vmaf_model(const VmafOptions& options, int width, int height) {
+    return options.model_choice != auto_model_choice ? options.model : model_for_resolution(width, height);
+}
+
 std::string resolve_run_models(VmafOptions& options, int width, int height) {
     if (options.compute_vmaf_v1) {
         options.model_v1 = resolve_v1_model(options, width, height);
@@ -1531,7 +1540,7 @@ std::string resolve_run_models(VmafOptions& options, int width, int height) {
     if (!options.compute_vmaf) {
         return {};
     }
-    return options.model_choice != auto_model_choice ? options.model : model_for_resolution(width, height);
+    return run_vmaf_model(options, width, height);
 }
 
 }  // namespace
@@ -1855,7 +1864,7 @@ MetricProvenance run_provenance(const std::string& key, const std::string& model
     std::map<std::string, std::string> parameters;
     if (key == "vmaf_neg") {
         parameters["model"] = nlohmann::json("version=vmaf_v0.6.1neg").dump();
-    } else if (key == "vmaf") {
+    } else if (uses_vmaf_model(key)) {
         parameters["model"] = nlohmann::json(model).dump();
     } else if (key == "vmaf_v1") {
         parameters["model"] = nlohmann::json(options.model_v1).dump();
@@ -1961,9 +1970,22 @@ std::optional<GpuPlan> gpu_plan(const RunFrames& run, const VmafOptions& options
 }
 
 // The plan for the run's PSNR, SSIM and XPSNR in the app (cpu_metrics_plan).
+// VMAF YUV's U and V are scored with the run's VMAF model, on the GPU VMAF runs on where the Vulkan engine
+// scores VMAF there (on a GPU whose VMAF is libvmaf's CUDA code, the Vulkan engine's would not be checked).
 std::optional<GpuPlan> cpu_plan(const RunFrames& run, const VmafOptions& options) {
-    return cpu_metrics_plan(options, std::pair(run.width, run.height), run.source, run.distorted, run.decoding,
-                            run.source_crop, run.distorted_crop, run.environment.cores, run.environment.ffmpeg);
+    std::optional<GpuPlan> plan =
+        cpu_metrics_plan(options, std::pair(run.width, run.height), run.source, run.distorted, run.decoding,
+                         run.source_crop, run.distorted_crop, run.environment.cores, run.environment.ffmpeg);
+    if (plan && (options.metric_enabled(vmaf_u_key) || options.metric_enabled(vmaf_v_key))) {
+        plan->vmaf_model = run_vmaf_model(options, run.width, run.height);
+        if (options.vmaf_on_gpu) {
+            if (const GpuVmafBackend backend = gpu_vmaf_backend(run.cancel); backend.backend == "vulkan") {
+                plan->vmaf_on_vulkan = true;
+                plan->extra_gpu = backend.device.value_or(-1);
+            }
+        }
+    }
+    return plan;
 }
 
 // `options` asking for its CPU metrics only (is_cpu_metric), or for its
@@ -2127,17 +2149,24 @@ std::optional<int> beside_gpu(const GpuPlan& cpu, const GpuPlan& pass) {
     return cpu.extra_gpu;
 }
 
+// Puts the CPU metrics' plan (`cpu`) beside the GPU pass's (`pass`): its metrics and how CpuScorer scores them.
+void put_beside(GpuPlan& pass, const GpuPlan& cpu) {
+    pass.beside = plan_keys(cpu);
+    pass.threads = cpu.threads;
+    pass.frame_rate = cpu.frame_rate;
+    pass.cambi = cpu.cambi;
+    pass.extra_gpu = beside_gpu(cpu, pass);
+    pass.vmaf_model = cpu.vmaf_model;
+    pass.vmaf_on_vulkan = cpu.vmaf_on_vulkan;
+}
+
 // The run's GPU metrics (`gpu`) with its CPU metrics (`cpu`) beside them in
 // one GPU pass, from one decode of each video (shares_pass). Throws what
 // score_on_gpu throws.
 RunScores score_shared(const RunFrames& run, const VmafOptions& options, const GpuPlan& gpu, const GpuPlan& cpu,
                        const ProgressCallback& on_progress, const StatusCallback& on_status) {
     GpuPlan plan = gpu;
-    plan.beside = plan_keys(cpu);
-    plan.threads = cpu.threads;
-    plan.frame_rate = cpu.frame_rate;
-    plan.cambi = cpu.cambi;
-    plan.extra_gpu = beside_gpu(cpu, gpu);
+    put_beside(plan, cpu);
     ParsedScores scored = score_on_gpu(run.environment, run.source, run.distorted, options, run.source_crop,
                                        run.distorted_crop, plan, run.distorted.fps, run.total_frames, run.decoding,
                                        on_progress, on_status, run.cancel);
@@ -2383,11 +2412,7 @@ std::optional<RunScores> score_hdr_beside(const RunFrames& run, const VmafOption
     }
     GpuPlan plan = gpu ? *gpu : hdr;
     if (cpu) {
-        plan.beside = plan_keys(*cpu);
-        plan.threads = cpu->threads;
-        plan.frame_rate = cpu->frame_rate;
-        plan.cambi = cpu->cambi;
-        plan.extra_gpu = beside_gpu(*cpu, plan);
+        put_beside(plan, *cpu);
     }
     if (gpu) {
         plan.beside.push_back("vmaf_hdr");
@@ -2478,6 +2503,11 @@ ComparisonResult score_pair_once(const RunEnvironment& environment, const VideoI
                                  const ProgressCallback& on_progress, const StatusCallback& on_status,
                                  const CancelToken& cancel,
                                  const std::optional<std::filesystem::path>& result_distorted_path) {
+    if (options.compute_vmaf_yuv || options.compute_vmaf_yuv_y) {
+        // Made from VMAF and its U and V by the video's job (JobRun::merged), which asks for those instead.
+        throw std::invalid_argument("VMAF YUV and its Y are not scored by a run: they are made from VMAF and "
+                                    "its U and V");
+    }
     const auto [width, height] = analysis_dimensions(source, distorted, options, source_crop, distorted_crop);
     const std::string model = resolve_run_models(options, width, height);
     // The range's frames counted at the source's rate, as the run cuts them (run_range).
@@ -2543,7 +2573,9 @@ ComparisonResult score_pair_once(const RunEnvironment& environment, const VideoI
     result.scale_direction = options.scale_direction;
     for (const ParsedScores& part : scores->parts) {
         for (const std::string& key : part.order) {
-            MetricProvenance provenance = run_provenance(key, model, options, environment.ffmpeg_version,
+            // VMAF YUV's U and V have VMAF's model also in a task without VMAF (`model` empty).
+            const std::string key_model = uses_vmaf_model(key) ? run_vmaf_model(options, width, height) : model;
+            MetricProvenance provenance = run_provenance(key, key_model, options, environment.ffmpeg_version,
                                                          scores->cpu_keys, scores->gpu_keys, scores->gpu_backend);
             mark_range(provenance, range);
             result.metric_results.add(
@@ -2832,7 +2864,7 @@ ComparisonResult resample_test_by_ffmpeg(const RunEnvironment& environment, cons
         std::map<std::string, std::string> parameters;
         if (key == "vmaf_neg") {
             parameters["model"] = nlohmann::json("version=vmaf_v0.6.1neg").dump();
-        } else if (key == "vmaf") {
+        } else if (uses_vmaf_model(key)) {
             parameters["model"] = nlohmann::json(model).dump();
         } else if (key == "vmaf_v1") {
             parameters["model"] = nlohmann::json(options.model_v1).dump();

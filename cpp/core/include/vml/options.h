@@ -150,6 +150,12 @@ struct VmafOptions {
     bool compute_psnr_hvs_v = false;
     bool compute_cambi = false;
     bool compute_ciede2000 = false;
+    // MSU's YUV-VMAF 6:1:1, and its planes: Y is VMAF's score, U and V the
+    // VMAF model on the chroma planes (chroma_vmaf.h).
+    bool compute_vmaf_yuv = false;
+    bool compute_vmaf_yuv_y = false;
+    bool compute_vmaf_yuv_u = false;
+    bool compute_vmaf_yuv_v = false;
     bool compute_vmaf = true;
     bool compute_vmaf_neg = false;
     // VMAF v1, with its own model: what the user chose, and what a run

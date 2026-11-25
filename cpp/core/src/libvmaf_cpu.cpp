@@ -7,6 +7,7 @@
 #include <stdexcept>
 
 #include "vml/app_log.h"
+#include "vml/chroma_vmaf.h"
 #include "vml/gpu_cpu_metrics.h"
 #include "vml/gpu_frames.h"
 #include "vml/host_frames.h"
@@ -35,7 +36,7 @@ constexpr std::string_view cambi_default_feature = "Cambi_feature_cambi_score";
 // A plane of a metric of the three planes (MetricDefinition::plane_of) is
 // the feature its metric's extractor gives for that plane, read in the same
 // pass (extractors_for starts the extractor for its metric).
-constexpr std::array<CpuFeature, 23> cpu_features{{
+constexpr std::array<CpuFeature, 25> cpu_features{{
     {"psnr", "psnr", "psnr_y", 6},
     {"ssim", "float_ssim", "float_ssim", 6},
     {"xpsnr", "xpsnr", "xpsnr_y", 4},
@@ -60,7 +61,11 @@ constexpr std::array<CpuFeature, 23> cpu_features{{
     {"psnr_hvs_u", "psnr_hvs", "psnr_hvs_cb", 6, true},
     {"psnr_hvs_v", "psnr_hvs", "psnr_hvs_cr", 6, true},
     {"ciede2000", "ciede", "ciede2000", 6, true, Value::delta_e},
+    {"vmaf_yuv_u", "", "", 6, true, Value::chroma_vmaf},
+    {"vmaf_yuv_v", "", "", 6, true, Value::chroma_vmaf},
 }};
+
+bool is_chroma_vmaf(std::string_view key) { return key == vmaf_u_key || key == vmaf_v_key; }
 
 // The PSNR of the planes' squared errors weighted (6 Y + Cb + Cr) / 8, from
 // the planes' PSNR in dB. 10^(-PSNR / 10) is a plane's MSE / peak^2, and the
@@ -80,6 +85,7 @@ constexpr int cambi_option_smallest = 144;   // the range of its enc_width and e
 constexpr int cambi_option_largest = 7680;
 constexpr int psnr_hvs_smallest_side = 16;   // two 8x8 blocks of 4:2:0 chroma
 constexpr int psnr_hvs_deepest = 12;
+constexpr int vmaf_smallest_plane = 32;      // VMAF's smallest side (the registry's), for each chroma plane
 
 // The most memory CpuScorer's pictures may take (unless two pairs alone take
 // more, at 8K). On 4K 10-bit video from NVIDIA's decoder, PSNR + SSIM run
@@ -307,6 +313,9 @@ std::map<std::string, std::string> cpu_metrics_unfit(const std::vector<std::stri
         } else if (metric == "psnr_hvs" && bit_depth > psnr_hvs_deepest) {
             unfit[key] = "PSNR-HVS-M is calculated up to " + std::to_string(psnr_hvs_deepest) +
                          " bits; these videos are compared at " + std::to_string(bit_depth) + ".";
+        } else if (is_chroma_vmaf(key) && std::min(width / 2, height / 2) < vmaf_smallest_plane) {
+            unfit[key] = "VMAF YUV needs pictures of at least " + square(2 * vmaf_smallest_plane) +
+                         " (chroma planes of " + square(vmaf_smallest_plane) + "); these are " + size + ".";
         } else if (metric == "ciede2000" && bit_depth != 8 && bit_depth != 10 && bit_depth != 12 && bit_depth != 16) {
             unfit[key] = "CIEDE2000 is calculated at 8, 10, 12 or 16 bits; these videos are compared at " +
                          std::to_string(bit_depth) + ".";
@@ -318,9 +327,23 @@ std::map<std::string, std::string> cpu_metrics_unfit(const std::vector<std::stri
 std::string cpu_library_build() { return "libvmaf-fast " + libvmaf_fast_version() + " (CPU)"; }
 
 CpuScorer::CpuScorer(int width, int height, int bit_depth, std::vector<std::string> metrics, int n_subsample,
-                     int threads, int frame_rate, const CambiInput& cambi, std::optional<int> gpu)
+                     int threads, int frame_rate, const CambiInput& cambi, std::optional<int> gpu,
+                     const std::string& vmaf_model, bool vmaf_on_vulkan,
+                     std::optional<ChromaFromDecoders> chroma_from_decoders)
     : library_(libvmaf()), metrics_(std::move(metrics)), step_(static_cast<unsigned>(std::max(1, n_subsample))) {
-    chroma_ = cpu_metrics_read_chroma(metrics_);  // the GPU's CIEDE2000 reads the chroma too
+    threads = std::max(0, threads);
+    // VMAF YUV's U and V first: whether the pictures need their planes.
+    std::vector<std::string> chroma_vmaf;
+    std::vector<std::string> others;
+    std::partition_copy(metrics_.begin(), metrics_.end(), std::back_inserter(chroma_vmaf), std::back_inserter(others),
+                        [](const std::string& key) { return is_chroma_vmaf(key); });
+    if (!chroma_vmaf.empty()) {
+        chroma_vmaf_ = std::make_unique<ChromaVmaf>(width, height, bit_depth, vmaf_model, chroma_vmaf, n_subsample,
+                                                    threads, vmaf_on_vulkan ? gpu : std::nullopt,
+                                                    chroma_from_decoders);
+    }
+    // The GPU's CIEDE2000 reads the chroma too.
+    chroma_ = cpu_metrics_read_chroma(others) || (chroma_vmaf_ && !chroma_vmaf_->takes_decoded());
     odd_ = width % 2 != 0 || height % 2 != 0;
     sample_ = bytes_per_sample(bit_depth);
     packed_ = PackedFrame(width, height, bit_depth);
@@ -328,7 +351,7 @@ CpuScorer::CpuScorer(int width, int height, int bit_depth, std::vector<std::stri
     decoded_bytes_ = chroma_ ? frame_bytes_ : static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * sample_;
     const ExtractorOptions cambi_with = cambi_options(cambi, width, height, bit_depth);
     start_gpu(width, height, bit_depth, gpu, cambi_with);
-    threads = std::max(0, threads);
+    std::erase_if(libvmaf_metrics_, [](const std::string& key) { return is_chroma_vmaf(key); });
     // With libvmaf calculating nothing, each pair is given back as soon as the
     // GPU has copied it: two pairs are all the decoders need.
     const int pairs = libvmaf_metrics_.empty()
@@ -370,7 +393,14 @@ CpuScorer::CpuScorer(int width, int height, int bit_depth, std::vector<std::stri
 
 CpuScorer::~CpuScorer() { release(); }
 
-std::vector<std::string> CpuScorer::gpu_metrics() const { return gpu_ ? gpu_->metrics() : std::vector<std::string>{}; }
+std::vector<std::string> CpuScorer::gpu_metrics() const {
+    std::vector<std::string> on_gpu = gpu_ ? gpu_->metrics() : std::vector<std::string>{};
+    if (chroma_vmaf_) {
+        const std::vector<std::string> chroma = chroma_vmaf_->keys_on_gpu();
+        on_gpu.insert(on_gpu.end(), chroma.begin(), chroma.end());
+    }
+    return on_gpu;
+}
 
 void CpuScorer::start_gpu(int width, int height, int bit_depth, std::optional<int> gpu,
                           const ExtractorOptions& cambi_with) {
@@ -422,6 +452,21 @@ void CpuScorer::give_back(VmafPicture& reference, VmafPicture& distorted) {
 }
 
 void CpuScorer::score(VmafPicture& reference, VmafPicture& distorted) {
+    // Every pair: VMAF's motion reads the frame before. From the decoders' memory, add_decoded gave them.
+    if (chroma_vmaf_ && !chroma_vmaf_->takes_decoded()) {
+        try {
+            chroma_vmaf_->add(reference, distorted);  // copies the planes before it returns
+        } catch (const std::exception& error) {
+            give_back(reference, distorted);
+            if (const std::vector<std::string> on_gpu = chroma_vmaf_->keys_on_gpu(); !on_gpu.empty()) {
+                throw GpuMetricsFailed(metric_labels(on_gpu, " and ") + " on the GPU failed: " + error.what());
+            }
+            throw;
+        } catch (...) {
+            give_back(reference, distorted);
+            throw;
+        }
+    }
     if (gpu_ && count_ % step_ == 0) {  // only the pairs scored go to the GPU
         try {
             gpu_->add(reference, distorted);  // copies the planes before it returns
@@ -476,6 +521,9 @@ void CpuScorer::add(std::span<const std::uint8_t> reference, std::span<const std
 }
 
 void CpuScorer::add_planes(const FramePlanes& reference, const FramePlanes& distorted) {
+    if (chroma_vmaf_ && chroma_vmaf_->takes_decoded()) {
+        throw std::logic_error("VMAF YUV's planes are copied from the decoders: the pairs go to add_decoded");
+    }
     VmafPicture reference_picture = take_picture();
     VmafPicture distorted_picture{};
     try {
@@ -500,6 +548,20 @@ void CpuScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFr
 
 void CpuScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot,
                             const std::function<void(Plane, Plane)>& also) {
+    if (chroma_vmaf_ && chroma_vmaf_->takes_decoded()) {
+        try {
+            chroma_vmaf_->add_decoded(reference, reference_slot, test, test_slot);
+        } catch (const GpuDecodeFailedError&) {
+            throw;  // the decoder's, which the run answers as it does any (not a GPU metric's)
+        } catch (const std::exception& error) {
+            throw GpuMetricsFailed(metric_labels(chroma_vmaf_->keys_on_gpu(), " and ") +
+                                   " on the GPU failed: " + error.what());
+        }
+        if (libvmaf_metrics_.empty() && !gpu_ && !also) {
+            ++count_;  // nothing else reads the pair: no picture downloaded
+            return;
+        }
+    }
     VmafPicture reference_picture = take_picture();
     VmafPicture distorted_picture{};
     try {
@@ -603,11 +665,34 @@ PairScores CpuScorer::finish() {
             throw gpu_failed(*gpu_, error);
         }
     }
+    // VMAF YUV's U and V, wherever they were scored: one value for each pair scored, as the GPU's.
+    std::map<std::string, std::vector<double>> chroma_vmaf;
+    if (chroma_vmaf_) {
+        const std::vector<std::string> chroma_on_gpu = chroma_vmaf_->keys_on_gpu();
+        try {
+            chroma_vmaf = chroma_vmaf_->finish();
+        } catch (const std::exception& error) {
+            if (chroma_on_gpu.empty()) {
+                throw;
+            }
+            throw GpuMetricsFailed(metric_labels(chroma_on_gpu, " and ") + " on the GPU failed: " + error.what());
+        }
+        result.features_on_gpu.insert(result.features_on_gpu.end(), chroma_on_gpu.begin(), chroma_on_gpu.end());
+    }
     for (unsigned frame = 0; frame < count_; frame += step_) {
         result.frames.push_back(frame);
     }
     for (const std::string& metric : metrics_) {
         const CpuFeature& feature = *cpu_feature(metric);
+        if (feature.value == Value::chroma_vmaf) {
+            std::vector<double>& column = chroma_vmaf.at(metric);
+            if (column.size() != result.frames.size()) {
+                throw LibvmafError(metric + " has " + std::to_string(column.size()) + " scores for " +
+                                   std::to_string(result.frames.size()) + " frames");
+            }
+            result.by_metric.emplace_back(metric, std::move(column));  // to 6 decimals already
+            continue;
+        }
         const auto gpu_column = on_gpu.find(metric);
         if (gpu_column != on_gpu.end()) {
             result.features_on_gpu.push_back(metric);
@@ -685,8 +770,8 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
                              int width, int height, int bit_depth, const std::vector<std::string>& metrics,
                              int n_subsample, const FrameRange& range, long long total_frames,
                              const std::pair<std::string, std::string>& decoders, int threads, int frame_rate,
-                             const CambiInput& cambi, std::optional<int> gpu, const std::string& scale_algorithm,
-                             const std::string& ffmpeg,
+                             const CambiInput& cambi, std::optional<int> gpu, const std::string& vmaf_model,
+                             bool vmaf_on_vulkan, const std::string& scale_algorithm, const std::string& ffmpeg,
                              const std::string& ffprobe, bool want_vvdec,
                              const std::function<void()>& on_vvdec_opening,
                              const GpuMetricsReport& on_gpu_metrics,
@@ -710,7 +795,8 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
         open_pass_stream(source, plans[1], 4, source_backend, reference_vvdec, -1, ffmpeg, ffprobe);
     // Declared after the streams so that it goes first: it gives back the
     // memory their decoders page-locked.
-    CpuScorer scorer(width, height, bit_depth, metrics, n_subsample, threads, frame_rate, cambi, gpu);
+    CpuScorer scorer(width, height, bit_depth, metrics, n_subsample, threads, frame_rate, cambi, gpu, vmaf_model,
+                     vmaf_on_vulkan);
     if (on_gpu_metrics) {
         on_gpu_metrics(scorer.metric_keys(), scorer.gpu_metrics());
     }

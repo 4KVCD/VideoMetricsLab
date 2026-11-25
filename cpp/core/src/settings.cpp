@@ -46,6 +46,7 @@ const std::unordered_map<std::string, Field>& fields() {
         {"default_compute_xpsnr", &Settings::default_compute_xpsnr},
         {"default_compute_psnr_yuv", &Settings::default_compute_psnr_yuv},
         {"default_compute_psnr_yuv_mse", &Settings::default_compute_psnr_yuv_mse},
+        {"default_compute_vmaf_yuv", &Settings::default_compute_vmaf_yuv},
         {"default_compute_ssim_yuv", &Settings::default_compute_ssim_yuv},
         {"default_compute_ms_ssim", &Settings::default_compute_ms_ssim},
         {"default_compute_ms_ssim_yuv", &Settings::default_compute_ms_ssim_yuv},
@@ -529,6 +530,7 @@ std::string Settings::text() const {
     data["default_compute_xpsnr"] = default_compute_xpsnr;
     data["default_compute_psnr_yuv"] = default_compute_psnr_yuv;
     data["default_compute_psnr_yuv_mse"] = default_compute_psnr_yuv_mse;
+    data["default_compute_vmaf_yuv"] = default_compute_vmaf_yuv;
     data["default_compute_ssim_yuv"] = default_compute_ssim_yuv;
     data["default_compute_ms_ssim"] = default_compute_ms_ssim;
     data["default_compute_ms_ssim_yuv"] = default_compute_ms_ssim_yuv;

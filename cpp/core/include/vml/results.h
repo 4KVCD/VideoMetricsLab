@@ -82,6 +82,8 @@ public:
     void copy_from(const MetricResultSet& other, const std::string& key);
     // Adds every result `other` has, in its order.
     void add_all(const MetricResultSet& other);
+    // Leaves out the result for `key`, if there is one.
+    void remove(const std::string& key);
 
     bool has(const std::string& key) const;
     const FrameMetricResult* frame(const std::string& key) const;

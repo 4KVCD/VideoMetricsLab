@@ -36,6 +36,7 @@ add_library(vml_core
     src/gpu_frames.cpp
     src/gpu_checks.cpp
     src/gpu_choice.cpp
+    src/chroma_vmaf.cpp
     src/gpu_cpu_metrics.cpp
     src/gpu_vmaf.cpp
     src/grain_feed.cpp

@@ -101,7 +101,7 @@ TEST(BdRatePanel, ShowsTheBdRatesOfTwoEncoders) {
     for (int column = 0; column < panel.results->columnCount(); ++column) {
         shown_columns += panel.results->isColumnHidden(column) ? 0 : 1;
     }
-    ASSERT_EQ(shown_columns, 19);
+    ASSERT_EQ(shown_columns, 20);
     EXPECT_EQ(panel.results->horizontalHeaderItem(1)->text(), "VMAF v0.6.1");
     ASSERT_EQ(panel.results->rowCount(), 4);
     const QTableWidgetItem* s1_vmaf = panel.results->item(2, 1);

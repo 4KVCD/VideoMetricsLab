@@ -73,7 +73,7 @@ std::vector<std::string> MainWindow::requested_metrics(const RowData& row_data) 
             requested.push_back(key);
         }
     }
-    return requested;
+    return with_metric_inputs(std::move(requested));  // VMAF with VMAF YUV, which is made from its score
 }
 
 std::optional<QString> MainWindow::metric_unavailable_reason(const RowData& row_data, const std::string& key) {

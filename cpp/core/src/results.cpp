@@ -41,6 +41,12 @@ void MetricResultSet::add(FrameMetricResult result) {
     frames_.insert_or_assign(key, std::move(result));
 }
 
+void MetricResultSet::remove(const std::string& key) {
+    std::erase(keys_, key);
+    frames_.erase(key);
+    sequences_.erase(key);
+}
+
 void MetricResultSet::add(SequenceMetricResult result) {
     remember_key(keys_, result.key);
     frames_.erase(result.key);

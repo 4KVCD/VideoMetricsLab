@@ -839,6 +839,69 @@ TEST(JobRunner, SavedScoresAreNotCalculatedAgain) {
     EXPECT_EQ(planned[0].metric_keys, std::vector<std::string>{"vmaf_neg"});
 }
 
+// VMAF YUV is planned as VMAF's U and V beside VMAF, and made from the three:
+// (6 VMAF + U + V) / 8 of each frame, its Y VMAF's score. The U and V asked
+// for it alone are not kept, and a failure of theirs is VMAF YUV's.
+TEST(JobRunner, VmafYuvIsMadeFromVmafAndItsChromaPlanes) {
+    VideoInfo source;
+    source.path = "reference.mkv";
+    source.width = 1920;
+    source.height = 1080;
+    source.pix_fmt = "yuv420p";
+    VideoInfo test = source;
+    test.path = "encode.mkv";
+    VmafJob job;
+    job.source_info = source;
+    job.distorted_info = test;
+    job.options.vmaf_on_gpu = false;
+    job.metric_keys = {"vmaf", "psnr", "vmaf_yuv", "vmaf_yuv_y"};
+    for (const std::string& key : job.metric_keys) {
+        job.options.set_metric_enabled(key, true);
+    }
+    EXPECT_EQ(plan_tasks(source, test, job.options, job.metric_keys, {}, saved_scores({"vmaf_yuv"}))[0].metric_keys,
+              (std::vector<std::string>{"vmaf", "psnr"}));
+    job.tasks = plan_tasks(source, test, job.options, job.metric_keys);
+    ASSERT_EQ(job.tasks.size(), 1u);
+    EXPECT_EQ(job.tasks[0].metric_keys, (std::vector<std::string>{"vmaf", "psnr", "vmaf_yuv_u", "vmaf_yuv_v"}));
+
+    const auto scores = [](const std::string& key, std::vector<float> values) {
+        return FrameMetricResult{key, {0, 1}, {0.0, 1 / 24.0}, std::move(values), {}};
+    };
+    std::vector<std::vector<std::string>> asked;
+    Reported reported;
+    run_jobs(
+        {job, job}, 1, reported.events(),
+        [&](const VmafJob&, const VmafOptions& options, const ProgressCallback&, const StatusCallback&,
+            const CancelToken&) {
+            asked.push_back(options.requested_metrics());
+            ComparisonResult result;
+            for (FrameMetricResult metric : {scores("vmaf", {80, 90}), scores("psnr", {40, 41}),
+                                             scores("vmaf_yuv_u", {60, 70}), scores("vmaf_yuv_v", {40, 50})}) {
+                result.metric_results.add(std::move(metric));
+            }
+            if (asked.size() == 2) {  // the second video's V cannot be scored
+                result.metric_results.remove("vmaf_yuv_v");
+                result.metric_failures["vmaf_yuv_v"] = "its chroma is too small";
+            }
+            return result;
+        },
+        24, CancelToken());
+
+    EXPECT_EQ(asked[0], (std::vector<std::string>{"vmaf", "psnr", "vmaf_yuv_u", "vmaf_yuv_v"}));
+    ASSERT_EQ(reported.finished.size(), 1u);
+    const MetricResultSet& made = reported.finished.at(0).metric_results;
+    ASSERT_NE(made.frame("vmaf_yuv"), nullptr);
+    EXPECT_EQ(made.frame("vmaf_yuv")->values, (std::vector<float>{72.5F, 82.5F}));
+    EXPECT_EQ(made.frame("vmaf_yuv_y")->values, made.frame("vmaf")->values);
+    EXPECT_EQ(made.keys(), (std::vector<std::string>{"vmaf", "psnr", "vmaf_yuv", "vmaf_yuv_y"}));
+    ASSERT_EQ(reported.partial.size(), 1u);
+    const Reported::Partial& failed = reported.partial.begin()->second;
+    EXPECT_FALSE(failed.result.has_metric("vmaf_yuv"));
+    EXPECT_FALSE(failed.result.has_metric("vmaf_yuv_u"));
+    EXPECT_EQ(failed.failures, (MetricFailures{{"vmaf_yuv", "its chroma is too small"}}));
+    EXPECT_EQ(failed.message, "VMAF YUV (6:1:1) failed: its chroma is too small");
+}
+
 // The CPU's task says why a failed check of the GPU sent metrics to it, of
 // those it calculates only: one note for each reason, with its metrics.
 TEST(JobRunner, AFallbackNoteNamesOnlyTheMetricsCalculated) {

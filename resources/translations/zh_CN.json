@@ -35,6 +35,8 @@
   "PSNR with color, as JVET weighs it": "含色彩的 PSNR，按 JVET 的方式加权",
   "PSNR with color, as MSU reports it": "含色彩的 PSNR，与 MSU 的报告方式相同",
   "PSNR of the three planes' squared errors weighted (6 x Y + Cb + Cr) / 8 and averaged over the frames before turning into dB, as MSU's codec comparisons report YUV-PSNR (avg. MSE). A little below PSNR YUV, more so where a few frames or one plane are much worse. In dB, higher is better.": "三个平面的平方误差按 (6 × Y + Cb + Cr) / 8 加权、在各帧上取平均后再换算为 dB 的 PSNR，与 MSU 编解码器比较报告的 YUV-PSNR (avg. MSE) 相同。略低于 PSNR YUV，少数帧或某一平面差得多时更低。单位 dB，越高越好。",
+  "VMAF with color, as MSU reports it": "含色彩的 VMAF，与 MSU 的报告方式相同",
+  "(6 x Y + U + V) / 8 of VMAF's model applied to each plane, as MSU's codec comparisons report YUV-VMAF. Its Y is the VMAF score, so VMAF is calculated with it. 0 to 100, higher is better.": "将 VMAF 模型分别用于各平面所得分数的 (6 × Y + U + V) / 8，与 MSU 编解码器对比中报告 YUV-VMAF 的方式相同。其 Y 即 VMAF 分数，因此会同时计算 VMAF。0 到 100，越高越好。",
   "Peak signal-to-noise ratio of the luma (Y) plane: the pixels' mean squared error, in dB. Higher is better.": "亮度（Y）平面的峰值信噪比：像素的均方误差，单位 dB。越高越好。",
   "SSIM at five scales, as MSU reports it": "五个尺度上的 SSIM，与 MSU 的报告方式相同",
   "SSIM of the luma (Y) plane at five scales (Wang et al. 2003), as MSU's codec comparisons report it. Up to 1, higher is better.": "亮度（Y）平面在五个尺度上的 SSIM（Wang et al. 2003），与 MSU 编解码器对比的报告方式相同。最高为 1，越高越好。",

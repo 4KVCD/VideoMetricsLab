@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "vml/cancel.h"
+#include "vml/chroma_vmaf.h"
 #include "vml/frame_range.h"
 #include "vml/libvmaf.h"
 #include "vml/pair_scorer.h"
@@ -39,7 +40,9 @@ class GpuMetricsScorer;  // gpu_cpu_metrics.h
 // ("%3.4f"). A 6:1:1 metric (PSNR YUV, SSIM YUV, MS-SSIM YUV) is
 // (6 Y + Cb + Cr) / 8 of its extractor's luma feature and its two chroma
 // features, rounded once; PSNR YUV avg. MSE weighs the planes' squared
-// errors 6:1:1 instead, from the same three PSNR features. CIEDE2000 is shown
+// errors 6:1:1 instead, from the same three PSNR features. VMAF YUV's U and V
+// are the run's VMAF model applied to a chroma plane (ChromaVmaf), not a
+// libvmaf extractor's feature. CIEDE2000 is shown
 // as the mean colour difference ΔE00 of the frame's pixels (0: identical),
 // from libvmaf's 45 - 20 log10(mean ΔE00), which is +infinity for identical
 // frames.
@@ -50,7 +53,8 @@ struct CpuFeature {
         // The PSNR of (6 MSE_Y + MSE_Cb + MSE_Cr) / 8, from the planes'
         // PSNR (feature, cb and cr): the planes share one peak.
         planes_611_mse,
-        delta_e,  // 10^((45 - feature) / 20)
+        delta_e,      // 10^((45 - feature) / 20)
+        chroma_vmaf,  // ChromaVmaf's score of the plane
     };
     std::string_view key;  // the app's metric key: "psnr", "ssim", "cambi", "ciede2000", ...
     std::string_view extractor;
@@ -126,10 +130,16 @@ public:
     // `cambi`: CAMBI's test video. With `gpu` (Vulkan's number for the GPU,
     // -1 for the one VMAF runs on), CIEDE2000 and CAMBI are calculated there
     // where it can (gpu_cpu_metrics.h), from the same pictures; else, and
-    // where the GPU cannot, by libvmaf. Throws LibvmafError.
+    // where the GPU cannot, by libvmaf. `vmaf_model`: the run's VMAF model
+    // (its model= value), for VMAF YUV's U and V, which go on `gpu` too
+    // where `vmaf_on_vulkan` (the Vulkan engine scores this PC's GPU VMAF),
+    // copied there from `chroma_from_decoders` where it can (ChromaVmaf's
+    // add_decoded), so that the pictures add_decoded downloads need no
+    // chroma for them. Throws LibvmafError.
     CpuScorer(int width, int height, int bit_depth, std::vector<std::string> metrics, int n_subsample = 1,
               int threads = 0, int frame_rate = 0, const CambiInput& cambi = {},
-              std::optional<int> gpu = std::nullopt);
+              std::optional<int> gpu = std::nullopt, const std::string& vmaf_model = {},
+              bool vmaf_on_vulkan = false, std::optional<ChromaFromDecoders> chroma_from_decoders = std::nullopt);
     ~CpuScorer() override;
     CpuScorer(const CpuScorer&) = delete;
     CpuScorer& operator=(const CpuScorer&) = delete;
@@ -150,7 +160,11 @@ public:
     // samples; 64 with chroma), and otherwise into a buffer that is then
     // copied in, as NVIDIA's are for an odd size with chroma. Where the decoders allow (downloads_at_once), or one of the
     // two is copied from where the software decoder holds it, the two come
-    // at the same time, the source's on a thread of the scorer's.
+    // at the same time, the source's on a thread of the scorer's. VMAF YUV's
+    // U and V copied on the GPU from the decoders' memory (ChromaVmaf::
+    // takes_decoded) are copied first; with nothing else to score (and no
+    // `also` below), no picture is downloaded. Only these pairs may then be given (add and
+    // add_planes throw std::logic_error).
     void add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot);
 
     // add_decoded, giving `also` the pair's two luma planes (the source's,
@@ -193,6 +207,7 @@ private:
     std::vector<std::string> metrics_;
     std::vector<std::string> libvmaf_metrics_;  // those of metrics_ libvmaf calculates; the GPU the others
     std::unique_ptr<GpuMetricsScorer> gpu_;     // CIEDE2000 and CAMBI on the GPU, or nullptr
+    std::unique_ptr<ChromaVmaf> chroma_vmaf_;   // VMAF YUV's U and V, or nullptr
     std::string cambi_feature_;  // CAMBI's score's name, which libvmaf builds from its options
     unsigned step_ = 1;
     unsigned count_ = 0;
@@ -259,8 +274,8 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
                              int width, int height, int bit_depth, const std::vector<std::string>& metrics,
                              int n_subsample, const FrameRange& range, long long total_frames,
                              const std::pair<std::string, std::string>& decoders, int threads, int frame_rate,
-                             const CambiInput& cambi, std::optional<int> gpu, const std::string& scale_algorithm,
-                             const std::string& ffmpeg,
+                             const CambiInput& cambi, std::optional<int> gpu, const std::string& vmaf_model,
+                             bool vmaf_on_vulkan, const std::string& scale_algorithm, const std::string& ffmpeg,
                              const std::string& ffprobe, bool want_vvdec,
                              const std::function<void()>& on_vvdec_opening,
                              const GpuMetricsReport& on_gpu_metrics,

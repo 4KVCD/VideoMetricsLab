@@ -15,6 +15,7 @@
 
 #include "vml/app_log.h"
 #include "vml/append.h"
+#include "vml/chroma_vmaf.h"
 #include "vml/crop_detect.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/film_grain_scoring.h"
@@ -25,6 +26,7 @@
 #include "vml/gpu_vmaf.h"
 #include "vml/hardware_decoding.h"
 #include "vml/isolated.h"
+#include "vml/libvmaf.h"
 #include "vml/metrics.h"
 #include "vml/number_format.h"
 #include "vml/perceptual.h"
@@ -80,6 +82,57 @@ constexpr std::size_t max_videos_in_flight = max_parallel_jobs + 1;
 
 bool contains(const std::vector<std::string>& keys, std::string_view key) {
     return std::find(keys.begin(), keys.end(), key) != keys.end();
+}
+
+// Whether `key` is VMAF YUV's U or V calculated only to make VMAF YUV: its
+// planes not asked for themselves (`asked`, the video's metrics).
+bool only_for_vmaf_yuv(const std::string& key, const std::vector<std::string>& asked) {
+    return (key == vmaf_u_key || key == vmaf_v_key) && !contains(asked, key);
+}
+
+// A task's `keys` as the video's metrics (`asked`) name them: VMAF YUV in
+// place of the U and V plan_tasks put there for it.
+std::vector<std::string> as_asked(const std::vector<std::string>& keys, const std::vector<std::string>& asked) {
+    std::vector<std::string> named;
+    for (const std::string& key : keys) {
+        const std::string name = only_for_vmaf_yuv(key, asked) ? "vmaf_yuv" : key;
+        if (!contains(named, name)) {
+            named.push_back(name);
+        }
+    }
+    return named;
+}
+
+// VMAF YUV (MSU's YUV-VMAF 6:1:1), (6 VMAF + U + V) / 8 of each frame, and
+// its Y, VMAF's score, where `asked` asks for them and `results` has what
+// they are made from but not them (a saved one stands); the U and V
+// calculated only for it are left out. Nothing where VMAF and its U and V
+// were not scored on the same frames: finish() says why.
+void make_vmaf_yuv(MetricResultSet& results, const std::vector<std::string>& asked) {
+    const FrameMetricResult* vmaf = results.frame("vmaf");
+    const FrameMetricResult* u = results.frame(vmaf_u_key);
+    const FrameMetricResult* v = results.frame(vmaf_v_key);
+    if (contains(asked, "vmaf_yuv") && !results.has("vmaf_yuv") && vmaf && u && v && u->frame == vmaf->frame &&
+        v->frame == vmaf->frame) {
+        // The planes' provenance: VMAF's model, scored by the app's libvmaf.
+        FrameMetricResult yuv{"vmaf_yuv", vmaf->frame, vmaf->time, {}, u->provenance, u->av1_grain_dav1d};
+        yuv.values.reserve(vmaf->values.size());
+        for (std::size_t frame = 0; frame < vmaf->values.size(); ++frame) {
+            const double sum = 6.0 * vmaf->values[frame] + u->values[frame] + v->values[frame];
+            yuv.values.push_back(static_cast<float>(to_6_decimals(sum / 8.0)));
+        }
+        results.add(std::move(yuv));
+    }
+    if (contains(asked, "vmaf_yuv_y") && !results.has("vmaf_yuv_y") && vmaf) {
+        FrameMetricResult y = *vmaf;
+        y.key = "vmaf_yuv_y";
+        results.add(std::move(y));
+    }
+    for (const char* plane : {vmaf_u_key, vmaf_v_key}) {
+        if (only_for_vmaf_yuv(plane, asked)) {
+            results.remove(plane);
+        }
+    }
 }
 
 // `result` with only every `step`-th frame (0, step, 2*step...): the frames
@@ -456,8 +509,8 @@ JobRun::JobRun(Scheduler& scheduler, std::size_t index, const VmafJob& job)
 
 std::pair<std::vector<std::string>, std::vector<std::string>> JobRun::shown_keys(std::size_t task) const {
     const MetricTask& planned = job_.tasks[task];
-    std::vector<std::string> own = own_keys(planned);
-    std::vector<std::string> beside = planned.cpu_beside;
+    std::vector<std::string> own = as_asked(own_keys(planned), job_.metric_keys);
+    std::vector<std::string> beside = as_asked(planned.cpu_beside, job_.metric_keys);
     // HDR VMAF beside the GPU's VMAF scores its features on the GPU too (hdr_plan; only its pictures are converted
     // on the CPU), so it is shown with the GPU's metrics. In the CPU's task it stays there: that task waits for a
     // CPU slot, as the run line says.
@@ -595,6 +648,11 @@ ComparisonResult JobRun::execute_task(std::size_t task) {
     VmafOptions options = options_;
     for (const std::string& key : options_.requested_metrics()) {
         options.set_metric_enabled(key, contains(job_.tasks[task].metric_keys, key));
+    }
+    for (const std::string& key : job_.tasks[task].metric_keys) {
+        if (key == vmaf_u_key || key == vmaf_v_key) {
+            options.set_metric_enabled(key, true);  // VMAF YUV's U and V, which plan_tasks put in its place
+        }
     }
     // The CPU's task keeps what the planner gave it: VMAF, NEG or v1 placed
     // there with the whole family (plan_tasks) stay on the CPU, which the
@@ -861,7 +919,7 @@ void JobRun::finish() {
     for (const TaskState& state : tasks_) {
         if (state.result) {
             for (const auto& [key, why] : state.result->metric_failures) {
-                set_failure(metric_failures, key, why);
+                set_failure(metric_failures, only_for_vmaf_yuv(key, job_.metric_keys) ? "vmaf_yuv" : key, why);
             }
         }
     }
@@ -895,10 +953,22 @@ void JobRun::finish() {
                         "are paired in step");
         }
     }
+    // VMAF YUV not made, its U and V not failed (finish's failures of them are its own): VMAF failed, or the
+    // three were not scored on the same frames (a saved VMAF of another range, say: make_vmaf_yuv).
+    if (result && !cancelled && contains(job_.metric_keys, "vmaf_yuv") && !result->has_metric("vmaf_yuv") &&
+        std::none_of(metric_failures.begin(), metric_failures.end(),
+                     [](const auto& failure) { return failure.first == "vmaf_yuv"; }) &&
+        std::none_of(failed.begin(), failed.end(), [this](std::size_t task) {
+            return contains(as_asked(job_.tasks[task].metric_keys, job_.metric_keys), "vmaf_yuv");
+        })) {
+        set_failure(metric_failures, "vmaf_yuv",
+                    result->has_metric("vmaf") ? "it needs VMAF and its U and V scored on the same frames"
+                                               : "it is made from VMAF's score, which failed");
+    }
     PerceptualFailures why_failed = metric_failures;  // each metric once, as the events say it
     for (const std::size_t task : failed) {
         const std::string why = failure_of(tasks_[task].error).first;
-        for (const std::string& key : job_.tasks[task].metric_keys) {
+        for (const std::string& key : as_asked(job_.tasks[task].metric_keys, job_.metric_keys)) {
             if (std::none_of(metric_failures.begin(), metric_failures.end(),
                              [&key](const auto& failure) { return failure.first == key; })) {
                 set_failure(why_failed, key, why);
@@ -941,10 +1011,11 @@ void JobRun::finish() {
     PerceptualFailures failures;  // each metric once, its last reason (the Python app's dict)
     for (const std::size_t task : failed) {
         const auto [why, tail] = failure_of(tasks_[task].error);
-        for (const std::string& key : job_.tasks[task].metric_keys) {
+        const std::vector<std::string> keys = as_asked(job_.tasks[task].metric_keys, job_.metric_keys);
+        for (const std::string& key : keys) {
             set_failure(failures, key, why);
         }
-        message += (message.empty() ? "" : "\n") + metric_labels(job_.tasks[task].metric_keys) + " failed: " + why;
+        message += (message.empty() ? "" : "\n") + metric_labels(keys) + " failed: " + why;
         if (stderr_tail.empty()) {
             stderr_tail = tail;
         }
@@ -1322,6 +1393,9 @@ std::optional<ComparisonResult> JobRun::merged() const {
             result->model_choice_hdr = job_.cached_result->model_choice_hdr;
         }
     }
+    if (result) {
+        make_vmaf_yuv(result->metric_results, job_.metric_keys);
+    }
     return result;
 }
 
@@ -1510,9 +1584,16 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
     // VMAF, NEG and v1 are placed together, on the GPU or not, as the run of
     // the whole family would place them, and the CPU's task keeps its place
     // (JobRun::execute_task).
+    //
+    // VMAF YUV and its Y are made from VMAF and its U and V (JobRun::merged),
+    // VMAF asked for with them (with_metric_inputs): the U and V are
+    // calculated in their place.
+    const bool vmaf_yuv = contains(metric_keys, "vmaf_yuv") && !saved.has("vmaf_yuv");
     std::vector<std::string> keys;
-    for (const std::string& key : metric_keys) {
-        if (!saved.has(key)) {
+    for (const MetricDefinition& metric : metrics()) {  // the registry's order
+        const std::string key(metric.key);
+        const bool asked = contains(metric_keys, key) || (vmaf_yuv && (key == vmaf_u_key || key == vmaf_v_key));
+        if (asked && !saved.has(key) && key != "vmaf_yuv" && key != "vmaf_yuv_y") {
             keys.push_back(key);
         }
     }

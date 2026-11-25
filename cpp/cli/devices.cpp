@@ -106,6 +106,10 @@ nlohmann::ordered_json devices_json(const DeviceFindings& found, const std::vect
         metrics[key] = found.cpu_metrics_in_app ? where("cpu", std::nullopt, cpu_detail)
                                                 : where(nullptr, std::nullopt, "not available: needs the app's libvmaf");
     }
+    // VMAF YUV: VMAF's score with its U and V, which the app's libvmaf scores on the GPU where VMAF is on Vulkan.
+    metrics["vmaf_yuv"] = !found.cpu_metrics_in_app ? where(nullptr, std::nullopt, "not available: needs the app's libvmaf")
+                          : found.vmaf.backend == "vulkan" ? where("gpu", vmaf_gpu, vmaf_detail)
+                                                           : where("cpu", std::nullopt, cpu_detail);
     if (found.vship) {
         const std::string detail = vship_build_name(*found.vship) + ", " + vship_build_api(found.vship->build);
         for (const char* key : {"ssimulacra2", "butteraugli", "cvvdp"}) {

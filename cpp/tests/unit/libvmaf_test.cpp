@@ -236,6 +236,46 @@ TEST(Libvmaf, PlanesAreTheirMetricsPlanes) {
     EXPECT_EQ(cpu_metrics_unfit({"ms_ssim_yuv", "ms_ssim_yuv_u"}, 320, 240, 8, {}).size(), 2U);
 }
 
+// VMAF YUV's U and V are the run's VMAF model applied to each chroma plane:
+// with only the test's U changed, V scores as identical planes do and U lower.
+// Chroma below VMAF's 32 x 32 is refused.
+TEST(Libvmaf, VmafOfEachChromaPlaneReadsThatPlane) {
+    if (!std::filesystem::exists(libvmaf_folder() / platform::shared_library_name("libvmaf"))) {
+        GTEST_SKIP() << "the app ships no libvmaf-fast for this system yet";
+    }
+    constexpr int width = 128, height = 96, frames = 2;
+    const PackedFrame packed(width, height, 10);
+    const std::size_t luma = static_cast<std::size_t>(width) * height, chroma = luma / 4;
+    const auto picture = [&](int index, bool change_u) {
+        std::vector<std::uint8_t> bytes(packed.bytes());
+        for (std::size_t i = 0; i < bytes.size() / 2; ++i) {
+            auto sample = static_cast<std::uint16_t>(64 + (i * 7 + index * 13 + (i / width) * 3) % 800);
+            if (change_u && i >= luma && i < luma + chroma) {
+                sample = 512;  // a flat U: all its detail lost
+            }
+            bytes[2 * i] = static_cast<std::uint8_t>(sample);
+            bytes[2 * i + 1] = static_cast<std::uint8_t>(sample >> 8);
+        }
+        return bytes;
+    };
+    const auto scored = [&](bool change_u) {
+        CpuScorer scorer(width, height, 10, {"vmaf_yuv_u", "vmaf_yuv_v"}, 1, 1, 0, {}, std::nullopt,
+                         "version=vmaf_v0.6.1");
+        for (int index = 0; index < frames; ++index) {
+            scorer.add(picture(index, false), picture(index, change_u));
+        }
+        return scorer.finish();
+    };
+    const PairScores same = scored(false), u_changed = scored(true);
+    ASSERT_EQ(scores_of(u_changed, "vmaf_yuv_u").size(), static_cast<std::size_t>(frames));
+    EXPECT_EQ(scores_of(u_changed, "vmaf_yuv_v"), scores_of(same, "vmaf_yuv_v"));
+    for (std::size_t i = 0; i < frames; ++i) {
+        EXPECT_LT(scores_of(u_changed, "vmaf_yuv_u")[i], scores_of(same, "vmaf_yuv_u")[i]) << "frame " << i;
+    }
+    EXPECT_EQ(cpu_metrics_unfit({"vmaf_yuv_u", "vmaf_yuv_v"}, 62, 96, 8, {}).size(), 2U);
+    EXPECT_TRUE(cpu_metrics_unfit({"vmaf_yuv_u", "vmaf_yuv_v"}, 64, 64, 8, {}).empty());
+}
+
 // The app's metrics a comparison cannot score are refused up front, each with
 // its reason, so they fail alone: libvmaf would fail every metric scored with
 // them. 160x90 is below MS-SSIM's 176 and CAMBI's 216; DCI 4K is past CAMBI's

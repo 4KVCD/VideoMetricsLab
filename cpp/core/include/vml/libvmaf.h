@@ -102,6 +102,8 @@ struct LibvmafHandles {
 
     // Loads the model in `file` (and destroys one that fails half-made).
     void load_model(const std::filesystem::path& file);
+    // Loads the model libvmaf has built in as `version` ("vmaf_v0.6.1").
+    void load_builtin(const std::string& version);
 };
 
 // Where the bundled library is, with its build record.

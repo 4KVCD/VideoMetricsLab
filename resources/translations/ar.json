@@ -35,6 +35,8 @@
   "PSNR with color, as JVET weighs it": "PSNR مع اللون، كما يزنه JVET",
   "PSNR with color, as MSU reports it": "PSNR مع اللون، كما تذكره MSU",
   "PSNR of the three planes' squared errors weighted (6 x Y + Cb + Cr) / 8 and averaged over the frames before turning into dB, as MSU's codec comparisons report YUV-PSNR (avg. MSE). A little below PSNR YUV, more so where a few frames or one plane are much worse. In dB, higher is better.": "PSNR لأخطاء المستويات الثلاثة التربيعية مرجّحةً (6 × Y + Cb + Cr) / 8 ومتوسَّطةً على الإطارات قبل تحويلها إلى dB، كما تذكر مقارنات الترميز لدى MSU قيمة YUV-PSNR (avg. MSE). أقل قليلًا من PSNR YUV، وأكثر حين تكون بضعة إطارات أو مستوى واحد أسوأ بكثير. بوحدة dB، والأعلى أفضل.",
+  "VMAF with color, as MSU reports it": "VMAF مع اللون، كما تذكره MSU",
+  "(6 x Y + U + V) / 8 of VMAF's model applied to each plane, as MSU's codec comparisons report YUV-VMAF. Its Y is the VMAF score, so VMAF is calculated with it. 0 to 100, higher is better.": "(6 × Y + U + V) / 8 لنموذج VMAF مطبقًا على كل مستوى، كما تذكر مقارنات الترميز لدى MSU قيمة YUV-VMAF. قيمة Y فيه هي درجة VMAF، لذا يُحسب VMAF معه. من 0 إلى 100، والأعلى أفضل.",
   "Peak signal-to-noise ratio of the luma (Y) plane: the pixels' mean squared error, in dB. Higher is better.": "نسبة الإشارة القصوى إلى الضوضاء لمستوى السطوع (Y): متوسط مربع خطأ البكسلات، بوحدة dB. الأعلى أفضل.",
   "SSIM at five scales, as MSU reports it": "SSIM على خمسة مقاييس، كما تذكره MSU",
   "SSIM of the luma (Y) plane at five scales (Wang et al. 2003), as MSU's codec comparisons report it. Up to 1, higher is better.": "SSIM لمستوى السطوع (Y) على خمسة مقاييس (Wang et al. 2003)، كما تذكره مقارنات الترميز لدى MSU. حتى 1، والأعلى أفضل.",

@@ -615,6 +615,7 @@ std::vector<std::string> default_metrics(const Settings& settings) {
     options.compute_xpsnr = settings.default_compute_xpsnr;
     options.compute_psnr_yuv = settings.default_compute_psnr_yuv;
     options.compute_psnr_yuv_mse = settings.default_compute_psnr_yuv_mse;
+    options.compute_vmaf_yuv = settings.default_compute_vmaf_yuv;
     options.compute_ssim_yuv = settings.default_compute_ssim_yuv;
     options.compute_ms_ssim = settings.default_compute_ms_ssim;
     options.compute_ms_ssim_yuv = settings.default_compute_ms_ssim_yuv;
@@ -2643,7 +2644,8 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
         print_error(error.what());
         return exit_usage;
     }
-    const std::vector<std::string> asked = arguments.metrics.value_or(default_metrics(settings));
+    // VMAF with VMAF YUV, which is made from its score.
+    const std::vector<std::string> asked = with_metric_inputs(arguments.metrics.value_or(default_metrics(settings)));
     if (const std::optional<std::string> wrong = model_file_wrong(arguments, asked)) {
         print_error(*wrong);
         return exit_usage;

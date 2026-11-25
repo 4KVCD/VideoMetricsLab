@@ -182,7 +182,7 @@ AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<s
         spec.backend_id = "ffmpeg";
         spec.coverage = libvmaf_requested && subsampled ? FrameCoverage{"sampled", options.n_subsample}
                                                         : FrameCoverage{"full", 1};
-        if (key == "vmaf") {
+        if (uses_vmaf_model(key)) {
             // Only what decides the score: an explicit or bundled choice is
             // the model that runs, while Auto's model is known only once the
             // size compared at is, and is recorded with the score instead.

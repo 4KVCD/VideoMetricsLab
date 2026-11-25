@@ -182,7 +182,8 @@ private:
             std::nullopt /* PSNR YUV: the app's only */, std::nullopt /* SSIM YUV: the app's only */,
             std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt /* the app's only too */,
             std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt,
-            std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt /* their planes */};
+            std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt /* their planes */,
+            std::nullopt, std::nullopt /* VMAF YUV's U and V: the app's only */};
         frames.push_back(frame_number);
         for (std::size_t column = 0; column < column_count; ++column) {
             // A column is filled from its first score on, the frames before it

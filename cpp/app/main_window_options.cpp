@@ -170,6 +170,7 @@ VmafOptions MainWindow::read_panel_options() const {
         metric_header_->is_checked(col_xpsnr));
     options.compute_psnr_yuv = metric_header_->is_checked(col_psnr_yuv);
     options.compute_psnr_yuv_mse = metric_header_->is_checked(col_psnr_yuv_mse);
+    options.compute_vmaf_yuv = metric_header_->is_checked(col_vmaf_yuv);
     options.compute_ssim_yuv = metric_header_->is_checked(col_ssim_yuv);
     options.compute_ms_ssim = metric_header_->is_checked(col_ms_ssim);
     options.compute_ms_ssim_yuv = metric_header_->is_checked(col_ms_ssim_yuv);
@@ -779,6 +780,7 @@ void MainWindow::add_cvvdp_display_rows(const std::vector<int>& rows, const Cvvd
             options.compute_xpsnr = false;
             options.compute_psnr_yuv = false;
             options.compute_psnr_yuv_mse = false;
+            options.compute_vmaf_yuv = false;
             options.compute_ssim_yuv = false;
             options.compute_ms_ssim = false;
             options.compute_ms_ssim_yuv = false;

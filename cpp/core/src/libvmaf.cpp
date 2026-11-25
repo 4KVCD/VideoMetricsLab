@@ -115,6 +115,11 @@ void LibvmafHandles::load_model(const std::filesystem::path& file) {
     check_libvmaf(library.model_load_from_path(&model, &config, path.c_str()), "Loading the model");
 }
 
+void LibvmafHandles::load_builtin(const std::string& version) {
+    VmafModelConfig config{"vmaf", 0};
+    check_libvmaf(library.model_load(&model, &config, version.c_str()), "Loading the " + version + " model");
+}
+
 Libvmaf::Libvmaf(const std::filesystem::path& path)
     : library(path),
       version(library.function<decltype(version)>("vmaf_version")),

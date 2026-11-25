@@ -320,7 +320,8 @@ void append_scores(PairScores& scores, PairScores&& more, const std::string& wha
 
 }  // namespace
 
-BesideScorer::BesideScorer(const GpuPlan& plan, int n_subsample, GpuFrameStream* shared) {
+BesideScorer::BesideScorer(const GpuPlan& plan, int n_subsample, GpuFrameStream* shared,
+                           std::optional<ChromaFromDecoders> chroma_from_decoders) {
     std::vector<std::string> cpu_metrics;
     bool hdr = false;
     for (const std::string& key : plan.beside) {
@@ -332,7 +333,8 @@ BesideScorer::BesideScorer(const GpuPlan& plan, int n_subsample, GpuFrameStream*
     }
     if (!cpu_metrics.empty()) {
         cpu_.emplace(plan.width, plan.height, plan.bit_depth, cpu_metrics, n_subsample, plan.threads,
-                     plan.frame_rate, plan.cambi, plan.extra_gpu);
+                     plan.frame_rate, plan.cambi, plan.extra_gpu, plan.vmaf_model, plan.vmaf_on_vulkan,
+                     chroma_from_decoders);
     }
     if (hdr) {
         hdr_ = make_hdr_scorer(plan, n_subsample, shared);
@@ -416,11 +418,11 @@ PairScores BesideScorer::finish() {
 }
 
 void start_beside(std::optional<BesideScorer>& scorer, const GpuPlan& plan, int n_subsample,
-                  GpuFrameStream* shared) {
+                  GpuFrameStream* shared, std::optional<ChromaFromDecoders> chroma_from_decoders) {
     if (plan.beside.empty()) {
         return;
     }
-    scorer.emplace(plan, n_subsample, shared);
+    scorer.emplace(plan, n_subsample, shared, chroma_from_decoders);
     if (const CpuScorer* cpu = scorer->cpu(); cpu != nullptr && plan.on_gpu_metrics) {
         plan.on_gpu_metrics(cpu->metric_keys(), cpu->gpu_metrics());
     }
@@ -668,7 +670,8 @@ GpuAttempt::GpuAttempt(const GpuPlan& plan, int n_subsample) : state_(std::make_
             metrics.push_back(key);
         }
         auto cpu = std::make_unique<CpuScorer>(plan.width, plan.height, plan.bit_depth, metrics, n_subsample,
-                                               plan.threads, plan.frame_rate, plan.cambi, plan.extra_gpu);
+                                               plan.threads, plan.frame_rate, plan.cambi, plan.extra_gpu,
+                                               plan.vmaf_model, plan.vmaf_on_vulkan);
         if (plan.on_gpu_metrics) {
             plan.on_gpu_metrics(cpu->metric_keys(), cpu->gpu_metrics());
         }
@@ -938,8 +941,16 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     // After the streams, so that it goes before them: it gives back the memory NVIDIA's decoder page-locked for
     // it, and the decoders' memory it imported.
     const bool may_share = !vvdec.any() && test.shares_gpu_memory_with(reference);
+    // VMAF YUV's U and V are copied on the GPU from the decoders' memory too, where both copy their planes there
+    // (NVIDIA's; AMD's hand nothing over beside the CPU's metrics): the CPU then downloads no chroma for them. Not
+    // beside HDR VMAF, whose pairs may go through system memory (HostPairs); without it every pair goes to the metrics
+    // beside through add_decoded.
+    std::optional<ChromaFromDecoders> chroma_from_decoders;
+    if (may_share && !hdr_beside && test.copies_planes() && reference.copies_planes()) {
+        chroma_from_decoders = ChromaFromDecoders{&test, plan.device};
+    }
     std::optional<BesideScorer> beside;
-    start_beside(beside, plan, n_subsample, may_share ? &test : nullptr);
+    start_beside(beside, plan, n_subsample, may_share ? &test : nullptr, chroma_from_decoders);
     // Declared after the streams so that it goes first: it holds on to the
     // decoder's memory.
     std::optional<VulkanScorer> scorer;
