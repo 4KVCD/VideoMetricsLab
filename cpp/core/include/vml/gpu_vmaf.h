@@ -202,12 +202,19 @@ private:
     std::unique_ptr<SideThread> side_;  // add_decoded_alongside's, made at its first; last, as its jobs use the scorers
 };
 
-// Whether a pass may ask for its pictures to stay on the GPU. Not with CPU metrics
-// or HDR VMAF beside it: they read the frames in system memory anyway, and AMD's decoder then
+// Whether a pass (HDR VMAF's own) may ask for its pictures to stay on the GPU. Not with CPU metrics
+// beside it: they read the frames in system memory anyway, and AMD's decoder then
 // gives AMF's own download rather than Windows' decoder's pictures, the ones
 // those metrics read in their own run. NVIDIA's and vvdec-vulkan's streams hand
 // over whatever they are asked (GpuFrameStream).
 inline bool pass_may_hand_over(const GpuPlan& plan) { return plan.beside.empty(); }
+
+// The same for the VMAF passes (score_decoded, score_decoded_v1), which may also hand over beside metrics that take
+// the decoders' pictures on the GPU themselves: VMAF YUV's U and V (ChromaVmaf copies them from the decoders' memory,
+// ChromaFromDecoders) and HDR VMAF (HdrScorer converts them there, `shared`). Where those cannot, they download
+// them from the same decoders' pictures. Not beside any other metric (pass_may_hand_over). It matters for AMD's
+// decoder only: NVIDIA's and vvdec-vulkan's always hand over, the others never.
+bool pass_may_hand_over_beside(const GpuPlan& plan);
 
 // Whether both videos' decoders can copy their pictures on the GPU into a
 // Vulkan scorer's memory that each imports (SharedSlots with the source's

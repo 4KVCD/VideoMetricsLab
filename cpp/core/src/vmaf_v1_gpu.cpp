@@ -1387,7 +1387,7 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
     // planes are not made (1080p: 342 -> 291 MB committed).
     const bool v1 = std::any_of(plan.models.begin(), plan.models.end(),
                                 [](const auto& model) { return model.first == "vmaf_v1"; });
-    const bool hand_over = pass_may_hand_over(plan);
+    const bool hand_over = pass_may_hand_over_beside(plan);
     const int pool = hand_over && plan.backend == "vulkan" && v1 && source_backend == test_backend &&
                              hands_over_textures(test_backend)
                          ? 6
@@ -1425,7 +1425,8 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
     // vvdec-vulkan's for one video and its own or NVIDIA's for the other,
     // each imports the scorers' memory (both_copy_on_gpu), where Vulkan
     // scores and calculates every VMAF v1 feature (V1Scorer), but not beside
-    // the CPU's metrics (pass_may_hand_over): they need both pictures in
+    // the CPU's metrics (pass_may_hand_over_beside, `beside` not taking the
+    // decoders' pictures): they need both pictures in
     // system memory anyway, and the extra copies on the GPU made the six
     // metrics of a 1080p pair about 30 % slower on an RTX 5090.
     bool on_gpu = false;

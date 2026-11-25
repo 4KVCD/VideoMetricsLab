@@ -433,6 +433,13 @@ void start_beside(std::optional<BesideScorer>& scorer, const GpuPlan& plan, int 
     logger.info(metric_labels(plan.beside, " and ") + " beside " + pass + ", from the same frames");
 }
 
+bool pass_may_hand_over_beside(const GpuPlan& plan) {
+    const auto takes_decoded = [](const std::string& key) {
+        return key == "vmaf_yuv_u" || key == "vmaf_yuv_v" || key == "vmaf_hdr";
+    };
+    return std::ranges::all_of(plan.beside, takes_decoded);
+}
+
 void add_beside(PairScores& scores, std::optional<BesideScorer>& beside) {
     if (beside) {
         append_scores(scores, beside->finish(), "The metrics beside them");
@@ -922,8 +929,8 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     const std::string source_library = vvdec.reference ? std::string(vvdec_decoder) : source_backend;
     // AMD's decoder hands its pictures over on the GPU where neither video is scaled or widened for the other
     // (can_hand_over); NVIDIA's always does. Not beside vvdec-vulkan's pictures in host memory, where nothing hands
-    // over, nor beside the CPU's metrics or HDR VMAF (pass_may_hand_over).
-    const bool hand_over = pass_may_hand_over(plan) && (vvdec.mixed || !vvdec.any()) &&
+    // over, nor beside the CPU's metrics; beside VMAF YUV's U and V and HDR VMAF it does (pass_may_hand_over_beside).
+    const bool hand_over = pass_may_hand_over_beside(plan) && (vvdec.mixed || !vvdec.any()) &&
                            can_hand_over(plans[0], test_library) && can_hand_over(plans[1], source_library);
     if (vvdec.any() && on_vvdec_opening) {
         on_vvdec_opening();
@@ -942,7 +949,7 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     // it, and the decoders' memory it imported.
     const bool may_share = !vvdec.any() && test.shares_gpu_memory_with(reference);
     // VMAF YUV's U and V are copied on the GPU from the decoders' memory too, where both copy their planes there
-    // (NVIDIA's; AMD's hand nothing over beside the CPU's metrics): the CPU then downloads no chroma for them. Not
+    // (NVIDIA's and AMD's, where they hand over): the CPU then downloads no chroma for them. Not
     // beside HDR VMAF, whose pairs may go through system memory (HostPairs); without it every pair goes to the metrics
     // beside through add_decoded.
     std::optional<ChromaFromDecoders> chroma_from_decoders;

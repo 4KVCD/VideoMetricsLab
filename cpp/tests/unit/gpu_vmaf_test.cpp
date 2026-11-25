@@ -222,5 +222,21 @@ TEST(GpuVmaf, OnlyAFailureAMinuteOldIsAskedAgain) {
     EXPECT_FALSE(stale_failure(false, seconds(61)));
 }
 
+// A VMAF pass keeps its pictures on the GPU beside nothing or beside metrics that take them there (VMAF YUV's U and
+// V, HDR VMAF), not beside any metric that reads them in system memory.
+TEST(GpuVmaf, HandsOverBesideMetricsThatTakeTheDecodersPictures) {
+    GpuPlan plan;
+    EXPECT_TRUE(pass_may_hand_over_beside(plan));
+    plan.beside = {"vmaf_yuv_u", "vmaf_yuv_v"};
+    EXPECT_TRUE(pass_may_hand_over_beside(plan));
+    EXPECT_FALSE(pass_may_hand_over(plan));
+    plan.beside = {"vmaf_hdr", "vmaf_yuv_u", "vmaf_yuv_v"};
+    EXPECT_TRUE(pass_may_hand_over_beside(plan));
+    plan.beside = {"vmaf_yuv_u", "vmaf_yuv_v", "psnr"};
+    EXPECT_FALSE(pass_may_hand_over_beside(plan));
+    plan.beside = {"vmaf_hdr", "ssim"};
+    EXPECT_FALSE(pass_may_hand_over_beside(plan));
+}
+
 }  // namespace
 }  // namespace vml

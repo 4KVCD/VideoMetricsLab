@@ -1741,7 +1741,9 @@ namespace {
 // pass): the software decoder's and Intel's pictures, which are never handed
 // over (can_hand_over: nvf_download writes them out in both passes), NVIDIA's,
 // which always are, and AMD's, which are not with these metrics beside
-// (pass_may_hand_over): AMF's download in both. Or FFmpeg decoding them, Apple's
+// (pass_may_hand_over): AMF's download in both. (Beside VMAF YUV's U and V
+// or HDR VMAF alone, AMD's are handed over, pass_may_hand_over_beside: those
+// take Windows' decoder's pictures on the GPU.) Or FFmpeg decoding them, Apple's
 // VideoToolbox having no library here: both passes read the same pipes.
 bool pass_feeds_cpu_metrics(const VideoInfo& source, const VideoInfo& distorted, const HardwareDecoding& decoding) {
     const auto ffmpeg_decodes = [](const std::optional<std::string>& hwaccel) {
