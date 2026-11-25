@@ -181,7 +181,7 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
             }
         }
         // Open, then the archive of the selection and the quick grabs.
-        EXPECT_EQ(texts.size(), 9);
+        EXPECT_EQ(texts.size(), 11);
         EXPECT_EQ(texts.mid(0, 2), (QStringList{"Open in Metric Graphs",
                                                 "Export this video's results, graphs, worst frames and weak segments..."}));
         EXPECT_EQ(texts.last(), "Run file (.metrics.json)...");
@@ -202,8 +202,8 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
         }
     }
     EXPECT_EQ(texts, (QStringList{"Results as JSON...", "Results as CSV...", "Per-frame scores as JSON...",
-                                  "Per-frame scores as CSV...", "Graphs as ZIP...", "Weak segments as JSON or CSV...",
-                                  "Run file (.metrics.json)..."}));
+                                  "Per-frame scores as CSV...", "Score summary as JSON...", "Score summary as CSV...",
+                                  "Graphs as ZIP...", "Weak segments as JSON or CSV...", "Run file (.metrics.json)..."}));
     QSignalSpy exports(&panel, &SavedResultsPanel::export_requested);
     const auto item = [&menu](const QString& text) -> QAction* {
         for (QAction* action : menu.actions()) {

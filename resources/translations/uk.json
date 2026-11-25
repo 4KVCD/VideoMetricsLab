@@ -1,5 +1,13 @@
 {
  "strings": {
+  "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Оцінка кожної метрики, яку вибирають «Налаштування > Збережені результати», зі статистикою та тим, як її отримано, по рядку на метрику, у позначених форматах: усіх відео в одному файлі (<video> - score details.json).",
+  "Export score summary": "Експорт зведення оцінок",
+  "Score summary": "Зведення оцінок",
+  "Score summary as CSV...": "Зведення оцінок у CSV...",
+  "Score summary as JSON...": "Зведення оцінок у JSON...",
+  "Score summary of {name}": "Зведення оцінок: {name}",
+  "score summary": "зведення оцінок",
+  "this score summary": "це зведення оцінок",
   "Click to dismiss.": "Клацніть, щоб закрити.",
   "Restart now": "Перезапустити зараз",
   "Restart the app now? The videos open now are not opened again ({setting}).": "Перезапустити застосунок зараз? Відкриті зараз відео не буде відкрито знову ({setting}).",
@@ -1390,7 +1398,6 @@
   "Saved": "Збережено",
   "Saved Results": "Збережені результати",
   "Saved scores": "Збережені оцінки",
-  "Saved scores of {name}": "Збережені оцінки: {name}",
   "Select a comparison to see its saved scores.": "Виберіть порівняння, щоб побачити його збережені оцінки.",
   "Select one comparison to see its saved scores.": "Виберіть одне порівняння, щоб побачити його збережені оцінки.",
   "Size": "Розмір",

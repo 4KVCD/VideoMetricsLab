@@ -54,6 +54,7 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--test-remuxes {on,off}]
                                    [--csv FOLDER] [--json FILE]
                                    [--frames-json FOLDER] [--batch CSV]
+                                   [--score-summary FOLDER]
                                    [--scores-csv FILE] [--worst N]
                                    [--segments CONDITIONS]
                                    [--segments-all | --segments-any]
@@ -87,6 +88,7 @@ const char* const bitrate_usage = R"(usage: VideoMetricsLab-cli bitrate [-h] [--
 
 const char* const saved_usage = R"(usage: VideoMetricsLab-cli saved [-h] [--filter TEXT] [--json FILE]
                                  [--csv FOLDER] [--frames-json FOLDER]
+                                 [--score-summary FOLDER]
                                  [--run-dir FOLDER] [--worst N]
                                  [--segments CONDITIONS]
                                  [--segments-all | --segments-any]
@@ -103,6 +105,7 @@ const char* const saved_usage = R"(usage: VideoMetricsLab-cli saved [-h] [--filt
 
 const char* const report_usage = R"(usage: VideoMetricsLab-cli report [-h] [--json FILE] [--csv FOLDER]
                                   [--frames-json FOLDER] [--run-dir FOLDER]
+                                  [--score-summary FOLDER]
                                   [--worst N] [--segments CONDITIONS]
                                   [--segments-all | --segments-any]
                                   [--segment-min-frames N]
@@ -379,6 +382,11 @@ R"(  --no-gpu-decode       decode the videos on the CPU
   --frames-json FOLDER  write each video's per-frame scores to FOLDER as JSON,
                         <video>.frames.json, as --csv's but JSON (further
                         --cvvdp-display scores as <video>_<display>.frames.json)
+  --score-summary FOLDER
+                        write the videos' score summary to FOLDER: each
+                        metric's score with the statistics and how it was
+                        made that Settings > Saved Results picks, as
+                        <reference>.score-summary.json and .csv
   --batch CSV           compare the videos a CSV file lists, in place of
                         REFERENCE and TEST, in one run: a row per test video,
                         with the columns reference and test (a file or a
@@ -576,6 +584,10 @@ options:
   --csv FOLDER          write each video's per-frame scores to FOLDER as
                         <video>.csv
   --frames-json FOLDER  write them as JSON, <video>.frames.json
+  --score-summary FOLDER
+                        write their score summary,
+                        <reference>.score-summary.json and .csv (the
+                        columns Settings > Saved Results picks)
   --run-dir FOLDER      write each video's result as <video>.metrics.json
   --worst N             after the tables, each metric's N worst dips
   --segments CONDITIONS
@@ -620,6 +632,10 @@ options:
   --csv FOLDER          write each video's per-frame scores to FOLDER as
                         <video>.csv
   --frames-json FOLDER  write them as JSON, <video>.frames.json
+  --score-summary FOLDER
+                        write their score summary,
+                        <reference>.score-summary.json and .csv (the
+                        columns Settings > Saved Results picks)
   --run-dir FOLDER      write each video's result as <video>.metrics.json
   --worst N             after the tables, each metric's N worst dips
   --segments CONDITIONS
@@ -1566,6 +1582,7 @@ Parser compare_parser(CompareArguments& parsed) {
         option({"--csv"}, [&parsed](const std::string& value) { parsed.csv = value; }),
         option({"--json"}, [&parsed](const std::string& value) { parsed.json_path = value; }),
         option({"--frames-json"}, [&parsed](const std::string& value) { parsed.frames_json = value; }),
+        option({"--score-summary"}, [&parsed](const std::string& value) { parsed.score_summary = value; }),
         option({"--batch"}, [&parsed](const std::string& value) { parsed.batch = value; }),
         option({"--scores-csv"}, [&parsed](const std::string& value) { parsed.scores_csv = value; }),
         option({"--worst"}, [&parsed](const std::string& value) { parsed.worst = int_up_to(value, 1000); }),
@@ -1640,6 +1657,7 @@ std::vector<Action> saved_output_options(CompareArguments& parsed) {
         option({"--json"}, [&parsed](const std::string& value) { parsed.json_path = value; }),
         option({"--csv"}, [&parsed](const std::string& value) { parsed.csv = value; }),
         option({"--frames-json"}, [&parsed](const std::string& value) { parsed.frames_json = value; }),
+        option({"--score-summary"}, [&parsed](const std::string& value) { parsed.score_summary = value; }),
         option({"--run-dir"}, [&parsed](const std::string& value) { parsed.run_dir = value; }),
         option({"--worst"}, [&parsed](const std::string& value) { parsed.worst = int_up_to(value, 1000); }),
         option({"--segments"}, [&parsed](const std::string& value) { read_segments(value, parsed); }),
@@ -1713,7 +1731,7 @@ std::optional<std::string> saved_misuse(const SavedArguments& parsed) {
     if (parsed.action != "list" && parsed.filter) {
         return "argument --filter: only with list";
     }
-    const bool writes = output.csv || output.frames_json || output.run_dir || output.worst ||
+    const bool writes = output.csv || output.frames_json || output.score_summary || output.run_dir || output.worst ||
                         !output.segments.empty() || output.segments_saved || output.segments_report ||
                         output.segments_dir || output.stills;
     if (parsed.action != "show" && writes) {

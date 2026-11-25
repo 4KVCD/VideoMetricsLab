@@ -1,5 +1,13 @@
 {
  "strings": {
+  "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "La puntuación de cada métrica que elige Configuración > Resultados guardados, con las estadísticas y cómo se obtuvo, una fila por métrica, en los formatos marcados: las de todos los videos en un archivo (<video> - score details.json).",
+  "Export score summary": "Exportar resumen de puntuaciones",
+  "Score summary": "Resumen de puntuaciones",
+  "Score summary as CSV...": "Resumen de puntuaciones como CSV...",
+  "Score summary as JSON...": "Resumen de puntuaciones como JSON...",
+  "Score summary of {name}": "Resumen de puntuaciones de {name}",
+  "score summary": "resumen de puntuaciones",
+  "this score summary": "este resumen de puntuaciones",
   "Click to dismiss.": "Haz clic para descartar.",
   "Restart now": "Reiniciar ahora",
   "Restart the app now? The videos open now are not opened again ({setting}).": "¿Reiniciar la aplicación ahora? Los videos abiertos ahora no se vuelven a abrir ({setting}).",
@@ -1390,7 +1398,6 @@
   "Saved": "Guardado",
   "Saved Results": "Resultados guardados",
   "Saved scores": "Puntuaciones guardadas",
-  "Saved scores of {name}": "Puntuaciones guardadas de {name}",
   "Select a comparison to see its saved scores.": "Selecciona una comparación para ver sus puntuaciones guardadas.",
   "Select one comparison to see its saved scores.": "Selecciona solo una comparación para ver sus puntuaciones guardadas.",
   "Size": "Tamaño",

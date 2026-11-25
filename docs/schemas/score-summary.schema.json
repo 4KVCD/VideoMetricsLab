@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VideoMetricsLab score summary",
+  "description": "A comparison's scores, one row a metric, with the statistics and facts of how each was made that the columns name (docs/RESULTS_JSON.md, 'Score summary as JSON and CSV').",
+  "type": "object",
+  "required": [
+    "app",
+    "url",
+    "version",
+    "commit",
+    "format",
+    "columns",
+    "comparisons"
+  ],
+  "properties": {
+    "app": {
+      "const": "VideoMetricsLab"
+    },
+    "url": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "commit": {
+      "type": "string"
+    },
+    "format": {
+      "const": "score-summary-1"
+    },
+    "columns": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "median",
+          "stdev",
+          "min",
+          "max",
+          "worst_10",
+          "worst_5",
+          "worst_1",
+          "worst_0_1",
+          "bands",
+          "model",
+          "made",
+          "device",
+          "saved"
+        ]
+      }
+    },
+    "comparisons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "label",
+          "test",
+          "reference",
+          "scores"
+        ],
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "test": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "scores": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "metric",
+                "label",
+                "score"
+              ],
+              "properties": {
+                "metric": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "score": {
+                  "$ref": "#/$defs/number"
+                },
+                "median": {
+                  "$ref": "#/$defs/number"
+                },
+                "stdev": {
+                  "$ref": "#/$defs/number"
+                },
+                "min": {
+                  "$ref": "#/$defs/number"
+                },
+                "max": {
+                  "$ref": "#/$defs/number"
+                },
+                "worst_10": {
+                  "$ref": "#/$defs/number"
+                },
+                "worst_5": {
+                  "$ref": "#/$defs/number"
+                },
+                "worst_1": {
+                  "$ref": "#/$defs/number"
+                },
+                "worst_0_1": {
+                  "$ref": "#/$defs/number"
+                },
+                "bands": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "band",
+                      "share"
+                    ],
+                    "properties": {
+                      "band": {
+                        "type": "string"
+                      },
+                      "share": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "model": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "made": {
+                  "type": "string"
+                },
+                "device": {
+                  "enum": [
+                    "cpu",
+                    "gpu"
+                  ]
+                },
+                "saved": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "number": {
+      "description": "A number, \"inf\" or \"-inf\" for an endless one, or null for none.",
+      "type": [
+        "number",
+        "string",
+        "null"
+      ]
+    }
+  }
+}

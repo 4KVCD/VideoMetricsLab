@@ -29,6 +29,7 @@
 #include "bd_rate_panel.h"
 #include "quick_save.h"
 #include "i18n.h"
+#include "vml/score_summary.h"
 #include "vml/app_log.h"
 #include "vml/bitrate_store.h"
 #include "vml/export_csv.h"
@@ -547,6 +548,16 @@ void MainWindow::export_rows_as(SavedResultsPanel::Export kind) {
         save_per_frame_files(results, kind == SavedResultsPanel::Export::frames_json);
         return;
     }
+    case SavedResultsPanel::Export::score_summary_json:
+    case SavedResultsPanel::Export::score_summary_csv: {
+        std::vector<ScoreSummaryEntry> entries;
+        for (const BundleVideo& video : videos) {
+            entries.push_back({video.label.toStdString(), video.path, source_info_->path,
+                               score_summary(*video.result, settings_.cvvdp_presets_json)});
+        }
+        save_score_summary(std::move(entries), name, kind == SavedResultsPanel::Export::score_summary_csv);
+        return;
+    }
     case SavedResultsPanel::Export::graphs: {
         // Each video's graph of every metric, all of them together, and their
         // bitrate with the reference's, as one .zip file.
@@ -573,6 +584,53 @@ void MainWindow::export_rows_as(SavedResultsPanel::Export kind) {
         return;
     }
     }
+}
+
+std::vector<ScoreSummaryEntry> MainWindow::saved_score_summary(const std::vector<LoadedSavedResult>& results) const {
+    std::vector<ScoreSummaryEntry> entries;
+    for (const LoadedSavedResult& saved : results) {
+        entries.push_back({saved.label.toStdString(), saved.result->distorted, saved.result->source,
+                           score_summary(*saved.result, settings_.cvvdp_presets_json, saved.saved)});
+    }
+    return entries;
+}
+
+void MainWindow::save_score_summary(std::vector<ScoreSummaryEntry> entries, const QString& name, bool csv) {
+    // As Results as JSON / CSV saves its file, with the columns Settings >
+    // Saved Results ticks.
+    const QString path = dialogs_.save_file(
+        app::tr("Export score summary"),
+        file_safe(name + QStringLiteral(" - score summary")) + (csv ? ".csv" : ".json"),
+        csv ? app::tr("CSV file (*.csv)") : app::tr("JSON file (*.json)"));
+    if (path.isEmpty()) {
+        return;
+    }
+    const std::vector<std::string>& columns = settings_.saved_details_columns;
+    std::string bytes = csv ? score_summary_csv(entries, columns)
+                            : python_json_dumps(score_summary_json(entries, columns)) + "\n";
+    submit_export(app::tr("export {name}", {{"name", name_of(path_of(path))}}),
+                  [bytes = std::move(bytes), out = path_of(path)] {
+                      write_bytes(out, bytes);
+                      return QStringList{text_of(out)};
+                  });
+}
+
+void MainWindow::quick_save_score_summary(std::vector<ScoreSummaryEntry> entries, const QString& name) {
+    // At one click, in the quick saves' formats, as quick_save_results.
+    const auto shared = std::make_shared<const std::vector<ScoreSummaryEntry>>(std::move(entries));
+    const std::vector<std::string> columns = settings_.saved_details_columns;
+    std::vector<QuickFile> files;
+    for (const std::string& format : quick_formats(settings_)) {
+        const bool csv = format == "csv";
+        files.push_back({file_safe(name + QStringLiteral(" - score summary")) + (csv ? ".csv" : ".json"),
+                         [shared, columns, csv](const QString& path) {
+                             return write_text_file(path, csv ? score_summary_csv(*shared, columns)
+                                                              : python_json_dumps(score_summary_json(*shared, columns)) +
+                                                                    "\n");
+                         }});
+    }
+    window_quick_saves().save(dialogs_.export_folder(), std::move(files),
+                              [this](const ExportOutcome& outcome) { report_export(outcome); });
 }
 
 void MainWindow::save_results_document(const nlohmann::ordered_json& document, const QString& name, bool csv) {
@@ -927,6 +985,11 @@ void MainWindow::export_saved_results(SavedResultsPanel::Export kind, const std:
             name, kind == SavedResultsPanel::Export::results_csv);
         return;
     }
+    case SavedResultsPanel::Export::score_summary_json:
+    case SavedResultsPanel::Export::score_summary_csv:
+        save_score_summary(saved_score_summary(results), name,
+                           kind == SavedResultsPanel::Export::score_summary_csv);
+        return;
     case SavedResultsPanel::Export::frames_json:
     case SavedResultsPanel::Export::frames_csv: {
         std::vector<std::pair<std::shared_ptr<const ComparisonResult>, QString>> files;

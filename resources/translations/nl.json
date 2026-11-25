@@ -1,5 +1,13 @@
 {
  "strings": {
+  "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "De score van elke metriek met de statistieken en hoe hij is gemaakt die Instellingen > Opgeslagen resultaten kiest, één rij per metriek, in de aangevinkte formaten: die van alle video's in één bestand (<video> - score details.json).",
+  "Export score summary": "Scoresamenvatting exporteren",
+  "Score summary": "Scoresamenvatting",
+  "Score summary as CSV...": "Scoresamenvatting als CSV...",
+  "Score summary as JSON...": "Scoresamenvatting als JSON...",
+  "Score summary of {name}": "Scoresamenvatting van {name}",
+  "score summary": "scoresamenvatting",
+  "this score summary": "deze scoresamenvatting",
   "Click to dismiss.": "Klik om te sluiten.",
   "Restart now": "Nu opnieuw starten",
   "Restart the app now? The videos open now are not opened again ({setting}).": "De app nu opnieuw starten? De video's die nu open zijn, worden niet opnieuw geopend ({setting}).",
@@ -1390,7 +1398,6 @@
   "Saved": "Opgeslagen",
   "Saved Results": "Opgeslagen resultaten",
   "Saved scores": "Opgeslagen scores",
-  "Saved scores of {name}": "Opgeslagen scores van {name}",
   "Select a comparison to see its saved scores.": "Selecteer een vergelijking om de opgeslagen scores te zien.",
   "Select one comparison to see its saved scores.": "Selecteer één vergelijking om de opgeslagen scores te zien.",
   "Size": "Grootte",

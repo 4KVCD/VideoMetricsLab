@@ -1,5 +1,13 @@
 {
  "strings": {
+  "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "คะแนนของแต่ละเมตริกพร้อมสถิติและวิธีที่ได้มา ตามที่ การตั้งค่า > ผลลัพธ์ที่บันทึก เลือก หนึ่งแถวต่อเมตริก ในรูปแบบที่ติ๊กไว้: ของวิดีโอทั้งหมดในไฟล์เดียว (<video> - score details.json)",
+  "Export score summary": "ส่งออกสรุปคะแนน",
+  "Score summary": "สรุปคะแนน",
+  "Score summary as CSV...": "สรุปคะแนนเป็น CSV...",
+  "Score summary as JSON...": "สรุปคะแนนเป็น JSON...",
+  "Score summary of {name}": "สรุปคะแนนของ {name}",
+  "score summary": "สรุปคะแนน",
+  "this score summary": "สรุปคะแนนนี้",
   "Click to dismiss.": "คลิกเพื่อปิด",
   "Restart now": "รีสตาร์ทเลย",
   "Restart the app now? The videos open now are not opened again ({setting}).": "รีสตาร์ทแอปตอนนี้หรือไม่ วิดีโอที่เปิดอยู่ตอนนี้จะไม่ถูกเปิดอีกครั้ง ({setting})",
@@ -1390,7 +1398,6 @@
   "Saved": "บันทึกเมื่อ",
   "Saved Results": "ผลลัพธ์ที่บันทึก",
   "Saved scores": "คะแนนที่บันทึกไว้",
-  "Saved scores of {name}": "คะแนนที่บันทึกไว้ของ {name}",
   "Select a comparison to see its saved scores.": "เลือกการเปรียบเทียบเพื่อดูคะแนนที่บันทึกไว้",
   "Select one comparison to see its saved scores.": "เลือกการเปรียบเทียบเพียงรายการเดียวเพื่อดูคะแนนที่บันทึกไว้",
   "Size": "ขนาด",

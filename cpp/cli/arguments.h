@@ -97,6 +97,12 @@ struct CompareArguments {
     std::optional<std::string> csv;
     // --frames-json: the folder for each video's per-frame scores as JSON (<video>.frames.json).
     std::optional<std::string> frames_json;
+    // --score-summary: the folder for the score summary (score_summary.h),
+    // a JSON and a CSV file a reference; with the columns and CVVDP's
+    // displays the settings give (filled in by the command, not parsed).
+    std::optional<std::string> score_summary;
+    std::vector<std::string> score_summary_columns;
+    std::string cvvdp_presets_json;
     std::optional<std::string> json_path;  // "-" prints the JSON instead of the tables
     std::optional<int> worst;  // --worst N: each metric's N worst dips, after the tables
     // --segments: where scores fall past these (weak_frames.h), with the

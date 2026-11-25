@@ -2,6 +2,7 @@
 #pragma once
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -64,6 +65,9 @@ struct TestVideo {
     std::string error;  // why it was not compared at all
     std::string error_code{};  // error's (codes.h)
     std::optional<ComparisonResult> result;
+    // When each metric's score was saved, by its key: of the scores saved
+    // show read (the score summary' "saved"); empty for a run's.
+    std::map<std::string, std::chrono::system_clock::time_point> saved_times;
     // The metrics that failed and why, in the order they failed.
     std::vector<std::pair<std::string, std::string>> failures;
     // The codes of the failures the command line found itself, by metric;

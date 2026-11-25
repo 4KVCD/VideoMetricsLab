@@ -1,5 +1,13 @@
 {
  "strings": {
+  "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Ocena każdej metryki ze statystykami i tym, jak powstała, wybranymi w Ustawienia > Zapisane wyniki, jeden wiersz na metrykę, w zaznaczonych formatach: wszystkich wideo w jednym pliku (<video> - score details.json).",
+  "Export score summary": "Eksportuj podsumowanie ocen",
+  "Score summary": "Podsumowanie ocen",
+  "Score summary as CSV...": "Podsumowanie ocen jako CSV...",
+  "Score summary as JSON...": "Podsumowanie ocen jako JSON...",
+  "Score summary of {name}": "Podsumowanie ocen: {name}",
+  "score summary": "podsumowanie ocen",
+  "this score summary": "to podsumowanie ocen",
   "Click to dismiss.": "Kliknij, aby zamknąć.",
   "Restart now": "Uruchom ponownie teraz",
   "Restart the app now? The videos open now are not opened again ({setting}).": "Uruchomić ponownie aplikację teraz? Otwarte teraz wideo nie zostaną ponownie otwarte ({setting}).",
@@ -1390,7 +1398,6 @@
   "Saved": "Zapisano",
   "Saved Results": "Zapisane wyniki",
   "Saved scores": "Zapisane oceny",
-  "Saved scores of {name}": "Zapisane oceny: {name}",
   "Select a comparison to see its saved scores.": "Zaznacz porównanie, aby zobaczyć jego zapisane oceny.",
   "Select one comparison to see its saved scores.": "Zaznacz tylko jedno porównanie, aby zobaczyć jego zapisane oceny.",
   "Size": "Rozmiar",

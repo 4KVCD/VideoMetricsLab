@@ -73,6 +73,7 @@ add_library(vml_core
     src/run_line.cpp
     src/run_record.cpp
     src/saved_results.cpp
+    src/score_summary.cpp
     src/score_logs.cpp
     src/segment_presets.cpp
     src/segment_profiles.cpp

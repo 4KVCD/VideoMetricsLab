@@ -950,6 +950,11 @@ void MainWindow::build_ui() {
             }
             return false;
         };
+    saved_results_panel_->save_score_summary = [this](const std::vector<LoadedSavedResult>& results) {
+        if (!results.empty()) {
+            quick_save_score_summary(saved_score_summary(results), results.front().label);
+        }
+    };
     saved_results_panel_->save_results = [this](const std::vector<LoadedSavedResult>& results) {
         if (results.empty()) {
             return;

@@ -49,6 +49,7 @@ convention.
 | Key | Meaning |
 | --- | --- |
 | `app`, `version`, `commit` | The program that wrote the file, its version and its build's commit (`-dirty`: built with uncommitted changes). |
+| `url` | The program's home, `https://github.com/4KVCD/VideoMetricsLab`. |
 | `format` | `2`. |
 | `cancelled` | Command line only: whether the run was cancelled. A cancelled run's videos hold the scores it finished. |
 | `timed_out` | Command line with `--timeout` or `--video-timeout` only: whether either stopped the run or a video. |
@@ -307,6 +308,28 @@ their CSV, for scripts that read JSON. So does the command line's
 
 In Python, `pandas.DataFrame(doc["rows"], columns=doc["columns"])` gives the
 CSV's table.
+
+## Score summary as JSON and CSV
+
+A leaner file than the results: a comparison's scores alone, a row a
+metric, with the statistics of its frames and how each was made, as Saved
+Results' details panel shows them. The window saves it (the details panel's
+save icon, the export menus' **Score summary**, Settings > Storage > Exports
+include); the command line writes it with `--score-summary FOLDER` (with
+`compare`, `report` and `saved show`), one file of each format a reference,
+`<reference>.score-summary.json` and `.csv`.
+The columns are those ticked in Settings > Saved Results (the window's
+settings, or the command line's `--settings`).
+
+| Key | Meaning |
+| --- | --- |
+| `app`, `url`, `version`, `commit`, `format` | As in [every file](#the-format-of-each-file), with the program's home; `format` is `"score-summary-1"`. |
+| `columns` | The columns each score has, in order: `median`, `stdev`, `min`, `max`, `worst_10`, `worst_5`, `worst_1`, `worst_0_1` (the score the worst 10% ... 0.1% of the frames are worse than), `bands` (each of the metric's score bands, `band` as Metric Graphs heads it and `share` of the frames in it, in percent), `model` (VMAF's model, CVVDP's display), `made` (what calculated it, and its version), `device` (`cpu` or `gpu`), `saved` (when the score was saved, in UTC; `null` where not known). |
+| `comparisons` | Each comparison: `label` (its test video, as the window names it), `test` and `reference` (their paths), and `scores`: a row a metric, `metric` (its key), `label` (its name) and `score` (the whole video's), then the columns. |
+
+The CSV has a row a score, headed `Comparison`, `Metric`, `Score` and the
+columns' names; numbers at their metric's precision, the bands as `> 90:
+98.3%; ...`.
 
 ## Worst frames as JSON and CSV
 

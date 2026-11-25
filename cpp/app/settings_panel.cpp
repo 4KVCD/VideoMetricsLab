@@ -521,6 +521,10 @@ QWidget* SettingsPanel::build_export_choices() {
         {"frames",
          app::tr("Every frame's score of each metric, in the formats ticked: a file for each video "
                  "(<video> - frames.json). A long video's are big.")},
+        {"score_summary",
+         app::tr("Each metric's score with the statistics and how it was made that Settings > Saved Results "
+                 "picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score "
+                 "details.json).")},
         {"graphs",
          app::tr("Each video's graph of every metric, and its bitrate with the reference's, as PNG images "
                  "(<video> - <metric>.png); with several videos, all of them together too. They're saved once "

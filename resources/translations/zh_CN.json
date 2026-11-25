@@ -1,5 +1,13 @@
 {
  "strings": {
+  "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "“设置 > 已保存的结果”所选的每个指标的分数，及其统计和生成方式，每个指标一行，以勾选的格式：所有视频保存在一个文件中（<video> - score details.json）。",
+  "Export score summary": "导出分数摘要",
+  "Score summary": "分数摘要",
+  "Score summary as CSV...": "分数摘要导出为 CSV...",
+  "Score summary as JSON...": "分数摘要导出为 JSON...",
+  "Score summary of {name}": "{name} 的分数摘要",
+  "score summary": "分数摘要",
+  "this score summary": "此分数摘要",
   "Click to dismiss.": "点击关闭。",
   "Restart now": "立即重启",
   "Restart the app now? The videos open now are not opened again ({setting}).": "立即重启应用？当前打开的视频不会再次打开（{setting}）。",
@@ -1390,7 +1398,6 @@
   "Saved": "保存时间",
   "Saved Results": "已保存的结果",
   "Saved scores": "已保存的分数",
-  "Saved scores of {name}": "{name} 的已保存分数",
   "Select a comparison to see its saved scores.": "选择一个对比以查看其已保存的分数。",
   "Select one comparison to see its saved scores.": "只选择一个对比以查看其已保存的分数。",
   "Size": "大小",

@@ -18,6 +18,10 @@
 #include "vml/stats.h"
 
 class QLabel;
+
+namespace vml::app {
+class SaveButton;
+}
 class QTableWidget;
 
 namespace vml::app {
@@ -61,6 +65,9 @@ public:
     // A metric's other score clicked: it is to be the one used.
     std::function<void(const std::string& key, const std::filesystem::path& file)> picked;
 
+    // The save icon at its top right: the window sets what it saves.
+    SaveButton* save_button() const { return save_button_; }
+
     // Opens under `anchor`, its left edge on the anchor's, kept on screen.
     void show_under(QWidget* anchor);
 
@@ -78,7 +85,8 @@ private:
 
     std::vector<SavedScoreRow> rows_;
     QTableWidget* table_ = nullptr;
-    int used_column_ = -1;  // the column marking the score used, where a metric has several; else -1
+    int used_column_ = -1;
+    SaveButton* save_button_ = nullptr;  // the column marking the score used, where a metric has several; else -1
 };
 
 }  // namespace vml::app

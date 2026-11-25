@@ -1,5 +1,13 @@
 {
  "strings": {
+  "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Điểm của từng chỉ số mà Cài đặt > Kết quả đã lưu chọn, kèm thống kê và cách tạo ra nó, mỗi chỉ số một hàng, theo các định dạng đã chọn: của mọi video trong một tệp (<video> - score details.json).",
+  "Export score summary": "Xuất tóm tắt điểm",
+  "Score summary": "Tóm tắt điểm",
+  "Score summary as CSV...": "Tóm tắt điểm dạng CSV...",
+  "Score summary as JSON...": "Tóm tắt điểm dạng JSON...",
+  "Score summary of {name}": "Tóm tắt điểm của {name}",
+  "score summary": "tóm tắt điểm",
+  "this score summary": "tóm tắt điểm này",
   "Click to dismiss.": "Nhấp để ẩn.",
   "Restart now": "Khởi động lại ngay",
   "Restart the app now? The videos open now are not opened again ({setting}).": "Khởi động lại ứng dụng ngay? Các video đang mở sẽ không được mở lại ({setting}).",
@@ -1390,7 +1398,6 @@
   "Saved": "Ngày lưu",
   "Saved Results": "Kết quả đã lưu",
   "Saved scores": "Điểm đã lưu",
-  "Saved scores of {name}": "Điểm đã lưu của {name}",
   "Select a comparison to see its saved scores.": "Chọn một so sánh để xem điểm đã lưu.",
   "Select one comparison to see its saved scores.": "Chỉ chọn một so sánh để xem điểm đã lưu.",
   "Size": "Kích thước",

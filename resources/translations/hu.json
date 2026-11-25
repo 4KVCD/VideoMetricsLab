@@ -1,5 +1,13 @@
 {
  "strings": {
+  "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Minden metrika pontszáma, amelyet a Beállítások > Mentett eredmények kiválaszt, a statisztikákkal és azzal, hogyan készült, metrikánként egy sorban, a bejelölt formátumokban: az összes videóé egy fájlban (<video> - score details.json).",
+  "Export score summary": "Pontszám-összesítő exportálása",
+  "Score summary": "Pontszám-összesítő",
+  "Score summary as CSV...": "Pontszám-összesítő CSV-ként...",
+  "Score summary as JSON...": "Pontszám-összesítő JSON-ként...",
+  "Score summary of {name}": "Pontszám-összesítő: {name}",
+  "score summary": "pontszám-összesítőjének",
+  "this score summary": "e pontszám-összesítő",
   "Click to dismiss.": "Kattintson a bezáráshoz.",
   "Restart now": "Újraindítás most",
   "Restart the app now? The videos open now are not opened again ({setting}).": "Újraindítja most az alkalmazást? A most megnyitott videók nem nyílnak meg újra ({setting}).",
@@ -1390,7 +1398,6 @@
   "Saved": "Mentve",
   "Saved Results": "Mentett eredmények",
   "Saved scores": "Mentett pontszámok",
-  "Saved scores of {name}": "{name} mentett pontszámai",
   "Select a comparison to see its saved scores.": "Jelöljön ki egy összehasonlítást a mentett pontszámai megtekintéséhez.",
   "Select one comparison to see its saved scores.": "Csak egy összehasonlítást jelöljön ki a mentett pontszámai megtekintéséhez.",
   "Size": "Méret",

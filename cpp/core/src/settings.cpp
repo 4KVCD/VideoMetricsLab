@@ -224,7 +224,8 @@ const std::vector<std::pair<std::string_view, std::string Settings::*>>& secret_
 }
 
 const std::vector<std::string>& export_item_keys() {
-    static const std::vector<std::string> items{"results", "frames", "graphs", "worst_frames", "weak_segments"};
+    static const std::vector<std::string> items{"results",      "frames",       "score_summary", "graphs",
+                                                "worst_frames", "weak_segments"};
     return items;
 }
 

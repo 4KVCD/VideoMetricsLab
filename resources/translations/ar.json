@@ -1,5 +1,13 @@
 {
  "strings": {
+  "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "درجة كل مقياس التي تختارها الإعدادات > النتائج المحفوظة، مع إحصاءاتها وطريقة حسابها، صف لكل مقياس، بالصيغ المحددة: درجات كل الفيديوهات في ملف واحد (<video> - score details.json).",
+  "Export score summary": "تصدير ملخص الدرجات",
+  "Score summary": "ملخص الدرجات",
+  "Score summary as CSV...": "ملخص الدرجات بصيغة CSV...",
+  "Score summary as JSON...": "ملخص الدرجات بصيغة JSON...",
+  "Score summary of {name}": "ملخص درجات {name}",
+  "score summary": "ملخص الدرجات",
+  "this score summary": "ملخص الدرجات هذا",
   "Click to dismiss.": "انقر للإخفاء.",
   "Restart now": "إعادة التشغيل الآن",
   "Restart the app now? The videos open now are not opened again ({setting}).": "إعادة تشغيل التطبيق الآن؟ لن يُعاد فتح الفيديوهات المفتوحة حاليًا ({setting}).",
@@ -1390,7 +1398,6 @@
   "Saved": "تاريخ الحفظ",
   "Saved Results": "النتائج المحفوظة",
   "Saved scores": "الدرجات المحفوظة",
-  "Saved scores of {name}": "الدرجات المحفوظة لـ {name}",
   "Select a comparison to see its saved scores.": "حدّد مقارنة لعرض درجاتها المحفوظة.",
   "Select one comparison to see its saved scores.": "حدّد مقارنة واحدة فقط لعرض درجاتها المحفوظة.",
   "Size": "الحجم",

@@ -1,5 +1,13 @@
 {
  "strings": {
+  "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Ayarlar > Kaydedilen sonuçlar'ın seçtiği her metriğin puanı, istatistikleri ve nasıl elde edildiği; metrik başına bir satır, işaretli biçimlerde: tüm videolarınki tek dosyada (<video> - score details.json).",
+  "Export score summary": "Puan özetini dışa aktar",
+  "Score summary": "Puan özeti",
+  "Score summary as CSV...": "Puan özeti CSV olarak...",
+  "Score summary as JSON...": "Puan özeti JSON olarak...",
+  "Score summary of {name}": "{name} puan özeti",
+  "score summary": "puan özetini",
+  "this score summary": "bu puan özeti",
   "Click to dismiss.": "Kapatmak için tıklayın.",
   "Restart now": "Şimdi yeniden başlat",
   "Restart the app now? The videos open now are not opened again ({setting}).": "Uygulama şimdi yeniden başlatılsın mı? Şu anda açık olan videolar yeniden açılmaz ({setting}).",
@@ -1390,7 +1398,6 @@
   "Saved": "Kayıt tarihi",
   "Saved Results": "Kaydedilen sonuçlar",
   "Saved scores": "Kayıtlı puanlar",
-  "Saved scores of {name}": "{name} için kayıtlı puanlar",
   "Select a comparison to see its saved scores.": "Kayıtlı puanlarını görmek için bir karşılaştırma seçin.",
   "Select one comparison to see its saved scores.": "Kayıtlı puanlarını görmek için yalnızca bir karşılaştırma seçin.",
   "Size": "Boyut",

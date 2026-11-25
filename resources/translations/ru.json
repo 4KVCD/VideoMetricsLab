@@ -1,5 +1,13 @@
 {
  "strings": {
+  "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Оценка каждой метрики со статистикой и тем, как она сделана, что выбрано в Настройки > Сохранённые результаты, по строке на метрику, в отмеченных форматах: всех видео в одном файле (<video> - score details.json).",
+  "Export score summary": "Экспортировать сводку оценок",
+  "Score summary": "Сводка оценок",
+  "Score summary as CSV...": "Сводка оценок в CSV...",
+  "Score summary as JSON...": "Сводка оценок в JSON...",
+  "Score summary of {name}": "Сводка оценок: {name}",
+  "score summary": "сводку оценок",
+  "this score summary": "эту сводку оценок",
   "Click to dismiss.": "Нажмите, чтобы скрыть.",
   "Restart now": "Перезапустить сейчас",
   "Restart the app now? The videos open now are not opened again ({setting}).": "Перезапустить приложение сейчас? Открытые сейчас видео не откроются снова ({setting}).",
@@ -1390,7 +1398,6 @@
   "Saved": "Сохранено",
   "Saved Results": "Сохранённые результаты",
   "Saved scores": "Сохранённые оценки",
-  "Saved scores of {name}": "Сохранённые оценки: {name}",
   "Select a comparison to see its saved scores.": "Выберите сравнение, чтобы увидеть его сохранённые оценки.",
   "Select one comparison to see its saved scores.": "Выберите одно сравнение, чтобы увидеть его сохранённые оценки.",
   "Size": "Размер",

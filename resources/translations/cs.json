@@ -1,5 +1,13 @@
 {
  "strings": {
+  "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Skóre každé metriky, které vybírá Nastavení > Uložené výsledky, se statistikami a tím, jak vzniklo, jeden řádek na metriku, v zaškrtnutých formátech: skóre všech videí v jednom souboru (<video> - score details.json).",
+  "Export score summary": "Exportovat souhrn skóre",
+  "Score summary": "Souhrn skóre",
+  "Score summary as CSV...": "Souhrn skóre jako CSV...",
+  "Score summary as JSON...": "Souhrn skóre jako JSON...",
+  "Score summary of {name}": "Souhrn skóre pro {name}",
+  "score summary": "souhrn skóre",
+  "this score summary": "tento souhrn skóre",
   "Click to dismiss.": "Kliknutím skryjete.",
   "Restart now": "Restartovat nyní",
   "Restart the app now? The videos open now are not opened again ({setting}).": "Restartovat aplikaci nyní? Právě otevřená videa se znovu neotevřou ({setting}).",
@@ -1390,7 +1398,6 @@
   "Saved": "Uloženo",
   "Saved Results": "Uložené výsledky",
   "Saved scores": "Uložená skóre",
-  "Saved scores of {name}": "Uložená skóre: {name}",
   "Select a comparison to see its saved scores.": "Vyberte porovnání a zobrazí se jeho uložená skóre.",
   "Select one comparison to see its saved scores.": "Vyberte jedno porovnání a zobrazí se jeho uložená skóre.",
   "Size": "Velikost",
