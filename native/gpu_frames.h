@@ -16,7 +16,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <string>
 #if defined(__SSE2__) || defined(_M_X64)
 #include <emmintrin.h>
 #endif
@@ -76,6 +78,12 @@ struct Params {
 // via_h.
 #define NVF_PARAMS_VERSION 4
 NVF_API int nvf_params_version() { return NVF_PARAMS_VERSION; }
+
+// `text` into the caller's buffer `out` of `size` bytes (nvf_open's and
+// nvf_error's), cut to fit; nothing where there is no buffer.
+inline void copy_text(char *out, int size, const std::string &text) {
+    if (out && size > 0) snprintf(out, size, "%s", text.c_str());
+}
 
 inline int out_width(const Params &p) { return p.out_w > 0 ? p.out_w : p.crop_w; }
 inline int out_height(const Params &p) { return p.out_h > 0 ? p.out_h : p.crop_h; }

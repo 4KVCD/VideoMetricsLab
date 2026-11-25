@@ -678,10 +678,6 @@ void destroy(Decoder *d) {
     delete d;
 }
 
-void copy_text(char *out, int size, const std::string &text) {
-    if (out && size > 0) snprintf(out, size, "%s", text.c_str());
-}
-
 int download_result(Decoder *d, bool copied) {
     if (copied) return 0;
     d->fail(d->vk.error);

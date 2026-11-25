@@ -86,10 +86,6 @@ struct Decoder {
     }
 };
 
-void copy_text(char *out, int size, const std::string &text) {
-    if (out && size > 0) snprintf(out, size, "%s", text.c_str());
-}
-
 // The process's vvdec-vulkan settings, before its first decoder, each unless already set: the GPU's parse
 // (VVDEC_GPU_PARSE=2), and the GPU (its Vulkan device index; a device below 0 leaves the choice to vvdec-vulkan, the
 // first discrete GPU, as the app's Vulkan VMAF picks). vvdec reads them once per process. The GPU's parse is the

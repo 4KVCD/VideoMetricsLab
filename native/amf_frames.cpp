@@ -922,10 +922,6 @@ void destroy(Decoder *d) {
     trace("close: done");
 }
 
-void copy_text(char *out, int size, const std::string &text) {
-    if (out && size > 0) snprintf(out, size, "%s", text.c_str());
-}
-
 // A hand-over copy's result for the API: a failure ends the decoding, with why.
 int download_result(Decoder *d, bool copied) {
     if (copied) return 0;

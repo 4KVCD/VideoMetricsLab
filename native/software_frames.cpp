@@ -712,10 +712,6 @@ void destroy(Decoder *d) {
     delete d;
 }
 
-void copy_text(char *out, int size, const std::string &text) {
-    if (out && size > 0) snprintf(out, size, "%s", text.c_str());
-}
-
 // libavcodec's decoders by the codec numbers of gpu_frames.h.
 const char *decoder_name(int codec) {
     switch (codec) {
