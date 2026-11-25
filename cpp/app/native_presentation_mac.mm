@@ -27,6 +27,7 @@
 #include "native_common.h"
 #include "native_device.h"
 #include "native_metal.h"
+#include "video_surround.h"
 #include "vml/native_playback.h"
 
 // The presenter's view: a CAMetalLayer, which the mouse passes through to the
@@ -51,8 +52,8 @@ namespace vml::app {
 
 namespace {
 
-// The colour around a frame: the views' background (#171717).
-constexpr std::array<float, 4> background{0x17 / 255.0f, 0x17 / 255.0f, 0x17 / 255.0f, 1.0f};
+// The colour around a frame: black, as the views' (video_surround.h).
+constexpr std::array<float, 4> background = video_surround_rgba;
 
 // What the layer is told its colours are: SDR (sRGB-coded BT.709), or HDR10
 // (PQ in BT.2020, extended dynamic range), as Windows' swapchain is.

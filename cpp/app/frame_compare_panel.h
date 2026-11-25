@@ -108,6 +108,9 @@ public:
     // Shows a message instead of a frame, and the keys under it unless not
     // `with_keys`.
     void set_message(const QString& message, bool with_keys = true);
+    // The message with nothing to compare, the screen in the theme's colours
+    // rather than black (video_surround.h), until a frame or another message.
+    void show_empty(const QString& message);
     // Shows a frame.
     void set_image(const QImage& image);
     // Draws the frame again after the zoom changed.
@@ -125,11 +128,15 @@ protected:
 
 private:
     void fit_screen_text();
+    // The message's and the keys' colours: the theme's while empty_, else
+    // light on black.
+    void show_look();
 
     Zoom& zoom_;
     QWidget* screen_text_ = nullptr;  // the message and the keys
     QLabel* label_ = nullptr;
     KeyGuide* key_guide_ = nullptr;
+    bool empty_ = false;  // nothing to compare: the theme's colours (show_empty)
     QImage image_;
     // The frame scaled down smoothly, at the size last drawn: a drag paints
     // often, and scaling a 4K frame each time is slow.

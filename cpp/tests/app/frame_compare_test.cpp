@@ -671,6 +671,30 @@ TEST_F(FramePanelTest, AZoomedStillFrameIsDraggedAndAFittedOneIsNot) {
     EXPECT_NEAR(zoom.centre.first, 0.5 + 50 * ratio / 800, 1e-9);
 }
 
+// With nothing to compare, Video Compare's screen is the theme's, not a black
+// slab in a light window; around a frame, and while one loads, it is pure
+// black, as a film's bars are (video_surround.h), not dark gray.
+TEST_F(FramePanelTest, TheScreenIsTheThemesWhenEmptyAndBlackAroundAFrame) {
+    Zoom zoom;
+    FrameView viewer(zoom);
+    QPalette light = viewer.palette();
+    light.setColor(QPalette::Window, QColor("#f3f3f3"));
+    viewer.setPalette(light);
+    viewer.resize(400, 200);
+    viewer.show();
+    const auto corner = [&viewer] { return viewer.grab().toImage().pixelColor(1, 1); };
+
+    viewer.show_empty("Select a source video and add a test video to compare their frames.");
+    EXPECT_EQ(corner(), QColor("#f3f3f3"));
+    viewer.set_message("Loading test frame 12\xE2\x80\xA6", false);  // a frame loading: the video's screen
+    EXPECT_EQ(corner(), QColor(0, 0, 0));
+    viewer.show_empty("again");
+    QImage frame(100, 100, QImage::Format_RGB32);  // fitted, with room either side of it
+    frame.fill(QColor("#808080"));
+    viewer.set_image(frame);
+    EXPECT_EQ(corner(), QColor(0, 0, 0));
+}
+
 // A pair keeps its identity while its frames change: its black bars found,
 // its scaling edited, another reference chosen. The frames kept from before
 // were shown again (in both apps, the uncropped one extracted while the bars

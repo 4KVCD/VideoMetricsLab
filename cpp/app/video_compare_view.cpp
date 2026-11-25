@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "i18n.h"
+#include "video_surround.h"
 #include "vml/app_log.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
@@ -39,7 +40,7 @@ constexpr double audio_resume_seconds = 1.0;
 // every frame played, which would ask the disk as often).
 constexpr double found_for_seconds = 2.0;
 
-const QColor background("#171717");
+const QColor background = video_surround();  // black (video_surround.h)
 
 // Whether `path` is a file: found less than found_for_seconds ago, or on disk
 // now. A file found missing is looked for again at once.
