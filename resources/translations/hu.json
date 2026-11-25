@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Dips listed": "Listázott visszaesések",
+  "How many dips to list, up to {count}.": "Hány visszaesés legyen listázva, legfeljebb {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Minden visszaesés legrosszabb képkockája, a legrosszabb elöl, amíg egy oszlopfejlécre nem kattint: egy rosszabbtól 1 s-on belüli képkocka annak visszaeséséhez tartozik.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Minden metrika pontszáma, amelyet a Beállítások > Mentett eredmények kiválaszt, a statisztikákkal és azzal, hogyan készült, metrikánként egy sorban, a bejelölt formátumokban: az összes videóé egy fájlban (<video> - score details.json).",
   "Export score summary": "Pontszám-összesítő exportálása",

@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Dips listed": "Số chỗ tụt được liệt kê",
+  "How many dips to list, up to {count}.": "Số chỗ tụt cần liệt kê, tối đa {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Khung tệ nhất của mỗi chỗ tụt, tệ nhất trước cho đến khi nhấp vào một tiêu đề cột: một khung cách một khung tệ hơn không quá 1 s thuộc chỗ tụt của khung đó.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Điểm của từng chỉ số mà Cài đặt > Kết quả đã lưu chọn, kèm thống kê và cách tạo ra nó, mỗi chỉ số một hàng, theo các định dạng đã chọn: của mọi video trong một tệp (<video> - score details.json).",
   "Export score summary": "Xuất tóm tắt điểm",

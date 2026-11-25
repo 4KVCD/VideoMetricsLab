@@ -12,6 +12,7 @@
 #include <QScopeGuard>
 #include <QScrollBar>
 #include <QSizePolicy>
+#include <QSpinBox>
 #include <QSplitter>
 #include <QSignalBlocker>
 #include <QTabBar>
@@ -498,17 +499,36 @@ QWidget* WorstFramesTab::build_lists() {
     for (const int count : worst_frame_counts) {
         count_combo_->addItem(ntr("{count} dip", "{count} dips", count), count);
     }
+    count_combo_->addItem(app::tr("Custom..."), 0);  // the number box beside it says how many
+    count_spin_ = new QSpinBox;
+    count_spin_->setRange(1, most_worst_frames);
+    count_spin_->setKeyboardTracking(false);  // a number typed counts once it is finished
+    count_spin_->setToolTip(app::tr("How many dips to list, up to {count}.", {{"count", most_worst_frames}}));
+    count_spin_->setAccessibleName(app::tr("Dips listed"));
+    count_spin_->hide();
     connect(count_combo_, &QComboBox::currentIndexChanged, this, [this](int index) {
-        if (index >= 0 && !building_) {
-            count_ = count_combo_->itemData(index).toInt();
-            fill_worst();
-            refresh_chart();
-            show_details();  // the list made again: a row selected is gone
-            select_kept();
-            emit count_changed(count_);
+        if (index < 0 || building_) {
+            return;
+        }
+        const int preset = count_combo_->itemData(index).toInt();
+        count_spin_->setVisible(preset == 0);
+        if (preset == 0) {
+            // Custom...: the number box, from the count listed now.
+            const QSignalBlocker blocker(count_spin_);
+            count_spin_->setValue(count_);
+            count_spin_->setFocus();
+            count_spin_->selectAll();
+            return;
+        }
+        apply_count(preset);
+    });
+    connect(count_spin_, &QSpinBox::valueChanged, this, [this](int count) {
+        if (!building_) {
+            apply_count(count);
         }
     });
     worst_head->addWidget(count_combo_);
+    worst_head->addWidget(count_spin_);
     worst_head->addWidget(save_button(Card::worst));
     worst->addLayout(worst_head);
     worst_table_ = make_table(false);  // sized by fit_list
@@ -732,13 +752,21 @@ void WorstFramesTab::set_segment_profiles(std::vector<SegmentProfile> profiles, 
 }
 
 void WorstFramesTab::set_worst_count(int count) {
+    if (count < 1) {
+        count = worst_frame_counts.front();
+    }
+    count = std::min(count, most_worst_frames);
     const auto found = std::find(worst_frame_counts.begin(), worst_frame_counts.end(), count);
-    const int index = found == worst_frame_counts.end() ? 0 : static_cast<int>(found - worst_frame_counts.begin());
+    const bool custom = found == worst_frame_counts.end();
     {
         const QSignalBlocker blocker(count_combo_);
-        count_combo_->setCurrentIndex(index);
+        count_combo_->setCurrentIndex(custom ? static_cast<int>(worst_frame_counts.size())
+                                             : static_cast<int>(found - worst_frame_counts.begin()));
+        const QSignalBlocker spin_blocker(count_spin_);
+        count_spin_->setValue(count);
+        count_spin_->setVisible(custom);
     }
-    count_ = worst_frame_counts[static_cast<std::size_t>(index)];
+    count_ = count;
     fill_worst();
     refresh_chart();
     show_details();  // the list made again: a row selected is gone
@@ -1426,6 +1454,18 @@ QString WorstFramesTab::segment_details(const WeakSegment& segment) const {
 std::optional<int> WorstFramesTab::worst_frame_of_row(int row) const {
     const QTableWidgetItem* item = worst_table_->item(row, 0);
     return item != nullptr ? std::optional(item->data(Qt::UserRole).toInt()) : std::nullopt;
+}
+
+void WorstFramesTab::apply_count(int count) {
+    if (count == count_) {
+        return;
+    }
+    count_ = count;
+    fill_worst();
+    refresh_chart();
+    show_details();  // the list made again: a row selected is gone
+    select_kept();
+    emit count_changed(count_);
 }
 
 std::optional<std::size_t> WorstFramesTab::segment_of_row(int row) const {

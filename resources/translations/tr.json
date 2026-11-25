@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Dips listed": "Listelenen düşüşler",
+  "How many dips to list, up to {count}.": "Kaç düşüş listelensin, en fazla {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Her düşüşün en kötü karesi, bir başlığa tıklanana kadar en kötüsü önce: daha kötü bir kareye 1 s içindeki bir kare onun düşüşüne aittir.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Ayarlar > Kaydedilen sonuçlar'ın seçtiği her metriğin puanı, istatistikleri ve nasıl elde edildiği; metrik başına bir satır, işaretli biçimlerde: tüm videolarınki tek dosyada (<video> - score details.json).",
   "Export score summary": "Puan özetini dışa aktar",

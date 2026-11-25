@@ -342,7 +342,7 @@ shown there.
 | --- | --- |
 | `app`, `version`, `commit`, `format` | As in [every file](#the-format-of-each-file): `format` is `"worst-frames-1"`. |
 | `metric` | The metric the dips are of (`vmaf`). |
-| `dips` | How many dips were asked for (10, 25 or 50); fewer are listed where the video has fewer. |
+| `dips` | How many dips were asked for (10, 25, 50, or a number of the user's own up to 999); fewer are listed where the video has fewer. |
 | `ranges` | The frames looked in, `first_frame` and `last_frame` each (Metric Graphs' highlighted range); empty: the whole video. |
 | `worst_frames` | One object per dip, worst first: `rank` (1 is the worst), `frame`, `time` (seconds, where the frame starts) and `scores`, every scored metric's score at that frame by its key, in the app's order of metrics; `null` where a metric has none there. |
 

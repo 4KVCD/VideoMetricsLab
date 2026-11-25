@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Dips listed": "Показано провалов",
+  "How many dips to list, up to {count}.": "Сколько провалов показать, не более {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Худший кадр каждого провала, худшие первыми, пока не нажат заголовок столбца: кадр в пределах 1 с от худшего относится к его провалу.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Оценка каждой метрики со статистикой и тем, как она сделана, что выбрано в Настройки > Сохранённые результаты, по строке на метрику, в отмеченных форматах: всех видео в одном файле (<video> - score details.json).",
   "Export score summary": "Экспортировать сводку оценок",

@@ -41,6 +41,7 @@ class QComboBox;
 class QLabel;
 class QMenu;
 class QPushButton;
+class QSpinBox;
 class QSplitter;
 class QTabBar;
 class QTableWidget;
@@ -59,8 +60,10 @@ struct WeakFramesVideo {
     QString shown{};  // its name in the videos list, as Metric Graphs shows it; empty: label
 };
 
-// How many dips Worst frames can list.
+// How many dips Worst frames lists: one of these, or a number of the user's
+// own (Custom...) up to most_worst_frames.
 inline constexpr std::array<int, 3> worst_frame_counts{10, 25, 50};
+inline constexpr int most_worst_frames = 999;
 
 class WorstFramesTab : public QWidget {
     Q_OBJECT
@@ -89,7 +92,8 @@ public:
     // use. Changed in Settings, the profile picked here stays picked where it
     // is still there, with the conditions shown kept.
     void set_segment_profiles(std::vector<SegmentProfile> profiles, const std::string& in_use);
-    // How many dips Worst frames lists: 10, 25 or 50 (another: 10).
+    // How many dips Worst frames lists: 10, 25, 50, or another number up to
+    // most_worst_frames, shown as Custom... with its number (none: 10).
     void set_worst_count(int count);
 
     // The rules shown, with the range.
@@ -118,6 +122,8 @@ public:
     QTableWidget* segments_table() const { return segments_table_; }
     QTabBar* metric_bar() const { return metric_bar_; }
     QComboBox* profile_combo() const { return profile_combo_; }
+    QComboBox* count_combo() const { return count_combo_; }
+    QSpinBox* count_spin() const { return count_spin_; }
     QPushButton* save_button() const { return save_button_; }
     QPushButton* save_new_button() const { return save_new_button_; }
     QPushButton* preset_button() const { return preset_button_; }
@@ -306,6 +312,10 @@ private:
     QWidget* worst_card_ = nullptr;
     QWidget* segments_card_ = nullptr;
     QComboBox* count_combo_ = nullptr;
+    QSpinBox* count_spin_ = nullptr;  // Custom...'s number, shown with it
+    // The dips listed changed (the drop-down or the number box): the list
+    // and the graph's dots made again, Settings told.
+    void apply_count(int count);
     QTableWidget* worst_table_ = nullptr;
     QLabel* worst_note_ = nullptr;
     QTableWidget* segments_table_ = nullptr;

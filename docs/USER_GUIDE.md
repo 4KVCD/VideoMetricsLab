@@ -100,8 +100,9 @@ calculated in resolution tests.
    frames dotted. Below it, side by side where the window has room and one
    above the other where it hasn't:
    - **Worst frames**: the worst frame of each of the metric's 10, 25 or 50
-     worst dips (a frame within 1 s of a worse one is part of its dip), with
-     the conditions' metrics' scores there; every metric's is in the row's
+     worst dips, or as many as you give after **Custom...** (up to 999). A
+     frame within 1 s of a worse one is part of its dip. With it, the
+     conditions' metrics' scores there; every metric's is in the row's
      tooltip.
    - **Weak segments**: the stretches where the conditions hold; with more
      than one condition and **any condition holds**, the **Weak by** column
@@ -1369,7 +1370,7 @@ by the Export panel, the right-click menus or after each run. Tick:
   together too, as **Graphs as ZIP...** draws them, once the bitrate is
   read;
 - **Worst frames**: each video's worst frames of every metric, as many
-  dips as the Worst Frames tab lists (10, 25 or 50), each with every
+  dips as the Worst Frames tab lists (10, 25, 50 or its Custom... number), each with every
   metric's score there (`<video> - worst frames.json`, `.csv`; see
   [RESULTS_JSON.md](RESULTS_JSON.md#worst-frames-as-json-and-csv));
 - **Weak segments**: by the profile in use: a video's

@@ -339,6 +339,48 @@ TEST(WorstFramesTab, SortingMovesNoColumn) {
     }
 }
 
+// Beside 10, 25 and 50, a number of the user's own: Custom... and its number
+// box, the count kept in Settings and shown as Custom again when it is no
+// preset; a preset picked hides the box.
+TEST(WorstFramesTab, ListsACustomNumberOfDips) {
+    std::vector<float> values(300, 95.0F);
+    for (int dip = 0; dip < 8; ++dip) {
+        values[static_cast<std::size_t>(5 + dip * 35)] = 40.0F + static_cast<float>(dip);  // 8 dips, 35 frames apart
+    }
+    Settings settings;
+    Bench bench(settings);
+    WorstFramesTab& tab = bench.tab;
+    std::vector<int> told;
+    QObject::connect(&tab, &WorstFramesTab::count_changed, [&told](int count) { told.push_back(count); });
+    tab.set_videos({{"row:a", "a", vmaf_result("a.mkv", values)}});
+    ASSERT_EQ(tab.worst_table()->rowCount(), 8);  // 10 asked, 8 there
+    EXPECT_TRUE(tab.count_spin()->isHidden());
+
+    tab.set_worst_count(3);  // Settings' count, no preset
+    EXPECT_EQ(tab.count_combo()->currentText(), "Custom...");
+    EXPECT_FALSE(tab.count_spin()->isHidden());
+    EXPECT_EQ(tab.count_spin()->value(), 3);
+    EXPECT_EQ(tab.worst_table()->rowCount(), 3);
+    EXPECT_TRUE(told.empty());  // Settings' own count: not told back
+
+    tab.count_spin()->setValue(5);
+    EXPECT_EQ(tab.worst_table()->rowCount(), 5);
+    EXPECT_EQ(told, std::vector<int>{5});
+
+    tab.count_combo()->setCurrentIndex(0);  // 10 dips
+    EXPECT_TRUE(tab.count_spin()->isHidden());
+    EXPECT_EQ(tab.worst_table()->rowCount(), 8);
+    EXPECT_EQ(told, (std::vector<int>{5, 10}));
+
+    tab.count_combo()->setCurrentIndex(tab.count_combo()->count() - 1);  // Custom..., from 10
+    EXPECT_FALSE(tab.count_spin()->isHidden());
+    EXPECT_EQ(tab.count_spin()->value(), 10);
+    EXPECT_EQ(told.size(), 2U);  // nothing changed until a number is given
+
+    tab.set_worst_count(5000);  // past the most
+    EXPECT_EQ(tab.count_spin()->value(), most_worst_frames);
+}
+
 TEST(WorstFramesTab, DetailsTellsTheFrameUnderThePointerElseTheRowSelected) {
     // Details: the frame the pointer is on, with why it is weak; a worst
     // frame's dot a few pixels away taken instead (a frame further off is

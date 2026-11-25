@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Dips listed": "Quedas listadas",
+  "How many dips to list, up to {count}.": "Quantas quedas listar, até {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "O pior quadro de cada queda, o pior primeiro até que se clique em um cabeçalho: um quadro a menos de 1 s de um pior faz parte da queda dele.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "A pontuação de cada métrica com as estatísticas e como foi feita que Configurações > Resultados salvos escolhe, uma linha por métrica, nos formatos marcados: as de todos os vídeos em um arquivo (<video> - score details.json).",
   "Export score summary": "Exportar resumo de pontuações",

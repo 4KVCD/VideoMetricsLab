@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Dips listed": "Gelistete Einbrüche",
+  "How many dips to list, up to {count}.": "Wie viele Einbrüche aufgelistet werden, bis zu {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Das schlechteste Bild jedes Einbruchs, das schlechteste zuerst, bis auf eine Spaltenüberschrift geklickt wird: Ein Bild innerhalb 1 s um ein schlechteres gehört zu dessen Einbruch.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Der Wert jeder Metrik, den Einstellungen > Gespeicherte Ergebnisse wählt, mit den Statistiken und wie er entstand, eine Zeile pro Metrik, in den angehakten Formaten: die aller Videos in einer Datei (<video> - score details.json).",
   "Export score summary": "Wertübersicht exportieren",

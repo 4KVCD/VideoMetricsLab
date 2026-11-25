@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Dips listed": "Cali elencati",
+  "How many dips to list, up to {count}.": "Quanti cali elencare, fino a {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Il fotogramma peggiore di ogni calo, prima il peggiore finché non si fa clic su un'intestazione: un fotogramma entro 1 s da uno peggiore fa parte del suo calo.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Il punteggio di ogni metrica scelto da Impostazioni > Risultati salvati, con le statistiche e come è stato calcolato, una riga per metrica, nei formati spuntati: quelli di tutti i video in un unico file (<video> - score details.json).",
   "Export score summary": "Esporta riepilogo punteggi",

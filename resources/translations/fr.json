@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Dips listed": "Creux listés",
+  "How many dips to list, up to {count}.": "Combien de creux lister, jusqu'à {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "La pire image de chaque creux, la pire d'abord jusqu'au clic sur un en-tête : une image à moins de 1 s d'une pire fait partie de son creux.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Le score de chaque métrique que choisit Paramètres > Résultats enregistrés, avec les statistiques et la façon dont il a été obtenu, une ligne par métrique, dans les formats cochés : ceux de toutes les vidéos dans un fichier (<video> - score details.json).",
   "Export score summary": "Exporter le résumé des scores",

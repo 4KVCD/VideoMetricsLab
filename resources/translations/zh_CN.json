@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Dips listed": "列出的低谷数",
+  "How many dips to list, up to {count}.": "要列出的低谷数，最多 {count}。",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "每次低谷的最差帧，在点击列标题前最差的在前：与更差帧相距 1 秒以内的帧属于其低谷。",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "“设置 > 已保存的结果”所选的每个指标的分数，及其统计和生成方式，每个指标一行，以勾选的格式：所有视频保存在一个文件中（<video> - score details.json）。",
   "Export score summary": "导出分数摘要",

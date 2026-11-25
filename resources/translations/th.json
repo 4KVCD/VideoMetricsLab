@@ -1,5 +1,7 @@
 {
  "strings": {
+  "Dips listed": "จำนวนช่วงที่คะแนนตกที่แสดง",
+  "How many dips to list, up to {count}.": "จำนวนช่วงที่คะแนนตกที่จะแสดง สูงสุด {count}",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "เฟรมที่แย่ที่สุดของแต่ละช่วงที่คะแนนตก เรียงจากแย่ที่สุดจนกว่าจะคลิกหัวคอลัมน์: เฟรมที่อยู่ห่างจากเฟรมที่แย่กว่าไม่เกิน 1 วินาทีเป็นส่วนหนึ่งของช่วงนั้น",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "คะแนนของแต่ละเมตริกพร้อมสถิติและวิธีที่ได้มา ตามที่ การตั้งค่า > ผลลัพธ์ที่บันทึก เลือก หนึ่งแถวต่อเมตริก ในรูปแบบที่ติ๊กไว้: ของวิดีโอทั้งหมดในไฟล์เดียว (<video> - score details.json)",
   "Export score summary": "ส่งออกสรุปคะแนน",
