@@ -3,6 +3,7 @@
 // saving a frame's stills.
 #include <QCheckBox>
 #include <QDoubleSpinBox>
+#include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
@@ -45,6 +46,29 @@ std::filesystem::path unused_path(const std::filesystem::path& file) {
                                                                   platform::path_text(file.extension()));
     }
     return candidate;
+}
+
+// `text` with each digit replaced by its script's widest digit in `metrics`:
+// as wide as any number with as many digits is drawn. In a font whose digits
+// differ in width (macOS's system font), the largest number is not always the
+// widest: "119" is narrower than "108".
+QString widest_digits(QString text, const QFontMetrics& metrics) {
+    for (QChar& character : text) {
+        const int value = character.digitValue();
+        if (value < 0) {
+            continue;
+        }
+        const char16_t zero = static_cast<char16_t>(character.unicode() - value);
+        QChar widest(zero);
+        for (char16_t digit = 1; digit <= 9; ++digit) {
+            const QChar candidate(static_cast<char16_t>(zero + digit));
+            if (metrics.horizontalAdvance(candidate) > metrics.horizontalAdvance(widest)) {
+                widest = candidate;
+            }
+        }
+        character = widest;
+    }
+    return text;
 }
 
 }  // namespace
@@ -349,9 +373,11 @@ void FrameComparePanel::refresh_loop_text() {
     loop_before_frames_spin->setEnabled(usable && fps > 0);
     loop_after_frames_spin->setEnabled(usable && fps > 0);
     const QString centre = app::tr("Loop around frame {frame:,}:", {{"frame", loop_centre_}});
-    // As wide as the video's last frame would make it: the row stays put as
+    // As wide as any frame of the video would make it: the row stays put as
     // the frame changes (it is centred).
-    const QString widest = app::tr("Loop around frame {frame:,}:", {{"frame", std::max(loop_centre_, last_frame())}});
+    const QString widest = widest_digits(
+        app::tr("Loop around frame {frame:,}:", {{"frame", std::max(loop_centre_, last_frame())}}),
+        loop_checkbox->fontMetrics());
     loop_checkbox->setText(centre);
     loop_checkbox->setMinimumWidth(loop_checkbox->sizeHint().width() +
                                    loop_checkbox->fontMetrics().horizontalAdvance(widest) -
@@ -379,8 +405,9 @@ void FrameComparePanel::refresh_loop_text() {
         app::tr("(looping frames {first:,}\xE2\x80\x93{last:,})", {{"first", first}, {"last", last}}));
     // As wide as the widest range the video has, for the same reason.
     const long long widest_frame = std::max(last_frame(), 0LL);
-    loop_range_label->setMinimumWidth(loop_range_label->fontMetrics().horizontalAdvance(app::tr(
-        "(looping frames {first:,}\xE2\x80\x93{last:,})", {{"first", widest_frame}, {"last", widest_frame}})));
+    loop_range_label->setMinimumWidth(loop_range_label->fontMetrics().horizontalAdvance(widest_digits(
+        app::tr("(looping frames {first:,}\xE2\x80\x93{last:,})", {{"first", widest_frame}, {"last", widest_frame}}),
+        loop_range_label->fontMetrics())));
     // The band only while the loop is on: what will repeat.
     timeline->set_band(usable ? std::optional(std::pair(static_cast<int>(first), static_cast<int>(last)))
                               : std::nullopt);
