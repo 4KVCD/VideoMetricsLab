@@ -557,9 +557,17 @@ TEST_F(FramePanelTest, TheLoopRowKeepsItsWidthInAFontWithUnevenDigits) {
     const auto panel = std::make_unique<FrameComparePanel>([] { return std::string("no-ffmpeg-here"); },
                                                            PreviewColorMode::unmanaged, 3);
     idle_view(*panel);
-    panel->setFont(QFont(family, 10));
+    // Unhinted, as macOS draws text: the digits' advances are fractions of
+    // a pixel, so a width summed from separately rounded measurements comes
+    // out a pixel apart from one frame to the next.
+    QFont font(family);
+    font.setPixelSize(13);
+    font.setHintingPreference(QFont::PreferNoHinting);
+    panel->setFont(font);
     const QFontMetrics metrics(panel->loop_checkbox->font());
     ASSERT_GT(metrics.horizontalAdvance("108"), metrics.horizontalAdvance("119"));  // the case to catch
+    const QFontMetricsF exact(panel->loop_checkbox->font());
+    EXPECT_NE(exact.horizontalAdvance("1"), std::round(exact.horizontalAdvance("1")));  // fractional, as on a Mac
     const test::Folder folder;
     panel->set_runs({tagged(folder, "bt709", "bt709")});  // 24 fps, frames 0 to 119
     panel->set_frame(10);

@@ -374,14 +374,17 @@ void FrameComparePanel::refresh_loop_text() {
     loop_after_frames_spin->setEnabled(usable && fps > 0);
     const QString centre = app::tr("Loop around frame {frame:,}:", {{"frame", loop_centre_}});
     // As wide as any frame of the video would make it: the row stays put as
-    // the frame changes (it is centred).
+    // the frame changes (it is centred). The box's own size with the widest
+    // text, measured once: a sum of separately rounded widths, two of them
+    // of the frame shown, came out a pixel apart from frame to frame where
+    // digits' advances are fractions of a pixel (macOS, #242).
     const QString widest = widest_digits(
         app::tr("Loop around frame {frame:,}:", {{"frame", std::max(loop_centre_, last_frame())}}),
         loop_checkbox->fontMetrics());
+    loop_checkbox->setText(widest);
+    const int widest_width = loop_checkbox->sizeHint().width();
     loop_checkbox->setText(centre);
-    loop_checkbox->setMinimumWidth(loop_checkbox->sizeHint().width() +
-                                   loop_checkbox->fontMetrics().horizontalAdvance(widest) -
-                                   loop_checkbox->fontMetrics().horizontalAdvance(centre));
+    loop_checkbox->setMinimumWidth(widest_width);
     const QString before_tip = app::tr("How far before frame {frame:,} the loop starts. Type seconds or frames: the "
                                        "other follows.",
                                        {{"frame", loop_centre_}});
