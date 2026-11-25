@@ -100,8 +100,8 @@ TEST(WorstFramesTab, ListsTheDipsAndTheSegmentsAndOpensThemInVideoCompare) {
     WorstFramesTab& tab = bench.tab;
     tab.set_videos({{"row:a", "a", vmaf_result("a.mkv", values)}});
     ASSERT_NE(tab.chosen_video(), nullptr);
-    ASSERT_NE(tab.metric(), nullptr);
-    EXPECT_EQ(std::string(tab.metric()->key), "vmaf");
+    ASSERT_NE(tab.shown_metric(), nullptr);
+    EXPECT_EQ(std::string(tab.shown_metric()->key), "vmaf");
 
     QTableWidget& list = *tab.worst_table();
     ASSERT_EQ(list.rowCount(), 2);
@@ -562,11 +562,11 @@ TEST(WorstFramesTab, KeepsTheChosenVideoWhenItIsScoredAgain) {
 
     // The same line with a metric dropped: the bar loses it.
     tab.metric_bar()->setCurrentIndex(1);  // SSIMULACRA2
-    ASSERT_EQ(std::string(tab.metric()->key), "ssimulacra2");
+    ASSERT_EQ(std::string(tab.shown_metric()->key), "ssimulacra2");
     tab.set_videos({a, {"run:3", "b", vmaf_result("b.mkv", {95, 55, 95})}});
     EXPECT_EQ(tab.metric_bar()->count(), 1);
-    ASSERT_NE(tab.metric(), nullptr);
-    EXPECT_EQ(std::string(tab.metric()->key), "vmaf");
+    ASSERT_NE(tab.shown_metric(), nullptr);
+    EXPECT_EQ(std::string(tab.shown_metric()->key), "vmaf");
     EXPECT_EQ(tab.worst_table()->item(0, 2)->text(), "55.00");
 
     // A line of the same file and reference beside it (a CVVDP display row

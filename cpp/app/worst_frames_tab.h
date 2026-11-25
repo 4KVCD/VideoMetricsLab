@@ -90,7 +90,9 @@ public:
     // were (a preset's, once one is loaded: it replaces them all).
     SegmentRules rules_to_save() const;
     const WeakFramesVideo* chosen_video() const;
-    const MetricDefinition* metric() const { return metric_; }
+    // The metric shown. Not named metric(): that would hide QWidget's virtual metric(PaintDeviceMetric), which
+    // clang's -Woverloaded-virtual turns into an error on macOS.
+    const MetricDefinition* shown_metric() const { return metric_; }
     const std::vector<WeakSegment>& segments() const { return segments_; }
     // Worst frames' list as shown, for Video Compare to step through.
     WorstFrameList shown_list() const;
