@@ -44,11 +44,18 @@ PopupPanel::~PopupPanel() {
 }
 
 void PopupPanel::set_anchor(QWidget* anchor) {
+    // Connected once an anchor: a panel kept and opened again (the Export
+    // panel's open_under sets its anchor each time) gained a connection a
+    // time.
+    if (anchor == anchor_) {
+        return;
+    }
+    disconnect(anchor_released_);
     anchor_ = anchor;
     if (auto* button = qobject_cast<QAbstractButton*>(anchor)) {
         // A click() (UI Automation's Invoke) lets the button up after its
         // pressed signal has opened the panel: down again while it is open.
-        connect(button, &QAbstractButton::released, this, [this] {
+        anchor_released_ = connect(button, &QAbstractButton::released, this, [this] {
             if (isVisible()) {
                 hold_anchor_down(true);
             }

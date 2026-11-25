@@ -52,6 +52,7 @@ private:
     void hold_anchor_down(bool down);
 
     QPointer<QWidget> anchor_;
+    QMetaObject::Connection anchor_released_;  // its released signal's, set_anchor's
 };
 
 }  // namespace vml::app

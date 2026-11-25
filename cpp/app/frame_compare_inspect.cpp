@@ -375,9 +375,10 @@ void FrameComparePanel::refresh_loop_text() {
     const QString centre = app::tr("Loop around frame {frame:,}:", {{"frame", loop_centre_}});
     // As wide as any frame of the video would make it: the row stays put as
     // the frame changes (it is centred). The box's own size with the widest
-    // text, measured once: a sum of separately rounded widths, two of them
-    // of the frame shown, came out a pixel apart from frame to frame where
-    // digits' advances are fractions of a pixel (macOS, #242).
+    // text, one measurement rather than a sum: a sum of separately rounded
+    // widths, two of them of the frame shown, came out a pixel apart from
+    // frame to frame where digits' advances are fractions of a pixel (macOS,
+    // #242).
     const QString widest = widest_digits(
         app::tr("Loop around frame {frame:,}:", {{"frame", std::max(loop_centre_, last_frame())}}),
         loop_checkbox->fontMetrics());
