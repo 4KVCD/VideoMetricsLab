@@ -2903,6 +2903,7 @@ void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const Fr
     const std::optional<long long> limit =
         range.decode_end ? std::optional(*range.decode_end - range.decode_start) : std::nullopt;
     auto reported = std::chrono::steady_clock::now();
+    long long reported_count = -1;  // the count last reported, so the last one is not sent twice
     FrameRate rate;
     long long count = 0;
     while (!limit || count < *limit) {
@@ -2915,6 +2916,15 @@ void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const Fr
             release.test(test_picture->slot);
             break;
         }
+        if (count == 0 && on_progress) {
+            // The first pair is decoded: scoring starts now. The run times the
+            // pass's fps from its first report (job_runner), so this one must
+            // not wait for the interval below, or the frames scored meanwhile
+            // would count without their time.
+            reported = std::chrono::steady_clock::now();
+            reported_count = skipped;
+            on_progress(skipped, whole, 0.0);
+        }
         score(test_picture->slot, reference_picture->slot);
         release.test(test_picture->slot);
         release.reference(reference_picture->slot);
@@ -2925,8 +2935,14 @@ void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const Fr
         }
         if (on_progress && now - reported >= std::chrono::milliseconds(250)) {
             reported = now;
+            reported_count = skipped + count;
             on_progress(skipped + count, whole, rate.fps(now, skipped + count));
         }
+    }
+    // The frames since the last report: without them a pass shorter than the
+    // interval would end on the start's count, none scored, and no fps.
+    if (on_progress && count > 0 && reported_count != skipped + count) {
+        on_progress(skipped + count, whole, rate.fps(std::chrono::steady_clock::now(), skipped + count));
     }
 }
 
