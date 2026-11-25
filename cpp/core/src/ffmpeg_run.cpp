@@ -2318,10 +2318,13 @@ std::variant<GpuPlan, std::string> hdr_plan(const RunFrames& run, const VmafOpti
     plan.hdr_threads =
         options.n_threads > 0 ? options.n_threads : std::max(1, static_cast<int>(run.environment.cores) / 2);
     if (options.vmaf_on_gpu) {
-        // Its features on VMAF v1's Vulkan engine, on the GPU gpu_plan gives VMAF v1 (HdrScorer falls back to the
-        // CPU where it cannot).
-        const GpuVmafBackend backend = gpu_vmaf_backend(run.cancel);
-        plan.hdr_gpu = backend.backend == "vulkan" && backend.device ? *backend.device : -1;
+        // Its features on VMAF v1's Vulkan engine, on the GPU VMAF runs on, where the Vulkan engine scores VMAF
+        // there (HdrScorer falls back to the CPU where it cannot). Where the engine failed its check, or VMAF is
+        // libvmaf's CUDA code, it is not checked on this GPU: the features stay on the CPU, as the run's plan
+        // counts them (heavy_cpu_unit), as do CIEDE2000 and CAMBI (cpu_plan).
+        if (const GpuVmafBackend backend = gpu_vmaf_backend(run.cancel); backend.backend == "vulkan") {
+            plan.hdr_gpu = backend.device.value_or(-1);
+        }
     }
     try {
         const std::optional<std::string_view> file = model_file_of(options.model_hdr);
