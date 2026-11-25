@@ -55,7 +55,7 @@ jobs:
       - name: Build the package
         env:
           OUTPUT_ROOT: ${{ runner.temp }}/package
-        run: scripts/build_release_macos.sh --qt "$RUNNER_TEMP/Qt"
+        run: scripts/build_release_macos.sh --qt "$RUNNER_TEMP/Qt" --allow-local-libvmaf && shasum -a 256 resources/tools/vmaf_vulkan/vmaf_vulkan.dylib resources/tools/libvmaf/libvmaf.dylib
       # The release script builds the two programs alone.
       - name: Build the tests
         working-directory: cpp
