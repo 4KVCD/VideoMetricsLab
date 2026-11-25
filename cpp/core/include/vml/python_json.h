@@ -1,6 +1,6 @@
-// JSON written as the Python app writes it, so that scripts reading the
-// command line's --json, and files compared byte for byte, see no
-// difference between the two apps.
+// JSON written as the Python app (v2.0 and before) wrote it, so that
+// scripts reading the command line's --json, and files compared byte for
+// byte, see no difference from it.
 #pragma once
 
 #include <nlohmann/json.hpp>

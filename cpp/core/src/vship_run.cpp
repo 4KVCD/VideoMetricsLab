@@ -375,7 +375,7 @@ private:
             process->terminate();
         }
         const int code = process->wait();
-        // The end of FFmpeg's error output, as the Python app keeps it.
+        // The end of FFmpeg's error output, as the Python app kept it.
         std::string errors = error_lines_of(process->standard_error());
         if (errors.size() > 2000) {
             errors.erase(0, errors.size() - 2000);

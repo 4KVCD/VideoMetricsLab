@@ -1,7 +1,8 @@
 // The saved scores: scores kept on disk so that a run can reuse those
 // calculated before instead of calculating them again. A port of the Python
 // app's metric_cache.py (and the parts of result_cache.py the command line
-// uses), on the same files, so that either app finds what the other saved.
+// uses), on the same files, so that this app and the Python app (v2.0 and
+// before) find what the other saved.
 //
 // Each comparison has a folder of its own, <base>/v2/<hash>, named by a hash
 // of the two files' identities (file_identity) and the comparison recipe. It

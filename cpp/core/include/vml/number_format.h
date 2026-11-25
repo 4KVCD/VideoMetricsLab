@@ -1,5 +1,5 @@
-// Numbers as text, written as the Python app writes them, so that the C++
-// app's CSV and JSON files and its tables read the same as the Python app's.
+// Numbers as text, written as the Python app (v2.0 and before) wrote them,
+// so that the app's CSV and JSON files and its tables read as they did.
 #pragma once
 
 #include <string>

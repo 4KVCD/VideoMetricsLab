@@ -127,7 +127,7 @@ using FeatureValues = std::pair<std::string, std::span<const double>>;
 // A libvmaf model's scores for frames, predicted by libvmaf itself from
 // `features`, each with a value for every frame. `version` names a model
 // libvmaf has built in, such as "vmaf_v0.6.1". Each score is kept to 6
-// decimals, as the Python app keeps it. Throws LibvmafError.
+// decimals, as the Python app kept it. Throws LibvmafError.
 std::vector<double> predict_scores(const std::string& version, const std::vector<unsigned>& frames,
                                    const std::vector<FeatureValues>& features);
 

@@ -1,7 +1,7 @@
 // Loading a shared library (a DLL on Windows) while the app runs, and
 // finding its functions: how the app uses the libraries it ships beside
 // itself (libvmaf-fast, its Vulkan engine, Vship, the GPU decoders), as the
-// Python app does through ctypes.
+// Python app did through ctypes.
 #pragma once
 
 #include <filesystem>

@@ -25,8 +25,8 @@
 namespace vml {
 
 // A display as CVVDP models it. The resolution is kept as a number, as the
-// Python app keeps a hand-edited one ("width": 3840.5), and made whole
-// where it is used.
+// Python app's settings could hold a hand-edited one ("width": 3840.5),
+// and made whole where it is used.
 struct CvvdpDisplay {
     double width = 3840;
     double height = 2160;

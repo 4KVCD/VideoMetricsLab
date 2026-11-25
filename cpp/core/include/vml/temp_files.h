@@ -6,8 +6,8 @@
 // the pictures of SSIMULACRA2 and Butteraugli on the CPU alone can take more
 // than a gigabyte. So each name is one of the app's prefixes, then the id of
 // the process that made it (temp_prefix), and the next run removes those
-// whose process no longer runs (remove_leftovers). Both apps name them the
-// same way, so either removes what the other left. Names without a process
+// whose process no longer runs (remove_leftovers). The Python app (v2.0 and
+// before) named them the same way, so either removes what the other left. Names without a process
 // id were made by earlier versions: they are removed once nothing has
 // changed them for a week, as Windows' Disk Cleanup removes temporary files.
 #pragma once

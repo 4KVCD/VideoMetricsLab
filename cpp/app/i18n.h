@@ -118,7 +118,7 @@ QString language();
 
 // Shows Qt's own dialogs and buttons (Yes, No, Cancel, the file dialogs) in
 // `code` too, from Qt's translation of them, qtbase_<code>.qm, in Qt's
-// translations folder, as the Python app does. On Windows that is the
+// translations folder, as the Python app did. On Windows that is the
 // translations folder beside the program, where the build and the package
 // put them, as for any program with Qt's libraries beside it. Returns the
 // translator installed, which the application owns, or nullptr where there

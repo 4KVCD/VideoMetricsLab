@@ -558,7 +558,7 @@ ParsedScores execute_run(const RunFrames& run, const VmafOptions& options, const
 }
 
 // The GPU's scores as the run's (the Python app's _gpu_frame_scores): each
-// kept as a float, as the Python app keeps FFmpeg's, the frames timed at
+// kept as a float, as the Python app kept FFmpeg's, the frames timed at
 // `fps`, with a ranged run's frames numbered as in the whole videos and only
 // those in `range` kept (keep_range). Throws when no frame was scored or a
 // requested metric has none.

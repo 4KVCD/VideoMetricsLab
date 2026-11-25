@@ -1057,7 +1057,7 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
                                  bool save, const std::filesystem::path& cache_folder, std::vector<VmafJob>& jobs,
                                  bool share_decode = false) {
     // The request the window makes for a row: what the saved scores are
-    // looked up and saved under, so that the two apps find each other's.
+    // looked up and saved under, so that the window and vml-cli find each other's.
     const std::map<std::string, std::string> chosen(backends.begin(), backends.end());
     const auto asks = [&video](std::string_view key) {
         return std::find(video.metrics.begin(), video.metrics.end(), key) != video.metrics.end();

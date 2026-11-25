@@ -78,7 +78,7 @@ the CPU path, VMAF v0.6.1, NEG and v1 calculated by FFmpeg's libvmaf with
 PSNR, SSIM and XPSNR beside them (`--vmaf-on cpu` or `--cpu`); scores VMAF,
 NEG and v1 on the GPU, the app's default, with Vulkan or, where Vulkan
 cannot, with libvmaf's CUDA code on an NVIDIA GPU; scores PSNR, SSIM and XPSNR in the app, with its libvmaf's own
-extractors, as the Python app does; scores SSIMULACRA2, Butteraugli and
+extractors, as the Python app did; scores SSIMULACRA2, Butteraugli and
 CVVDP on the GPU with the app's own Vship (Vship-fast's Vulkan build; the
 window's "GPU") or, with `--vship vship` or Settings > Metrics > GPU metrics' choice,
 stock Vship's ("Vship Vulkan", "Vship HIP", "Vship CUDA"), in a pass each or (Settings > Metrics > GPU metrics) in
@@ -91,7 +91,7 @@ their GPU pass failed in a comparison up to ten minutes long. Two FFmpegs
 write each video's frames into pipes as 16-bit RGB, and the engines score
 several pairs at once, Butteraugli's work split between threads.
 With VMAF on the GPU, PSNR, SSIM and XPSNR are a task of their own on the
-CPU, and the two run at once, as the Python app runs a video's tasks; so
+CPU, and the two run at once, as the Python app ran a video's tasks; so
 are Vship's metrics, in the GPU's queue after VMAF, and SSIMULACRA2 and
 Butteraugli on the CPU, in the CPU's queue. Where the app decodes a video
 on the CPU (a VVC video, say), or both on a GPU whose pictures reach them as
@@ -99,7 +99,7 @@ in their own run (`pass_feeds_cpu_metrics`), PSNR, SSIM and XPSNR are scored in
 VMAF's task instead, from the frames decoded for VMAF, rather than decoding the
 videos a second time. For VMAF and Vship's
 metrics on the GPU, and PSNR, SSIM and XPSNR in the app, it decodes the
-videos itself, as the Python app does: with the GPU's own decoder (NVIDIA's,
+videos itself, as the Python app did: with the GPU's own decoder (NVIDIA's,
 Intel's or AMD's, through the app's libraries in `resources/native`; for VMAF
 v1 on an AMD GPU, Windows' own decoder where it opens, its pictures read by
 Vulkan where the decoder left them), or with
@@ -118,10 +118,10 @@ SSIMULACRA2 and Butteraugli. For a run it cannot do
 yet (FFmpeg pairing the frames with `VML_VMAF_PIPES=canvas`), it says what it
 cannot do and exits with code 2, rather than giving other answers than the
 Python app. It reads and saves the app's saved scores, in the same files as
-the Python app: a score either app saved is not calculated again (unless
-`--recalculate`), by the same rules. `vml-cli devices` says FFmpeg's
+the Python app (v2.0 and before): a score either saved is not calculated
+again (unless `--recalculate`), by the same rules. `vml-cli devices` says FFmpeg's
 version and where each metric is calculated on the PC, as the Python app's
-does.
+did.
 
     build\windows\cli\Release\vml-cli.exe compare reference.mkv encode.mkv -m vmaf,vmaf_neg
     build\windows\cli\Release\vml-cli.exe compare reference.mkv encode.mkv -m vmaf,psnr --vmaf-on cpu

@@ -1,5 +1,5 @@
-// Reading text as the Python app reads it, so that what ffprobe, FFmpeg's
-// logs and settings.json say is taken the same way by both apps.
+// Reading text as the Python app (v2.0 and before) read it, so that what
+// ffprobe, FFmpeg's logs and settings.json say is taken as it was then.
 #pragma once
 
 #include <cstddef>

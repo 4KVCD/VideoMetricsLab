@@ -2,9 +2,9 @@
 // (what calculated it). A port of vmaf_app/core/metric_results.py and the
 // result parts of models.py.
 //
-// Scores are kept as 32-bit floats, as the Python app keeps them (and as
+// Scores are kept as 32-bit floats, as the Python app kept them (and as
 // libvmaf and FFmpeg give them), so that they are written out digit for
-// digit as the Python app writes them.
+// digit as the Python app wrote them.
 #pragma once
 
 #include <filesystem>
