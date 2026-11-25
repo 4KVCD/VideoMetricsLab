@@ -66,7 +66,7 @@ RunWorker::RunWorker(std::vector<VmafJob> jobs, int parallel_jobs, bool gpu_metr
                 return run_resample_test(environment_, job.source_info, options, on_progress, on_status, token);
             }
             return run_vmaf(environment_, job.source_info, job.distorted_info, options, on_progress, on_status, token,
-                            job.result_distorted_path);
+                            job.result_distorted_path, job.gpu_answers.engine);
         },
         [this](const VmafJob& job, const std::vector<std::string>& keys, bool together, int concurrent_cpu_tasks,
                const PerceptualHooks& hooks, const CancelToken& token) {

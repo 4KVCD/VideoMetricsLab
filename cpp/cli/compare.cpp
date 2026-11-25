@@ -1030,7 +1030,7 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
                                       const CancelToken& token) {
             const CancelToken& own = watch.token(static_cast<std::size_t>(&job - jobs.data()), token);
             return run_vmaf(environment, job.source_info, job.distorted_info, options, on_progress, on_status, own,
-                            job.result_distorted_path);
+                            job.result_distorted_path, job.gpu_answers.engine);
         },
         [&environment, &jobs, &watch](const VmafJob& job, const std::vector<std::string>& keys, bool together,
                                       int concurrent_cpu_tasks, const PerceptualHooks& hooks,

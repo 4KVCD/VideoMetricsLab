@@ -234,8 +234,10 @@ namespace {
 
 // What every part of a run scores: the videos as they are compared (their
 // crops, and the size and depth compared at), how many frames, how they are
-// decoded, and the token that cancels and pauses it. Each part's scores are
-// timed at the test video's rate (distorted.fps).
+// decoded, the token that cancels and pauses it, and the place its plan gave
+// the metrics that follow VMAF's (none: the GPU's check is asked,
+// run_engine_place). Each part's scores are timed at the test video's rate
+// (distorted.fps).
 struct RunFrames {
     const RunEnvironment& environment;
     const VideoInfo& source;
@@ -248,11 +250,12 @@ struct RunFrames {
     long long total_frames = 0;
     const HardwareDecoding& decoding;
     const CancelToken& cancel;
+    std::optional<EnginePlace> engine;
 
     // The same run for a part on a thread beside it, stopped by a token of its own (ScoresBeside).
     RunFrames with_cancel(const CancelToken& stop) const {
         return {environment, source, distorted, source_crop, distorted_crop, width, height, depth, total_frames,
-                decoding, stop};
+                decoding, stop, engine};
     }
 };
 
@@ -1770,9 +1773,10 @@ nlohmann::json scoring_task(const nlohmann::json& request, const std::filesystem
     const GpuPlan plan = plan_from(request.at("plan"));
     const HardwareDecoding decoding{hwaccel_from(decoders.at("source")), hwaccel_from(decoders.at("distorted"))};
     const CancelToken cancel;  // the parent cancels by ending this process
+    // The plan was made in the parent, with the metrics that follow VMAF's place already placed.
     const RunFrames run{environment,   source,      distorted,      source_crop,
                         distorted_crop, plan.width, plan.height,    plan.bit_depth,
-                        request.at("total_frames").get<long long>(), decoding, cancel};
+                        request.at("total_frames").get<long long>(), decoding, cancel, std::nullopt};
     const ParsedScores scores = score_plan(
         run, options_from(request.at("options")), plan,
         [](long long done, long long whole, double fps) {
@@ -1791,6 +1795,19 @@ nlohmann::json scoring_task(const nlohmann::json& request, const std::filesystem
         throw std::runtime_error("The scores could not be written.");
     }
     return {{"frames", scores.frame.size()}, {"order", scores.order}, {"features_on_gpu", scores.features_on_gpu}};
+}
+
+bool follows_vulkan_engine(std::string_view key) {
+    return key == "cambi" || key == "ciede2000" || key == "vmaf_yuv" || key == vmaf_u_key || key == vmaf_v_key ||
+           key == "vmaf_hdr";
+}
+
+EnginePlace engine_place(const CancelToken& cancel) {
+    const GpuVmafBackend backend = gpu_vmaf_backend(cancel);
+    if (backend.backend != "vulkan") {
+        return {};
+    }
+    return {true, backend.device.value_or(-1)};
 }
 
 namespace {
@@ -1946,6 +1963,12 @@ std::optional<GpuPlan> gpu_plan(const RunFrames& run, const VmafOptions& options
     return plan;
 }
 
+// Where the run's metrics that follow VMAF's place go (follows_vulkan_engine): where its plan counted them, or,
+// for a run without one, where the GPU's check says.
+EnginePlace run_engine_place(const RunFrames& run) {
+    return run.engine ? *run.engine : engine_place(run.cancel);
+}
+
 // The plan for the run's CPU metrics in the app (cpu_metrics_plan).
 // VMAF YUV's U and V are scored with the run's VMAF model. They, CIEDE2000 and CAMBI go to the GPU VMAF runs on
 // where the Vulkan engine scores VMAF there (CpuScorer falls back to libvmaf where the GPU cannot take them): with
@@ -1962,13 +1985,15 @@ std::optional<GpuPlan> cpu_plan(const RunFrames& run, const VmafOptions& options
     if (chroma_vmaf) {
         plan->vmaf_model = run_vmaf_model(options, run.width, run.height);
     }
+    // What the engine's place serves in this plan: U and V (vmaf_on_vulkan), CIEDE2000 and CAMBI (extra_gpu). VMAF
+    // YUV with its Y alone needs neither.
     const bool cie_cambi = std::any_of(plan->models.begin(), plan->models.end(), [](const auto& model) {
         return model.first == "ciede2000" || model.first == "cambi";
     });
     if (options.vmaf_on_gpu && (chroma_vmaf || cie_cambi)) {
-        if (const GpuVmafBackend backend = gpu_vmaf_backend(run.cancel); backend.backend == "vulkan") {
+        if (const EnginePlace place = run_engine_place(run); place.on_engine) {
             plan->vmaf_on_vulkan = chroma_vmaf;
-            plan->extra_gpu = backend.device.value_or(-1);
+            plan->extra_gpu = place.device;
         }
     }
     return plan;
@@ -2273,8 +2298,8 @@ std::variant<GpuPlan, std::string> hdr_plan(const RunFrames& run, const VmafOpti
         // there (HdrScorer falls back to the CPU where it cannot). Where the engine failed its check, or VMAF is
         // libvmaf's CUDA code, it is not checked on this GPU: the features stay on the CPU, as the run's plan
         // counts them (heavy_cpu_unit), as do CIEDE2000 and CAMBI (cpu_plan).
-        if (const GpuVmafBackend backend = gpu_vmaf_backend(run.cancel); backend.backend == "vulkan") {
-            plan.hdr_gpu = backend.device.value_or(-1);
+        if (const EnginePlace place = run_engine_place(run); place.on_engine) {
+            plan.hdr_gpu = place.device;
         }
     }
     try {
@@ -2457,7 +2482,8 @@ ComparisonResult score_pair_once(const RunEnvironment& environment, const VideoI
                                  const std::optional<CropBox>& distorted_crop, const HardwareDecoding& decoding,
                                  const ProgressCallback& on_progress, const StatusCallback& on_status,
                                  const CancelToken& cancel,
-                                 const std::optional<std::filesystem::path>& result_distorted_path) {
+                                 const std::optional<std::filesystem::path>& result_distorted_path,
+                                 const std::optional<EnginePlace>& engine) {
     if (options.compute_vmaf_yuv || options.compute_vmaf_yuv_y) {
         // Made from VMAF and its U and V by the video's job (JobRun::merged), which asks for those instead.
         throw std::invalid_argument("VMAF YUV and its Y are not scored by a run: they are made from VMAF and "
@@ -2472,8 +2498,8 @@ ComparisonResult score_pair_once(const RunEnvironment& environment, const VideoI
     const long long first_frame = range.start;
 
     const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt}));
-    const RunFrames run{environment, source, distorted, source_crop, distorted_crop, width, height,
-                        depth,       decoded_frames, decoding, cancel};
+    const RunFrames run{environment, source,         distorted, source_crop, distorted_crop, width,
+                        height,      depth,          decoded_frames, decoding, cancel,         engine};
     // HDR VMAF in the others' pass where it can (score_hdr_beside); else a part of its own, after the others
     // (score_hdr), they scored as they would be without it.
     VmafOptions others = options;
@@ -2555,10 +2581,11 @@ ComparisonResult score_pair(const RunEnvironment& environment, const VideoInfo& 
                             const std::optional<CropBox>& distorted_crop, const HardwareDecoding& decoding,
                             const ProgressCallback& on_progress, const StatusCallback& on_status,
                             const CancelToken& cancel,
-                            const std::optional<std::filesystem::path>& result_distorted_path) {
+                            const std::optional<std::filesystem::path>& result_distorted_path,
+                            const std::optional<EnginePlace>& engine) {
     try {
         return score_pair_once(environment, source, distorted, options, source_crop, distorted_crop, decoding,
-                               on_progress, on_status, cancel, result_distorted_path);
+                               on_progress, on_status, cancel, result_distorted_path, engine);
     } catch (const VmafRunError& error) {
         // (The proofs are kept: this asks for what the run was given.)
         const RangeSeeks seeks = reading_near_range(options, environment, source, distorted, cancel).range_seeks;
@@ -2568,7 +2595,7 @@ ComparisonResult score_pair(const RunEnvironment& environment, const VideoInfo& 
         turn_off_range_seek(error.what());
     }
     return score_pair_once(environment, source, distorted, options, source_crop, distorted_crop, decoding, on_progress,
-                           on_status, cancel, result_distorted_path);
+                           on_status, cancel, result_distorted_path, engine);
 }
 
 // Logs why each video the plan leaves off the GPU is decoded in software, as
@@ -2618,7 +2645,8 @@ std::map<std::string, std::string> refuse_unfit_metrics(VmafOptions& options, Si
 ComparisonResult run_vmaf_once(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
                                VmafOptions options, const ProgressCallback& on_progress,
                                const StatusCallback& on_status, const CancelToken& cancel,
-                               const std::optional<std::filesystem::path>& result_distorted_path) {
+                               const std::optional<std::filesystem::path>& result_distorted_path,
+                               const std::optional<EnginePlace>& engine) {
     validate_video_pair(source, distorted, options);
     // The decode plan comes before black-bar detection, so the detection
     // decodes the way the run will.
@@ -2641,7 +2669,7 @@ ComparisonResult run_vmaf_once(const RunEnvironment& environment, const VideoInf
                              cambi_input(distorted, distorted_crop));
     ComparisonResult result = score_pair(environment, source, distorted, std::move(options), source_crop,
                                          distorted_crop, decoding, on_progress, on_status, cancel,
-                                         result_distorted_path);
+                                         result_distorted_path, engine);
     result.metric_failures.insert(unfit.begin(), unfit.end());
     return result;
 }
@@ -2666,7 +2694,8 @@ void decode_on_cpu(VmafOptions& options, const std::string& reason, std::initial
 ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
                           VmafOptions options, const ProgressCallback& on_progress, const StatusCallback& on_status,
                           const CancelToken& cancel,
-                          const std::optional<std::filesystem::path>& result_distorted_path) {
+                          const std::optional<std::filesystem::path>& result_distorted_path,
+                          const std::optional<EnginePlace>& engine) {
     VideoInfo scored_source = source;
     VideoInfo scored_test = distorted;
     SizeChangeMarks marks(scored_source, scored_test);
@@ -2683,7 +2712,7 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
         }
         try {
             ComparisonResult result = run_vmaf_once(environment, scored_source, scored_test, options, on_progress,
-                                                    on_status, cancel, result_distorted_path);
+                                                    on_status, cancel, result_distorted_path, engine);
             if (!on_gpu || !gpu_decoding_distrusted()) {
                 marks.finished();
                 return result;
@@ -2754,7 +2783,7 @@ std::optional<ComparisonResult> resample_test_on_gpu(const RunEnvironment& envir
     try {
         ComparisonResult result =
             score_pair(environment, source, test, options, source_crop, source_crop, decoding, on_progress, on_status,
-                       cancel, synthetic_resample_distorted_path(source.path, target));
+                       cancel, synthetic_resample_distorted_path(source.path, target), std::nullopt);
         result.distorted_info = source;  // after the round trip, it is back at the source's own size
         result.resample_target = options.resample_test;
         return result;

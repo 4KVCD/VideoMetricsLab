@@ -955,7 +955,7 @@ TEST(JobRunner, AMetricWithAGpuRouteOnTheCpuIsAloneInItsTask) {
     // Set to the GPU on a PC whose checks found no Vulkan engine and no GPU for Vship.
     options.vmaf_on_gpu = true;
     const Keys asked{"psnr", "cambi", "ciede2000", "vmaf_yuv", "ssimulacra2", "butteraugli"};
-    EXPECT_EQ(shape(plan_tasks(source, test, options, asked, {}, {}, false, GpuAnswers{false, false})),
+    EXPECT_EQ(shape(plan_tasks(source, test, options, asked, {}, {}, false, GpuAnswers{EnginePlace{}, false})),
               (std::vector<std::tuple<std::string, Keys, bool, bool>>{
                   {ffmpeg, {"psnr", "cambi"}, true, false},
                   {ffmpeg, {"ciede2000"}, true, false},

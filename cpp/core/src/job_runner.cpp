@@ -1605,11 +1605,11 @@ std::string heavy_cpu_unit(const std::string& key, bool on_vulkan, bool chroma_o
     if (key == "vmaf" || key == "vmaf_neg" || key == "vmaf_v1") {
         return key;  // in a CPU task's keys only: the GPU's task scores them on the GPU
     }
-    if (key == "cambi" || key == "ciede2000" || key == "vmaf_hdr") {
-        return on_vulkan ? "" : key;
-    }
     if (key == vmaf_u_key || key == vmaf_v_key) {
         return on_vulkan && chroma_on_gpu ? "" : "vmaf_yuv";
+    }
+    if (follows_vulkan_engine(key)) {
+        return on_vulkan ? "" : key;
     }
     return "";
 }
@@ -1654,17 +1654,15 @@ HeavySplit split_heavy_units(const std::vector<std::string>& keys, bool on_vulka
 
 bool plan_asks_vulkan_engine(const VmafOptions& options, const std::vector<std::string>& metric_keys) {
     return options.vmaf_on_gpu &&
-           std::any_of(metric_keys.begin(), metric_keys.end(), [](const std::string& key) {
-               return key == "cambi" || key == "ciede2000" || key == "vmaf_yuv" || key == vmaf_u_key ||
-                      key == vmaf_v_key || key == "vmaf_hdr";
-           });
+           std::any_of(metric_keys.begin(), metric_keys.end(),
+                       [](const std::string& key) { return follows_vulkan_engine(key); });
 }
 
 GpuAnswers plan_gpu_answers(const VmafOptions& options, const std::vector<std::string>& metric_keys,
                             const PerceptualBackends& perceptual_backends) {
     GpuAnswers answers;
     if (plan_asks_vulkan_engine(options, metric_keys)) {
-        answers.vulkan_engine = gpu_vmaf_backend(gpu_probes_token()).backend == "vulkan";
+        answers.engine = engine_place(gpu_probes_token());
     }
     // SSIMULACRA2 and Butteraugli set to the GPU ("gpu" where not given) run on the CPU without one.
     const bool vship_asked = std::any_of(metric_keys.begin(), metric_keys.end(), [&](const std::string& key) {
@@ -1783,7 +1781,7 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
     // for one whose U and V the engine takes (the black bars cut leave an even size).
     const bool vmaf_on_cpu = contains(ffmpeg.metric_keys, "vmaf") || contains(ffmpeg.metric_keys, "vmaf_neg") ||
                              contains(ffmpeg.metric_keys, "vmaf_v1");
-    const bool engine = options.vmaf_on_gpu && gpu_answers.vulkan_engine;
+    const bool engine = options.vmaf_on_gpu && (!gpu_answers.engine || gpu_answers.engine->on_engine);
     const bool chroma_on_gpu = !size || chroma_vmaf_fits_gpu(size->first, size->second, depth, options.model);
     std::vector<MetricTask> split_off;
     const auto split = [&](std::vector<std::string>& task_keys, bool on_vulkan, bool vmaf_cpu) {

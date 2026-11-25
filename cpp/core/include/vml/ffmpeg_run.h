@@ -334,6 +334,22 @@ FrameScores parse_libvmaf_log(const std::filesystem::path& log, double fps,
 // returns what the parent needs to read them.
 nlohmann::json scoring_task(const nlohmann::json& request, const std::filesystem::path& folder);
 
+// Whether metric `key` follows VMAF's place when VMAF is set to the GPU: CAMBI, CIEDE2000, VMAF YUV with its U and
+// V, and HDR VMAF's features go to the Vulkan engine with it where the engine scores VMAF, and stay on the CPU
+// otherwise.
+bool follows_vulkan_engine(std::string_view key);
+
+// Where the metrics that follow VMAF's place (follows_vulkan_engine) run when VMAF is set to the GPU: on the Vulkan
+// engine's GPU where the engine scores VMAF here, else on the CPU. Where VMAF is libvmaf's CUDA code, or the
+// engine's check failed, the engine is not trusted on that GPU.
+struct EnginePlace {
+    bool on_engine = false;
+    int device = -1;  // the engine's GPU (Vulkan's number), -1 where the check named none
+};
+
+// The place the GPU's check (gpu_vmaf_backend) gives them, asked under `cancel`.
+EnginePlace engine_place(const CancelToken& cancel);
+
 // Compares two videos and returns the result, with every requested metric's
 // scores: VMAF, NEG and VMAF v1 on the GPU when they are the run's only
 // metrics and the GPU can score them (scores_on_gpu); PSNR, SSIM and XPSNR
@@ -344,11 +360,14 @@ nlohmann::json scoring_task(const nlohmann::json& request, const std::filesystem
 // made again with it marked when FFmpeg rebuilds its filters
 // (size_changes.h). Throws VmafRunError when the run fails, and Cancelled.
 // `result_distorted_path` is the path the result carries for the test video
-// (by default, its own).
+// (by default, its own). `engine` is the place the run's plan gave the metrics
+// that follow VMAF's (GpuAnswers::engine), so that they are scored where the
+// plan counted them; without one, the GPU's check is asked.
 ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
                           VmafOptions options, const ProgressCallback& on_progress, const StatusCallback& on_status,
                           const CancelToken& cancel,
-                          const std::optional<std::filesystem::path>& result_distorted_path = std::nullopt);
+                          const std::optional<std::filesystem::path>& result_distorted_path = std::nullopt,
+                          const std::optional<EnginePlace>& engine = std::nullopt);
 
 // A made-up path that stands for a resolution test's test video, which has
 // no file of its own (the Python app's synthetic_resample_distorted_path):

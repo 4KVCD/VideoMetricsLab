@@ -79,17 +79,18 @@ struct MetricTask {
 // ("gpu" where not given).
 using PerceptualBackends = std::map<std::string, std::string, std::less<>>;
 
-// What this PC's GPU checks answered, for the plan of a video's tasks: whether the Vulkan engine scores VMAF
-// (gpu_vmaf_backend), which CAMBI, CIEDE2000, VMAF YUV's U and V and HDR VMAF's features run on when VMAF is set
-// to the GPU, and whether the video's Vship build has a GPU (detect_vship_device), without which SSIMULACRA2 and
-// Butteraugli set to the GPU run on the CPU. An answer not asked for (plan_gpu_answers) stays true.
+// What this PC's GPU checks answered, for the plan of a video's tasks and for its runs, which score where the plan
+// counted: where the metrics that follow VMAF's place run when VMAF is set to the GPU (engine_place, ffmpeg_run.h),
+// and whether the video's Vship build has a GPU (detect_vship_device), without which SSIMULACRA2 and Butteraugli set
+// to the GPU run on the CPU. An answer not asked for (plan_gpu_answers) is planned as the GPU taking them: `engine`
+// unset (each run then asks the check itself), `vship` true.
 struct GpuAnswers {
-    bool vulkan_engine = true;
+    std::optional<EnginePlace> engine;
     bool vship = true;
 };
 
 // Whether a plan of `metric_keys` asks gpu_vmaf_backend: VMAF set to the GPU, with a metric that follows its
-// engine (the window checks the GPU first, so that planning never waits for a probe).
+// engine (follows_vulkan_engine; the window checks the GPU first, so that planning never waits for a probe).
 bool plan_asks_vulkan_engine(const VmafOptions& options, const std::vector<std::string>& metric_keys);
 
 // The GPU answers a plan of `metric_keys` needs, asked under gpu_probes_token() (kept answers: probing only the
