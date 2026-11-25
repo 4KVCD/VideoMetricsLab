@@ -1212,7 +1212,8 @@ bool SavedResultsPanel::several_references() const {
 
 void SavedResultsPanel::fill_context_menu(QMenu& menu) {
     // Open in Metric Graphs, as the button under the box and a double-click,
-    // so that it is beside the rows; then the export.
+    // so that it is beside the rows; then the export; then Delete..., as the
+    // button under the box: the same question, locked when it is, and why.
     if (selected().empty()) {
         return;
     }
@@ -1220,6 +1221,12 @@ void SavedResultsPanel::fill_context_menu(QMenu& menu) {
             [this] { emit open_requested(selected_results()); });
     menu.addSeparator();
     add_export_items(menu);
+    menu.addSeparator();
+    QAction* remove = menu.addAction(app::tr("Delete..."));
+    remove->setEnabled(delete_button_->isEnabled());
+    remove->setToolTip(delete_button_->toolTip());
+    menu.setToolTipsVisible(true);
+    connect(remove, &QAction::triggered, this, [this] { delete_selected(); });
 }
 
 void SavedResultsPanel::delete_selected() {

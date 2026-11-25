@@ -187,7 +187,8 @@ public:
     // action added, or nullptr.
     QAction* fill_menu(QMenu& menu) const;
     // The table's right-click menu, made as it opens: Open in Metric Graphs,
-    // then the Export menu's items; nothing with nothing selected.
+    // then the Export menu's items, then Delete... (as delete_button_);
+    // nothing with nothing selected.
     void fill_context_menu(QMenu& menu);
     // The archive of the selection, then the quick grabs
     // (add_quick_items), added to `menu`: the table's right-click's.

@@ -180,11 +180,12 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
                 texts << action->text();
             }
         }
-        // Open, then the archive of the selection and the quick grabs.
-        EXPECT_EQ(texts.size(), 11);
+        // Open, then the archive of the selection and the quick grabs, then Delete.
+        EXPECT_EQ(texts.size(), 12);
         EXPECT_EQ(texts.mid(0, 2), (QStringList{"Open in Metric Graphs",
                                                 "Export this video's results, graphs, worst frames and weak segments..."}));
-        EXPECT_EQ(texts.last(), "Run file (.metrics.json)...");
+        EXPECT_EQ(texts.last(), "Delete...");
+        EXPECT_EQ(texts.at(10), "Run file (.metrics.json)...");
         menu.actions().first()->trigger();
         EXPECT_EQ(opened.count(), 2);
         ASSERT_EQ(opened.at(1).at(0).value<std::vector<LoadedSavedResult>>().size(), 1U);
@@ -242,6 +243,15 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
     panel.add_run_folders({elsewhere}, true);
     EXPECT_FALSE(remove->isEnabled());
     EXPECT_FALSE(remove->toolTip().isEmpty());
+    {
+        // The right-click's Delete..., locked as the button and saying why.
+        QMenu right_click;
+        panel.fill_context_menu(right_click);
+        const QAction* delete_item = right_click.actions().last();
+        EXPECT_EQ(delete_item->text(), "Delete...");
+        EXPECT_FALSE(delete_item->isEnabled());
+        EXPECT_EQ(delete_item->toolTip(), remove->toolTip());
+    }
     panel.delete_selected();
     EXPECT_TRUE(std::filesystem::exists(saved));
     panel.set_run_active(true, {{folder / "s.mp4", folder / "sub" / ".." / "t.mp4"}});  // the same file
