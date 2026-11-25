@@ -12,7 +12,7 @@
 # committed (.gitignore): the release script runs this.
 set -euo pipefail
 
-commit="6d15aeec1ada49448ead3aa105d34cbd3c74c363"  # libvmaf-fast macos-port with fast 549223f0 merged, 2026-11-24
+commit="ef89c2ffc851c9549a1e637344572a7751d37723"  # libvmaf-fast macos-port with fast 91c5553a merged, 2026-11-24
 
 project="$(cd "$(dirname "$0")/.." && pwd)"
 target="$project/resources/tools/vmaf_vulkan"
