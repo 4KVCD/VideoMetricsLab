@@ -9,6 +9,10 @@
 #
 #     scripts/build_release_macos.sh [--qt QT_FOLDER] [--allow-local-libvmaf]
 #
+# --allow-local-libvmaf makes a test package while libvmaf-fast.json names a
+# commit that is not a release: the libvmaf.dylib already built is kept, and
+# where there is none (a fresh checkout, as on CI) the pinned commit is built.
+#
 # QT_FOLDER is Qt's macos folder (such as ~/Qt/6.12.0/macos), for a build
 # folder not yet configured with it. Needs what building the app needs
 # (cpp/README.md), git, meson and Ninja for libvmaf-fast, and ffmpeg and
@@ -57,7 +61,7 @@ fi
 #    libvmaf.dylib, Video Compare's FFmpeg libraries,
 #    dav1d and splot (a pinned commit: splot has no release yet), and the
 #    software decoder the GPU metrics decode with in the app (not in git).
-if $allow_local_libvmaf; then
+if $allow_local_libvmaf && [[ -f "$app_files/tools/libvmaf/libvmaf.dylib" ]]; then
     step "Keeping the local libvmaf-fast build"
 else
     step "Building libvmaf-fast"

@@ -4,11 +4,12 @@ name: macOS package
 # scripts/build_release_macos.sh, runs both test suites, and uploads the
 # zipped bundle as an artifact. It runs when asked (Actions > macOS package >
 # Run workflow, once this file is on master: GitHub offers that only for a
-# workflow on the default branch), and on each push to a release branch.
+# workflow on the default branch), on each push to a release branch, and on
+# each push to a gh_actions_* branch (a branch pushed only to be tested here).
 on:
   workflow_dispatch:
   push:
-    branches: ['release/**']
+    branches: ['release/**', 'gh_actions_*']
 
 permissions:
   contents: read
@@ -20,10 +21,10 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
-      # Meson for libvmaf-fast, Ninja for the app, and FFmpeg 9
-      # (with libvmaf) for the tests and the self-test.
+      # Meson and zimg (HDR VMAF's colour conversion) for libvmaf-fast, Ninja
+      # for the app, and FFmpeg 9 (with libvmaf) for the tests and the self-test.
       - name: Install the tools
-        run: brew install meson ninja ffmpeg sevenzip
+        run: brew install meson zimg ninja ffmpeg sevenzip
       # Qt 6.12's macOS build (universal): qtbase, and Qt's translations of
       # its own dialogs, from Qt's own servers, each checked against the
       # SHA-1 Qt publishes beside it, as ci.yml installs Windows'.
@@ -52,10 +53,19 @@ jobs:
               fi
               7zz x -y -bso0 -bsp0 "-o$qt" "$archive"
           done
+      # Between releases libvmaf-fast.json names a commit of the fork, not a
+      # release, which the release script refuses: the package is then a test
+      # package, built with that commit (--allow-local-libvmaf). Once it names
+      # a release, the package is built as a release is.
       - name: Build the package
         env:
           OUTPUT_ROOT: ${{ runner.temp }}/package
-        run: scripts/build_release_macos.sh --qt "$RUNNER_TEMP/Qt"
+        run: |
+          options=(--qt "$RUNNER_TEMP/Qt")
+          if ! grep -q '"release": true' resources/tools/libvmaf/libvmaf-fast.json; then
+              options+=(--allow-local-libvmaf)
+          fi
+          scripts/build_release_macos.sh "${options[@]}"
       # The release script builds the two programs alone.
       - name: Build the tests
         working-directory: cpp
