@@ -8,7 +8,6 @@
 
 #include <QFrame>
 #include <QPoint>
-#include <QPointer>
 #include <QString>
 #include <QWidget>
 
@@ -19,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "popup_panel.h"
 #include "vml/metrics.h"
 
 class QCheckBox;
@@ -99,8 +99,9 @@ private:
 };
 
 // Add/remove metrics: the MetricList of the panel, in a popup that stays
-// open while metrics are ticked and closes on a click outside or Esc.
-class MetricsPanel : public QFrame {
+// open while metrics are ticked and closes on a click outside, a second click
+// on its button (set_anchor) or Esc.
+class MetricsPanel : public PopupPanel {
     Q_OBJECT
 
 public:
@@ -109,19 +110,9 @@ public:
     // Shows the panel with its top-right corner at `top_right` (a button's
     // bottom right), or its top left at `top_left`, kept on the screen.
     void show_at(const QPoint& top_left, std::optional<QPoint> top_right = std::nullopt);
-    // The button that opens the panel: a press on it while the panel is open
-    // closes the panel, and is not passed on to the button, whose click would
-    // open it again at once. A press anywhere else outside the panel closes
-    // it and still reaches what it lands on.
-    void set_anchor(QWidget* anchor) { anchor_ = anchor; }
-
-protected:
-    void keyPressEvent(QKeyEvent* event) override;
-    void mousePressEvent(QMouseEvent* event) override;
 
 private:
     MetricList* list_;
-    QPointer<QWidget> anchor_;
 };
 
 }  // namespace vml::app

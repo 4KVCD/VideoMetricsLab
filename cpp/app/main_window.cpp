@@ -1,5 +1,7 @@
 #include "main_window.h"
 
+#include "quick_save.h"
+
 #include <QMenu>
 #include <QAbstractItemView>
 #include <QApplication>
@@ -696,8 +698,6 @@ void MainWindow::build_ui() {
     worst_tab_ = new WorstFramesTab(dialogs_);
     worst_tab_->set_worst_count(settings_.graph_worst_frames);
     worst_tab_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
-    connect(worst_tab_, &WorstFramesTab::report_requested, this,
-            [this](const SegmentRules& rules) { export_segments_report(rules); });
     connect(worst_tab_, &WorstFramesTab::rules_saved, this, [this](const std::string& profile, const SegmentRules& rules) {
         store_segment_profile(settings_, profile, rules);
         save_settings();
@@ -736,12 +736,14 @@ void MainWindow::build_ui() {
         save_settings();
     });
     frame_compare_panel_->export_folder = dialogs_.export_folder;
-    connect(frame_compare_panel_, &FrameComparePanel::still_saved, this, [this](const QStringList& files) {
-        // Said as the other exports say it: the files, one a line.
-        dialogs_.inform(app::tr("Export"), app::tr("Export complete: {path}", {{"path", "\n" + files.join("\n")}}));
-    });
+    frame_compare_panel_->choose_folder = [this] {
+        return dialogs_.choose_folder(app::tr("Export the frame pair to"), dialogs_.export_folder());
+    };
+    // Said on the indicator, as every export is: no window.
+    connect(frame_compare_panel_, &FrameComparePanel::still_saved, this,
+            [this](const QStringList& files) { report_export({files, {}, {}}); });
     connect(frame_compare_panel_, &FrameComparePanel::still_failed, this, [this](const QString& error) {
-        dialogs_.alert(app::tr("Export failed"), tr_message(error));
+        report_export({{}, tr_message(error), tr_message(error)});
     });
     tabs_->addTab(frame_compare_panel_, app::tr("Video Compare"));
     // Its own list of videos: a finished run adds its own (on_job_finished).
@@ -756,18 +758,27 @@ void MainWindow::build_ui() {
     };
     graph_panel_->export_colours = export_colours;
     worst_tab_->export_colours = export_colours;
+    // Every tab's exports say how they went on the indicator (build_tab_corner),
+    // and their save icons save in the export folder in Settings' Quick saves
+    // formats, both read at each save.
+    const auto report = [this](const ExportOutcome& outcome) { report_export(outcome); };
+    const QuickSaves quick_saves = window_quick_saves();
+    graph_panel_->export_report = report;
+    graph_panel_->quick_saves = quick_saves;
+    worst_tab_->export_report = report;
+    worst_tab_->quick_saves = quick_saves;
+    bitrate_panel_->export_report = report;
+    bitrate_panel_->quick_saves = quick_saves;
     // Metric Graphs' statistics menu offers the Videos table's exports.
     graph_panel_->export_items = [this] { return exported_items(settings_); };
     graph_panel_->video_exportable = [this](const std::string& identity) {
         return row_of_graph(identity).has_value();
     };
-    graph_panel_->videos_exportable = [this] { return !exported_runs().empty(); };
     connect(graph_panel_, &GraphPanel::video_export_requested, this, [this](const std::string& identity) {
         if (const std::optional<int> row = row_of_graph(identity)) {
             export_this_video(*row);
         }
     });
-    connect(graph_panel_, &GraphPanel::all_videos_export_requested, this, [this] { export_all_videos(); });
     graph_panel_->row_identities = [this] {
         std::vector<std::string> identities;
         for (const std::shared_ptr<RowData>& row_data : rows_) {
@@ -796,6 +807,8 @@ void MainWindow::build_ui() {
         return graph_panel_->runs();
     });
     bd_rate_panel_->dialogs = standard_dialogs(bd_rate_panel_, export_dir);
+    bd_rate_panel_->export_report = report;
+    bd_rate_panel_->quick_saves = quick_saves;
     tabs_->addTab(new ScrollingPage(bd_rate_panel_), app::tr("BD-rate"));
     settings_panel_ = new SettingsPanel(settings_, *file_writes_, [this] { return tools_status_; }, dialogs_);
     connect(settings_panel_, &SettingsPanel::defaults_changed, this, [this] { on_default_settings_changed(); });
@@ -814,6 +827,24 @@ void MainWindow::build_ui() {
         worst_tab_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
     });
     saved_results_panel_ = new SavedResultsPanel(settings_, dialogs_, *file_writes_);
+    saved_results_panel_->quick_formats = [this] { return quick_formats(settings_); };
+    saved_results_panel_->save_results = [this](const std::vector<LoadedSavedResult>& results) {
+        if (results.empty()) {
+            return;
+        }
+        std::vector<ExportedRun> runs;
+        for (const LoadedSavedResult& saved : results) {
+            runs.push_back({saved.result, saved.label});
+        }
+        const std::filesystem::path& reference = results.front().result->source;
+        const bool one_reference = std::all_of(results.begin(), results.end(), [&reference](const auto& saved) {
+            return same_path(saved.result->source, reference);
+        });
+        quick_save_results(
+            export_document(one_reference ? std::optional(results.front().result->source_info) : std::nullopt, runs,
+                            current_machine()),
+            results.size() == 1 ? results.front().label : text_of(reference.stem()));
+    };
     connect(saved_results_panel_, &SavedResultsPanel::open_requested, this,
             [this](const std::vector<LoadedSavedResult>& results) {
                 // On Metric Graphs as saved runs: lines of their own, beside the
@@ -839,6 +870,7 @@ void MainWindow::build_ui() {
     tabs_->addTab(new ScrollingPage(saved_results_panel_), app::tr("Saved Results"));
     tabs_->addTab(new ScrollingPage(settings_panel_), app::tr("Settings"));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
+    build_tab_corner();
     make_title_buttons();
 }
 
@@ -864,9 +896,11 @@ void MainWindow::make_title_buttons() {
     if (title_buttons_ == nullptr) {
         // No bar of the app's own (VML Classic, another system, high
         // contrast, or Modern chosen since the start): at the tab bar's
-        // right end.
+        // right end, before the export indicator and Export, so that Export
+        // is last as it is under Modern's bar (build_tab_corner).
         title_buttons_ = new TitleButtons;
-        tabs_->setCornerWidget(title_buttons_, Qt::TopRightCorner);
+        static_cast<QBoxLayout*>(tab_corner_->layout())->insertWidget(0, title_buttons_);
+        tab_corner_->layout()->setAlignment(title_buttons_, Qt::AlignBottom);  // as the corner alone: on the tab pane
         title_buttons_->show();
     }
     title_buttons_->set_modern(modern);
@@ -993,12 +1027,10 @@ QHBoxLayout* MainWindow::build_table_heading() {
         app::tr("Choose which metrics appear in the test-video table. A hidden metric is not calculated; scores "
                 "already saved for it come back when it is shown again. Also available by right-clicking the column "
                 "headers."));
-    connect(metrics_button_, &QPushButton::clicked, this,
-            [this] {
-                show_metrics_panel(metrics_button_->mapToGlobal(metrics_button_->rect().bottomLeft()),
-                                   metrics_button_->mapToGlobal(metrics_button_->rect().bottomRight()),
-                                   metrics_button_);
-            });
+    PopupPanel::open_on_press(metrics_button_, [this] {
+        show_metrics_panel(metrics_button_->mapToGlobal(metrics_button_->rect().bottomLeft()),
+                           metrics_button_->mapToGlobal(metrics_button_->rect().bottomRight()), metrics_button_);
+    });
     auto* table_heading = new QHBoxLayout;
     auto* title = new QLabel(app::tr("Test videos"));  // VML Modern's: the card's title
     theme::set_role(title, "title");
@@ -1021,6 +1053,18 @@ QHBoxLayout* MainWindow::build_table_heading() {
     metrics_count_label_->setContentsMargins(10, 0, 4, 0);
     table_heading->addWidget(metrics_count_label_, 0, Qt::AlignBottom | Qt::AlignRight);
     table_heading->addWidget(metrics_button_, 0, Qt::AlignBottom);
+    // The card's save icon, at its top right (issue #224): the selected
+    // videos' results, else every scored video's.
+    videos_save_ = new SaveButton;
+    videos_save_->why_not = [this] {
+        return export_menu_rows().empty()             ? nothing_scored_text()
+               : quick_formats(settings_).empty() ? no_format_text()
+                                                    : QString();
+    };
+    videos_save_->describe = [this] { return quick_save_tooltip(rows_save_text(), quick_formats(settings_)); };
+    videos_save_->save = [this] { save_rows_results(); };
+    videos_save_->save_as = [this](QMenu& menu) { fill_videos_quick_menu(menu); };
+    table_heading->addWidget(videos_save_, 0, Qt::AlignBottom);
     return table_heading;
 }
 
@@ -1192,15 +1236,6 @@ std::vector<QWidget*> MainWindow::add_file_buttons(QBoxLayout* buttons) {
     highlight_check_->setChecked(settings_.highlight_best_worst);
     connect(highlight_check_, &QCheckBox::toggled, this, [this](bool on) { on_highlight_toggled(on); });
     buttons->addWidget(highlight_check_);
-    buttons->addWidget(theme::separator(12));
-    // The rows' exports, one menu made as it opens (fill_videos_export_menu),
-    // as Saved Results' Export: usable during a run, as the right-click
-    // menu's are.
-    export_button_ = new QPushButton(app::tr("Export"));
-    auto* export_menu = new QMenu(export_button_);
-    connect(export_menu, &QMenu::aboutToShow, this, [this, export_menu] { fill_videos_export_menu(*export_menu); });
-    export_button_->setMenu(export_menu);
-    buttons->addWidget(export_button_);
     best_worst_timer_ = new QTimer(this);
     best_worst_timer_->setSingleShot(true);
     best_worst_timer_->setInterval(0);
@@ -1214,6 +1249,10 @@ std::vector<QWidget*> MainWindow::add_file_buttons(QBoxLayout* buttons) {
     connect(model, &QAbstractItemModel::rowsMoved, this, [this] { check_ticks_soon(); });
     connect(model, &QAbstractItemModel::dataChanged, this, [this] { check_ticks_soon(); });
     connect(model, &QAbstractItemModel::modelReset, this, [this] { check_ticks_soon(); });
+    // The card's save icon saves the selected rows' results: grayed or not
+    // as the selection changes.
+    connect(distorted_table_->selectionModel(), &QItemSelectionModel::selectionChanged, this,
+            [this] { videos_save_->refresh(); });
     return {add_button, add_resample_button, load_button_, remove_button, remove_all_button_, start_over_button_};
 }
 

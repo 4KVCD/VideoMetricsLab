@@ -472,12 +472,11 @@ void FrameComparePanel::restart_loop_at_end() {
 
 // ------------------------------------------------------------ the stills
 
-void FrameComparePanel::save_still() {
+void FrameComparePanel::save_still(const QString& folder) {
     const FrameComparisonEntry* entry = current_entry();
     if (entry == nullptr || still_worker_ != nullptr) {
         return;
     }
-    const QString folder = export_folder ? export_folder() : QString();
     if (folder.isEmpty()) {
         emit still_failed(app::tr("No export folder: choose one in Settings."));
         return;
@@ -509,7 +508,7 @@ void FrameComparePanel::save_still() {
         update_enabled_state();
     });
     still_worker_ = worker;
-    save_still_button->setEnabled(false);
+    save_still_button->refresh();
     worker->start();
 }
 

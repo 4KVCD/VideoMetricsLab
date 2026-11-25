@@ -11,6 +11,8 @@
 #include <string_view>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include "vml/results.h"
 
 namespace vml {
@@ -154,5 +156,14 @@ std::string bd_rate_table(const BdRateReport& report, const std::string& anchor_
 // (empty for none), by metric key. A UTF-8 byte order mark and CR LF line
 // ends, as the app's other CSV files.
 std::string bd_rate_csv(const BdRateReport& report);
+
+// What bd_rate_json's document is: its own format, not compare's results.
+inline constexpr const char* bd_rate_format = "bdrate-1";
+
+// The report as JSON, its numbers in full, naming the anchor's and the
+// test's files (or encoders): the command line's bdrate --json, and the
+// BD-rate tab's table saved as JSON.
+nlohmann::ordered_json bd_rate_json(const BdRateReport& report, const std::string& anchor_path,
+                                    const std::string& test_path);
 
 }  // namespace vml

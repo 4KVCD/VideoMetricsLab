@@ -38,8 +38,11 @@
 #include <vector>
 
 #include "dialogs.h"
+#include "export_indicator.h"
+#include "export_panel.h"
 #include "graph_bundle.h"
 #include "probe_worker.h"
+#include "quick_save.h"
 #include "results_export.h"
 #include "saved_results_panel.h"
 #include "row_state.h"
@@ -624,10 +627,24 @@ private:
     // Saves `runs` (a result and its name) as run files (.metrics.json):
     // one where the user says, several into a folder, each named after it.
     void save_run_files(const std::vector<std::pair<const ComparisonResult*, QString>>& runs);
-    void submit_save(const ComparisonResult& result, const std::filesystem::path& path, const QString& label);
     std::vector<ExportedRun> exported_runs() const;
 
     // ------------------------------------- graph exports (main_window_exports.cpp)
+    // The tab bar's right end (the indicator; VML Modern's title buttons
+    // where the window has no title bar of its own), made once.
+    void build_tab_corner();
+    // Says how an export went on the indicator (export_indicator.h).
+    void report_export(const ExportOutcome& outcome);
+    // Writes an export off the window's thread (file_writes_), the indicator
+    // saying "Saving..." until `write` has run, then the files it gives, or
+    // why it failed. `quiet` (the after-run export): only a failure is said.
+    // No export opens a window, for success or failure.
+    void submit_export(const QString& description, std::function<QStringList()> write, bool quiet = false);
+    // What every tab's save icons save by: the export folder and Settings'
+    // Quick saves formats, read at each save; their files made and written
+    // on file_writes_ (written_by), the indicator saying "Saving..." until
+    // they are.
+    QuickSaves window_quick_saves();
     // Graphs to save as one .zip file (graph_bundle.h) once the bitrate they
     // need is read: of `videos`, compared with `reference`, with `extra`
     // files (a video's results); `together`: the videos' graphs together as
@@ -664,19 +681,18 @@ private:
     // `identity`; none for a line of a saved run loaded, or of a row whose
     // result is not one to export.
     std::optional<int> row_of_graph(const std::string& identity) const;
-    // Every scored test video's weak segments (scored_videos) by `rules`
-    // (the saved ones, or the Worst Frames tab's), in one JSON or CSV
-    // file the user names.
-    void export_segments_report(const SegmentRules& rules);
     // `videos`' weak segments by `rules` in one JSON or CSV file the user
-    // names, suggested after `reference` (export_segments_report, and the
-    // Saved results tab's).
+    // names, suggested after `reference` (the Videos table's and the Saved
+    // results tab's quick grabs).
     void save_segments_report(const std::vector<SegmentsReportVideo>& videos, const SegmentRules& rules,
                               const std::filesystem::path& reference);
     // The Saved results tab's exports of the comparisons it read.
     void export_saved_results(SavedResultsPanel::Export kind, const std::vector<LoadedSavedResult>& results);
     // The rules of the weak segment profile in use (Settings > Weak segments).
     SegmentRules saved_weak_rules() const;
+    // The rules the archive finds weak segments by: the Export panel's
+    // Weak segments by (the profile in use until another is picked).
+    SegmentRules archive_rules() const;
     // Writes `document` as Export results saves it, JSON or CSV, where the
     // user says, suggested after `name`.
     void save_results_document(const nlohmann::ordered_json& document, const QString& name, bool csv);
@@ -684,9 +700,9 @@ private:
     // user picks, each file named after its label.
     void save_per_frame_files(const std::vector<std::pair<std::shared_ptr<const ComparisonResult>, QString>>& results,
                               bool json);
-    // The Videos tab's Export menu, made as it opens: the shared export of
-    // the rows it acts on (export_menu_rows), then each kind on its own.
-    void fill_videos_export_menu(QMenu& menu);
+    // The Videos card's save icon's Save as...: each kind on its own, of the
+    // rows export_menu_rows gives.
+    void fill_videos_quick_menu(QMenu& menu);
     // A row's video for the Videos tab's Export menu: a finished run of the
     // reference's, as scored_video, whatever metrics are ticked.
     std::optional<BundleVideo> exportable_video(const RowData& row_data) const;
@@ -695,13 +711,27 @@ private:
     std::vector<int> export_menu_rows() const;
     // Whether rows are selected in the Videos table.
     bool rows_selected() const;
-    // The menu's shared export of its rows (export_menu_rows) as they are
-    // now, those with every ticked metric scored (or failed on the run,
-    // scored_video): this video's, the selected
-    // ones', or all the videos' (export_all_videos) with none selected.
-    void export_rows();
+    // The archive of the rows (export_menu_rows) as they are now, those with
+    // every ticked metric scored (or failed on the run, scored_video): this
+    // video's, the selected ones', or all the videos' (export_all_videos)
+    // with none selected. Into `folder` (the Export panel's), or where a
+    // dialog asks.
+    void export_rows(const std::optional<std::filesystem::path>& folder = std::nullopt);
+    // The archive of `rows` (Videos table rows), those scored: one's alone,
+    // several's together.
+    void export_rows_of(std::vector<int> rows, const std::optional<std::filesystem::path>& folder);
     // The menu's export of one kind, of its rows as they are now.
     void export_rows_as(SavedResultsPanel::Export kind);
+    // Saves `document` (Export results') in Settings' Quick saves formats,
+    // into the export folder, named after `name`: a save icon's results.
+    void quick_save_results(nlohmann::ordered_json document, const QString& name);
+    // The Videos card's save icon: the selected rows' results (else every
+    // scored row's), what it would save, and why it cannot.
+    void save_rows_results();
+    QString rows_save_text() const;
+    // The Videos table's quick grabs that cannot be made now, with why
+    // (SavedResultsPanel::add_quick_grabs).
+    std::map<SavedResultsPanel::Export, QString> videos_refused() const;
     // What an export holds, by Settings' Exports include: for one video, its
     // results (alone in the document) and its weak segments; for several,
     // the run's results document and their weak segments report; and the
@@ -720,14 +750,24 @@ private:
                            const std::function<nlohmann::ordered_json()>& document, const SegmentRules& rules,
                            bool several, const QString& name);
     // Saves `plan` as Settings' Exports include say (a .zip file, or loose
-    // files): asked where, or into `folder` after a run.
-    void save_export(ExportPlan plan, const std::optional<std::filesystem::path>& folder);
-    // The right-click menus' exports: the video of `row`, and all the
-    // videos (the Videos tab's run, every video Export results lists).
-    void export_this_video(int row);
-    void export_all_videos();
+    // files): where a dialog asks, or into `folder` (the Export panel's, or
+    // the after-run export's), its names numbered where taken. `automatic`:
+    // the after-run export, which says nothing unless it fails.
+    void save_export(ExportPlan plan, const std::optional<std::filesystem::path>& folder, bool automatic = false);
+    // The archive of the video of `row`, and of all the videos (the Videos
+    // tab's run, every video Export results lists): into `folder`, or where
+    // a dialog asks.
+    void export_this_video(int row, const std::optional<std::filesystem::path>& folder = std::nullopt);
+    void export_all_videos(const std::optional<std::filesystem::path>& folder = std::nullopt);
     // The Saved results tab's: the comparisons selected.
-    void export_saved_contents(const std::vector<LoadedSavedResult>& results);
+    void export_saved_contents(const std::vector<LoadedSavedResult>& results,
+                               const std::optional<std::filesystem::path>& folder = std::nullopt);
+    // The tab bar's Export panel (export_panel.h): made once, its questions
+    // answered by the window, as the tab open has them.
+    void build_export_panel();
+    ExportPanel::Videos export_panel_videos() const;
+    SaveButton* tab_save() const;
+    void export_from_panel(bool selection);
     // The bitrate the Saved results tab's exports draw for the selected
     // comparisons' files that are not those their scores were saved for
     // (gone, or another file there now): as it was saved with them
@@ -1054,12 +1094,19 @@ private:
     // The rows ticked when the run started, those already scored too: their
     // results go to the graph when it ends.
     std::vector<std::shared_ptr<RowData>> checked_rows_for_run_;
-    // The Videos box's Export menu (fill_videos_export_menu).
-    QPushButton* export_button_ = nullptr;
+    // The test videos' card's save icon (issue #224).
+    SaveButton* videos_save_ = nullptr;
     // Graph exports waiting for their bitrate (queue_bundle), and the timer
     // that looks whether it is read.
     std::vector<PendingBundle> pending_bundles_;
     QTimer* bundle_timer_ = nullptr;
+    // The tab bar's right end (build_tab_corner), and the indicator there
+    // that says how each export went.
+    QWidget* tab_corner_ = nullptr;
+    ExportIndicator* export_indicator_ = nullptr;
+    // The Export button there, and its panel.
+    QPushButton* tab_export_button_ = nullptr;
+    ExportPanel* export_panel_ = nullptr;
     QLabel* status_label_ = nullptr;
     std::vector<ElidedLabel*> job_progress_labels_;
 };

@@ -28,6 +28,8 @@
 #include <variant>
 #include <vector>
 
+#include "export_indicator.h"
+#include "quick_save.h"
 #include "dialogs.h"
 #include "results_export.h"
 #include "theme.h"
@@ -322,16 +324,25 @@ public:
 
     // The dialogs that wait for the user, which the tests answer.
     Dialogs dialogs;
+    // Where its exports say how they went: the window's indicator
+    // (export_indicator.h). Not set: nowhere.
+    ExportReport export_report;
+    // The export folder and formats its save icons save in (quick_save.h).
+    QuickSaves quick_saves;
     // The colours Export graph as PNG draws in (Settings' Exported graphs), asked at
     // each export; the light chart colours when not set.
     std::function<theme::ChartColours()> export_colours;
-    // The statistics' right-click exports, as the Videos table's: what they
-    // include (exported_items of the Settings), whether a line's video (its
-    // identity) can be exported on its own, and whether the run can: the
-    // window's, asked as the menu opens. Not set: no such export offered.
+    // The statistics' right-click archive, as the Videos table's: what it
+    // includes (exported_items of the Settings), and whether a line's video
+    // (its identity) can be exported on its own: the window's, asked as the
+    // menu opens. Not set: no such export offered.
     std::function<std::vector<std::string>()> export_items;
     std::function<bool(const std::string& identity)> video_exportable;
-    std::function<bool()> videos_exportable;
+    // The identities of the lines selected in the statistics table, in its
+    // order (the tab bar's Export panel's "the selected videos").
+    std::vector<std::string> selected_identities() const;
+    // The statistics' save icon, the tab's own one-click save.
+    SaveButton* stats_save() const { return stats_save_; }
     // The identities of the Videos tab's rows' lines: those removed with
     // their row still there are what Show removed videos brings back.
     std::function<std::vector<std::string>()> row_identities;
@@ -344,9 +355,8 @@ signals:
     // The metric the user chose to look at.
     void metric_changed(const QString& key);
     // The statistics' right-click menu, as the Videos table's: a line's
-    // video's export, or all the videos', of what Settings' Exports include.
+    // video's export, of what Settings' Exports include.
     void video_export_requested(const std::string& identity);
-    void all_videos_export_requested();
     // Show removed videos: the rows' lines removed here, to add again with
     // restore (the window has their results).
     void restore_removed_requested();
@@ -419,7 +429,6 @@ private:
     struct StatsMenu {
         std::string identity;  // the row's line's, if any
         QAction* this_video = nullptr;
-        QAction* all_videos = nullptr;
         QAction* graph = nullptr;
         QAction* statistics_csv = nullptr;
         QAction* statistics_json = nullptr;
@@ -432,8 +441,20 @@ private:
     // Each of `items` doing what it says.
     void connect_menu(const StatsMenu& items);
     void show_graph_menu(ChartWidget& chart, const QPoint& position);
-    void on_file_write_failed(const QString& description, const QString& error);
-    void on_file_writes_idle();
+    // The statistics' file name without extension, and their text as JSON
+    // or CSV (export_statistics' and the save icon's).
+    QString statistics_stem() const;
+    std::string statistics_text(bool json);
+    // The save icons' one-click saves, into the export folder.
+    void save_statistics();
+    void save_graph();
+    // Whether the page shown draws a graph, and its PNG's name.
+    bool shown_graph() const;
+    QString png_name() const;
+    // The difference of the lines `pair`: its file's name, and its writing
+    // to `path`, said with the files `with` once written.
+    QString difference_name(const std::pair<int, int>& pair) const;
+    void write_difference(const std::pair<int, int>& pair, const QString& path, const QStringList& with);
 
     VideoColors* colors_;
     // By series: ids rise as runs are added, and are given again in the
@@ -448,7 +469,9 @@ private:
     bool selecting_available_metric_ = false;
     bool populating_stats_ = false;  // the table is being filled: its edits are not the user's
     FileWrites* file_writes_ = nullptr;
-    std::optional<QString> export_destination_;
+    // The save icons of the statistics' card and the graph's (issue #224).
+    SaveButton* stats_save_ = nullptr;
+    SaveButton* graph_save_ = nullptr;
 
     QLabel* stats_hint_ = nullptr;
     QTableWidget* stats_table_ = nullptr;
@@ -465,7 +488,6 @@ private:
     bool difference_on_ = false;
     QCheckBox* difference_box_ = nullptr;
     QPushButton* restore_button_ = nullptr;  // Show removed videos
-    QLabel* status_label_ = nullptr;
     QLabel* metric_hint_ = nullptr;
 };
 

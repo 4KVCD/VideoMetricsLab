@@ -157,7 +157,6 @@ protected:
     static const ChartSeries& drawn(MetricPage& page, int series_id) { return page.chart_->series_.at(series_id); }
     static void export_png(GraphPanel& panel) { panel.on_export_png(); }
     static void export_difference(GraphPanel& panel) { panel.on_export_difference(); }
-    static QString status(const GraphPanel& panel) { return panel.status_label_->text(); }
     // What the exported image's table says: its headings, and each line's
     // label, colour and cells.
     static auto export_table(GraphPanel& panel) { return panel.export_table(); }
@@ -426,39 +425,27 @@ TEST_F(GraphPanelTest, TheStatisticsMenuOffersTheVideosExports) {
     const std::string text((std::istreambuf_iterator<char>(json)), std::istreambuf_iterator<char>());
     EXPECT_NE(text.find("\"metric\": \"vmaf\""), std::string::npos) << text;
     EXPECT_NE(text.find("\"frames\": null"), std::string::npos) << text;
+    // The line's video's archive, where the window can export it; every
+    // video's is the tab bar's Export panel's.
     std::vector<std::string> items{"results", "graphs", "weak_segments"};
-    bool run = true;
     panel.export_items = [&items] { return items; };
     panel.video_exportable = [](const std::string& identity) { return identity == "row-a"; };
-    panel.videos_exportable = [&run] { return run; };
-    EXPECT_EQ(stats_menu(panel, "a"), (QStringList{"Export this video's results, graphs and weak segments...",
-                                                   "Export all videos' results, graphs and weak segments..."} +
-                                       statistics));
-    EXPECT_EQ(stats_menu(panel, "b"),
-              QStringList{"Export all videos' results, graphs and weak segments..."} + statistics);
-    EXPECT_EQ(stats_menu(panel, "nowhere"),
-              QStringList{"Export all videos' results, graphs and weak segments..."} + statistics);
-    items = {"results", "frames"};
-    EXPECT_EQ(stats_menu(panel, "a"), (QStringList{"Export this video's results and per-frame scores...",
-                                                   "Export all videos' results and per-frame scores..."} +
-                                       statistics));
-    items = {"results"};
     EXPECT_EQ(stats_menu(panel, "a"),
-              (QStringList{"Export this video's results...", "Export all videos' results..."} + statistics));
-    run = false;
-    QStringList disabled;
-    stats_menu(panel, "a", &disabled);
-    EXPECT_EQ(disabled, QStringList{"Export all videos' results..."});
+              QStringList{"Export this video's results, graphs and weak segments..."} + statistics);
+    EXPECT_EQ(stats_menu(panel, "b"), statistics);
+    EXPECT_EQ(stats_menu(panel, "nowhere"), statistics);
+    items = {"results", "frames"};
+    EXPECT_EQ(stats_menu(panel, "a"),
+              QStringList{"Export this video's results and per-frame scores..."} + statistics);
     items.clear();
-    disabled.clear();
+    QStringList disabled;
     EXPECT_EQ(stats_menu(panel, "a", &disabled),
-              (QStringList{"Export: nothing is ticked in Settings > Storage > Exports include",
-                           "Export: nothing is ticked in Settings > Storage > Exports include"} +
-               statistics));
-    EXPECT_EQ(disabled.size(), 2);
+              QStringList{"Export: nothing is ticked in Settings > Storage > Exports include"} + statistics);
+    EXPECT_EQ(disabled.size(), 1);
 }
 
-// An export that cannot be written says so, and not that it is complete.
+// An export that cannot be written says so on the indicator, and not that it
+// was saved.
 TEST_F(GraphPanelTest, AFailedExportDoesNotSayItIsComplete) {
     VideoColors colors;
     GraphPanel panel(&colors);
@@ -470,10 +457,15 @@ TEST_F(GraphPanelTest, AFailedExportDoesNotSayItIsComplete) {
     std::ofstream(folder / "a file") << "x";
     const QString out = QString::fromStdString(platform::path_text(folder / "a file" / "a_minus_b.csv"));
     panel.dialogs.save_file = [&out](const QString&, const QString&, const QString&) { return out; };
+    std::vector<ExportOutcome> told;
+    panel.export_report = [&told](const ExportOutcome& outcome) { told.push_back(outcome); };
     export_difference(panel);
     ASSERT_TRUE(panel.wait_until_file_writes_idle(std::chrono::seconds(10)));
     QCoreApplication::sendPostedEvents();  // what the writer's thread said
-    EXPECT_TRUE(status(panel).startsWith("Could not")) << status(panel).toStdString();
+    ASSERT_EQ(told.size(), 1U);
+    EXPECT_TRUE(told.front().files.isEmpty());
+    EXPECT_FALSE(told.front().error.isEmpty());
+    EXPECT_TRUE(told.front().details.startsWith("Could not")) << told.front().details.toStdString();
 }
 
 // Export graph as PNG draws in the colours Settings asks for (export_colours), the
@@ -801,13 +793,15 @@ TEST_F(GraphPanelTest, TheExportedPngIsTheGraphWithItsKeyedTable) {
     export_png(panel);
     EXPECT_EQ(suggested.toStdString(), "source_vmaf.png");
 
-    // A file that cannot be written says so.
+    // A file that cannot be written says so, on the indicator: no window.
     const QString unwritable = QString::fromStdString(platform::path_text(folder / "no such folder" / "graph.png"));
     panel.dialogs.save_file = [&unwritable](const QString&, const QString&, const QString&) { return unwritable; };
-    QString alerted;
-    panel.dialogs.alert = [&alerted](const QString& title, const QString&) { alerted = title; };
+    std::vector<ExportOutcome> told;
+    panel.export_report = [&told](const ExportOutcome& outcome) { told.push_back(outcome); };
     export_png(panel);
-    EXPECT_EQ(alerted.toStdString(), "Export failed");
+    ASSERT_EQ(told.size(), 1U);
+    EXPECT_TRUE(told.front().files.isEmpty());
+    EXPECT_EQ(told.front().error.toStdString(), "Could not write " + unwritable.toStdString());
 }
 
 TEST_F(GraphPanelTest, ALineWithNoScoresForTheMetricShowsDashesAndExports) {

@@ -83,6 +83,9 @@ public:
     // Settings > Appearance would: saved and applied (the title bar's theme
     // menu).
     void choose_theme(const QString& value);
+    // Shows the export folder and Exports include as the settings have them
+    // now: changed by the tab bar's Export panel.
+    void show_export_choices();
     // Settings.light_look (`dark` false) or dark_look set to `value`, as its
     // button in Settings > Appearance would (the title bar's theme menu).
     void choose_look(bool dark, const QString& value);
@@ -139,6 +142,8 @@ public:
     std::map<std::string, QCheckBox*> export_item_boxes;
     std::map<std::string, QCheckBox*> export_format_boxes;  // by export_format_keys' key
     QComboBox* export_form = nullptr;
+    // Quick saves: a box for each format a save icon writes data in.
+    std::map<std::string, QCheckBox*> quick_format_boxes;  // by export_format_keys' key
     QCheckBox* after_run_box = nullptr;
     QComboBox* after_run_place = nullptr;
     QPushButton* export_background_button = nullptr;
@@ -264,6 +269,7 @@ private:
     QGroupBox* build_weak_segments_box();
     // Settings > Storage > Exports include, and After each run.
     QWidget* build_export_choices();
+    QWidget* build_quick_save_choices();
     QWidget* build_after_run_export();
     QGroupBox* build_gpu_box();
     QHBoxLayout* build_vvc_decoder_row();

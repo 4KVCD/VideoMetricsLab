@@ -907,12 +907,6 @@
    }
   },
   {
-   "text": "Export complete: {path}",
-   "values": {
-    "path": "<path>"
-   }
-  },
-  {
    "text": "FFmpeg ended partway through a {side} frame.",
    "values": {
     "side": "<side>"
@@ -2425,7 +2419,6 @@
     "Die Dauern stimmen nicht überein (<source> gegenüber <test> Sekunden). Setzen Sie einen Bereich innerhalb beider Dateien, wenn Sie nur einen gemeinsamen Teil vergleichen.",
     "Einstellungen bearbeiten für: <name>",
     "Verstrichen: <time>",
-    "Export abgeschlossen: <path>",
     "FFmpeg endete mitten in einem Bild von <side>.",
     "FFmpeg ist beim Dekodieren von <side> für Vship gescheitert.",
     "FFmpeg ist beim Dekodieren von <side> für Vship gescheitert: <error>",
@@ -3160,7 +3153,6 @@
     "Длительности не совпадают (<source> и <test> с). Задайте диапазон в пределах обоих файлов, если сравниваете только их общую часть.",
     "Настройки для: <name>",
     "Прошло: <time>",
-    "Экспорт завершён: <path>",
     "FFmpeg завершился посреди кадра <side>.",
     "FFmpeg не смог декодировать <side> для Vship.",
     "FFmpeg не смог декодировать <side> для Vship: <error>",
@@ -3895,7 +3887,6 @@
     "المدتان غير متطابقتين (<source> مقابل <test> ثانية). اضبط نطاقًا ضمن الملفين إذا كنت تقارن جزءًا مشتركًا فقط.",
     "تعديل إعدادات: <name>",
     "المنقضي: <time>",
-    "اكتمل التصدير: <path>",
     "انتهى FFmpeg في منتصف إطار من <side>.",
     "فشل FFmpeg أثناء فك ترميز <side> لـ Vship.",
     "فشل FFmpeg أثناء فك ترميز <side> لـ Vship: <error>",
@@ -4630,7 +4621,6 @@
     "長さが一致しません（<source> と <test> 秒）。共通する部分だけを比較する場合は、両方のファイルに収まる範囲を設定してください。",
     "設定を編集中：<name>",
     "経過時間：<time>",
-    "エクスポート完了：<path>",
     "FFmpeg が <side> のフレームの途中で終了しました。",
     "Vship 用に <side> をデコード中に FFmpeg が失敗しました。",
     "Vship 用に <side> をデコード中に FFmpeg が失敗しました：<error>",
@@ -5365,7 +5355,6 @@
     "时长不一致（<source> 与 <test> 秒）。如果只比较两者共同的部分，请设置一个在两个文件之内的范围。",
     "正在编辑设置：<name>",
     "已用时间：<time>",
-    "导出完成：<path>",
     "FFmpeg 在 <side> 的一帧中途结束。",
     "FFmpeg 为 Vship 解码 <side> 时失败。",
     "FFmpeg 为 Vship 解码 <side> 时失败：<error>",
@@ -6100,7 +6089,6 @@
     "ความยาวไม่ตรงกัน (<source> กับ <test> วินาที) ตั้งค่าช่วงให้อยู่ในทั้งสองไฟล์ หากเปรียบเทียบเฉพาะส่วนที่ตรงกัน",
     "แก้ไขการตั้งค่า: <name>",
     "ผ่านไป: <time>",
-    "ส่งออกเสร็จ: <path>",
     "FFmpeg จบกลางเฟรม<side>",
     "FFmpeg ล้มเหลวขณะถอดรหัส<side>สำหรับ Vship",
     "FFmpeg ล้มเหลวขณะถอดรหัส<side>สำหรับ Vship: <error>",

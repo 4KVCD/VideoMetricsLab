@@ -19,20 +19,6 @@ namespace {
 
 using Json = nlohmann::ordered_json;
 
-// What the JSON is: its own format, not compare's results (results_format).
-constexpr const char* bdrate_format = "bdrate-1";
-
-// A number in the JSON, in full, or null for none.
-Json number_or_null(const std::optional<double>& value) { return value ? Json(*value) : Json(nullptr); }
-
-Json row_json(const BdRateRow& row, const BdRateReport& report) {
-    Json percent = Json::object();
-    for (const std::string& metric : report.metrics) {
-        percent[metric] = number_or_null(row.percent.at(metric));
-    }
-    return Json{{"bd_rate", percent}};
-}
-
 // The file a table comes from, read; nothing, with the reason in `why`, when
 // it cannot be.
 std::optional<RateTable> read_table_file(const std::string& text_path, std::string& why) {
@@ -51,7 +37,7 @@ int refuse_input(const BdrateArguments& arguments, const std::string& why, const
     print_error(why);
     if (arguments.json_path) {
         const Json document{{"app", "VideoMetricsLab"}, {"version", VML_VERSION}, {"commit", build_commit()},
-                            {"format", bdrate_format},  {"anchor", arguments.anchor}, {"test", arguments.test},
+                            {"format", bd_rate_format}, {"anchor", arguments.anchor}, {"test", arguments.test},
                             {"error", why},             {"error_code", code}};
         if (*arguments.json_path == "-") {
             print_results(python_json_dumps(document) + "\n");
@@ -67,43 +53,6 @@ int refuse_input(const BdrateArguments& arguments, const std::string& why, const
 
 BdRateOptions bd_rate_options(const BdrateArguments& arguments) {
     return {arguments.metrics, arguments.group_by};
-}
-
-Json bd_rate_json(const BdRateReport& report, const std::string& anchor_path, const std::string& test_path) {
-    Json groups = Json::array();
-    for (const BdRateSummary& group : report.groups) {
-        groups.push_back(Json{{"group", group.group},
-                              {"sequences", group.sequences},
-                              {"mean", row_json(group.mean, report)},
-                              {"median", row_json(group.median, report)}});
-    }
-    Json sequences = Json::array();
-    for (const BdRateSequence& sequence : report.sequences) {
-        Json entry = row_json(sequence.row, report);
-        Json described{{"sequence", sequence.name}};
-        if (report.group_by) {
-            described["group"] = sequence.group;
-        }
-        described["anchor_encodes"] = sequence.anchor_encodes;
-        described["test_encodes"] = sequence.test_encodes;
-        described.update(entry);
-        described["why"] = sequence.why;
-        sequences.push_back(described);
-    }
-    return Json{{"app", "VideoMetricsLab"},
-                {"version", VML_VERSION},
-                {"commit", build_commit()},
-                {"format", bdrate_format},
-                {"method", "pchip"},
-                {"anchor", anchor_path},
-                {"test", test_path},
-                {"metrics", report.metrics},
-                {"group_by", report.group_by ? Json(*report.group_by) : Json(nullptr)},
-                {"mean", row_json(report.all.mean, report)},
-                {"median", row_json(report.all.median, report)},
-                {"groups", groups},
-                {"sequences", sequences},
-                {"warnings", report.warnings}};
 }
 
 int bdrate(const BdrateArguments& arguments) {

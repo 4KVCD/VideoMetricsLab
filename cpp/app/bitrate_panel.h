@@ -23,6 +23,8 @@
 #include <utility>
 #include <vector>
 
+#include "export_indicator.h"
+#include "quick_save.h"
 #include "dialogs.h"
 #include "export_image.h"
 #include "theme.h"
@@ -167,6 +169,11 @@ public:
 
     // Its questions and messages; the tests answer them.
     Dialogs dialogs;
+    // Where its exports say how they went: the window's indicator
+    // (export_indicator.h). Not set: nowhere.
+    ExportReport export_report;
+    // The export folder and formats its save icon saves in (quick_save.h).
+    QuickSaves quick_saves;
     // The saved results' folder, whose saved bitrate (bitrate_store.h) a
     // file's reading looks in first and is saved to; none set: not used.
     std::function<std::filesystem::path()> store_folder;
@@ -186,7 +193,9 @@ public:
     QCheckBox* frame_types_box = nullptr;
     QLabel* frame_types_legend = nullptr;
     QPushButton* reset_zoom_button = nullptr;
-    QPushButton* export_button = nullptr;
+    // The graph card's save icon (issue #224): the graph as PNG and the
+    // bitrate data of the files drawn.
+    SaveButton* graph_save = nullptr;
     ChartWidget* chart = nullptr;
     ReadoutLabel* hover_label = nullptr;
     // Go to frame and the frame range, shared with Metric Graphs, and what
@@ -280,6 +289,16 @@ private:
     void refresh_highlight();
     void refresh_range_label();
     void on_export_png();
+    // The bitrate data of each file drawn, in `format` ("json": one file a
+    // video; "csv": the command line's three, frames, seconds and groups of
+    // pictures), into a folder the user picks (Save as...).
+    void on_export_data(const std::string& format);
+    // The graph's PNG and the data, at one click, in the export folder.
+    void save_graph();
+    void fill_graph_menu(QMenu& menu);
+    QString png_name() const;
+    // The data files of the files drawn, in `formats`.
+    std::vector<QuickFile> data_files_of(const std::vector<std::string>& formats) const;
 
     std::function<std::string()> ffprobe_;
     VideoColors* colors_;

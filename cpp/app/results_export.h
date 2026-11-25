@@ -78,6 +78,18 @@ QString export_contents(const std::vector<std::string>& items);
 enum class ExportScope { this_video, all_videos, selected_videos };
 QString export_action_text(ExportScope scope, const std::vector<std::string>& items);
 
+// An export item's name as Settings' Exports include and the Export panel
+// tick it ("Results", "Per-frame scores", ...), by its export_item_keys key.
+QString export_item_title(const std::string& key);
+
+// Why an export cannot be made, said on the greyed item or icon before the
+// click (its tooltip), or on the indicator: no test video scored yet; weak
+// segments by rules without a condition; graphs or weak segments of test
+// videos of several references.
+QString nothing_scored_text();
+QString no_conditions_text();
+QString one_reference_text();
+
 // Whether a row's run is one to export (MainWindow::scored_video): each of
 // the metrics `requested` (ticked) has its score from the run (`kept`) or
 // failed on that run (`failed`), and at least one has its score. A metric

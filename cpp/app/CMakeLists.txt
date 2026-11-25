@@ -20,6 +20,8 @@ add_library(vml_app STATIC
     frame_drag.cpp
     dialogs.cpp
     export_image.cpp
+    export_indicator.cpp
+    export_panel.cpp
     ffmpeg_download_dialog.cpp
     file_writes.cpp
     formatting.cpp
@@ -44,9 +46,11 @@ add_library(vml_app STATIC
     main_window_saved_scores.cpp
     main_window_source.cpp
     metric_list.cpp
+    popup_panel.cpp
     options_panel.cpp
     playback_worker.cpp
     probe_worker.cpp
+    quick_save.cpp
     rate_curve_chart.cpp
     results_export.cpp
     row_state.cpp

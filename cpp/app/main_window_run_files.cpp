@@ -348,30 +348,39 @@ void MainWindow::save_run_files(const std::vector<std::pair<const ComparisonResu
         return;
     }
     const QString suffix = QString::fromUtf8(result_suffix.data(), static_cast<int>(result_suffix.size()));
+    // Each result copied now, while it is the window's, with where it goes.
+    std::vector<std::tuple<ComparisonResult, std::filesystem::path, std::string>> files;
     if (runs.size() == 1) {
         const QString chosen =
             dialogs_.save_file(app::tr("Export run file"), runs.front().second + suffix, run_file_filter());
-        if (!chosen.isEmpty()) {
-            submit_save(*runs.front().first, path_of(chosen), runs.front().second);
+        if (chosen.isEmpty()) {
+            return;
         }
-        return;
+        files.emplace_back(*runs.front().first, path_of(chosen), runs.front().second.toStdString());
+    } else {
+        const QString folder =
+            dialogs_.choose_folder(app::tr("Choose folder to save runs into"), dialogs_.export_folder());
+        if (folder.isEmpty()) {
+            return;
+        }
+        std::set<std::filesystem::path> reserved;
+        for (const auto& [result, label] : runs) {
+            files.emplace_back(*result,
+                               unique_output_path(path_of(folder), label.toStdString(), suffix.toStdString(), reserved),
+                               label.toStdString());
+        }
     }
-    const QString folder =
-        dialogs_.choose_folder(app::tr("Choose folder to save runs into"), dialogs_.export_folder());
-    if (folder.isEmpty()) {
-        return;
-    }
-    std::set<std::filesystem::path> reserved;
-    for (const auto& [result, label] : runs) {
-        submit_save(*result, unique_output_path(path_of(folder), label.toStdString(), suffix.toStdString(), reserved),
-                    label);
-    }
-}
-
-void MainWindow::submit_save(const ComparisonResult& result, const std::filesystem::path& path, const QString& label) {
-    // Saves a result off the window's thread: a long video's takes a while.
-    file_writes_->submit(app::tr("save {name}", {{"name", name_of(path)}}),
-                         [result, path, label = label.toStdString()] { save_run(result, path, label); });
+    // Saved off the window's thread (a long video's takes a while), the
+    // indicator saying how it went.
+    const QString name = files.size() == 1 ? name_of(std::get<1>(files.front())) : text_of(std::get<1>(files.front()).parent_path());
+    submit_export(app::tr("save {name}", {{"name", name}}), [files = std::move(files)] {
+        QStringList written;
+        for (const auto& [result, path, label] : files) {
+            save_run(result, path, label);
+            written.append(text_of(path));
+        }
+        return written;
+    });
 }
 
 std::vector<ExportedRun> MainWindow::exported_runs() const {

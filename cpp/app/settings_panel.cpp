@@ -48,6 +48,7 @@
 #include "formatting.h"
 #include "i18n.h"
 #include "metric_list.h"
+#include "results_export.h"
 #include "segment_rules_editor.h"
 #include "theme.h"
 #include "vml/app_log.h"
@@ -192,7 +193,7 @@ QGroupBox* SettingsPanel::build_storage_box() {
     run_locked_.push_back(clear_cache);
 
     export_edit = new QLineEdit(text_of(settings_.export_dir));
-    export_edit->setPlaceholderText(app::tr("blank = ask each time"));
+    export_edit->setPlaceholderText(app::tr("blank = Documents"));
     connect(export_edit, &QLineEdit::editingFinished, this, [this] { on_edited(); });
     auto* browse_export = new QPushButton(app::tr("Browse"));
     connect(browse_export, &QPushButton::clicked, this,
@@ -238,6 +239,7 @@ QGroupBox* SettingsPanel::build_storage_box() {
     show_export_colors();
 
     storage_form->addRow(app::tr("Exports include:"), build_export_choices());
+    storage_form->addRow(app::tr("Quick saves:"), build_quick_save_choices());
     storage_form->addRow(app::tr("After each run:"), build_after_run_export());
 
 
@@ -325,33 +327,30 @@ QWidget* SettingsPanel::build_export_choices() {
     auto* exports = new QWidget;
     auto* row = new QHBoxLayout(exports);
     row->setContentsMargins(0, 0, 0, 0);
-    const std::map<std::string, std::pair<QString, QString>> described{
+    const std::map<std::string, QString> described{
         {"results",
-         {app::tr("Results"),
-          app::tr("Scores and statistics, as Export results saves them, in the formats ticked: a video's alone "
-                  "(<video> - results.json), or all the videos' in one file.")}},
+         app::tr("Scores and statistics, as Export results saves them, in the formats ticked: a video's alone "
+                 "(<video> - results.json), or all the videos' in one file.")},
         {"frames",
-         {app::tr("Per-frame scores"),
-          app::tr("Every frame's score of each metric, in the formats ticked: a file for each video "
-                  "(<video> - frames.json). A long video's are big.")}},
+         app::tr("Every frame's score of each metric, in the formats ticked: a file for each video "
+                 "(<video> - frames.json). A long video's are big.")},
         {"graphs",
-         {app::tr("Graphs"),
-          app::tr("Each video's graph of every metric, and its bitrate with the reference's, as PNG images "
-                  "(<video> - <metric>.png); with several videos, all of them together too. They're saved once "
-                  "the bitrate has been read, which the Bitrate Viewer does after each run.")}},
+         app::tr("Each video's graph of every metric, and its bitrate with the reference's, as PNG images "
+                 "(<video> - <metric>.png); with several videos, all of them together too. They're saved once "
+                 "the bitrate has been read, which the Bitrate Viewer does after each run.")},
         {"worst_frames",
-         {app::tr("Worst frames"),
-          app::tr("Each video's worst frames of every metric, as many dips as the Worst Frames tab lists (10, 25 "
-                  "or 50), each with every metric's score, in the formats ticked (<video> - worst "
-                  "frames.json).")}},
+         app::tr("Each video's worst frames of every metric, as many dips as the Worst Frames tab lists (10, 25 "
+                 "or 50), each with every metric's score, in the formats ticked (<video> - worst "
+                 "frames.json).")},
         {"weak_segments",
-         {app::tr("Weak segments"),
-          app::tr("Weak segments by the profile in use (Settings > Weak segments; on the Saved Results tab, the "
-                  "rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all "
-                  "the videos' in one report. Nothing is saved while the rules have no condition.")}},
+         app::tr("Weak segments by the rules the Export panel's Weak segments by picks (the profile in use, "
+                 "Settings > Weak segments, until another is picked; after each run, always that profile), in "
+                 "the formats ticked: a video's (<video>.vmaf.segments.json), or all the videos' in one report. "
+                 "Nothing is saved while the rules have no condition.")},
     };
     for (const std::string& key : export_item_keys()) {
-        const auto& [name, tip] = described.at(key);
+        const QString name = export_item_title(key);
+        const QString& tip = described.at(key);
         auto* box = new QCheckBox(name);
         box->setToolTip(Qt::convertFromPlainText(tip, Qt::WhiteSpaceNormal));
         box->setChecked(std::find(settings_.export_items.begin(), settings_.export_items.end(), key) !=
@@ -399,6 +398,52 @@ QWidget* SettingsPanel::build_export_choices() {
     row->addWidget(export_form);
     row->addStretch(1);
     return exports;
+}
+
+void SettingsPanel::show_export_choices() {
+    // Set without being taken as the user's edits here (on_edited would read
+    // every control back, which these already match).
+    const QSignalBlocker edit_held(export_edit);
+    export_edit->setText(text_of(settings_.export_dir));
+    for (const auto& [key, box] : export_item_boxes) {
+        const QSignalBlocker held(box);
+        box->setChecked(std::find(settings_.export_items.begin(), settings_.export_items.end(), key) !=
+                        settings_.export_items.end());
+    }
+    for (const auto& [key, box] : export_format_boxes) {
+        const QSignalBlocker held(box);
+        box->setChecked(std::find(settings_.export_formats.begin(), settings_.export_formats.end(), key) !=
+                        settings_.export_formats.end());
+    }
+    const QSignalBlocker form_held(export_form);
+    export_form->setCurrentIndex(settings_.export_zip ? 0 : 1);
+}
+
+QWidget* SettingsPanel::build_quick_save_choices() {
+    // The formats each card's save icon writes what it shows in (issue
+    // #224): a box for each, as Exports include has; graphs are images.
+    auto* quick = new QWidget;
+    auto* row = new QHBoxLayout(quick);
+    row->setContentsMargins(0, 0, 0, 0);
+    for (const std::string& key : export_format_keys()) {
+        auto* box = new QCheckBox(QString::fromStdString(key).toUpper());
+        box->setToolTip(Qt::convertFromPlainText(
+            app::tr("The formats a table's or list's save icon writes what it shows in. With neither ticked, "
+                    "only graphs are saved at one click."),
+            Qt::WhiteSpaceNormal));
+        box->setChecked(std::find(settings_.quick_save_formats.begin(), settings_.quick_save_formats.end(), key) !=
+                        settings_.quick_save_formats.end());
+        connect(box, &QCheckBox::toggled, this, [this] { on_edited(); });
+        quick_format_boxes[key] = box;
+        row->addWidget(box);
+    }
+    row->addSpacing(12);
+    auto* note = new QLabel(app::tr("Graphs: always PNG. Each table's, list's and graph's save icon saves what it "
+                                    "shows, at one click, in the export folder."));
+    note->setWordWrap(true);
+    theme::style(note, "color: {muted};");
+    row->addWidget(note, 1);
+    return quick;
 }
 
 QWidget* SettingsPanel::build_after_run_export() {
@@ -1114,6 +1159,12 @@ void SettingsPanel::read_controls() {
         }
     }
     settings_.export_zip = export_form->currentData().toBool();
+    settings_.quick_save_formats.clear();
+    for (const std::string& key : export_format_keys()) {
+        if (quick_format_boxes.at(key)->isChecked()) {
+            settings_.quick_save_formats.push_back(key);
+        }
+    }
     settings_.after_run_export = after_run_box->isChecked();
     settings_.after_run_place = after_run_place->currentData().toString().toStdString();
     // The editor shows the profile in use.

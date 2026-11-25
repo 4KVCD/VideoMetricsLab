@@ -39,6 +39,7 @@ const std::unordered_map<std::string, Field>& fields() {
         {"export_items", &Settings::export_items},
         {"export_formats", &Settings::export_formats},
         {"export_zip", &Settings::export_zip},
+        {"quick_save_formats", &Settings::quick_save_formats},
         {"after_run_export", &Settings::after_run_export},
         {"after_run_place", &Settings::after_run_place},
         {"default_gpu_decode", &Settings::default_gpu_decode},
@@ -523,6 +524,7 @@ std::string Settings::text() const {
     data["export_items"] = export_items;
     data["export_formats"] = export_formats;
     data["export_zip"] = export_zip;
+    data["quick_save_formats"] = quick_save_formats;
     data["after_run_export"] = after_run_export;
     data["after_run_place"] = after_run_place;
     data["default_gpu_decode"] = default_gpu_decode;

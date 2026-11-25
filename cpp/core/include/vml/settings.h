@@ -62,6 +62,10 @@ struct Settings {
     // export_format_keys' keys.
     std::vector<std::string> export_formats = {"json", "csv"};
     bool export_zip = true;
+    // The formats a card's save icon writes what it shows in (Settings >
+    // Storage > Quick saves): export_format_keys' keys. Graphs are PNG
+    // images whatever is ticked.
+    std::vector<std::string> quick_save_formats = {"json", "csv"};
     // Whether each video is exported after its run, and where: "beside" next
     // to the test video, "folder" in export_dir (next to the test video while
     // that is empty).

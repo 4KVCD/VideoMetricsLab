@@ -16,6 +16,8 @@
 #include <utility>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include "vml/cancel.h"
 #include "vml/video.h"
 
@@ -146,6 +148,12 @@ GopBins gop_bins(const BitrateData& data, bool adjust_start);
 std::string frames_csv(const BitrateData& data, bool adjust_start);
 std::string seconds_csv(const BitrateData& data, bool adjust_start);
 std::string gops_csv(const BitrateData& data, bool adjust_start);
+// The same three tables as JSON (the Bitrate Viewer's quick save): an object
+// with "frames", "seconds" and "gops", each {"columns": [the CSV's
+// headings], "rows": [[a row's values]...]}, times rounded to the
+// microsecond and kb/s to a tenth as the CSV files have them, a kb/s that
+// cannot be worked out null.
+nlohmann::ordered_json figures_json(const BitrateData& data, bool adjust_start);
 // Two videos' difference as CSV text (the command line's bitrate
 // --difference): each of the first's frames' number, time and size in bytes
 // minus the size of the second's frame of that number (empty where it has

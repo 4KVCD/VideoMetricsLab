@@ -1,7 +1,6 @@
 #include "saved_results_panel.h"
 
 #include <QAction>
-#include <QActionGroup>
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDateTime>
@@ -182,6 +181,29 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     auto* refresh_button = new QPushButton(app::tr("Refresh"));
     connect(refresh_button, &QPushButton::clicked, this, [this] { refresh(); });
     top->addWidget(refresh_button);
+    // The list's save icon, at its top right (issue #224).
+    save_button_ = new SaveButton;
+    save_button_->why_not = [this] {
+        return selected().empty()                                   ? app::tr("Select the comparisons to save.")
+               : !quick_formats || quick_formats().empty() ? no_format_text()
+                                                                    : QString();
+    };
+    save_button_->describe = [this] {
+        const std::vector<const SavedComparison*> chosen = selected();
+        const QString what = chosen.size() == 1
+                                 ? app::tr("the selected comparison's results ({name})",
+                                           {{"name", text_of(chosen.front()->distorted.filename())}})
+                                 : app::tr("the selected comparisons' results ({count})",
+                                           {{"count", static_cast<long long>(chosen.size())}});
+        return quick_save_tooltip(what, quick_formats ? quick_formats() : std::vector<std::string>{});
+    };
+    save_button_->save = [this] {
+        if (save_results) {
+            save_results(selected_results());
+        }
+    };
+    save_button_->save_as = [this](QMenu& menu) { add_quick_items(menu); };
+    top->addWidget(save_button_);
     layout->addLayout(top);
 
     table_ = new QTableWidget(0, column_count);
@@ -280,14 +302,6 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     connect(open_button_, &QPushButton::clicked, this, [this] { emit open_requested(selected_results()); });
     buttons->addWidget(open_button_);
     buttons->addStretch(1);
-    // One Export button, at the right end beside Delete (docs/ARCHITECTURE.md,
-    // "Exports"): its menu is made as it opens (fill_export_menu).
-    export_button_ = new QPushButton(app::tr("Export"));
-    export_menu_ = new QMenu(export_button_);
-    export_menu_->setToolTipsVisible(true);
-    connect(export_menu_, &QMenu::aboutToShow, this, [this] { fill_export_menu(*export_menu_); });
-    export_button_->setMenu(export_menu_);
-    buttons->addWidget(export_button_);
     delete_button_ = new QPushButton(app::tr("Delete..."));
     theme::set_role(delete_button_, "danger");
     connect(delete_button_, &QPushButton::clicked, this, [this] { delete_selected(); });
@@ -935,7 +949,7 @@ bool SavedResultsPanel::locked_by_run(const SavedComparison& saved) const {
 void SavedResultsPanel::update_buttons() {
     const std::vector<const SavedComparison*> chosen = selected();
     open_button_->setEnabled(!chosen.empty());
-    export_button_->setEnabled(!chosen.empty());
+    save_button_->refresh();
     // Locked where any selected comparison is one the run uses (the others
     // can be deleted while it runs), and while a Delete is queued.
     const bool locked = std::any_of(chosen.begin(), chosen.end(),
@@ -946,10 +960,16 @@ void SavedResultsPanel::update_buttons() {
                                       : QString());
 }
 
-void SavedResultsPanel::add_quick_grabs(QMenu& menu, bool enabled, const std::function<void(Export)>& chosen) {
-    const auto add = [&menu, enabled, &chosen](const QString& text, Export kind) {
+void SavedResultsPanel::add_quick_grabs(QMenu& menu, bool enabled, const std::function<void(Export)>& chosen,
+                                        const std::map<Export, QString>& refused) {
+    menu.setToolTipsVisible(true);
+    const auto add = [&menu, enabled, &chosen, &refused](const QString& text, Export kind) {
         QAction* action = menu.addAction(text);
-        action->setEnabled(enabled);
+        const auto why = refused.find(kind);
+        action->setEnabled(enabled && why == refused.end());
+        if (enabled && why != refused.end()) {
+            action->setToolTip(why->second);
+        }
         QObject::connect(action, &QAction::triggered, &menu, [chosen, kind] { chosen(kind); });
         return action;
     };
@@ -957,25 +977,34 @@ void SavedResultsPanel::add_quick_grabs(QMenu& menu, bool enabled, const std::fu
     add(app::tr("Results as CSV..."), Export::results_csv);
     add(app::tr("Per-frame scores as JSON..."), Export::frames_json);
     add(app::tr("Per-frame scores as CSV..."), Export::frames_csv);
-    add(app::tr("Graphs as ZIP..."), Export::graphs)
-        ->setToolTip(app::tr("Each video's graph of every metric, and with several of one reference every metric "
-                             "with all of them; the bitrate graphs where the videos are still there."));
+    QAction* graphs = add(app::tr("Graphs as ZIP..."), Export::graphs);
+    if (!enabled || !refused.contains(Export::graphs)) {  // not refused: what it holds
+        graphs->setToolTip(app::tr("Each video's graph of every metric, and with several of one reference every "
+                                   "metric with all of them; the bitrate graphs where the videos are still there."));
+    }
     add(app::tr("Weak segments as JSON or CSV..."), Export::segments);
     menu.addSeparator();
     add(app::tr("Run file (.metrics.json)..."), Export::run_file);
 }
 
-void SavedResultsPanel::fill_export_menu(QMenu& menu) {
-    menu.clear();
-    for (QMenu* kind : menu.findChildren<QMenu*>(Qt::FindDirectChildrenOnly)) {
-        delete kind;  // clear() leaves the menus addMenu made
+void SavedResultsPanel::add_quick_items(QMenu& menu) {
+    // The quick grabs of the selected comparisons, each with the Save
+    // dialog; those that cannot be made greyed, saying why.
+    std::map<Export, QString> refused;
+    if (several_references()) {
+        refused[Export::graphs] = one_reference_text();
+        refused[Export::segments] = one_reference_text();
+    } else if (segment_rules().conditions.empty()) {
+        refused[Export::segments] = no_conditions_text();
     }
-    add_export_items(menu);
+    add_quick_grabs(menu, !selected().empty(),
+                    [this](Export kind) { emit export_requested(kind, selected_results()); }, refused);
 }
 
 void SavedResultsPanel::add_export_items(QMenu& menu) {
-    // The selection's archive first; then the quick grabs, for a one-off;
-    // then the rules the weak segments are found by.
+    // The selection's archive first, the one archive item outside the tab
+    // bar's Export panel (whose picker sets the weak segment rules); then
+    // the quick grabs, for a one-off.
     const QAction* contents = fill_menu(menu);
     if (contents == nullptr) {
         return;
@@ -983,22 +1012,7 @@ void SavedResultsPanel::add_export_items(QMenu& menu) {
     connect(contents, &QAction::triggered, this,
             [this] { emit export_requested(Export::contents, selected_results()); });
     menu.addSeparator();
-    add_quick_grabs(menu, true, [this](Export kind) { emit export_requested(kind, selected_results()); });
-    QMenu* segments = menu.addMenu(app::tr("Weak segments by"));
-    segments->setToolTipsVisible(true);
-    // The rules, one picked: the weak segments' quick grab's and the
-    // archive's.
-    auto* rules = new QActionGroup(segments);
-    const QString picked = segment_rule_choice();
-    for (const auto& [choice, text] : segment_rule_choices()) {
-        QAction* action = segments->addAction(text);
-        action->setCheckable(true);
-        action->setChecked(choice == picked);
-        action->setToolTip(app::tr("The rules the weak segments are found by: they are not saved with the scores, "
-                                   "but found from them now."));
-        rules->addAction(action);
-        connect(action, &QAction::triggered, this, [this, choice] { pick_segment_rules(choice); });
-    }
+    add_quick_items(menu);
 }
 
 QString SavedResultsPanel::segment_rule_choice() const {
@@ -1015,10 +1029,25 @@ QAction* SavedResultsPanel::fill_menu(QMenu& menu) const {
     if (count == 0) {
         return nullptr;
     }
-    QAction* contents = menu.addAction(export_action_text(
-        count == 1 ? ExportScope::this_video : ExportScope::selected_videos, exported_items(settings_)));
-    contents->setEnabled(!export_contents(exported_items(settings_)).isEmpty());
+    const std::vector<std::string> items = exported_items(settings_);
+    QAction* contents =
+        menu.addAction(export_action_text(count == 1 ? ExportScope::this_video : ExportScope::selected_videos, items));
+    const bool needs_one_reference = std::find(items.begin(), items.end(), "graphs") != items.end() ||
+                                     std::find(items.begin(), items.end(), "weak_segments") != items.end();
+    const bool refused = needs_one_reference && several_references();
+    contents->setEnabled(!export_contents(items).isEmpty() && !refused);
+    if (refused) {
+        menu.setToolTipsVisible(true);
+        contents->setToolTip(one_reference_text());
+    }
     return contents;
+}
+
+bool SavedResultsPanel::several_references() const {
+    const std::vector<const SavedComparison*> chosen = selected();
+    return std::any_of(chosen.begin(), chosen.end(), [&chosen](const SavedComparison* saved) {
+        return !same_path(saved->source, chosen.front()->source);
+    });
 }
 
 void SavedResultsPanel::fill_context_menu(QMenu& menu) {

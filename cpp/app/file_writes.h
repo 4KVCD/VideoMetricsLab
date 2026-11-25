@@ -29,6 +29,10 @@ public:
     // Queues a write, to run after those already queued. It runs on another
     // thread, so it must not touch a widget: give it plain data.
     void submit(QString description, std::function<void()> write);
+    // The same, then `done` called on this object's thread with the error
+    // (empty: written) in place of write_failed: an export, which says how
+    // it went on the window's indicator.
+    void submit(QString description, std::function<void()> write, std::function<void(const QString& error)> done);
 
     // Waits until every write queued has run, for at most `timeout`; whether
     // they all have. For closing the window, which must not cut one short.
@@ -49,7 +53,12 @@ private:
 
     std::mutex mutex_;
     std::condition_variable idle_;
-    std::deque<std::pair<QString, std::function<void()>>> writes_;
+    struct Write {
+        QString description;
+        std::function<void()> write;
+        std::function<void(const QString& error)> done;
+    };
+    std::deque<Write> writes_;
     int pending_ = 0;       // queued, not yet run
     bool writing_ = false;  // a thread is taking writes off the queue
     std::thread thread_;

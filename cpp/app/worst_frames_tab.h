@@ -24,6 +24,8 @@
 #include <utility>
 #include <vector>
 
+#include "export_indicator.h"
+#include "quick_save.h"
 #include "dialogs.h"
 #include "segment_rules_editor.h"
 #include "theme.h"
@@ -70,6 +72,13 @@ public:
     // Settings' Exported graphs, read at each export of the graph (light
     // where not set).
     std::function<theme::ChartColours()> export_colours;
+    // Where its exports say how they went: the window's indicator
+    // (export_indicator.h). Not set: nowhere.
+    ExportReport export_report;
+    // The export folder and formats its save icons save in (quick_save.h).
+    QuickSaves quick_saves;
+    // The worst frames list's save icon, the tab's own one-click save.
+    SaveButton* worst_save() const { return saves_.size() > 1 ? saves_[1] : nullptr; }
 
     // The videos to choose from (the graph's lines, in their order). The
     // video chosen stays chosen while it is among them; else the first is.
@@ -125,9 +134,6 @@ signals:
     // Save to profile, or Save as new profile: the profile's name ("" for
     // Default) and rules_to_save(), for Settings.
     void rules_saved(const std::string& profile, const vml::SegmentRules& rules);
-    // Export all videos...: the report of every scored test video, by the
-    // rules shown (without the range).
-    void report_requested(const vml::SegmentRules& rules);
     void count_changed(int count);
 
 protected:
@@ -138,13 +144,15 @@ private:
     QWidget* build_toolbar();
     // The quick grabs (what the tab shows: the video, the metric, the
     // conditions, the dips and the range), each list's and the graph's: the
-    // same items in its card's Export menu and its right-click menu.
+    // same items on a right-click on its card's save icon and on the card.
     void fill_worst_menu(QMenu* menu);
     void fill_graph_menu(QMenu* menu);
     void fill_segments_menu(QMenu* menu);
-    // An Export button whose menu `fill` fills each time it opens, and the
-    // same menu on a right-click on `view`.
-    QPushButton* export_button(const std::function<void(QMenu*)>& fill);
+    // A card's save icon (quick_save.h), and its menu on a right-click on
+    // `view`, filled by `fill` each time.
+    enum class Card { graph, worst, segments };
+    SaveButton* save_button(Card card);
+    std::vector<SaveButton*> saves_;  // every card's, refreshed with the tab
     void offer_menu(QWidget* view, const std::function<void(QMenu*)>& fill);
     QWidget* build_conditions();
     QWidget* build_lists();
@@ -180,12 +188,31 @@ private:
     void start_from_profile();
     std::string profile_name() const;
     void load_preset(const SegmentPreset& preset);
+    // What each card shows: whether it shows something to save, its file's
+    // name (without extension for a list's), and a list's text in a format.
+    bool graph_shown() const;
+    bool worst_shown() const;
+    bool segments_shown() const;
+    QString graph_name() const;
+    QPixmap graph_image();
+    QString worst_stem() const;
+    std::string worst_text(const std::string& format) const;
+    QString segments_stem() const;
+    std::string segments_text(const std::string& format) const;
+    // A list's quick save: a file of `text` in each of Settings' Quick saves
+    // formats, named `stem` and the format.
+    std::vector<QuickFile> quick_texts(const QString& stem,
+                                       std::string (WorstFramesTab::*text)(const std::string&) const) const;
     enum class ExportKind { json, csv };
     void export_segments(ExportKind kind);
     void export_worst(ExportKind kind);
     void export_graph();
-    // Writes `text` to `path` (CR LF on Windows), saying so if it cannot.
+    // Writes `text` at `path`, the Save dialog's answer (nothing for Cancel),
+    // and says how it went (export_report).
     void write_export(const QString& path, const std::string& text);
+    // A text file as the command line writes it (CR LF on Windows): the
+    // error, empty when written.
+    static QString write_text(const QString& path, const std::string& text);
     // The lists side by side where both fit at their natural widths, else
     // one above the other. Only compares the widths kept by fit_list with
     // the room: called on every resize of the work area.

@@ -168,6 +168,7 @@ WorstFramesTab::WorstFramesTab(Dialogs dialogs, QWidget* parent) : QWidget(paren
     theme::set_role(videos_title, "title");
     side->addWidget(videos_title);
     videos_table_ = make_table();
+    not_exported(videos_table_);  // the videos to pick one from, not data to save
     videos_table_->setColumnCount(3);
     videos_table_->setHorizontalHeaderLabels({app::tr("Video"), app::tr("Segments"), app::tr("Worst")});
     videos_table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
@@ -211,7 +212,7 @@ WorstFramesTab::WorstFramesTab(Dialogs dialogs, QWidget* parent) : QWidget(paren
     video_title_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     auto* graph_head = new QHBoxLayout;
     graph_head->addWidget(video_title_, 1);
-    graph_head->addWidget(export_button([this](QMenu* menu) { fill_graph_menu(menu); }));
+    graph_head->addWidget(save_button(Card::graph));
     chart_layout_->addLayout(graph_head);
     // The graph as tall as the lists: with the conditions on the left, the
     // height they had is the graph's.
@@ -262,22 +263,8 @@ QWidget* WorstFramesTab::build_toolbar() {
     return bar;
 }
 
-QPushButton* WorstFramesTab::export_button(const std::function<void(QMenu*)>& fill) {
-    // The Export menu of what its card shows, filled as it opens: the items
-    // usable then, as the right-click menu has them.
-    auto* button = new QPushButton(app::tr("Export"));
-    auto* menu = new QMenu(button);
-    menu->setToolTipsVisible(true);
-    connect(menu, &QMenu::aboutToShow, this, [menu, fill] {
-        menu->clear();
-        fill(menu);
-    });
-    button->setMenu(menu);
-    return button;
-}
-
 void WorstFramesTab::offer_menu(QWidget* view, const std::function<void(QMenu*)>& fill) {
-    // A list's or the graph's right-click: its card's Export items.
+    // A list's or the graph's right-click: its card's save icon's Save as... items.
     view->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(view, &QWidget::customContextMenuRequested, this, [view, fill](const QPoint& at) {
         QMenu menu;
@@ -313,15 +300,8 @@ void WorstFramesTab::fill_segments_menu(QMenu* menu) {
     connect(json, &QAction::triggered, this, [this] { export_segments(ExportKind::json); });
     QAction* csv = menu->addAction(app::tr("Weak segments as CSV..."));
     connect(csv, &QAction::triggered, this, [this] { export_segments(ExportKind::csv); });
-    QAction* report = menu->addAction(app::tr("All videos' weak segments as JSON or CSV..."));
-    report->setToolTip(app::tr("Every scored test video's weak segments by these conditions, in one JSON or CSV file."));
-    connect(report, &QAction::triggered, this, [this] {
-        SegmentRules rules = editor_ != nullptr ? editor_->rules() : SegmentRules{};
-        emit report_requested(rules);
-    });
     json->setEnabled(video);
     csv->setEnabled(video);
-    report->setEnabled(video);
 }
 
 QWidget* WorstFramesTab::build_conditions() {
@@ -477,7 +457,7 @@ QWidget* WorstFramesTab::build_lists() {
         }
     });
     worst_head->addWidget(count_combo_);
-    worst_head->addWidget(export_button([this](QMenu* menu) { fill_worst_menu(menu); }));
+    worst_head->addWidget(save_button(Card::worst));
     worst->addLayout(worst_head);
     worst_table_ = make_table(false);  // sized by fit_list
     offer_menu(worst_table_, [this](QMenu* menu) { fill_worst_menu(menu); });
@@ -524,7 +504,7 @@ QWidget* WorstFramesTab::build_lists() {
     theme::set_role(segments_title, "title");
     segments_head->addWidget(segments_title);
     segments_head->addStretch(1);
-    segments_head->addWidget(export_button([this](QMenu* menu) { fill_segments_menu(menu); }));
+    segments_head->addWidget(save_button(Card::segments));
     segments->addLayout(segments_head);
     segments_table_ = make_table(false);  // sized by fit_list
     offer_menu(segments_table_, [this](QMenu* menu) { fill_segments_menu(menu); });
@@ -866,6 +846,12 @@ void WorstFramesTab::refresh() {
     if (building_) {
         return;
     }
+    // The save icons greyed or not for what is shown now, however this ends.
+    const auto saves = qScopeGuard([this] {
+        for (SaveButton* save : saves_) {
+            save->refresh();
+        }
+    });
     const WeakFramesVideo* video = chosen_video();
     segments_ = video != nullptr && editor_ != nullptr ? weak_segments(*video->result, rules()) : std::vector<WeakSegment>{};
     long long frames = 0;
@@ -1451,103 +1437,168 @@ void WorstFramesTab::open_selected() {
     }
 }
 
-void WorstFramesTab::export_segments(ExportKind kind) {
-    const WeakFramesVideo* video = chosen_video();
-    if (video == nullptr) {
-        return;
-    }
-    const SegmentRules current = rules();
-    // Named after the metrics it covers.
-    QString suffix = "." + qt_text(segments_file_suffix(current));
-    QString filter;
-    std::string text;
-    switch (kind) {
-    case ExportKind::json:
-        suffix += QStringLiteral(".json");
-        filter = app::tr("JSON file (*.json)");
-        text = python_json_dumps(segments_file_json(*video->result, segments_, current)) + "\n";
-        break;
-    case ExportKind::csv:
-        suffix += QStringLiteral(".csv");
-        filter = app::tr("CSV file (*.csv)");
-        text = segments_csv(segments_, current);
-        break;
-    }
-    const QString path =
-        dialogs_.save_file(app::tr("Export weak segments"), suggested_file_name(video->label, suffix), filter);
-    write_export(path, text);
+QString WorstFramesTab::segments_stem() const {
+    // The video's name, then the metrics the rules cover.
+    return chosen_video()->label + "." + qt_text(segments_file_suffix(rules()));
 }
 
-void WorstFramesTab::export_worst(ExportKind kind) {
+std::string WorstFramesTab::segments_text(const std::string& format) const {
+    const SegmentRules current = rules();
+    return format == "json" ? python_json_dumps(segments_file_json(*chosen_video()->result, segments_, current)) + "\n"
+                            : segments_csv(segments_, current);
+}
+
+QString WorstFramesTab::worst_stem() const {
+    return chosen_video()->label + "." + qt_text(worst_frames_file_suffix(std::string(metric_->key)));
+}
+
+std::string WorstFramesTab::worst_text(const std::string& format) const {
     // The dips listed (the metric, the count and the range shown), each with
     // every metric's score.
-    const WeakFramesVideo* video = chosen_video();
-    if (video == nullptr || metric_ == nullptr || worst_.empty()) {
-        return;
-    }
     const std::string key(metric_->key);
-    QString suffix = "." + qt_text(worst_frames_file_suffix(key));
-    QString filter;
-    std::string text;
-    switch (kind) {
-    case ExportKind::json: {
+    if (format == "json") {
         std::vector<FrameInterval> ranges;
         if (range_) {
             ranges.push_back({range_->first, range_->second});
         }
-        suffix += QStringLiteral(".json");
-        filter = app::tr("JSON file (*.json)");
-        text = python_json_dumps(worst_frames_json(video->result->metric_results, key, worst_,
+        return python_json_dumps(worst_frames_json(chosen_video()->result->metric_results, key, worst_,
                                                    static_cast<std::size_t>(count_), ranges)) +
                "\n";
-        break;
     }
-    case ExportKind::csv:
-        suffix += QStringLiteral(".csv");
-        filter = app::tr("CSV file (*.csv)");
-        text = worst_frames_csv(video->result->metric_results, worst_);
-        break;
-    }
-    const QString path =
-        dialogs_.save_file(app::tr("Export worst frames"), suggested_file_name(video->label, suffix), filter);
-    write_export(path, text);
+    return worst_frames_csv(chosen_video()->result->metric_results, worst_);
 }
 
-void WorstFramesTab::export_graph() {
+QString WorstFramesTab::graph_name() const {
+    return suggested_file_name(chosen_video()->label + "_" + qt_text(metric_->key), ".png");
+}
+
+QPixmap WorstFramesTab::graph_image() {
     // The graph as shown (the weak segments shaded, the worst frames
     // dotted), titled as Metric Graphs titles its own, with the video's name.
-    const WeakFramesVideo* video = chosen_video();
-    if (video == nullptr || metric_ == nullptr || chart_ == nullptr) {
-        return;
-    }
     QString title = app::tr("{label} vs time", {{"label", qt_text(metric_->label)}}) + QStringLiteral(" — ") +
-                    video->label;
+                    chosen_video()->label;
     if (range_) {
         title += app::tr(" — frames {first} to {last}", {{"first", range_->first}, {"last", range_->second}});
     }
-    const QString suggested = suggested_file_name(video->label + "_" + qt_text(metric_->key), ".png");
-    const QString path = dialogs_.save_file(app::tr("Export graph"), suggested, app::tr("PNG image (*.png)"));
+    return export_image(*chart_, title, ExportTable{}, font(),
+                        export_colours ? export_colours() : theme::chart_colours(false));
+}
+
+bool WorstFramesTab::graph_shown() const {
+    return chosen_video() != nullptr && metric_ != nullptr && chart_ != nullptr;
+}
+
+bool WorstFramesTab::worst_shown() const { return chosen_video() != nullptr && metric_ != nullptr && !worst_.empty(); }
+
+bool WorstFramesTab::segments_shown() const { return chosen_video() != nullptr && editor_ != nullptr; }
+
+void WorstFramesTab::export_segments(ExportKind kind) {
+    if (!segments_shown()) {
+        return;
+    }
+    const bool json = kind == ExportKind::json;
+    const QString path = dialogs_.save_file(app::tr("Export weak segments"),
+                                            suggested_file_name(segments_stem(), json ? ".json" : ".csv"),
+                                            json ? app::tr("JSON file (*.json)") : app::tr("CSV file (*.csv)"));
+    write_export(path, path.isEmpty() ? std::string() : segments_text(json ? "json" : "csv"));
+}
+
+void WorstFramesTab::export_worst(ExportKind kind) {
+    if (!worst_shown()) {
+        return;
+    }
+    const bool json = kind == ExportKind::json;
+    const QString path = dialogs_.save_file(app::tr("Export worst frames"),
+                                            suggested_file_name(worst_stem(), json ? ".json" : ".csv"),
+                                            json ? app::tr("JSON file (*.json)") : app::tr("CSV file (*.csv)"));
+    write_export(path, path.isEmpty() ? std::string() : worst_text(json ? "json" : "csv"));
+}
+
+void WorstFramesTab::export_graph() {
+    if (!graph_shown()) {
+        return;
+    }
+    const QString path = dialogs_.save_file(app::tr("Export graph"), graph_name(), app::tr("PNG image (*.png)"));
     if (path.isEmpty()) {
         return;
     }
-    const QPixmap image = export_image(*chart_, title, ExportTable{}, font(),
-                                       export_colours ? export_colours() : theme::chart_colours(false));
-    if (!image.save(path)) {
-        dialogs_.alert(app::tr("Export failed"), app::tr("Could not write {path}", {{"path", path}}));
+    const QPixmap image = graph_image();
+    report_to(export_report, save_as(path, [&image](const QString& out) {
+                  return image.save(out) ? QString() : could_not_write(out);
+              }));
+}
+
+std::vector<QuickFile> WorstFramesTab::quick_texts(const QString& stem,
+                                                   std::string (WorstFramesTab::*text)(const std::string&) const) const {
+    // Written as the command line writes text files (write_text), each made now
+    // from what the card shows.
+    std::vector<QuickFile> files;
+    for (const std::string& format : quick_saves.data_formats()) {
+        files.push_back({suggested_file_name(stem, "." + QString::fromStdString(format)),
+                         [made = (this->*text)(format)](const QString& path) { return write_text(path, made); }});
     }
+    return files;
+}
+
+SaveButton* WorstFramesTab::save_button(Card card) {
+    // A card's save icon (issue #224): what it shows, at one click, in the
+    // export folder; its Export items on a right-click.
+    auto* button = new SaveButton;
+    saves_.push_back(button);
+    switch (card) {
+    case Card::graph:
+        button->why_not = [this] { return graph_shown() ? QString() : nothing_shown_text(); };
+        button->describe = [] { return quick_save_tooltip(app::tr("this graph as PNG"), {}); };
+        button->save = [this] {
+            quick_saves.save(quick_saves.export_folder(), {image_file(graph_name(), [this] { return graph_image(); })},
+                             export_report);
+        };
+        button->save_as = [this](QMenu& menu) { fill_graph_menu(&menu); };
+        break;
+    case Card::worst:
+        button->why_not = [this] {
+            return !worst_shown()                         ? nothing_shown_text()
+                   : quick_saves.data_formats().empty() ? no_format_text()
+                                                          : QString();
+        };
+        button->describe = [this] {
+            return quick_save_tooltip(app::tr("the worst frames listed"), quick_saves.data_formats());
+        };
+        button->save = [this] {
+            quick_saves.save(quick_saves.export_folder(), quick_texts(worst_stem(), &WorstFramesTab::worst_text),
+                             export_report);
+        };
+        button->save_as = [this](QMenu& menu) { fill_worst_menu(&menu); };
+        break;
+    case Card::segments:
+        button->why_not = [this] {
+            return !segments_shown()                      ? nothing_shown_text()
+                   : quick_saves.data_formats().empty() ? no_format_text()
+                                                          : QString();
+        };
+        button->describe = [this] {
+            return quick_save_tooltip(app::tr("the weak segments listed"), quick_saves.data_formats());
+        };
+        button->save = [this] {
+            quick_saves.save(quick_saves.export_folder(), quick_texts(segments_stem(), &WorstFramesTab::segments_text),
+                             export_report);
+        };
+        button->save_as = [this](QMenu& menu) { fill_segments_menu(&menu); };
+        break;
+    }
+    return button;
 }
 
 void WorstFramesTab::write_export(const QString& path, const std::string& text) {
-    if (path.isEmpty()) {
-        return;  // Cancel
-    }
+    report_to(export_report, save_as(path, [&text](const QString& out) { return write_text(out, text); }));
+}
+
+QString WorstFramesTab::write_text(const QString& path, const std::string& text) {
     // A text file, as the command line writes them: CR LF on Windows.
     std::ofstream file(path_of(path));
     file << text;
     file.close();
-    if (!file) {
-        dialogs_.alert(app::tr("Export failed"), app::tr("Could not write {path}", {{"path", path}}));
-    }
+    return file ? QString() : could_not_write(path);
 }
 
 // ------------------------------------------------------------------ layout

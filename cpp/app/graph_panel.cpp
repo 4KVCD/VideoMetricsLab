@@ -1215,9 +1215,6 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     // Exports of a feature-length run take seconds each: written off the
     // window's thread, so that the window does not freeze.
     file_writes_ = new FileWrites(this);
-    connect(file_writes_, &FileWrites::write_failed, this,
-            [this](const QString& description, const QString& error) { on_file_write_failed(description, error); });
-    connect(file_writes_, &FileWrites::became_idle, this, [this] { on_file_writes_idle(); });
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
@@ -1233,7 +1230,27 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     stats_hint_ = new QLabel;
     stats_hint_->setWordWrap(true);  // with a frame range it says more: wrapped, not widening the window
     theme::style(stats_hint_, "color: {muted};");
-    top_layout->addWidget(stats_hint_);
+    // The card's save icon at its top right (issue #224): the statistics
+    // shown, in Settings' Quick saves formats.
+    stats_save_ = new SaveButton;
+    stats_save_->why_not = [this] {
+        return export_table().second.empty()          ? nothing_shown_text()
+               : quick_saves.data_formats().empty() ? no_format_text()
+                                                      : QString();
+    };
+    stats_save_->describe = [this] {
+        return quick_save_tooltip(app::tr("the statistics shown"), quick_saves.data_formats());
+    };
+    stats_save_->save = [this] { save_statistics(); };
+    stats_save_->save_as = [this](QMenu& menu) {
+        StatsMenu items;
+        add_quick_grabs(menu, items, false, true);
+        connect_menu(items);
+    };
+    auto* hint_row = new QHBoxLayout;
+    hint_row->addWidget(stats_hint_, 1);
+    hint_row->addWidget(stats_save_, 0, Qt::AlignTop);
+    top_layout->addLayout(hint_row);
     stats_table_ = new QTableWidget;
     auto* swatches = new ColorSwatchDelegate(stats_table_);
     connect(swatches, &ColorSwatchDelegate::clicked, this, [this](int row) { choose_video_color(row); });
@@ -1278,15 +1295,27 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     QBoxLayout* graph_layout = nullptr;
     QWidget* graph_card = theme::container("card", false, &graph_layout);
     graph_card->setObjectName("graphCard");
+    // The graph's save icon, at the right end of the metrics' row: the graph
+    // shown as PNG, and the difference where the band shows one.
+    graph_save_ = new SaveButton;
+    graph_save_->why_not = [this] { return shown_graph() ? QString() : nothing_shown_text(); };
+    graph_save_->describe = [this] {
+        return quick_save_tooltip(difference_on_ && shown_difference_pair()
+                                      ? app::tr("this graph as PNG and the difference as CSV")
+                                      : app::tr("this graph as PNG"),
+                                  {});
+    };
+    graph_save_->save = [this] { save_graph(); };
+    graph_save_->save_as = [this](QMenu& menu) {
+        StatsMenu items;
+        add_quick_grabs(menu, items, true, false);
+        connect_menu(items);
+    };
+    tabs_->setCornerWidget(graph_save_, Qt::TopRightCorner);
     graph_layout->addWidget(tabs_);
     root->addWidget(graph_card, 1);
     root->addWidget(build_action_bar());
 
-    // Exports finish later: said here, not in a dialog taking the focus.
-    status_label_ = new QLabel;
-    status_label_->hide();
-    theme::style(status_label_, "color: {muted};");
-    root->addWidget(status_label_);
     metric_hint_ = new QLabel(app::tr("Calculate metrics or import a run file to view graphs."));
     root->addWidget(metric_hint_);
 
@@ -1463,18 +1492,6 @@ QWidget* GraphPanel::build_action_bar() {
     });
     layout->addWidget(difference_box_);
     layout->addStretch(1);
-    // Export, at the bar's right end: all the videos' archive, and the quick
-    // grabs of the page shown, filled as it opens.
-    auto* export_button = new QPushButton(app::tr("Export"));
-    auto* exports = new QMenu(export_button);
-    connect(exports, &QMenu::aboutToShow, this, [this, exports] {
-        exports->clear();
-        StatsMenu items;
-        fill_stats_menu(*exports, -1, items, true);
-        connect_menu(items);
-    });
-    export_button->setMenu(exports);
-    layout->addWidget(export_button);
     return bar;
 }
 
@@ -1511,7 +1528,12 @@ void GraphPanel::refresh_page_controls() {
     // The controls under the graph brought up to date for the page shown:
     // the Go to frame box bounded by what is drawn, so that it cannot ask
     // for a frame no line has, the range boxes likewise, and the Difference
-    // box usable where the page shows two lines.
+    // box usable where the page shows two lines. The save icons greyed or
+    // not for it.
+    if (stats_save_ != nullptr && graph_save_ != nullptr) {  // made after the first pages are
+        stats_save_->refresh();
+        graph_save_->refresh();
+    }
     const auto page = pages_.find(std::string(current_metric().key));
     if (page == pages_.end()) {
         return;
@@ -2215,19 +2237,13 @@ QString GraphPanel::export_stem() const {
     return !first ? QStringLiteral("comparison") : lines == 1 ? first->label : text_of(first->result->source.stem());
 }
 
-void GraphPanel::export_statistics(bool json) {
+QString GraphPanel::statistics_stem() const {
+    return export_stem() + "_" + QString::fromStdString(std::string(current_metric().key)) + "_statistics";
+}
+
+std::string GraphPanel::statistics_text(bool json) {
     const auto [headers, rows] = export_table();
-    if (rows.empty()) {
-        return;
-    }
     const std::string key(current_metric().key);
-    const QString suggested =
-        suggested_file_name(export_stem() + "_" + QString::fromStdString(key) + "_statistics", json ? ".json" : ".csv");
-    const QString path = dialogs.save_file(app::tr("Export statistics"), suggested,
-                                           json ? app::tr("JSON file (*.json)") : app::tr("CSV file (*.csv)"));
-    if (path.isEmpty()) {
-        return;
-    }
     std::string text;
     if (json) {
         // As the per-frame scores' JSON: the columns, then a list a row.
@@ -2275,21 +2291,73 @@ void GraphPanel::export_statistics(bool json) {
         }
         text = text_lines(lines);
     }
-    QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly) ||
-        file.write(text.data(), static_cast<qint64>(text.size())) != static_cast<qint64>(text.size()) ||
-        !file.commit()) {
-        dialogs.alert(app::tr("Export failed"), app::tr("Could not write {path}", {{"path", path}}));
+    return text;
+}
+
+void GraphPanel::export_statistics(bool json) {
+    if (export_table().second.empty()) {
+        return;
     }
+    const QString suggested = suggested_file_name(statistics_stem(), json ? ".json" : ".csv");
+    const QString path = dialogs.save_file(app::tr("Export statistics"), suggested,
+                                           json ? app::tr("JSON file (*.json)") : app::tr("CSV file (*.csv)"));
+    if (path.isEmpty()) {
+        return;
+    }
+    const std::string text = statistics_text(json);
+    report_to(export_report, save_as(path, [&text](const QString& out) { return write_text_file(out, text); }));
+}
+
+void GraphPanel::save_statistics() {
+    if (export_table().second.empty()) {
+        return;
+    }
+    quick_saves.save(quick_saves.export_folder(),
+                     data_files(statistics_stem(), quick_saves.data_formats(),
+                                [this](const std::string& format) { return statistics_text(format == "json"); }),
+                     export_report);
+}
+
+bool GraphPanel::shown_graph() const {
+    const auto page = pages_.find(std::string(current_metric().key));
+    return page != pages_.end() && page->second->chart().has_data();
+}
+
+QString GraphPanel::png_name() const {
+    return suggested_file_name(export_stem() + "_" + QString::fromStdString(std::string(current_metric().key)), ".png");
+}
+
+void GraphPanel::save_graph() {
+    // The PNG now; the difference, which takes seconds for a feature-length
+    // run, off the window's thread, both numbered alike and said together.
+    if (!shown_graph()) {
+        return;
+    }
+    const QString folder = quick_saves.export_folder();
+    const std::optional<std::pair<int, int>> pair = difference_on_ ? shown_difference_pair() : std::nullopt;
+    std::vector<QString> names{png_name()};
+    if (pair) {
+        names.push_back(difference_name(*pair));
+    }
+    std::error_code ignored;
+    std::filesystem::create_directories(path_of(folder), ignored);
+    std::set<std::filesystem::path> reserved;
+    const std::vector<QString> paths = quick_save_paths(folder, names, reserved);
+    ExportOutcome png = save_as(paths.front(), [this](const QString& out) {
+        return render_export_image().save(out) ? QString() : could_not_write(out);
+    });
+    if (!png.error.isEmpty() || !pair) {
+        report_to(export_report, png);
+        return;
+    }
+    write_difference(*pair, paths.back(), png.files);
 }
 
 void GraphPanel::on_export_png() {
-    const std::string key(current_metric().key);
-    const QString suggested = suggested_file_name(export_stem() + "_" + QString::fromStdString(key), ".png");
-    const QString path = dialogs.save_file(app::tr("Export graph"), suggested, app::tr("PNG image (*.png)"));
-    if (!path.isEmpty() && !render_export_image().save(path)) {
-        dialogs.alert(app::tr("Export failed"), app::tr("Could not write {path}", {{"path", path}}));
-    }
+    const QString path = dialogs.save_file(app::tr("Export graph"), png_name(), app::tr("PNG image (*.png)"));
+    report_to(export_report, save_as(path, [this](const QString& out) {
+        return render_export_image().save(out) ? QString() : could_not_write(out);
+    }));
 }
 
 void GraphPanel::on_export_difference() {
@@ -2300,30 +2368,45 @@ void GraphPanel::on_export_difference() {
     if (!pair) {
         return;
     }
-    const SeriesEntry& first = entries_.at(pair->first);
-    const SeriesEntry& second = entries_.at(pair->second);
+    const QString path =
+        dialogs.save_file(app::tr("Export the difference"), difference_name(*pair), app::tr("CSV file (*.csv)"));
+    if (!path.isEmpty()) {
+        write_difference(*pair, path, {});
+    }
+}
+
+QString GraphPanel::difference_name(const std::pair<int, int>& pair) const {
     // Named after the two test videos, as the command line's --difference
     // names it: a line's label carries " (saved)" and the like. Two runs of
     // one video, or one with no file, keep the lines' labels.
+    const SeriesEntry& first = entries_.at(pair.first);
+    const SeriesEntry& second = entries_.at(pair.second);
     const std::string first_name = platform::path_text(first.result->distorted.stem());
     const std::string second_name = platform::path_text(second.result->distorted.stem());
     const bool by_video = !first_name.empty() && !second_name.empty() && first_name != second_name;
-    const QString suggested = QString::fromStdString(
+    return QString::fromStdString(
         safe_filename_stem(by_video ? difference_label(first_name, second_name)
                                     : difference_label(first.label.toStdString(), second.label.toStdString())) +
         ".csv");
-    const QString path =
-        dialogs.save_file(app::tr("Export the difference"), suggested, app::tr("CSV file (*.csv)"));
-    if (path.isEmpty()) {
-        return;
-    }
-    file_writes_->submit(app::tr("export {name}", {{"name", name_of(path_of(path))}}),
-                         [first = first.result, second = second.result, out = path_of(path)] {
-                             export_difference_csv(*first, *second, out);
-                         });
-    export_destination_ = path;
-    status_label_->show();
-    status_label_->setText(app::tr("Exporting the difference to {path}...", {{"path", path}}));
+}
+
+void GraphPanel::write_difference(const std::pair<int, int>& pair, const QString& path, const QStringList& with) {
+    // Off the window's thread (a feature-length run's is big), said on the
+    // indicator once written, with the files `with` written before it.
+    const QString description = app::tr("export {name}", {{"name", name_of(path_of(path))}});
+    file_writes_->submit(
+        description,
+        [first = entries_.at(pair.first).result, second = entries_.at(pair.second).result, out = path_of(path)] {
+            export_difference_csv(*first, *second, out);
+        },
+        [this, path, with, description](const QString& error) {
+            report_to(export_report,
+                      error.isEmpty() ? ExportOutcome{with + QStringList{path}, {}, {}}
+                                      : ExportOutcome{{},
+                                                      tr_message(error),
+                                                      app::tr("Could not {description}: {error}",
+                                                              {{"description", description}, {"error", tr_message(error)}})});
+        });
 }
 
 std::optional<std::pair<int, int>> GraphPanel::shown_difference_pair() const {
@@ -2331,11 +2414,29 @@ std::optional<std::pair<int, int>> GraphPanel::shown_difference_pair() const {
     return page == pages_.end() ? std::nullopt : page->second->difference_pair();
 }
 
+std::vector<std::string> GraphPanel::selected_identities() const {
+    std::set<int> rows;
+    for (const QModelIndex& index : stats_table_->selectionModel()->selectedIndexes()) {
+        rows.insert(index.row());
+    }
+    std::vector<std::string> identities;
+    for (const int row : rows) {
+        if (const QTableWidgetItem* item = stats_table_->item(row, 0)) {
+            const auto entry = entries_.find(item->data(Qt::UserRole).toInt());
+            if (entry != entries_.end()) {
+                identities.push_back(entry->second.identity);
+            }
+        }
+    }
+    return identities;
+}
+
 void GraphPanel::fill_stats_menu(QMenu& menu, int row, StatsMenu& items, bool graph) const {
-    // The archive first, as the Videos table's menu: the clicked line's
-    // video's, where the window can export it on its own (not a line of a
-    // saved run loaded), and all the videos', each of what Settings'
-    // Exports include and named after it; then the quick grabs.
+    // The archive of the clicked line's video first, as the Videos table's
+    // menu has it, where the window can export it on its own (not a line of
+    // a saved run loaded), of what Settings' Exports include and named
+    // after it; then the quick grabs. Every video's archive is the tab
+    // bar's Export panel's.
     if (const QTableWidgetItem* item = stats_table_->item(row, 0)) {
         const auto entry = entries_.find(item->data(Qt::UserRole).toInt());
         if (entry != entries_.end()) {
@@ -2347,10 +2448,6 @@ void GraphPanel::fill_stats_menu(QMenu& menu, int row, StatsMenu& items, bool gr
     if (!items.identity.empty() && video_exportable && video_exportable(items.identity)) {
         items.this_video = menu.addAction(export_action_text(ExportScope::this_video, chosen));
         items.this_video->setEnabled(anything);
-    }
-    if (videos_exportable) {
-        items.all_videos = menu.addAction(export_action_text(ExportScope::all_videos, chosen));
-        items.all_videos->setEnabled(anything && videos_exportable());
     }
     add_quick_grabs(menu, items, graph, true);
 }
@@ -2382,9 +2479,6 @@ void GraphPanel::connect_menu(const StatsMenu& items) {
     if (items.this_video != nullptr) {
         connect(items.this_video, &QAction::triggered, this,
                 [this, identity = items.identity] { emit video_export_requested(identity); });
-    }
-    if (items.all_videos != nullptr) {
-        connect(items.all_videos, &QAction::triggered, this, [this] { emit all_videos_export_requested(); });
     }
     if (items.graph != nullptr) {
         connect(items.graph, &QAction::triggered, this, [this] { on_export_png(); });
@@ -2429,25 +2523,6 @@ std::vector<GraphPanel::Run> GraphPanel::runs() const {
         runs.push_back({entry.result, entry.label, entry.identity, true, entry.shown});
     }
     return runs;
-}
-
-void GraphPanel::on_file_writes_idle() {
-    // The export is done: said.
-    if (!file_writes_->idle()) {
-        return;
-    }
-    if (export_destination_) {
-        status_label_->setText(app::tr("Export complete: {path}", {{"path", *export_destination_}}));
-        status_label_->show();
-        export_destination_.reset();
-    }
-}
-
-void GraphPanel::on_file_write_failed(const QString& description, const QString& error) {
-    export_destination_.reset();  // not complete: on_file_writes_idle comes next, and must not say it is
-    status_label_->setText(
-        app::tr("Could not {description}: {error}", {{"description", description}, {"error", error}}));
-    status_label_->show();
 }
 
 }  // namespace vml::app

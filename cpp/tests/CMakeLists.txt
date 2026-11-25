@@ -133,6 +133,8 @@ if(TARGET vml_app)
         app/graph_bundle_test.cpp
         app/chart_test.cpp
         app/click_twice_test.cpp
+        app/export_indicator_test.cpp
+        app/export_panel_test.cpp
         app/film_grain_control_test.cpp
         app/frame_drag_test.cpp
         app/resample_target_dialog_test.cpp
@@ -147,6 +149,7 @@ if(TARGET vml_app)
         app/notifier_test.cpp
         app/options_panel_test.cpp
         app/playback_test.cpp
+        app/quick_save_test.cpp
         app/results_export_test.cpp
         app/saved_results_panel_test.cpp
         app/settings_panel_test.cpp

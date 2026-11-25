@@ -418,10 +418,10 @@ void MainWindow::show_table_menu(const QPoint& position) {
         recalculate = menu.addAction(app::tr("Recalculate selected metrics (ignore cached/previous results)"));
         menu.addSeparator();
     }
-    // The rows selected, where the row clicked is one of several selected,
-    // as the Export button takes them; else the video clicked, once all its
-    // metrics are scored; then all the videos'. Each of what Settings'
-    // Exports include.
+    // The rows selected, where the row clicked is one of several selected;
+    // else the video clicked, once all its metrics are scored. Each of what
+    // Settings' Exports include. Every video's is the tab bar's Export
+    // panel's.
     const int clicked = distorted_table_->rowAt(position.y());
     const bool scored = clicked >= 0 && scored_video(*rows_[static_cast<std::size_t>(clicked)]).has_value();
     const bool in_selection = selected.size() > 1 && selected.contains(clicked);
@@ -441,12 +441,11 @@ void MainWindow::show_table_menu(const QPoint& position) {
         this_video = menu.addAction(export_action_text(ExportScope::this_video, items));
         this_video->setEnabled(anything);
     }
-    QAction* all_videos = menu.addAction(export_action_text(ExportScope::all_videos, items));
-    all_videos->setEnabled(anything && !exported_runs().empty());
-    // Then the Export button's quick grabs, of the same rows.
+    // Then the quick grabs (the save icon's Save as...), of the same rows.
     menu.addSeparator();
     SavedResultsPanel::add_quick_grabs(menu, !export_menu_rows().empty(),
-                                       [this](SavedResultsPanel::Export kind) { export_rows_as(kind); });
+                                       [this](SavedResultsPanel::Export kind) { export_rows_as(kind); },
+                                       videos_refused());
     const QAction* chosen = menu.exec(distorted_table_->viewport()->mapToGlobal(position));
     if (chosen != nullptr && chosen == recalculate) {
         recompute_rows(std::vector<int>(selected.begin(), selected.end()));
@@ -454,8 +453,6 @@ void MainWindow::show_table_menu(const QPoint& position) {
         export_this_video(clicked);
     } else if (chosen != nullptr && chosen == selected_videos) {
         export_rows();
-    } else if (chosen != nullptr && chosen == all_videos) {
-        export_all_videos();
     }
 }
 

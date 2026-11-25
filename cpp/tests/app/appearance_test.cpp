@@ -19,7 +19,9 @@
 #include <QDir>
 #include <QBoxLayout>
 #include <QFrame>
+#include <QAbstractItemView>
 #include <QGroupBox>
+#include <QHeaderView>
 #include <QImage>
 #include <QLabel>
 #include <QLineEdit>
@@ -40,6 +42,7 @@
 
 #include "chart.h"
 #include "main_window.h"
+#include "quick_save.h"
 #include "theme.h"
 
 namespace vml::app {
@@ -284,6 +287,56 @@ TEST_F(Appearance, EveryRoleInTheWindowIsOneModernStyles) {
     const auto* graph_card = window_->findChild<QWidget*>("graphCard");
     ASSERT_NE(graph_card, nullptr);
     EXPECT_EQ(graph_card->property("vmlRole").toString(), "card");
+}
+
+// Every table, list or chart on a tab that shows data has a save icon on its
+// card (docs/ARCHITECTURE.md, "Exports"): the nearest card, framed box or, with
+// neither, the tab's page around it holds a SaveButton. A view that is not data
+// to save (a list of files to read, one to pick from) is marked so
+// (not_exported), with why where it is made. A new card without a save icon
+// fails here.
+TEST_F(Appearance, EveryCardThatShowsDataHasASaveIcon) {
+    const QTabWidget* tabs = nullptr;
+    for (const QTabWidget* each : window_->findChildren<QTabWidget*>()) {
+        if (each->count() > 0 && each->tabText(0) == "Videos") {
+            tabs = each;
+        }
+    }
+    ASSERT_NE(tabs, nullptr);
+    int views = 0;
+    for (int index = 0; index < tabs->count(); ++index) {
+        QWidget* page = tabs->widget(index);
+        if (tabs->tabText(index) == "Settings") {
+            continue;  // its lists are settings, not data
+        }
+        for (QWidget* view : page->findChildren<QWidget*>()) {
+            const bool shows = (qobject_cast<QAbstractItemView*>(view) != nullptr &&
+                                qobject_cast<QHeaderView*>(view) == nullptr) ||
+                               qobject_cast<ChartWidget*>(view) != nullptr ||
+                               QString(view->metaObject()->className()).endsWith("RateCurveChart");
+            if (!shows || is_not_exported(view)) {
+                continue;
+            }
+            bool in_a_combo = false;  // a combo box's list, not a view of its own
+            QWidget* holder = view->parentWidget();
+            for (QWidget* up = view->parentWidget(); up != nullptr && up != page; up = up->parentWidget()) {
+                in_a_combo = in_a_combo || qobject_cast<QComboBox*>(up) != nullptr;
+            }
+            if (in_a_combo) {
+                continue;
+            }
+            while (holder != page && holder->property("vmlRole").toString() != "card" &&
+                   qobject_cast<QGroupBox*>(holder) == nullptr) {
+                holder = holder->parentWidget();
+            }
+            ++views;
+            EXPECT_FALSE(holder->findChildren<SaveButton*>().isEmpty())
+                << tabs->tabText(index).toStdString() << ": " << view->metaObject()->className() << " "
+                << view->objectName().toStdString() << " in " << holder->metaObject()->className() << " "
+                << holder->objectName().toStdString() << " has no save icon on its card";
+        }
+    }
+    EXPECT_GE(views, 8);  // the tabs' tables, lists and charts were found at all
 }
 
 TEST_F(Appearance, ModernLight) {
