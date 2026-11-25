@@ -1218,6 +1218,10 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
+    // VML Modern: the other tabs' room around their cards (their layouts'
+    // own, Fusion's 9), so that the cards line up from tab to tab and the
+    // first one's top border is not drawn on the tab pane's line.
+    theme::modern_margins(this, QMargins(9, 9, 9, 9));
 
     // At the top, one table that is both the list of lines and their
     // statistics, shared by every metric's page: the first column has each
