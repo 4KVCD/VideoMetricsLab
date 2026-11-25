@@ -1,5 +1,6 @@
 {
  "strings": {
+  "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "La pire image de chaque creux, la pire d'abord jusqu'au clic sur un en-tête : une image à moins de 1 s d'une pire fait partie de son creux.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Le score de chaque métrique que choisit Paramètres > Résultats enregistrés, avec les statistiques et la façon dont il a été obtenu, une ligne par métrique, dans les formats cochés : ceux de toutes les vidéos dans un fichier (<video> - score details.json).",
   "Export score summary": "Exporter le résumé des scores",
   "Score summary": "Résumé des scores",
@@ -1275,7 +1276,6 @@
   "Shortest segment (frames):": "Segment le plus court (images) :",
   "Start": "Début",
   "The first {count} are listed; the exports have them all.": "Les {count} premiers sont listés ; les exports les contiennent tous.",
-  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "La pire image de chaque creux, la pire d'abord : une image à moins de 1 s d'une pire fait partie de son creux.",
   "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "Comparaison vidéo montre les vidéos de l'onglet Vidéos : la vidéo de cette courbe n'en fait pas partie. Ajoutez-la là-bas pour voir ses images.",
   "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "Les images de Comparaison vidéo s'arrêtent à {last}, la fin de sa vidéo la plus courte : l'image {frame} est au-delà.",
   "Weak segments": "Segments faibles",

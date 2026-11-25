@@ -1,5 +1,6 @@
 {
  "strings": {
+  "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "O pior quadro de cada queda, o pior primeiro até que se clique em um cabeçalho: um quadro a menos de 1 s de um pior faz parte da queda dele.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "A pontuação de cada métrica com as estatísticas e como foi feita que Configurações > Resultados salvos escolhe, uma linha por métrica, nos formatos marcados: as de todos os vídeos em um arquivo (<video> - score details.json).",
   "Export score summary": "Exportar resumo de pontuações",
   "Score summary": "Resumo de pontuações",
@@ -1275,7 +1276,6 @@
   "Shortest segment (frames):": "Segmento mais curto (quadros):",
   "Start": "Início",
   "The first {count} are listed; the exports have them all.": "Os primeiros {count} estão listados; as exportações têm todos.",
-  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "O pior quadro de cada queda, o pior primeiro: um quadro a menos de 1 s de um pior faz parte da queda dele.",
   "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "Comparar vídeos mostra os vídeos da aba Vídeos: o vídeo desta linha não é um deles. Adicione-o lá para ver seus quadros.",
   "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "Os quadros de Comparar vídeos terminam em {last}, o fim do seu vídeo mais curto: o quadro {frame} fica depois disso.",
   "Weak segments": "Segmentos fracos",

@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <set>
 #include <cmath>
+#include <limits>
 #include <fstream>
 #include <iterator>
 #include <span>
@@ -50,11 +51,62 @@ QString condition_label(const WeakCondition& condition) {
            qt_text(metric.format_value(condition.threshold));
 }
 
-QTableWidgetItem* cell(const QString& text, bool number = true) {
-    auto* item = new QTableWidgetItem(text);
+// A list's cell sorts by its number (a frame, a time, a score) where it has
+// one, and by its text where it has none ("Weak by"): as text, 100 would
+// come before 25. No score (none at that frame) sorts after every score,
+// whichever way the column is sorted.
+constexpr int sort_role = Qt::UserRole + 1;
+
+class SortedItem : public QTableWidgetItem {
+public:
+    using QTableWidgetItem::QTableWidgetItem;
+    bool operator<(const QTableWidgetItem& other) const override {
+        const QVariant mine = data(sort_role);
+        const QVariant theirs = other.data(sort_role);
+        if (!mine.isValid() || !theirs.isValid()) {
+            return QTableWidgetItem::operator<(other);
+        }
+        const double a = mine.toDouble();
+        const double b = theirs.toDouble();
+        if (std::isnan(a) || std::isnan(b)) {
+            if (std::isnan(a) == std::isnan(b)) {
+                return false;
+            }
+            // Descending, Qt asks whether the other is less than this one:
+            // the score without a value is then the "less" one, to come last.
+            const QTableWidget* table = tableWidget();
+            const bool descending =
+                table != nullptr && table->horizontalHeader()->sortIndicatorOrder() == Qt::DescendingOrder;
+            return descending ? std::isnan(a) : std::isnan(b);
+        }
+        return a < b;
+    }
+};
+
+QTableWidgetItem* cell(const QString& text, bool number = true, std::optional<double> key = std::nullopt) {
+    auto* item = new SortedItem(text);
     item->setTextAlignment(number ? (Qt::AlignRight | Qt::AlignVCenter) : (Qt::AlignLeft | Qt::AlignVCenter));
+    if (key) {
+        item->setData(sort_role, *key);
+    }
     return item;
 }
+
+// A list's heading, clicked to sort it. The arrow's room is in every column
+// from the start, its indicator "shown" with no column sorted: Qt widens
+// every column by it once it is shown, and showing it on the first click
+// moved the columns under the pointer. The lists sort themselves
+// (sort_list), never with setSortingEnabled, which shows and hides the
+// indicator as it is turned on and off.
+void sortable_heading(QTableWidget* table) {
+    QHeaderView* heading = table->horizontalHeader();
+    heading->setSectionsClickable(true);
+    heading->setSortIndicatorShown(true);
+    heading->setSortIndicator(-1, Qt::AscendingOrder);
+}
+
+// A score's sort key: none sorts last (SortedItem).
+double key_of(const std::optional<double>& value) { return value.value_or(std::numeric_limits<double>::quiet_NaN()); }
 
 // `measured`: the columns sized to their contents as they change, for a
 // short table; else sized once a fill ends (fit_list). A list of up to 1000
@@ -460,6 +512,13 @@ QWidget* WorstFramesTab::build_lists() {
     worst_head->addWidget(save_button(Card::worst));
     worst->addLayout(worst_head);
     worst_table_ = make_table(false);  // sized by fit_list
+    sortable_heading(worst_table_);
+    // A quick second click comes as a double-click, which the heading takes
+    // for no click (Windows sends no second press): it is a click too.
+    for (const auto heard : {&QHeaderView::sectionClicked, &QHeaderView::sectionDoubleClicked}) {
+        connect(worst_table_->horizontalHeader(), heard, this,
+                [this](int column) { header_clicked(worst_table_, worst_sort_, column); });
+    }
     offer_menu(worst_table_, [this](QMenu* menu) { fill_worst_menu(menu); });
     connect(worst_table_, &QTableWidget::itemSelectionChanged, this, [this] {
         const QList<QTableWidgetItem*> selected = worst_table_->selectedItems();
@@ -507,6 +566,13 @@ QWidget* WorstFramesTab::build_lists() {
     segments_head->addWidget(save_button(Card::segments));
     segments->addLayout(segments_head);
     segments_table_ = make_table(false);  // sized by fit_list
+    sortable_heading(segments_table_);
+    // A quick second click comes as a double-click, which the heading takes
+    // for no click (Windows sends no second press): it is a click too.
+    for (const auto heard : {&QHeaderView::sectionClicked, &QHeaderView::sectionDoubleClicked}) {
+        connect(segments_table_->horizontalHeader(), heard, this,
+                [this](int column) { header_clicked(segments_table_, segments_sort_, column); });
+    }
     offer_menu(segments_table_, [this](QMenu* menu) { fill_segments_menu(menu); });
     connect(segments_table_, &QTableWidget::itemSelectionChanged, this, [this] {
         const QList<QTableWidgetItem*> selected = segments_table_->selectedItems();
@@ -520,12 +586,12 @@ QWidget* WorstFramesTab::build_lists() {
             const QSignalBlocker blocker(worst_table_);
             worst_table_->clearSelection();
         }
-        const int row = selected.front()->row();
-        if (row >= 0 && static_cast<std::size_t>(row) < segments_.size() && chosen_video() != nullptr) {
-            kept_ = Kept{chosen_video()->identity, true, {}, segments_[static_cast<std::size_t>(row)].first_frame};
+        const std::optional<std::size_t> index = segment_of_row(selected.front()->row());
+        if (index && chosen_video() != nullptr) {
+            kept_ = Kept{chosen_video()->identity, true, {}, segments_[*index].first_frame};
         }
-        if (row >= 0 && static_cast<std::size_t>(row) < segments_.size() && chart_ != nullptr) {
-            const WeakSegment& segment = segments_[static_cast<std::size_t>(row)];
+        if (index && chart_ != nullptr) {
+            const WeakSegment& segment = segments_[*index];
             chart_->set_highlight(std::pair(segment.start_time, segment.end_time));
             chart_->set_cursor_time(std::nullopt);
             chart_->bring_into_view(segment.start_time);
@@ -969,6 +1035,7 @@ void WorstFramesTab::refresh_chart() {
 void WorstFramesTab::fill_worst() {
     // Its columns fitted to what it shows, on every way out, emptied too.
     const auto fitted = qScopeGuard([this] {
+        sort_list(worst_table_, worst_sort_);
         fit_list(worst_table_, worst_width_);
         filling_ = false;
     });
@@ -1029,17 +1096,17 @@ void WorstFramesTab::fill_worst() {
                          qt_text(definition->format_value(score_at(column_samples, worst_[row].frame)));
         }
         const QString tooltip = every.join(QLatin1Char('\n'));
-        QTableWidgetItem* frame = cell(QString::number(worst_[row].frame));
+        QTableWidgetItem* frame = cell(QString::number(worst_[row].frame), true, worst_[row].frame);
         frame->setData(Qt::UserRole, worst_[row].frame);
         frame->setToolTip(tooltip);
         worst_table_->setItem(r, 0, frame);
-        QTableWidgetItem* time = cell(time_text(worst_[row].time));
+        QTableWidgetItem* time = cell(time_text(worst_[row].time), true, worst_[row].time);
         time->setToolTip(tooltip);
         worst_table_->setItem(r, 1, time);
         for (std::size_t c = 0; c < columns.size(); ++c) {
             const auto& [definition, column_samples] = columns[c];
-            QTableWidgetItem* score =
-                cell(qt_text(definition->format_value(score_at(column_samples, worst_[row].frame))));
+            const std::optional<double> value = score_at(column_samples, worst_[row].frame);
+            QTableWidgetItem* score = cell(qt_text(definition->format_value(value)), true, key_of(value));
             score->setToolTip(tooltip);
             worst_table_->setItem(r, static_cast<int>(c) + 2, score);
         }
@@ -1047,8 +1114,8 @@ void WorstFramesTab::fill_worst() {
     worst_note_->setText(samples->per_second
                              ? app::tr("CVVDP scores each second: a row is its second's first frame, and a dip is the "
                                        "seconds within 1 s of a worse one.")
-                             : app::tr("The worst frame of each dip, worst first: a frame within 1 s of a worse one is "
-                                       "part of its dip."));
+                             : app::tr("The worst frame of each dip, worst first until a heading is clicked: a frame "
+                                       "within 1 s of a worse one is part of its dip."));
 }
 
 void WorstFramesTab::fill_segments() {
@@ -1081,10 +1148,12 @@ void WorstFramesTab::fill_segments() {
     segments_table_->setRowCount(rows);
     for (int r = 0; r < rows; ++r) {
         const WeakSegment& segment = segments_[static_cast<std::size_t>(r)];
-        segments_table_->setItem(r, 0, cell(QString::number(segment.first_frame)));
-        segments_table_->setItem(r, 1, cell(QString::number(segment.last_frame)));
-        segments_table_->setItem(r, 2, cell(QString::number(segment.frames())));
-        QTableWidgetItem* start = cell(time_text(segment.start_time));
+        QTableWidgetItem* first = cell(QString::number(segment.first_frame), true, segment.first_frame);
+        first->setData(Qt::UserRole, r);  // its segment, wherever a sort puts the row
+        segments_table_->setItem(r, 0, first);
+        segments_table_->setItem(r, 1, cell(QString::number(segment.last_frame), true, segment.last_frame));
+        segments_table_->setItem(r, 2, cell(QString::number(segment.frames()), true, segment.frames()));
+        QTableWidgetItem* start = cell(time_text(segment.start_time), true, segment.start_time);
         start->setToolTip(app::tr("{start} to {end}", {{"start", time_text(segment.start_time)},
                                                          {"end", time_text(segment.end_time)}}));
         segments_table_->setItem(r, 3, start);
@@ -1107,10 +1176,12 @@ void WorstFramesTab::fill_segments() {
         for (const SegmentMetric& metric : segment.metrics) {
             const MetricDefinition& definition = metric_definition(metric.key);
             const std::optional<double> end = segment_end_value(metric, segment_end(current, definition));
-            segments_table_->setItem(r, column++, cell(qt_text(definition.format_value(end))));
-            segments_table_->setItem(r, column++, cell(qt_text(definition.format_value(metric.mean))));
+            segments_table_->setItem(r, column++, cell(qt_text(definition.format_value(end)), true, key_of(end)));
+            segments_table_->setItem(r, column++,
+                                     cell(qt_text(definition.format_value(metric.mean)), true, metric.mean));
         }
     }
+    sort_list(segments_table_, segments_sort_);
     fit_list(segments_table_, segments_width_);
 }
 
@@ -1251,9 +1322,8 @@ void WorstFramesTab::show_details() {
                 text = frame_details(*frame);
             }
         } else if (const QList<QTableWidgetItem*> picked = segments_table_->selectedItems(); !picked.isEmpty()) {
-            const int row = picked.front()->row();
-            if (row >= 0 && static_cast<std::size_t>(row) < segments_.size()) {
-                text = segment_details(segments_[static_cast<std::size_t>(row)]);
+            if (const std::optional<std::size_t> index = segment_of_row(picked.front()->row())) {
+                text = segment_details(segments_[*index]);
             }
         }
     }
@@ -1358,6 +1428,60 @@ std::optional<int> WorstFramesTab::worst_frame_of_row(int row) const {
     return item != nullptr ? std::optional(item->data(Qt::UserRole).toInt()) : std::nullopt;
 }
 
+std::optional<std::size_t> WorstFramesTab::segment_of_row(int row) const {
+    const QTableWidgetItem* item = segments_table_->item(row, 0);
+    if (item == nullptr) {
+        return std::nullopt;
+    }
+    const auto index = static_cast<std::size_t>(item->data(Qt::UserRole).toInt());
+    return index < segments_.size() ? std::optional(index) : std::nullopt;
+}
+
+void WorstFramesTab::sort_list(QTableWidget* table, std::optional<ListSort>& sort) {
+    QHeaderView* header = table->horizontalHeader();
+    // The column sorted by is found again by its heading: the columns change
+    // with the metric shown and the conditions. Gone, the list's own order.
+    int column = -1;
+    for (int c = 0; sort && c < table->columnCount() && column < 0; ++c) {
+        if (const QTableWidgetItem* heading = table->horizontalHeaderItem(c);
+            heading != nullptr && heading->text() == sort->heading) {
+            column = c;
+        }
+    }
+    if (column < 0) {
+        if (table->columnCount() > 0) {
+            sort.reset();  // a column of another metric or condition: gone
+        }  // with none (no video, no metric for now), kept for when there are
+        header->setSortIndicator(-1, Qt::AscendingOrder);  // no arrow; its room kept (sortable_heading)
+        return;
+    }
+    header->setSortIndicator(column, sort->order);  // SortedItem reads the order
+    table->sortItems(column, sort->order);
+}
+
+void WorstFramesTab::header_clicked(QTableWidget* table, std::optional<ListSort>& sort, int column) {
+    const QTableWidgetItem* heading = table->horizontalHeaderItem(column);
+    if (heading == nullptr) {
+        return;
+    }
+    // Ascending, then descending, then the list's own order again (worst
+    // first, segments in time): Qt's own sorting has no way back to it.
+    const bool same = sort && sort->heading == heading->text();
+    if (!same) {
+        sort = ListSort{heading->text(), Qt::AscendingOrder};
+    } else if (sort->order == Qt::AscendingOrder) {
+        sort->order = Qt::DescendingOrder;
+    } else {
+        sort.reset();
+    }
+    if (table == worst_table_) {
+        fill_worst();
+    } else {
+        fill_segments();
+    }
+    select_kept();  // the row selected stays selected, wherever it now is
+}
+
 void WorstFramesTab::keep_worst_frame(const std::string& identity, const QString& metric, int frame) {
     // Only for the list opened from here (the same video and metric): a
     // list of another metric, from Metric Graphs, leaves the row here as it is.
@@ -1381,8 +1505,8 @@ void WorstFramesTab::select_kept() {
         if (kept_->segment) {
             // The segment holding its first frame: the same one, or the one
             // it became under rules changed since.
-            const WeakSegment& segment = segments_[static_cast<std::size_t>(row)];
-            if (segment.first_frame <= kept_->frame && kept_->frame <= segment.last_frame) {
+            const std::optional<std::size_t> index = segment_of_row(row);
+            if (index && segments_[*index].first_frame <= kept_->frame && kept_->frame <= segments_[*index].last_frame) {
                 found = row;
             }
         } else if (worst_frame_of_row(row) == kept_->frame) {
@@ -1430,9 +1554,8 @@ void WorstFramesTab::open_selected() {
         return;
     }
     if (const QList<QTableWidgetItem*> segment = segments_table_->selectedItems(); !segment.isEmpty()) {
-        const int row = segment.front()->row();
-        if (row >= 0 && static_cast<std::size_t>(row) < segments_.size()) {
-            emit open_requested(video->identity, segments_[static_cast<std::size_t>(row)].first_frame, {});
+        if (const std::optional<std::size_t> index = segment_of_row(segment.front()->row())) {
+            emit open_requested(video->identity, segments_[*index].first_frame, {});
         }
     }
 }

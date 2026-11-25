@@ -225,6 +225,20 @@ private:
     // three videos at a time.
     void fit_videos_height();
     std::optional<int> worst_frame_of_row(int row) const;
+    // The segment a Weak segments row shows, wherever a sort has put it.
+    std::optional<std::size_t> segment_of_row(int row) const;
+    // A list sorted by a column (a click on its heading): kept by heading
+    // while the list is filled again, as long as that column is there.
+    struct ListSort {
+        QString heading;
+        Qt::SortOrder order = Qt::AscendingOrder;
+    };
+    std::optional<ListSort> worst_sort_;
+    std::optional<ListSort> segments_sort_;
+    // The list put in `sort`'s order, after it is filled in its own.
+    void sort_list(QTableWidget* table, std::optional<ListSort>& sort);
+    // A click on a list's heading: ascending, descending, then its own order.
+    void header_clicked(QTableWidget* table, std::optional<ListSort>& sort, int column);
     void open_selected();
     // The row last selected in either list, selected again (and scrolled
     // to) after the lists are filled again: they are on every refresh, as

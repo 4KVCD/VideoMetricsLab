@@ -1,5 +1,6 @@
 {
  "strings": {
+  "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Das schlechteste Bild jedes Einbruchs, das schlechteste zuerst, bis auf eine Spaltenüberschrift geklickt wird: Ein Bild innerhalb 1 s um ein schlechteres gehört zu dessen Einbruch.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Der Wert jeder Metrik, den Einstellungen > Gespeicherte Ergebnisse wählt, mit den Statistiken und wie er entstand, eine Zeile pro Metrik, in den angehakten Formaten: die aller Videos in einer Datei (<video> - score details.json).",
   "Export score summary": "Wertübersicht exportieren",
   "Score summary": "Wertübersicht",
@@ -1275,7 +1276,6 @@
   "Shortest segment (frames):": "Kürzester Abschnitt (Bilder):",
   "Start": "Beginn",
   "The first {count} are listed; the exports have them all.": "Die ersten {count} sind aufgelistet; die Exporte enthalten alle.",
-  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "Das schlechteste Bild jedes Einbruchs, das schlechteste zuerst: Ein Bild innerhalb 1 s um ein schlechteres gehört zu dessen Einbruch.",
   "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "Der Videovergleich zeigt die Videos des Tabs „Videos“: Das Video dieser Linie ist keins davon. Fügen Sie es dort hinzu, um seine Bilder zu sehen.",
   "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "Die Bilder des Videovergleichs enden bei {last}, dem Ende seines kürzesten Videos: Bild {frame} liegt dahinter.",
   "Weak segments": "Schwache Abschnitte",

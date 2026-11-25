@@ -2,11 +2,13 @@
 // segments, with the conditions, the profiles and the presets that Metric
 // Graphs' Weak segments dialog had.
 #include <QAction>
+#include <QApplication>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QHeaderView>
 #include <QLabel>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QTabBar>
 #include <QTableWidget>
@@ -190,6 +192,151 @@ TEST(WorstFramesTab, ListsTheDipsAndTheSegmentsAndOpensThemInVideoCompare) {
     suggested.sort();
     EXPECT_EQ(suggested, (QStringList{"a.vmaf.segments.csv", "a.vmaf.segments.json", "a.vmaf.worst.csv",
                                       "a.vmaf.worst.json", "a_vmaf.png"}));
+}
+
+// A click on a list's heading sorts it by that column, by number (120 after
+// 70, where text would put it before): ascending, descending, then the
+// list's own order. A row keeps its frame wherever it is sorted to: the one
+// selected stays selected, a double-click opens that frame, and Video
+// Compare steps through the list as it is shown. A segment's row opens its
+// own segment.
+TEST(WorstFramesTab, SortsItsListsAndEachRowKeepsItsFrame) {
+    std::vector<float> values(150, 95.0F);
+    values[10] = 40.0F;
+    values[70] = 50.0F;
+    values[120] = 45.0F;
+    Settings settings;
+    Bench bench(settings);
+    WorstFramesTab& tab = bench.tab;
+    tab.set_videos({{"row:a", "a", vmaf_result("a.mkv", values)}});
+    QTableWidget& list = *tab.worst_table();
+    const auto frames = [&list] {
+        QStringList shown;
+        for (int row = 0; row < list.rowCount(); ++row) {
+            shown << list.item(row, 0)->text();
+        }
+        return shown;
+    };
+    ASSERT_EQ(frames(), (QStringList{"10", "120", "70"}));  // worst first
+    QHeaderView* heading = list.horizontalHeader();
+
+    emit heading->sectionClicked(0);  // Frame, ascending
+    EXPECT_EQ(frames(), (QStringList{"10", "70", "120"}));
+    EXPECT_EQ(heading->sortIndicatorSection(), 0);  // its arrow on Frame
+    list.selectRow(2);  // frame 120
+    emit heading->sectionClicked(0);  // descending
+    EXPECT_EQ(frames(), (QStringList{"120", "70", "10"}));
+    ASSERT_EQ(list.selectedItems().size(), list.columnCount());
+    EXPECT_EQ(list.selectedItems().front()->row(), 0);  // still frame 120
+
+    std::pair<std::string, int> asked;
+    WorstFrameList handed;
+    QObject::connect(&tab, &WorstFramesTab::open_requested,
+                     [&](const std::string& identity, int frame, const WorstFrameList& stops) {
+                         asked = {identity, frame};
+                         handed = stops;
+                     });
+    emit list.cellDoubleClicked(0, 0);
+    EXPECT_EQ(asked, (std::pair<std::string, int>{"row:a", 120}));
+    ASSERT_EQ(handed.stops.size(), 3U);
+    EXPECT_EQ(handed.stops[0].frame, 120);  // stepped through as shown
+    EXPECT_EQ(handed.stops[2].frame, 10);
+
+    emit heading->sectionClicked(0);  // the list's own order again
+    EXPECT_EQ(frames(), (QStringList{"10", "120", "70"}));
+    EXPECT_EQ(heading->sortIndicatorSection(), -1);  // no arrow
+
+    // Weak segments, by First descending: the last segment first, and its
+    // row opens it.
+    QTableWidget& segments = *tab.segments_table();
+    ASSERT_EQ(tab.segments().size(), 3U);
+    emit segments.horizontalHeader()->sectionClicked(0);
+    emit segments.horizontalHeader()->sectionClicked(0);
+    EXPECT_EQ(segments.item(0, 0)->text(), QString::number(tab.segments()[2].first_frame));
+    segments.selectRow(0);
+    emit segments.cellDoubleClicked(0, 0);
+    EXPECT_EQ(asked, (std::pair<std::string, int>{"row:a", tab.segments()[2].first_frame}));
+    EXPECT_TRUE(handed.stops.empty());
+}
+
+// Two quick clicks on a heading are two clicks: Windows sends the second as a
+// double-click (press, release, double-click, release), which the heading
+// took as no click at all, so a list clicked twice quickly stayed ascending
+// (the user, 2026-11-26: "eating mouse clicks or lagging").
+TEST(WorstFramesTab, AQuickSecondClickOnAHeadingSortsAgain) {
+    std::vector<float> values(150, 95.0F);
+    values[10] = 40.0F;
+    values[70] = 50.0F;
+    values[120] = 45.0F;
+    Settings settings;
+    Bench bench(settings);
+    WorstFramesTab& tab = bench.tab;
+    tab.set_videos({{"row:a", "a", vmaf_result("a.mkv", values)}});
+    QTableWidget& list = *tab.worst_table();
+    list.resize(600, 300);
+    list.show();
+    QHeaderView* heading = list.horizontalHeader();
+    QWidget* surface = heading->viewport();
+    const QPoint at(heading->sectionViewportPosition(0) + heading->sectionSize(0) / 2, heading->height() / 2);
+    const auto send = [&](QEvent::Type type) {
+        QMouseEvent event(type, at, surface->mapToGlobal(at), Qt::LeftButton,
+                          type == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(surface, &event);
+    };
+    const auto frames = [&list] {
+        QStringList shown;
+        for (int row = 0; row < list.rowCount(); ++row) {
+            shown << list.item(row, 0)->text();
+        }
+        return shown;
+    };
+    send(QEvent::MouseButtonPress);
+    send(QEvent::MouseButtonRelease);
+    EXPECT_EQ(frames(), (QStringList{"10", "70", "120"}));  // the first click: ascending
+    send(QEvent::MouseButtonDblClick);  // the second, as Windows sends it within its double-click time
+    send(QEvent::MouseButtonRelease);
+    EXPECT_EQ(frames(), (QStringList{"120", "70", "10"}));  // descending
+    send(QEvent::MouseButtonPress);  // a third, slower
+    send(QEvent::MouseButtonRelease);
+    EXPECT_EQ(frames(), (QStringList{"10", "120", "70"}));  // the list's own order
+}
+
+// A click on a heading sorts the list where it is: no column moves or
+// changes width, so the pointer stays on the heading it clicked (the user,
+// 2026-11-26: the sort arrow appearing widened the columns and shifted
+// them under the pointer).
+TEST(WorstFramesTab, SortingMovesNoColumn) {
+    std::vector<float> values(150, 95.0F);
+    values[10] = 40.0F;
+    values[70] = 50.0F;
+    values[120] = 45.0F;
+    Settings settings;
+    Bench bench(settings);
+    WorstFramesTab& tab = bench.tab;
+    tab.resize(1400, 900);
+    tab.show();
+    tab.set_videos({{"row:a", "a", vmaf_result("a.mkv", values)}});
+    for (QTableWidget* list : {tab.worst_table(), tab.segments_table()}) {
+        QHeaderView* heading = list->horizontalHeader();
+        const auto edges = [heading] {
+            std::vector<std::pair<int, int>> shown;
+            for (int c = 0; c < heading->count(); ++c) {
+                shown.emplace_back(heading->sectionViewportPosition(c), heading->sectionSize(c));
+            }
+            return shown;
+        };
+        const auto before = edges();
+        for (int click = 0; click < 3; ++click) {  // ascending, descending, its own order
+            for (int column = 0; column < heading->count(); ++column) {
+                emit heading->sectionClicked(column);
+                EXPECT_EQ(edges(), before) << "column " << column << ", click " << click;
+                // and not by hiding the arrow: shown, on the column just clicked
+                // (each click is on another column than the last: ascending)
+                EXPECT_TRUE(heading->isSortIndicatorShown());
+                EXPECT_EQ(heading->sortIndicatorSection(), column);
+            }
+        }
+    }
 }
 
 TEST(WorstFramesTab, DetailsTellsTheFrameUnderThePointerElseTheRowSelected) {

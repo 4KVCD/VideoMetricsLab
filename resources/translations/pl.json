@@ -1,5 +1,6 @@
 {
  "strings": {
+  "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Najgorsza klatka każdego spadku, najgorsza pierwsza, dopóki nie kliknie się nagłówka: klatka w odległości do 1 s od gorszej należy do jej spadku.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Ocena każdej metryki ze statystykami i tym, jak powstała, wybranymi w Ustawienia > Zapisane wyniki, jeden wiersz na metrykę, w zaznaczonych formatach: wszystkich wideo w jednym pliku (<video> - score details.json).",
   "Export score summary": "Eksportuj podsumowanie ocen",
   "Score summary": "Podsumowanie ocen",
@@ -1275,7 +1276,6 @@
   "Shortest segment (frames):": "Najkrótszy odcinek (klatki):",
   "Start": "Początek",
   "The first {count} are listed; the exports have them all.": "Na liście jest pierwszych {count}; eksporty zawierają wszystkie.",
-  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "Najgorsza klatka każdego spadku, najgorsza pierwsza: klatka w odległości do 1 s od gorszej należy do jej spadku.",
   "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "Porównanie wideo pokazuje wideo z karty Wideo: wideo tej linii nie jest jednym z nich. Dodaj je tam, aby zobaczyć jego klatki.",
   "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "Klatki Porównania wideo kończą się na {last}, końcu jego najkrótszego wideo: klatka {frame} jest dalej.",
   "Weak segments": "Słabe odcinki",

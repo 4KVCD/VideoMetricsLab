@@ -1,5 +1,6 @@
 {
  "strings": {
+  "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "各落ち込みの最悪フレーム（見出しをクリックするまでは悪い順）。より悪いフレームから 1 秒以内のフレームはその落ち込みに含まれます。",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "設定 > 保存済みの結果 で選ばれる各指標のスコアを、統計と作成方法とともに 1 指標 1 行で、チェックした形式で：すべての動画分を 1 つのファイルに（<video> - score details.json）。",
   "Export score summary": "スコアの概要をエクスポート",
   "Score summary": "スコアの概要",
@@ -1275,7 +1276,6 @@
   "Shortest segment (frames):": "最短の区間（フレーム）：",
   "Start": "開始",
   "The first {count} are listed; the exports have them all.": "最初の {count} 件を表示しています。エクスポートにはすべて含まれます。",
-  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "各落ち込みの最悪フレーム（悪い順）。より悪いフレームから 1 秒以内のフレームはその落ち込みに含まれます。",
   "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "動画比較は［動画］タブの動画を表示します。この線の動画はその中にありません。フレームを見るにはそこに追加してください。",
   "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "動画比較のフレームは最も短い動画の終わりである {last} までです。フレーム {frame} はその先です。",
   "Weak segments": "弱い区間",

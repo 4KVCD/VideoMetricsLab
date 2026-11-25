@@ -1,5 +1,6 @@
 {
  "strings": {
+  "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "أسوأ إطار في كل انخفاض، الأسوأ أولًا حتى يُنقر على عنوان عمود: الإطار الواقع ضمن 1 ث من إطار أسوأ جزء من انخفاضه.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "درجة كل مقياس التي تختارها الإعدادات > النتائج المحفوظة، مع إحصاءاتها وطريقة حسابها، صف لكل مقياس، بالصيغ المحددة: درجات كل الفيديوهات في ملف واحد (<video> - score details.json).",
   "Export score summary": "تصدير ملخص الدرجات",
   "Score summary": "ملخص الدرجات",
@@ -1275,7 +1276,6 @@
   "Shortest segment (frames):": "أقصر مقطع (إطارات):",
   "Start": "البداية",
   "The first {count} are listed; the exports have them all.": "تُسرد أول {count}؛ وتحتوي ملفات التصدير عليها كلها.",
-  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "أسوأ إطار في كل انخفاض، الأسوأ أولًا: الإطار الواقع ضمن 1 ث من إطار أسوأ جزء من انخفاضه.",
   "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "تعرض «مقارنة الفيديو» مقاطع تبويب «الفيديو»: فيديو هذا الخط ليس واحدًا منها. أضفه هناك لرؤية إطاراته.",
   "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "تنتهي إطارات «مقارنة الفيديو» عند {last}، نهاية أقصر فيديو فيها: الإطار {frame} بعدها.",
   "Weak segments": "المقاطع الضعيفة",

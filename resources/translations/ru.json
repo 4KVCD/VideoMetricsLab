@@ -1,5 +1,6 @@
 {
  "strings": {
+  "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Худший кадр каждого провала, худшие первыми, пока не нажат заголовок столбца: кадр в пределах 1 с от худшего относится к его провалу.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Оценка каждой метрики со статистикой и тем, как она сделана, что выбрано в Настройки > Сохранённые результаты, по строке на метрику, в отмеченных форматах: всех видео в одном файле (<video> - score details.json).",
   "Export score summary": "Экспортировать сводку оценок",
   "Score summary": "Сводка оценок",
@@ -1275,7 +1276,6 @@
   "Shortest segment (frames):": "Самый короткий участок (кадры):",
   "Start": "Начало",
   "The first {count} are listed; the exports have them all.": "В списке первые {count}; в экспорте есть все.",
-  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "Худший кадр каждого провала, худшие первыми: кадр в пределах 1 с от худшего относится к его провалу.",
   "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "«Сравнение видео» показывает видео со вкладки «Видео»: видео этой линии среди них нет. Добавьте его туда, чтобы увидеть его кадры.",
   "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "Кадры «Сравнения видео» заканчиваются на {last}, конце его самого короткого видео: кадр {frame} дальше.",
   "Weak segments": "Слабые участки",

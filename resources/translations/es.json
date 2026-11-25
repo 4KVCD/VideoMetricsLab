@@ -1,5 +1,6 @@
 {
  "strings": {
+  "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "El peor fotograma de cada caída, el peor primero hasta que se hace clic en un encabezado: un fotograma a menos de 1 s de uno peor forma parte de su caída.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "La puntuación de cada métrica que elige Configuración > Resultados guardados, con las estadísticas y cómo se obtuvo, una fila por métrica, en los formatos marcados: las de todos los videos en un archivo (<video> - score details.json).",
   "Export score summary": "Exportar resumen de puntuaciones",
   "Score summary": "Resumen de puntuaciones",
@@ -1275,7 +1276,6 @@
   "Shortest segment (frames):": "Segmento más corto (fotogramas):",
   "Start": "Inicio",
   "The first {count} are listed; the exports have them all.": "Se muestran los primeros {count}; las exportaciones los tienen todos.",
-  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "El peor fotograma de cada caída, el peor primero: un fotograma a menos de 1 s de uno peor forma parte de su caída.",
   "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "Comparar videos muestra los videos de la pestaña Videos: el video de esta línea no es uno de ellos. Añádelo allí para ver sus fotogramas.",
   "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "Los fotogramas de Comparar videos terminan en {last}, el final de su video más corto: el fotograma {frame} queda después.",
   "Weak segments": "Segmentos débiles",

@@ -1,5 +1,6 @@
 {
  "strings": {
+  "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "每次低谷的最差影格，在按一下欄標題前最差的在前：與更差影格相距 1 秒以內的影格屬於其低谷。",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "「設定 > 已儲存的結果」所選的每個指標的分數，及其統計和產生方式，每個指標一列，以勾選的格式：所有影片儲存在一個檔案中（<video> - score details.json）。",
   "Export score summary": "匯出分數摘要",
   "Score summary": "分數摘要",
@@ -1275,7 +1276,6 @@
   "Shortest segment (frames):": "最短片段（影格）：",
   "Start": "開始",
   "The first {count} are listed; the exports have them all.": "列出了前 {count} 個；匯出檔案包含全部。",
-  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "每次低谷的最差影格，最差的在前：與更差影格相距 1 秒以內的影格屬於其低谷。",
   "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "影片比較顯示「影片」分頁中的影片：這條線的影片不在其中。在那裡新增它即可查看其影格。",
   "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "影片比較的影格在 {last} 結束，即其中最短影片的結尾：第 {frame} 格在此之後。",
   "Weak segments": "弱片段",

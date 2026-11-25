@@ -1,5 +1,6 @@
 {
  "strings": {
+  "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Bingkai terburuk dari tiap penurunan, terburuk dulu sampai sebuah judul kolom diklik: bingkai dalam 1 d dari bingkai yang lebih buruk termasuk penurunannya.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Skor setiap metrik yang dipilih Pengaturan > Hasil tersimpan, beserta statistik dan cara pembuatannya, satu baris per metrik, dalam format yang dicentang: milik semua video dalam satu file (<video> - score details.json).",
   "Export score summary": "Ekspor ringkasan skor",
   "Score summary": "Ringkasan skor",
@@ -1275,7 +1276,6 @@
   "Shortest segment (frames):": "Segmen terpendek (bingkai):",
   "Start": "Mulai",
   "The first {count} are listed; the exports have them all.": "{count} yang pertama dicantumkan; ekspor memuat semuanya.",
-  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "Bingkai terburuk dari tiap penurunan, terburuk dulu: bingkai dalam 1 d dari bingkai yang lebih buruk termasuk penurunannya.",
   "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "Bandingkan video menampilkan video di tab Video: video garis ini bukan salah satunya. Tambahkan di sana untuk melihat bingkainya.",
   "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "Bingkai Bandingkan video berakhir di {last}, akhir video terpendeknya: bingkai {frame} berada setelahnya.",
   "Weak segments": "Segmen lemah",

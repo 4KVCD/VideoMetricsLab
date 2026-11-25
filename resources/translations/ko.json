@@ -1,5 +1,6 @@
 {
  "strings": {
+  "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "각 급락의 가장 나쁜 프레임, 머리글을 클릭하기 전까지는 나쁜 순서: 더 나쁜 프레임에서 1초 이내의 프레임은 그 급락에 속합니다.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "설정 > 저장된 결과가 고르는 각 지표의 점수를 통계, 계산 방식과 함께 지표마다 한 행으로 선택한 형식으로: 모든 동영상을 파일 하나에(<video> - score details.json).",
   "Export score summary": "점수 요약 내보내기",
   "Score summary": "점수 요약",
@@ -1275,7 +1276,6 @@
   "Shortest segment (frames):": "가장 짧은 구간(프레임):",
   "Start": "시작",
   "The first {count} are listed; the exports have them all.": "처음 {count}개만 표시합니다. 내보내기에는 모두 들어 있습니다.",
-  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "각 급락의 가장 나쁜 프레임, 나쁜 순서: 더 나쁜 프레임에서 1초 이내의 프레임은 그 급락에 속합니다.",
   "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "영상 비교는 [영상] 탭의 영상을 보여줍니다. 이 선의 영상은 그중에 없습니다. 프레임을 보려면 그곳에 추가하세요.",
   "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "영상 비교의 프레임은 가장 짧은 영상의 끝인 {last}에서 끝납니다. 프레임 {frame}은(는) 그 뒤입니다.",
   "Weak segments": "약한 구간",

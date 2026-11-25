@@ -1,5 +1,6 @@
 {
  "strings": {
+  "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Het slechtste frame van elke dip, slechtste eerst tot op een kolomkop wordt geklikt: een frame binnen 1 s van een slechter frame hoort bij diens dip.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "De score van elke metriek met de statistieken en hoe hij is gemaakt die Instellingen > Opgeslagen resultaten kiest, één rij per metriek, in de aangevinkte formaten: die van alle video's in één bestand (<video> - score details.json).",
   "Export score summary": "Scoresamenvatting exporteren",
   "Score summary": "Scoresamenvatting",
@@ -1275,7 +1276,6 @@
   "Shortest segment (frames):": "Kortste segment (frames):",
   "Start": "Begin",
   "The first {count} are listed; the exports have them all.": "De eerste {count} staan in de lijst; de exports bevatten ze allemaal.",
-  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "Het slechtste frame van elke dip, slechtste eerst: een frame binnen 1 s van een slechter frame hoort bij diens dip.",
   "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "Video vergelijken toont de video's van het tabblad Video's: de video van deze lijn is daar niet bij. Voeg hem daar toe om zijn frames te zien.",
   "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "De frames van Video vergelijken eindigen bij {last}, het einde van de kortste video: frame {frame} ligt daarna.",
   "Weak segments": "Zwakke segmenten",

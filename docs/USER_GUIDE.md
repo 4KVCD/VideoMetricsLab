@@ -107,6 +107,11 @@ calculated in resolution tests.
      than one condition and **any condition holds**, the **Weak by** column
      names those behind each segment.
 
+   Click a column's heading to sort its list by it: once ascending, again
+   descending, a third time back to the list's own order (Worst frames
+   worst first, Weak segments in time). Video Compare's **Previous worst**
+   and **Next worst** follow Worst frames as it is sorted.
+
    Click a row to mark it on the graph; double-click it to see it in Video
    Compare (a segment from its first frame). Point at the
    graph and **Details**, under the conditions, tells the frame there: its

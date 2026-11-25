@@ -1,5 +1,6 @@
 {
  "strings": {
+  "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Khung tệ nhất của mỗi chỗ tụt, tệ nhất trước cho đến khi nhấp vào một tiêu đề cột: một khung cách một khung tệ hơn không quá 1 s thuộc chỗ tụt của khung đó.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Điểm của từng chỉ số mà Cài đặt > Kết quả đã lưu chọn, kèm thống kê và cách tạo ra nó, mỗi chỉ số một hàng, theo các định dạng đã chọn: của mọi video trong một tệp (<video> - score details.json).",
   "Export score summary": "Xuất tóm tắt điểm",
   "Score summary": "Tóm tắt điểm",
@@ -1275,7 +1276,6 @@
   "Shortest segment (frames):": "Đoạn ngắn nhất (khung):",
   "Start": "Bắt đầu",
   "The first {count} are listed; the exports have them all.": "Liệt kê {count} mục đầu tiên; các tệp xuất có tất cả.",
-  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "Khung tệ nhất của mỗi chỗ tụt, tệ nhất trước: một khung cách một khung tệ hơn không quá 1 s thuộc chỗ tụt của khung đó.",
   "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "So sánh video hiển thị các video của thẻ Video: video của đường này không nằm trong đó. Hãy thêm nó vào đó để xem các khung.",
   "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "Các khung của So sánh video kết thúc ở {last}, cuối video ngắn nhất của nó: khung {frame} nằm sau đó.",
   "Weak segments": "Đoạn yếu",
