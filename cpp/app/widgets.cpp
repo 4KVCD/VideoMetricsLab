@@ -109,13 +109,19 @@ QRect CheckableHeaderView::section_indicator_rect(int section) const {
     return indicator_rect(QRect(sectionViewportPosition(section), 0, sectionSize(section), height()));
 }
 
-void CheckableHeaderView::mousePressEvent(QMouseEvent* event) {
-    const QPoint position = event->position().toPoint();
+bool CheckableHeaderView::toggle_at(const QPoint& position) {
     const int index = logicalIndexAt(position);
-    if (checked_.contains(index) && section_indicator_rect(index).contains(position)) {
-        checked_[index] = !checked_.value(index);
-        updateSection(index);
-        emit sectionToggled(index, checked_.value(index));
+    if (!checked_.contains(index) || !section_indicator_rect(index).contains(position)) {
+        return false;
+    }
+    checked_[index] = !checked_.value(index);
+    updateSection(index);
+    emit sectionToggled(index, checked_.value(index));
+    return true;
+}
+
+void CheckableHeaderView::mousePressEvent(QMouseEvent* event) {
+    if (toggle_at(event->position().toPoint())) {
         return;
     }
     // Anywhere else in the section is an ordinary header click: dragging the
@@ -123,6 +129,16 @@ void CheckableHeaderView::mousePressEvent(QMouseEvent* event) {
     // must not toggle: every near miss of the checkbox would quietly change
     // what the next run calculates.
     QHeaderView::mousePressEvent(event);
+}
+
+void CheckableHeaderView::mouseDoubleClickEvent(QMouseEvent* event) {
+    // Windows sends a quick second click as a double-click with no second
+    // press: on a checkbox it toggles it again, as a QCheckBox's does, and
+    // is no double-click on the heading (which sorts, as a click does).
+    if (toggle_at(event->position().toPoint())) {
+        return;
+    }
+    QHeaderView::mouseDoubleClickEvent(event);
 }
 
 // ------------------------------------------------------------- FrozenColumnsView
@@ -623,9 +639,13 @@ void FillColumnTable::freeze_leading_columns(int count) {
         }
     });
     // A click on a frozen heading sorts, and a right-click opens the
-    // header's menu, as on the table's own header.
+    // header's menu, as on the table's own header. A quick second click
+    // comes as a double-click (MainWindow's sorting takes it as a click):
+    // passed on too.
     connect(frozen_header, &QHeaderView::sectionClicked, this,
             [this](int column) { emit horizontalHeader()->sectionClicked(column); });
+    connect(frozen_header, &QHeaderView::sectionDoubleClicked, this,
+            [this](int column) { emit horizontalHeader()->sectionDoubleClicked(column); });
     connect(frozen_header, &QWidget::customContextMenuRequested, this, [this, frozen_header](const QPoint& position) {
         QHeaderView* own = horizontalHeader();
         emit own->customContextMenuRequested(own->mapFromGlobal(frozen_header->mapToGlobal(position)));

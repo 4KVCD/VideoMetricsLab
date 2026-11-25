@@ -3,14 +3,17 @@
 // selection read back for Metric Graphs and the exports, the weak segment
 // rules picked, and Delete (locked during a run).
 #include <QAction>
+#include <QApplication>
 #include <QComboBox>
 #include <QGroupBox>
+#include <QHeaderView>
 #include <QCoreApplication>
 #include <QLabel>
 #include <QGridLayout>
 #include <QLayout>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QToolButton>
@@ -569,6 +572,54 @@ TEST(SavedResultsPanel, ClickingARowKeepsTheListWhereItWas) {
 }
 
 // Two saved scores of VMAF (two models), and one of PSNR, of one comparison.
+// A quick second click on a heading reverses the sort: Windows sends it as a
+// double-click with no second press, which QHeaderView took for no click,
+// neither sorting nor reversing, so every second quick click was lost.
+TEST(SavedResultsPanel, AQuickSecondClickOnAHeadingSortsAgain) {
+    std::vector<SavedComparison> list(3);
+    const char* labels[] = {"b", "a", "c"};
+    for (std::size_t i = 0; i < list.size(); ++i) {
+        list[i].folder = std::filesystem::path("saved") / labels[i];
+        list[i].label = labels[i];
+    }
+    Settings settings;
+    const Dialogs dialogs = standard_dialogs(nullptr);
+    FileWrites writes;
+    SavedResultsPanel panel(settings, dialogs, writes);
+    panel.show_list(list);
+    panel.resize(900, 500);
+    panel.show();
+    QTableWidget& table = *panel.table();
+    QHeaderView* heading = table.horizontalHeader();
+    QWidget* surface = heading->viewport();
+    const QPoint at(heading->sectionViewportPosition(0) + heading->sectionSize(0) / 2, heading->height() / 2);
+    const auto send = [&](QEvent::Type type) {
+        QMouseEvent event(type, at, surface->mapToGlobal(at), Qt::LeftButton,
+                          type == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(surface, &event);
+    };
+    const auto shown = [&table] {
+        QStringList labels;
+        for (int row = 0; row < table.rowCount(); ++row) {
+            labels << table.item(row, 0)->text();
+        }
+        return labels;
+    };
+    const QStringList ascending{"a", "b", "c"};
+    const QStringList descending{"c", "b", "a"};
+    send(QEvent::MouseButtonPress);
+    send(QEvent::MouseButtonRelease);
+    const QStringList first = shown();  // whichever way the click turned it
+    ASSERT_TRUE(first == ascending || first == descending) << first.join(",").toStdString();
+    const QStringList other = first == ascending ? descending : ascending;
+    send(QEvent::MouseButtonDblClick);  // the second, as Windows sends it within its double-click time
+    send(QEvent::MouseButtonRelease);
+    EXPECT_EQ(shown(), other);
+    send(QEvent::MouseButtonPress);  // a third, slower
+    send(QEvent::MouseButtonRelease);
+    EXPECT_EQ(shown(), first);
+}
+
 struct TwoOfVmaf {
     test::Folder folder;
     Settings settings;

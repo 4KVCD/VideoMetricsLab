@@ -54,9 +54,12 @@ protected:
     void paintSection(QPainter* painter, const QRect& rect, int logical_index) const override;
     QSize sectionSizeFromContents(int logical_index) const override;
     void mousePressEvent(QMouseEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
 
 private:
     QRect indicator_rect(const QRect& rect) const;
+    // Toggles the checkbox at `position`, if there is one there.
+    bool toggle_at(const QPoint& position);
 
     QMap<int, bool> checked_;
 };

@@ -1332,7 +1332,13 @@ void MainWindow::build_test_table() {
             [this](const QStringList& paths) { on_files_dropped_on_table(paths); });
     connect(distorted_table_, &FillColumnTable::rowsMoved, this,
             [this](const QList<int>& rows, int target) { on_rows_dragged(rows, target); });
-    connect(metric_header_, &QHeaderView::sectionClicked, this, [this](int column) { on_header_clicked(column); });
+    // A quick second click comes as a double-click, which the heading takes
+    // for no click (Windows sends no second press): it is a click too. A
+    // double-click on a column's edge is sectionHandleDoubleClicked, and on
+    // a tick box ticks it again (CheckableHeaderView).
+    for (const auto heard : {&QHeaderView::sectionClicked, &QHeaderView::sectionDoubleClicked}) {
+        connect(metric_header_, heard, this, [this](int column) { on_header_clicked(column); });
+    }
 
     // Every column can be resized by dragging, File name included, which
     // also fills whatever space is left over (FillColumnTable).

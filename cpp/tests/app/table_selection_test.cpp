@@ -1,6 +1,7 @@
 // A new test video's row is selected when no row is, so that the Options
 // panel shows its settings at once (FillColumnTable::select_row_if_none_is,
 // called as the window adds test videos).
+#include <QApplication>
 #include <QColor>
 #include <QCoreApplication>
 #include <QImage>
@@ -9,6 +10,7 @@
 #include <QHeaderView>
 #include <QItemSelectionModel>
 #include <QMimeData>
+#include <QMouseEvent>
 #include <QPaintEvent>
 #include <QScrollBar>
 #include <QSignalSpy>
@@ -20,9 +22,13 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <fstream>
 #include <vector>
 
+#include "main_window.h"
+#include "test_videos.h"
 #include "widgets.h"
+#include "vml/metrics.h"
 
 namespace vml::app {
 namespace {
@@ -358,6 +364,98 @@ TEST(TableSelection, FrozenColumnsLetTheTableScrollWithoutRepaintingIt) {
     EXPECT_EQ(heading->mapToGlobal(QPoint()),
               QPoint(frozen->mapToGlobal(QPoint()).x(), header->mapToGlobal(QPoint()).y()));
     EXPECT_EQ(heading->size(), QSize(frozen->width(), header->height()));
+}
+
+// The Videos tab's headings, in a window made once (about 150 ms).
+// The window goes before the videos' folder: it may still be reading them.
+class VideosHeading : public ::testing::Test {
+protected:
+    static void SetUpTestSuite() {
+        folder_ = new test::Folder;
+        window_ = new MainWindow;
+        window_->resize(1600, 700);
+        window_->show();
+        QApplication::processEvents();
+    }
+    static void TearDownTestSuite() {
+        delete window_;
+        window_ = nullptr;
+        delete folder_;
+        folder_ = nullptr;
+    }
+    static test::Folder* folder_;
+    static MainWindow* window_;
+};
+
+test::Folder* VideosHeading::folder_ = nullptr;
+MainWindow* VideosHeading::window_ = nullptr;
+
+// A quick second click on a heading sorts the other way: Windows sends it as
+// a double-click with no second press, which QHeaderView took for no click,
+// so every second quick click on File name was lost, on the frozen heading
+// the user clicks as on the table's own. On a metric's tick box, a quick
+// second click ticks it back, and sorts nothing.
+TEST_F(VideosHeading, AQuickSecondClickSortsAgain) {
+    QStringList paths;
+    for (const char* name : {"b.mkv", "a.mkv", "c.mkv"}) {
+        std::ofstream(*folder_ / name) << name;
+        paths << QString::fromStdString((*folder_ / name).string());
+    }
+    auto* table = window_->findChild<FillColumnTable*>();
+    ASSERT_NE(table, nullptr);
+    emit table->filesDropped(paths);
+    ASSERT_EQ(table->rowCount(), 3);
+    const auto names = [table] {
+        QStringList shown;
+        for (int row = 0; row < table->rowCount(); ++row) {
+            shown << table->item(row, col_path)->text();
+        }
+        return shown;
+    };
+    const auto send = [](QHeaderView* heading, const QPoint& at, QEvent::Type type) {
+        QWidget* surface = heading->viewport();
+        QMouseEvent event(type, at, surface->mapToGlobal(at), Qt::LeftButton,
+                          type == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(surface, &event);
+    };
+    const QStringList ascending{"a.mkv", "b.mkv", "c.mkv"};
+    const QStringList descending{"c.mkv", "b.mkv", "a.mkv"};
+    auto* frozen = table->findChild<QHeaderView*>(QStringLiteral("frozenHeader"));
+    ASSERT_NE(frozen, nullptr);
+    auto* header = qobject_cast<CheckableHeaderView*>(table->horizontalHeader());
+    ASSERT_NE(header, nullptr);
+    for (QHeaderView* heading : {frozen, static_cast<QHeaderView*>(header)}) {
+        const char* which = heading == frozen ? "frozen heading" : "table's heading";
+        const QPoint at(heading->sectionViewportPosition(col_path) + heading->sectionSize(col_path) / 2,
+                        heading->height() / 2);
+        send(heading, at, QEvent::MouseButtonPress);
+        send(heading, at, QEvent::MouseButtonRelease);
+        EXPECT_EQ(names(), ascending) << which << ", the first click";
+        send(heading, at, QEvent::MouseButtonDblClick);  // the second, as Windows sends it within its double-click time
+        send(heading, at, QEvent::MouseButtonRelease);
+        EXPECT_EQ(names(), descending) << which << ", the quick second click";
+    }
+    // The first metric tick box in view.
+    int ticked = -1;
+    for (int visual = 0; visual < header->count() && ticked < 0; ++visual) {
+        const int column = header->logicalIndex(visual);
+        const QRect box = header->section_indicator_rect(column);
+        const MetricColumn* metric = metric_column_of(column);
+        if (metric != nullptr && !metric_definition(metric->key).is_plane() && !header->isSectionHidden(column) &&
+            header->viewport()->rect().contains(box)) {
+            ticked = column;
+        }
+    }
+    ASSERT_GE(ticked, 0);
+    const bool was = header->is_checked(ticked);
+    const QPoint box = header->section_indicator_rect(ticked).center();
+    send(header, box, QEvent::MouseButtonPress);
+    send(header, box, QEvent::MouseButtonRelease);
+    EXPECT_NE(header->is_checked(ticked), was);
+    send(header, box, QEvent::MouseButtonDblClick);
+    send(header, box, QEvent::MouseButtonRelease);
+    EXPECT_EQ(header->is_checked(ticked), was);  // ticked back
+    EXPECT_EQ(names(), descending);              // and nothing sorted
 }
 
 }  // namespace
