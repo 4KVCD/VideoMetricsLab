@@ -40,6 +40,7 @@
 #include <cstring>
 #include <deque>
 #include <mutex>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -1375,6 +1376,17 @@ NVF_API int nvf_download_planes(void *handle, int slot, void *const *planes, con
     return ok ? 0 : NVF_ERROR;
 }
 
+namespace {
+
+// An imported allocation, as nvf_import hands it out: the memory object and
+// its mapping here, each of which CUDA wants released (nvf_unimport).
+struct Imported {
+    CUexternalMemory memory;
+    CUdeviceptr address;
+};
+
+}  // namespace
+
 // GPU memory another API allocated on this GPU (Vulkan's, by the Win32
 // handle it exports; `dedicated` for an allocation of one buffer), as memory
 // nvf_copy_luma copies pictures into. *device is its address here, and
@@ -1403,16 +1415,30 @@ NVF_API int nvf_import(void *handle, void *win32_handle, unsigned long long byte
         cu.cuDestroyExternalMemory(imported);
         return static_cast<int>(result);
     }
+    Imported *kept = new (std::nothrow) Imported{imported, address};
+    if (!kept) {
+        cu.cuMemFree(address);
+        cu.cuDestroyExternalMemory(imported);
+        return -1;
+    }
     *device = address;
-    *memory = imported;
+    *memory = kept;
     return 0;
 }
 
+// Releases what nvf_import imported: the mapping first (CUDA keeps a mapped
+// buffer until it is freed with cuMemFree, even after its memory object is
+// destroyed), then the memory object.
 NVF_API void nvf_unimport(void *handle, void *memory) {
     Decoder *d = static_cast<Decoder *>(handle);
-    if (!memory || !g_driver.cuDestroyExternalMemory) return;
-    ContextScope scope(d);
-    g_driver.cuDestroyExternalMemory(static_cast<CUexternalMemory>(memory));
+    if (!memory) return;
+    const Imported *imported = static_cast<Imported *>(memory);
+    {
+        ContextScope scope(d);
+        g_driver.cuMemFree(imported->address);
+        g_driver.cuDestroyExternalMemory(imported->memory);
+    }
+    delete imported;
 }
 
 NVF_API unsigned long long nvf_slot_pointer(void *handle, int slot) {
