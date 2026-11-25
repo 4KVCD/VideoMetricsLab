@@ -166,8 +166,9 @@ TEST_F(BitratePanelTest, AFileReadFillsItsRowAndEachGraph) {
     // At one click: the graph and the data, in the export folder, as the
     // command line names the data; again, all numbered alike.
     const std::filesystem::path out = folder / "out";
+    // No background runner: the files are written at once.
     panel->quick_saves = {[&out] { return QString::fromStdString(platform::path_text(out)); },
-                          [] { return std::vector<std::string>{"json", "csv"}; }};
+                          [] { return std::vector<std::string>{"json", "csv"}; }, QuickSaveRunner{}};
     std::vector<ExportOutcome> told;
     panel->export_report = [&told](const ExportOutcome& outcome) { told.push_back(outcome); };
     panel->graph_save->click();

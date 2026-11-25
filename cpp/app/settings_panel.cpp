@@ -94,9 +94,9 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
       file_writes_(file_writes),
       tools_(std::move(tools)),
       dialogs_(dialogs),
-      started_language_(settings.language),
       counting_(new QFutureWatcher<CacheSummary>(this)),
-      deletion_listing_(new QFutureWatcher<std::vector<SavedComparison>>(this)) {
+      deletion_listing_(new QFutureWatcher<std::vector<SavedComparison>>(this)),
+      started_language_(settings.language) {
     connect(counting_, &QFutureWatcher<CacheSummary>::finished, this, [this] { show_cache_summary(); });
     connect(deletion_listing_, &QFutureWatcher<std::vector<SavedComparison>>::finished, this,
             [this] { ask_and_delete(deletion_listing_->result()); });

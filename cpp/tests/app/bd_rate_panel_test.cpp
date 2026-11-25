@@ -144,7 +144,9 @@ TEST(BdRatePanel, ShowsTheBdRatesOfTwoEncoders) {
     EXPECT_EQ(file.readAll().toStdString(), bd_rate_csv(*panel.report()));
     // At one click, in the export folder: the table as JSON (the command
     // line's bdrate --json, the encoders named) and CSV; the chart as PNG.
-    panel.quick_saves = {[&folder] { return folder.path(); }, [] { return std::vector<std::string>{"json", "csv"}; }};
+    // No background runner: the files are written at once.
+    panel.quick_saves = {[&folder] { return folder.path(); }, [] { return std::vector<std::string>{"json", "csv"}; },
+                         QuickSaveRunner{}};
     std::vector<ExportOutcome> told;
     panel.export_report = [&told](const ExportOutcome& outcome) { told.push_back(outcome); };
     panel.table_save->refresh();  // as the pointer coming to it does
