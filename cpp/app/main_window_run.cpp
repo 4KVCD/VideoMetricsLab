@@ -665,6 +665,7 @@ void MainWindow::set_run_ui_active(bool active) {
     for (QWidget* widget : file_action_widgets_) {
         widget->setEnabled(!active);
     }
+    repaint_row_marks();  // the remove marks, drawn locked with Remove selected
     // The same for what the table and the reference box take by hand:
     // dropped files, dragged rows, a typed path, a click to sort.
     distorted_table_->drops_allowed = !active;

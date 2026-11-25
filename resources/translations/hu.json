@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Show {name} in Metric Graphs again": "{name} újra megjelenítése a metrikagrafikonokon",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} még nem rendelkezik a metrikagrafikonokon megjeleníthető pontszámokkal.",
+  "{name} is already in Metric Graphs.": "{name} már szerepel a metrikagrafikonokon.",
+  "{name} is back in Metric Graphs.": "{name} ismét szerepel a metrikagrafikonokon.",
+  "Locked while metrics are calculated.": "Zárolva a metrikák számítása alatt.",
+  "Remove {name} from the list": "Eltávolítás a listáról: {name}",
   "Start over": "Újrakezdés",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Törli a referenciát és eltávolítja az összes tesztvideót egy új összehasonlításhoz. A mentett eredmények megmaradnak.",
   "Click Start over again to clear the reference.": "Kattintson ismét az „Újrakezdés” gombra a referencia törléséhez.",

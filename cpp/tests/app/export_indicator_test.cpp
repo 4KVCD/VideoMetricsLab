@@ -54,6 +54,24 @@ TEST(ExportIndicator, SaysWhyNothingWasSaved) {
     EXPECT_TRUE(indicator.text().contains("Saving..."));
 }
 
+// A note (what a click did, or why it did nothing) is shown as a save is,
+// replacing a save's line; a failure stays over it until clicked.
+TEST(ExportIndicator, ANoteSaysWhatAClickDidButNotOverAFailure) {
+    ExportIndicator indicator;
+    indicator.show_outcome({{"Y:/out/a.json"}, {}, {}});
+    indicator.show_note("crf20.mkv is already in Metric Graphs.");
+    EXPECT_EQ(indicator.text().toStdString(), "crf20.mkv is already in Metric Graphs.");
+    EXPECT_FALSE(indicator.failed());
+    // Hidden, it keeps its room, so nothing beside it moves as it goes: its
+    // corner laid out again drew the buttons beside it over for a frame,
+    // a flash where the line had faded.
+    EXPECT_TRUE(indicator.sizePolicy().retainSizeWhenHidden());
+    indicator.show_outcome({{}, "Could not write a.json", {}});
+    indicator.show_note("a note");
+    EXPECT_TRUE(indicator.failed());
+    EXPECT_TRUE(indicator.text().contains("Not saved:"));
+}
+
 // A write queued with what to call when it is done calls it on the window's
 // thread, with the error where it failed, and not write_failed then.
 TEST(ExportIndicator, AWriteSaysHowItWent) {

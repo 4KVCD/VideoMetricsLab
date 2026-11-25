@@ -1255,6 +1255,8 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     auto* swatches = new ColorSwatchDelegate(stats_table_);
     connect(swatches, &ColorSwatchDelegate::clicked, this, [this](int row) { choose_video_color(row); });
     stats_table_->setItemDelegateForColumn(0, swatches);
+    remove_marks_ = new RemoveMarkDelegate(stats_table_);  // its items say their line, for the tooltip
+    RemoveMarkDelegate::track_hover(stats_table_);
     stats_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     connect(stats_table_, &QTableWidget::itemChanged, this,
             [this](QTableWidgetItem* item) { on_stats_item_changed(item); });
@@ -1587,8 +1589,21 @@ void GraphPanel::setup_stats_table() {
         headers.append(threshold_label(threshold));
     }
     headers.append(QString());  // the remove button
+    for (int column = 1; column < stats_table_->columnCount(); ++column) {
+        stats_table_->setItemDelegateForColumn(column, nullptr);  // the remove column's, where it was
+    }
     stats_table_->setColumnCount(static_cast<int>(headers.size()));
     stats_table_->setHorizontalHeaderLabels(headers);
+    // The remove button first, at the start of a line's row, where it is
+    // seen; at the end of a wide table it was off to the side, or scrolled
+    // out of view. Moved in the header only: every column keeps its number.
+    const int remove_column = stats_table_->columnCount() - 1;
+    stats_table_->setItemDelegateForColumn(remove_column, remove_marks_);
+    QHeaderView* columns = stats_table_->horizontalHeader();
+    columns->moveSection(columns->visualIndex(remove_column), 0);
+    for (int column = 0; column < remove_column; ++column) {
+        columns->moveSection(columns->visualIndex(column), column + 1);  // the rest in their own order after it
+    }
     stats_table_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     stats_table_->verticalHeader()->setVisible(false);
     // A plane's column (MetricDefinition::plane_of) too only where a line
@@ -1681,7 +1696,7 @@ std::optional<int> GraphPanel::series_id_at_row(int row) const {
 }
 
 void GraphPanel::on_stats_cell_clicked(int row, int column) {
-    // The last column's ✕ removes the line; a metric's mean shows its
+    // The last column's mark (shown first) removes the line; a metric's mean shows its
     // statistics.
     if (is_mean_column(column)) {
         show_metric_detail(column - first_mean_column());
@@ -1752,6 +1767,7 @@ void GraphPanel::refresh_restore_button() {
         }
     }
     restore_button_->setEnabled(any);
+    emit lines_changed();
 }
 
 bool GraphPanel::add_series(const Run& run) {
@@ -2078,11 +2094,11 @@ void GraphPanel::refresh_stats_table() {
         }
         // A plain item, handled by cellClicked: a button in the cell would be
         // drawn over the first column before the widths settled.
+        // Its text as the Python app's table had it; drawn by remove_marks_.
         auto* remove = new QTableWidgetItem(QStringLiteral("✕"));
-        remove->setFont(symbol_font(stats_table_->font()));
         remove->setFlags(Qt::ItemIsEnabled);
-        remove->setTextAlignment(Qt::AlignCenter);
         remove->setToolTip(app::tr("Remove {label} from the graph", {{"label", entry.label}}));
+        remove->setData(Qt::AccessibleTextRole, remove->toolTip());
         stats_table_->setItem(row, stats_table_->columnCount() - 1, remove);
         ++row;
     }

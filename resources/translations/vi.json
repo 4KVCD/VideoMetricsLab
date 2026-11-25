@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Show {name} in Metric Graphs again": "Hiện lại {name} trong Biểu đồ chỉ số",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} chưa có điểm để hiển thị trong Biểu đồ chỉ số.",
+  "{name} is already in Metric Graphs.": "{name} đã có trong Biểu đồ chỉ số.",
+  "{name} is back in Metric Graphs.": "{name} đã trở lại Biểu đồ chỉ số.",
+  "Locked while metrics are calculated.": "Bị khóa khi đang tính chỉ số.",
+  "Remove {name} from the list": "Bỏ {name} khỏi danh sách",
   "Start over": "Bắt đầu lại",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Xóa video tham chiếu và gỡ mọi video thử, để bắt đầu một so sánh mới. Kết quả đã lưu vẫn còn.",
   "Click Start over again to clear the reference.": "Nhấp \"Bắt đầu lại\" lần nữa để xóa video tham chiếu.",

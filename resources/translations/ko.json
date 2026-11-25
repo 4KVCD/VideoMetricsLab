@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Show {name} in Metric Graphs again": "{name}을(를) 지표 그래프에 다시 표시",
+  "{name} has no scores yet to show in Metric Graphs.": "{name}에는 아직 지표 그래프에 표시할 점수가 없습니다.",
+  "{name} is already in Metric Graphs.": "{name}은(는) 이미 지표 그래프에 있습니다.",
+  "{name} is back in Metric Graphs.": "{name}이(가) 지표 그래프에 다시 표시됩니다.",
+  "Locked while metrics are calculated.": "지표를 계산하는 동안 잠김.",
+  "Remove {name} from the list": "목록에서 {name} 제거",
   "Start over": "새로 시작",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "참조 영상을 비우고 모든 테스트 영상을 제거하여 새 비교를 시작합니다. 저장된 결과는 유지됩니다.",
   "Click Start over again to clear the reference.": "'새로 시작'을 한 번 더 클릭하면 참조 영상을 비웁니다.",

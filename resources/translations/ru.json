@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Show {name} in Metric Graphs again": "Снова показать {name} на графиках метрик",
+  "{name} has no scores yet to show in Metric Graphs.": "У {name} ещё нет оценок для графиков метрик.",
+  "{name} is already in Metric Graphs.": "{name} уже на графиках метрик.",
+  "{name} is back in Metric Graphs.": "{name} снова на графиках метрик.",
+  "Locked while metrics are calculated.": "Заблокировано во время вычисления метрик.",
+  "Remove {name} from the list": "Убрать {name} из списка",
   "Start over": "Начать заново",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Очищает эталон и убирает все тестовые видео, чтобы начать новое сравнение. Сохранённые результаты остаются.",
   "Click Start over again to clear the reference.": "Нажмите «Начать заново» ещё раз, чтобы очистить эталон.",

@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Show {name} in Metric Graphs again": "在指标图表中重新显示 {name}",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} 尚无可在指标图表中显示的分数。",
+  "{name} is already in Metric Graphs.": "{name} 已在指标图表中。",
+  "{name} is back in Metric Graphs.": "{name} 已回到指标图表中。",
+  "Locked while metrics are calculated.": "计算指标期间锁定。",
+  "Remove {name} from the list": "从列表中移除 {name}",
   "Start over": "重新开始",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "清除参考视频并移除所有测试视频，以开始新的比较。已保存的结果会保留。",
   "Click Start over again to clear the reference.": "再次单击“重新开始”以清除参考视频。",
