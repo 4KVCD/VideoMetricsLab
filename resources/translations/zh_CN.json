@@ -1,9 +1,68 @@
 {
  "strings": {
+  "A card for each saved score, to pick the one used": "每个已保存的分数一张卡片，用于选择所用的分数",
+  "CPU or GPU": "CPU 或 GPU",
+  "Choose columns…": "选择列…",
+  "Click to use this score.": "点击使用此分数。",
+  "Counting the saved results...": "正在统计已保存的结果...",
+  "Delete:": "删除：",
+  "Deleting saved results...": "正在删除已保存的结果...",
+  "Each card shows when its score was saved; the round button on it picks the one used.": "每张卡片显示其分数的保存时间；卡片上的圆形按钮用于选择所用的分数。",
+  "Every saved result": "所有已保存的结果",
+  "Every saved score of this comparison: its statistics, when it was saved and how it was made": "此比较所有已保存的分数：统计、保存时间和生成方式",
+  "How far the frames' scores spread from their mean.": "各帧分数偏离其平均值的程度。",
+  "Made with": "生成工具",
+  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and deleting saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "正在计算指标：ffmpeg 文件夹、已保存结果的文件夹和删除已保存的结果在运行结束前被锁定，因为运行正在使用它们。其他所有设置现在都可以更改。",
+  "Model or display": "模型或显示器",
+  "No saved results in that range.": "该范围内没有已保存的结果。",
+  "No saved results in that range: nothing deleted.": "该范围内没有已保存的结果：未删除任何内容。",
+  "No saved results in {directory}": "{directory} 中没有已保存的结果",
+  "Of the newest, or of those the newest version of the app made, these come first. The Videos tab's choice goes by the settings instead.": "在最新的分数中，或在最新版本的应用生成的分数中，这些优先。“视频”标签页的选择则依据设置。",
+  "One card per metric, saying how many are saved": "每个指标一张卡片，显示已保存的数量",
+  "Saved results are already being deleted.": "已保存的结果已在删除中。",
+  "Score": "分数",
+  "Score bands": "分数分档",
+  "Settings > Saved Results": "设置 > 已保存的结果",
+  "Show:": "显示：",
+  "The bitrate readings and black-bar answers kept with them are deleted too.": "与之一同保存的码率读数和黑边检测结果也会被删除。",
+  "The card shows the score used; the details panel, opened by the button over the scores, lists them all, and a click on another uses it.": "卡片显示所用的分数；详细信息面板（由分数上方的按钮打开）列出全部分数，点击另一个即改用它。",
+  "The details panel, opened by the button over the scores, shows each score's metric and score, and:": "详细信息面板（由分数上方的按钮打开）显示每个分数的指标和分数，以及：",
+  "The highest frame's score.": "最高的帧分数。",
+  "The lowest frame's score.": "最低的帧分数。",
+  "The middle frame's score.": "中位帧分数。",
+  "The score Open in Metric Graphs and the exports take, where a metric has several. Click another of its rows to use that one.": "当一个指标有多个分数时，“在指标图表中打开”和导出所用的分数。点击它的另一行即改用那一个。",
+  "The score the card shows and Open in Metric Graphs and the exports take, unless you pick another in the details panel. The Videos tab's: the one a run would use again with the settings as they are (where it would use none, the newest).": "卡片显示、“在指标图表中打开”和导出所用的分数，除非你在详细信息面板中另选一个。“视频”标签页的选择：按当前设置运行时会再次使用的那个（若一个都不会使用，则为最新的）。",
+  "The score {share} of the frames are worse than: the low end where a higher score is better, the high end where a lower one is (Metric Graphs' {share} Low or High).": "有 {share} 的帧比它差的分数：分数越高越好时取低端，越低越好时取高端（即指标图表中的 {share} 低或高）。",
+  "The share of the frames in each of the metric's score bands, as Metric Graphs' table has them (≥ 95, < 70, ...).": "各帧落在该指标每个分数分档中的比例，与指标图表的表格一致（≥ 95、< 70、...）。",
+  "The whole video's score, as Metric Graphs shows it.": "整个视频的分数，与指标图表显示的一致。",
+  "Their videos are scored again the next time they are compared.": "其视频会在下次比较时重新评分。",
+  "Those saved from": "保存于",
+  "Those saved more than": "保存时间早于",
+  "Use this score": "使用此分数",
+  "Use:": "使用：",
+  "Used": "使用中",
+  "VMAF's model, or the display CVVDP modelled.": "VMAF 的模型，或 CVVDP 模拟的显示器。",
+  "What calculated the score, and its version.": "计算该分数的程序及其版本。",
+  "When a metric has several saved scores:": "当一个指标有多个已保存的分数时：",
+  "When the score was saved.": "分数的保存时间。",
+  "Whether the score was calculated on the CPU or the GPU.": "分数是在 CPU 还是 GPU 上计算的。",
+  "Worst {share}": "最差 {share}",
+  "by FFmpeg first": "优先由 FFmpeg",
+  "by any engine": "由任意引擎",
+  "by the app's own first": "优先由应用自身",
+  "on any device": "在任意设备上",
+  "on the CPU first": "优先在 CPU 上",
+  "on the GPU first": "优先在 GPU 上",
+  "the newest": "最新的",
+  "the one made by the newest version of the app": "最新版本的应用生成的那个",
+  "the one the Videos tab would use": "“视频”标签页会使用的那个",
+  "{size}, last saved {date}, in {directory}.": "{size}，最后保存于 {date}，位于 {directory}。",
+  "{size}, last saved {first} to {last}, in {directory}.": "{size}，最后保存于 {first} 至 {last}，位于 {directory}。",
+  "Folder:": "文件夹：",
+  "Saved results": "已保存的结果",
   "Start over": "重新开始",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "清除参考视频并移除所有测试视频，以开始新的比较。已保存的结果会保留。",
   "Click Start over again to clear the reference.": "再次单击“重新开始”以清除参考视频。",
-  "Every saved score in this folder is deleted. This can't be undone.": "此文件夹中所有已保存的分数都将被删除。此操作无法撤消。",
   "Show details": "显示详细信息",
   "Hide details": "隐藏详细信息",
   "OK": "确定",
@@ -332,8 +391,6 @@
   "Storage": "存储",
   "blank = shared user-profile folder": "留空 = 用户配置文件中的共享文件夹",
   "Open": "打开",
-  "Saved results:": "已保存的结果：",
-  "Clear saved results": "清除已保存的结果",
   "Export folder:": "导出文件夹：",
   "Reuse a saved result when a video is added again": "再次添加视频时重用已保存的结果",
   "Each session's setup, every run and its steps, and every failure with its full text. Send these files along when reporting a problem.": "每次会话的设置、每次运行及其步骤，以及每个失败的完整信息。报告问题时请附上这些文件。",
@@ -385,9 +442,6 @@
   "Could not export the log: {error}": "无法导出日志：{error}",
   "There is no log to export yet.": "还没有可导出的日志。",
   "Log exported to {path}": "日志已导出到 {path}",
-  "There are no saved results to clear.": "没有可清除的已保存结果。",
-  "Saved results are already being cleared.": "已保存的结果正在清除。",
-  "Clearing saved results...": "正在清除已保存的结果...",
   "Reference video:": "参考视频：",
   "No reference selected.": "未选择参考视频。",
   "Add/remove metrics": "添加/移除指标",
@@ -627,7 +681,6 @@
   "Run files (*{suffix})": "运行结果文件 (*{suffix})",
   "Choose folder to save runs into": "选择保存运行结果的文件夹",
   "Could not {description}: {error}": "无法{description}：{error}",
-  "clear saved results": "清除已保存的结果",
   "delete saved results": "删除已保存的结果",
   "save {name}": "保存 {name}",
   "export {name}": "导出 {name}",
@@ -1258,7 +1311,6 @@
   "Automatic (a discrete GPU first)": "自动（优先独立 GPU）",
   "{name} (not found)": "{name}（未找到）",
   "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "在有多个 GPU 的电脑上计算 VMAF、VMAF v1、SSIMULACRA2、Butteraugli 和 CVVDP 的 GPU；GPU 解码为自动时，会先尝试该 GPU 厂商的解码器。该 GPU 无法计算的指标改在 CPU 上计算，而不是在其他 GPU 上。自动会优先使用独立 GPU。\n\n下次启动应用时生效；命令行的 --gpu 为单次运行选择。",
-  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and Clear saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "正在计算指标：ffmpeg 文件夹、已保存结果的文件夹和“清除已保存的结果”在运行结束前被锁定，因为运行正在使用它们。其他设置现在都可以更改。",
   "Locked while metrics are calculated: the run uses it.": "计算指标期间锁定：运行正在使用。",
   "This video has {test:,} frames, but the reference has {source:,}, even though both are the same length. From the first point where they differ, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "此视频有 {test:,} 帧，但参考视频有 {source:,} 帧，尽管两者长度相同。从两者第一次出现差异的位置起，每一帧都会和错误的参考帧比较，因此此后的所有分数都是错的。这通常是编码时重复或丢弃了帧造成的。使用与源一致的可变帧率编码即可避免。",
   "This video may be out of sync with the reference. Only {compared:,} frames were compared, but videos of this length should have {length:,}. If the scores drop suddenly partway through and stay low, this is the likely cause. To find out for sure, turn on {setting}, then right-click this video and choose {recalculate}.": "此视频可能与参考视频不同步。只比较了 {compared:,} 帧，但这个长度的视频应有 {length:,} 帧。如果分数在中途突然下降并一直偏低，这很可能就是原因。要确认，请打开 {setting}，然后右键单击此视频并选择“{recalculate}”。",
@@ -1331,7 +1383,6 @@
   "Saved scores of {name}": "{name} 的已保存分数",
   "Select a comparison to see its saved scores.": "选择一个对比以查看其已保存的分数。",
   "Select one comparison to see its saved scores.": "只选择一个对比以查看其已保存的分数。",
-  "Several scores of this metric are saved: the newest is used unless another is picked.": "此指标保存了多个分数：除非选择其他分数，否则使用最新的。",
   "Size": "大小",
   "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "所选方案没有条件：请在 设置 > 弱片段 中设置，或选择一个预设。",
   "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "查找弱片段所用的规则：它们不随分数保存，而是现在根据分数查找。",
@@ -1341,8 +1392,6 @@
   "{name} (saved)": "{name}（已保存）",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "要删除 {directory} 中已保存的结果吗？\n\n已评分的视频需要重新计算。参考视频已不在原位置的结果会保留：它们的分数无法再重新计算。请在“已保存的结果”选项卡中删除它们。",
-  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "其中一些无法重新评分：它们的参考视频已不在原位置（标记为“未找到”）。",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\n在该位置找不到：没有它，就无法重新计算这些分数。",
   "Recognize test videos remuxed after scoring (reads each one again)": "识别评分后重新封装的测试视频（会再读取每个视频一次）",
   "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "评分后封装或重新封装的测试视频（原始流封装为 MKV，MKV 转为 MP4）会保留已保存的分数：按其编码画面识别。\n\n为此，每个测试视频在分数保存后会再读取一次，耗时与读取文件相同（网络共享上的电影需要几分钟），在后台进行，计算期间不会进行；流的开头与已评分视频相同的视频，会在其他视频的已保存分数找到后完整读取，以判断是否为同一视频。\n\n关闭：测试视频只按文件识别。",
@@ -1418,6 +1467,33 @@
   "{low} to {high} metrics": "{low} 到 {high} 个指标"
  },
  "plurals": {
+  "Deleted the saved scores of {count} comparison.": [
+   "已删除 {count} 个比较的已保存分数。"
+  ],
+  "The saved scores of {count} comparison are deleted. This can't be undone.": [
+   "{count} 个比较的已保存分数将被删除。此操作无法撤销。"
+  ],
+  "Would delete {count} comparison's saved scores, {size}.": [
+   "将删除 {count} 个比较的已保存分数，共 {size}。"
+  ],
+  "day ago": [
+   "天前"
+  ],
+  "{count} of them can't be scored again: its reference video is no longer where it was scored from (marked \"not found\" in the Saved Results tab).": [
+   "其中 {count} 个无法重新评分：其参考视频已不在评分时的位置（在“已保存的结果”标签页中标为“未找到”）。"
+  ],
+  "{count} saved": [
+   "已保存 {count} 个"
+  ],
+  "{count} saved result, {size}, saved {first} to {last}, in {directory}": [
+   "{count} 个已保存的结果，{size}，保存于 {first} 至 {last}，位于 {directory}"
+  ],
+  "{count} saved result, {size}, saved {first}, in {directory}": [
+   "{count} 个已保存的结果，{size}，保存于 {first}，位于 {directory}"
+  ],
+  "{count} score of this metric is saved: choose the one used in the details, opened by the button above.": [
+   "此指标已保存 {count} 个分数：请在详细信息中选择所用的那个，可由上方的按钮打开。"
+  ],
   "Click Remove all again to remove {count} video. Saved results are kept.": ["再次单击“全部移除”以移除全部 {count} 个视频。已保存的结果会保留。"],
   "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["再次单击“重新开始”以清除参考视频并移除全部 {count} 个视频。已保存的结果会保留。"],
   "{count} test video does not last as long as the reference ({length}).": ["{count} 个测试视频的长度与参考视频（{length}）不同。"],
@@ -1437,9 +1513,6 @@
   ],
   "about {count} minute": [
    "约 {count} 分钟"
-  ],
-  "{count} saved result, {size:.1f} MB in {directory}": [
-   "{count} 个已保存的结果，{size:.1f} MB，位于 {directory}"
   ],
   "Copied the log to the clipboard ({count} line, the middle left out -- Export log saves all of it).": [
    "已将日志复制到剪贴板（{count} 行，中间部分已省略——“导出日志”会保存全部内容）。"
@@ -1480,9 +1553,6 @@
   "{count} video: {counts}": [
    "{count} 个视频：{counts}"
   ],
-  "Removed {count} saved result.": [
-   "已移除 {count} 个已保存的结果。"
-  ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "所勾选的 {count} 个视频已有码率结果。\n\n要重新计算这些文件吗？选择“否”保留其结果，只计算没有结果的文件。"
   ],
@@ -1507,17 +1577,11 @@
   "{count} frame in all.": [
    "共 {count} 帧。"
   ],
-  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
-   "删除 {count} 个对比的已保存分数？删除后无法恢复：下次对比时会重新为视频评分。"
-  ],
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "无法删除 {count} 个对比的已保存分数：其中某个文件可能已打开。"
   ],
   "{count} saved comparison in {directory}": [
    "{count} 个已保存的对比，位于 {directory}"
-  ],
-  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
-   "已保留 {count} 个参考视频已丢失的结果：请在“已保存的结果”选项卡中删除。"
   ],
   "Saved {count} file": [
    "已保存 {count} 个文件"

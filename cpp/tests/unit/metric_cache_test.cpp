@@ -771,6 +771,46 @@ TEST(MetricCache, ClearingKeepsTheComparisonsWhoseReferenceIsGone) {
     EXPECT_FALSE(std::filesystem::exists(bitrate_store_folder(cache)));
 }
 
+// Settings > Saved Results' "older than": the comparisons last saved before
+// the day given are deleted, those whose reference is gone kept (their
+// scores could not be calculated again), newer ones left.
+TEST(MetricCache, ComparisonsSavedInARangeAreDeletedThoseWithoutTheirReferenceToo) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    const AnalysisRequest request = request_from(stored);
+    const std::filesystem::path cache = folder / "cache";
+    std::map<std::string, std::filesystem::path> saved;
+    for (const char* name : {"old", "old_gone", "new"}) {
+        const std::filesystem::path reference = folder / (std::string(name) + ".mp4");
+        touch(reference, name);
+        touch(folder / "t.mp4", "t");
+        ComparisonResult result = test::result_from(stored.at("result"));
+        result.source = reference;
+        result.distorted = folder / "t.mp4";
+        saved[name] = store_result(cache, reference, folder / "t.mp4", request.recipe, result, name, request.metrics);
+    }
+    std::filesystem::remove(folder / "old_gone.mp4");
+    for (const char* name : {"old", "old_gone"}) {  // saved 40 days ago
+        for (const auto& entry : std::filesystem::directory_iterator(saved[name])) {
+            std::filesystem::last_write_time(entry.path(),
+                                             std::filesystem::last_write_time(entry.path()) - std::chrono::days(40));
+        }
+    }
+    // The count Settings shows has each comparison's time and size.
+    const CacheSummary summary = cache_summary(cache);
+    ASSERT_EQ(summary.saved.size(), 3U);
+    EXPECT_EQ(summary.saved.front().folder, saved["new"]);  // newest first
+    EXPECT_LT(summary.saved.back().saved, std::chrono::system_clock::now() - std::chrono::days(39));
+    EXPECT_GT(summary.saved.back().bytes, 0U);
+    // From 50 days ago to 30: the two old ones, whatever their reference.
+    const auto now = std::chrono::system_clock::now();
+    const ClearedResults done = delete_saved_between(cache, now - std::chrono::days(50), now - std::chrono::days(30));
+    EXPECT_EQ(done.removed, 2);
+    EXPECT_FALSE(std::filesystem::exists(saved["old"]));
+    EXPECT_FALSE(std::filesystem::exists(saved["old_gone"]));
+    EXPECT_TRUE(std::filesystem::exists(saved["new"] / "context.json"));
+}
+
 TEST(MetricCache, SavedComparisonsAreListedReadAndDeleted) {
     const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
     const test::Folder folder;
@@ -2141,6 +2181,31 @@ TEST(MetricCache, ASavedVmafKeepsTheModelItWasMadeWith) {
     EXPECT_EQ(load(standard), Models(standard, standard));
 }
 
+// A run takes a saved VMAF only from the file its request reads: one made
+// with the 4K model never stands for the standard model's, though made by
+// the same engine on the same device (Saved Results' "the one the Videos tab
+// would use" picked the newer 4K score of a 640x360 comparison).
+TEST(MetricCache, ARunTakesOnlyTheFileItsRequestReads) {
+    const auto spec_for = [](const std::string& model) {
+        VmafOptions options;
+        options.model_choice = model;
+        return analysis_request(options, {"vmaf"}, {}, CvvdpSettings{}, VideoInfo{}, VideoInfo{}).metrics.at(0);
+    };
+    const MetricRequestSpec standard = spec_for("version=vmaf_v0.6.1");
+    const MetricRequestSpec four_k = spec_for("version=vmaf_4k_v0.6.1");
+    MetricProvenance made;
+    made.compute_backend = "gpu";
+    made.implementation_compatibility_id = standard.implementation_compatibility_id;
+    const std::filesystem::path folder = "comparison";
+    const auto takes = [&](const MetricRequestSpec& asked, const MetricRequestSpec& saved) {
+        return run_takes(folder, asked, metric_path(folder, saved), made, std::nullopt,
+                         [](const std::string&) { return true; }, {});
+    };
+    EXPECT_TRUE(takes(standard, standard));
+    EXPECT_FALSE(takes(standard, four_k));
+    EXPECT_TRUE(takes(four_k, four_k));
+}
+
 // Arrays come back from an .npz file as they went in, text past ASCII too,
 // and a file that is not one reads as none.
 TEST(Npz, ReadsWhatItWrites) {
@@ -2179,6 +2244,42 @@ TEST(MetricCache, StockVshipsBuildsShareTheirSavedScores) {
     EXPECT_EQ(ids_of(VshipBuild::hip), ids_of(VshipBuild::stock));
     EXPECT_EQ(ids_of(VshipBuild::cuda), ids_of(VshipBuild::stock));
     EXPECT_NE(ids_of(VshipBuild::fast), ids_of(VshipBuild::stock));
+}
+
+// Settings > Saved Results' rule for a metric's several saved scores: the
+// one the Videos tab would use (else the newest), the newest, or the one the
+// newest app made; the device's and engine's first; never one that can't be
+// read or is out of date.
+TEST(MetricCache, ASavedScoreIsPickedByTheRule) {
+    using std::chrono::hours;
+    const auto now = std::chrono::system_clock::now();
+    const auto made = [](const char* device, const char* implementation, const char* by) {
+        MetricProvenance provenance;
+        provenance.compute_backend = device;
+        provenance.implementation = implementation;
+        provenance.made_by = by;
+        return provenance;
+    };
+    const std::vector<SavedScoreChoice> choices{
+        {"old_gpu_app", now - hours(48), made("gpu", "libvmaf/vulkan", "2.10 (aaaaaaaaaaaa)")},
+        {"new_cpu_ffmpeg", now - hours(1), made("cpu", "ffmpeg/libvmaf", "2.6 (bbbbbbbbbbbb)")},
+        {"newest_unreadable", now, std::nullopt},
+        {"mid_cpu_app", now - hours(24), made("cpu", "libvmaf", "2.9 (cccccccccccc)")}};
+    const auto pick = [&choices](const char* rule, const char* device, const char* engine,
+                                 std::function<bool(const SavedScoreChoice&)> videos = {}) {
+        return pick_saved_score(choices, SavedScoreRule{rule, device, engine}, videos).value_or("none").string();
+    };
+    EXPECT_EQ(pick("newest", "any", "any"), "new_cpu_ffmpeg");          // the unreadable one never
+    EXPECT_EQ(pick("newest", "gpu", "any"), "old_gpu_app");             // the GPU's first
+    EXPECT_EQ(pick("newest", "any", "app"), "mid_cpu_app");             // the app's own first
+    EXPECT_EQ(pick("newest_app", "any", "any"), "old_gpu_app");         // 2.10 is newer than 2.9 and 2.6
+    EXPECT_EQ(pick("newest_app", "cpu", "any"), "mid_cpu_app");         // of the CPU's, the newest app's
+    EXPECT_EQ(pick("videos", "gpu", "any",
+                   [](const SavedScoreChoice& c) { return c.provenance->compute_backend == "cpu"; }),
+              "new_cpu_ffmpeg");  // the Videos tab's; device and engine don't apply
+    EXPECT_EQ(pick("videos", "any", "any", [](const SavedScoreChoice&) { return false; }),
+              "new_cpu_ffmpeg");  // none it would use: the newest
+    EXPECT_EQ(pick_saved_score({{"x", now, std::nullopt}}, SavedScoreRule{}), std::nullopt);
 }
 
 }  // namespace

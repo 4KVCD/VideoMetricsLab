@@ -1,9 +1,68 @@
 {
  "strings": {
+  "A card for each saved score, to pick the one used": "การ์ดสำหรับคะแนนที่บันทึกไว้แต่ละชุด เพื่อเลือกชุดที่ใช้",
+  "CPU or GPU": "CPU หรือ GPU",
+  "Choose columns…": "เลือกคอลัมน์…",
+  "Click to use this score.": "คลิกเพื่อใช้คะแนนนี้",
+  "Counting the saved results...": "กำลังนับผลลัพธ์ที่บันทึก...",
+  "Delete:": "ลบ:",
+  "Deleting saved results...": "กำลังลบผลลัพธ์ที่บันทึก...",
+  "Each card shows when its score was saved; the round button on it picks the one used.": "การ์ดแต่ละใบแสดงเวลาที่บันทึกคะแนน ปุ่มกลมบนการ์ดใช้เลือกชุดที่ใช้",
+  "Every saved result": "ผลลัพธ์ที่บันทึกทั้งหมด",
+  "Every saved score of this comparison: its statistics, when it was saved and how it was made": "คะแนนที่บันทึกไว้ทุกชุดของการเปรียบเทียบนี้: สถิติ เวลาที่บันทึก และวิธีที่ได้มา",
+  "How far the frames' scores spread from their mean.": "คะแนนของเฟรมกระจายห่างจากค่าเฉลี่ยมากเพียงใด",
+  "Made with": "สร้างด้วย",
+  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and deleting saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "กำลังคำนวณเมตริก: โฟลเดอร์ ffmpeg โฟลเดอร์ผลลัพธ์ที่บันทึก และการลบผลลัพธ์ที่บันทึกจะถูกล็อกจนกว่าการรันจะจบ เพราะการรันใช้งานอยู่ ส่วนอื่นเปลี่ยนได้ตอนนี้",
+  "Model or display": "โมเดลหรือจอแสดงผล",
+  "No saved results in that range.": "ไม่มีผลลัพธ์ที่บันทึกในช่วงนั้น",
+  "No saved results in that range: nothing deleted.": "ไม่มีผลลัพธ์ที่บันทึกในช่วงนั้น จึงไม่ได้ลบอะไร",
+  "No saved results in {directory}": "ไม่มีผลลัพธ์ที่บันทึกใน {directory}",
+  "Of the newest, or of those the newest version of the app made, these come first. The Videos tab's choice goes by the settings instead.": "ในบรรดาชุดล่าสุด หรือชุดที่แอปเวอร์ชันล่าสุดสร้าง ชุดเหล่านี้จะมาก่อน ส่วนตัวเลือกของแท็บวิดีโอจะเป็นไปตามการตั้งค่าแทน",
+  "One card per metric, saying how many are saved": "การ์ดเดียวต่อเมตริก บอกว่าบันทึกไว้กี่ชุด",
+  "Saved results are already being deleted.": "กำลังลบผลลัพธ์ที่บันทึกอยู่แล้ว",
+  "Score": "คะแนน",
+  "Score bands": "ช่วงคะแนน",
+  "Settings > Saved Results": "การตั้งค่า > ผลลัพธ์ที่บันทึก",
+  "Show:": "แสดง:",
+  "The bitrate readings and black-bar answers kept with them are deleted too.": "ค่าบิตเรตที่อ่านได้และผลตรวจแถบดำที่เก็บไว้ด้วยกันจะถูกลบด้วย",
+  "The card shows the score used; the details panel, opened by the button over the scores, lists them all, and a click on another uses it.": "การ์ดแสดงคะแนนที่ใช้ แผงรายละเอียดซึ่งเปิดด้วยปุ่มเหนือคะแนนจะแสดงทั้งหมด และคลิกชุดอื่นเพื่อใช้ชุดนั้น",
+  "The details panel, opened by the button over the scores, shows each score's metric and score, and:": "แผงรายละเอียดซึ่งเปิดด้วยปุ่มเหนือคะแนน แสดงเมตริกและคะแนนของแต่ละชุด และ:",
+  "The highest frame's score.": "คะแนนของเฟรมที่สูงที่สุด",
+  "The lowest frame's score.": "คะแนนของเฟรมที่ต่ำที่สุด",
+  "The middle frame's score.": "คะแนนของเฟรมที่อยู่ตรงกลาง",
+  "The score Open in Metric Graphs and the exports take, where a metric has several. Click another of its rows to use that one.": "คะแนนที่ เปิดในกราฟเมตริก และการส่งออกใช้ เมื่อเมตริกมีหลายชุด คลิกแถวอื่นของเมตริกนั้นเพื่อใช้ชุดนั้น",
+  "The score the card shows and Open in Metric Graphs and the exports take, unless you pick another in the details panel. The Videos tab's: the one a run would use again with the settings as they are (where it would use none, the newest).": "คะแนนที่การ์ดแสดง และที่ เปิดในกราฟเมตริก และการส่งออกใช้ เว้นแต่คุณเลือกชุดอื่นในแผงรายละเอียด ของแท็บวิดีโอ: ชุดที่การรันจะใช้อีกครั้งตามการตั้งค่าปัจจุบัน (หากไม่ใช้ชุดใดเลย จะเป็นชุดล่าสุด)",
+  "The score {share} of the frames are worse than: the low end where a higher score is better, the high end where a lower one is (Metric Graphs' {share} Low or High).": "คะแนนที่ {share} ของเฟรมแย่กว่า: ฝั่งต่ำเมื่อคะแนนที่สูงกว่าดีกว่า ฝั่งสูงเมื่อคะแนนที่ต่ำกว่าดีกว่า (ต่ำสุดหรือสูงสุด {share} ในกราฟเมตริก)",
+  "The share of the frames in each of the metric's score bands, as Metric Graphs' table has them (≥ 95, < 70, ...).": "สัดส่วนของเฟรมในแต่ละช่วงคะแนนของเมตริก ตามตารางในกราฟเมตริก (≥ 95, < 70, ...)",
+  "The whole video's score, as Metric Graphs shows it.": "คะแนนของวิดีโอทั้งเรื่อง ตามที่กราฟเมตริกแสดง",
+  "Their videos are scored again the next time they are compared.": "วิดีโอเหล่านั้นจะถูกคำนวณคะแนนใหม่ในครั้งถัดไปที่เปรียบเทียบ",
+  "Those saved from": "ที่บันทึกตั้งแต่",
+  "Those saved more than": "ที่บันทึกนานกว่า",
+  "Use this score": "ใช้คะแนนนี้",
+  "Use:": "ใช้:",
+  "Used": "ใช้อยู่",
+  "VMAF's model, or the display CVVDP modelled.": "โมเดลของ VMAF หรือจอแสดงผลที่ CVVDP จำลอง",
+  "What calculated the score, and its version.": "สิ่งที่คำนวณคะแนน และเวอร์ชันของสิ่งนั้น",
+  "When a metric has several saved scores:": "เมื่อเมตริกมีคะแนนที่บันทึกไว้หลายชุด:",
+  "When the score was saved.": "เวลาที่บันทึกคะแนน",
+  "Whether the score was calculated on the CPU or the GPU.": "คะแนนคำนวณบน CPU หรือ GPU",
+  "Worst {share}": "แย่สุด {share}",
+  "by FFmpeg first": "โดย FFmpeg ก่อน",
+  "by any engine": "โดยเอนจินใดก็ได้",
+  "by the app's own first": "โดยเอนจินของแอปเองก่อน",
+  "on any device": "บนอุปกรณ์ใดก็ได้",
+  "on the CPU first": "บน CPU ก่อน",
+  "on the GPU first": "บน GPU ก่อน",
+  "the newest": "ชุดล่าสุด",
+  "the one made by the newest version of the app": "ชุดที่สร้างโดยแอปเวอร์ชันล่าสุด",
+  "the one the Videos tab would use": "ชุดที่แท็บวิดีโอจะใช้",
+  "{size}, last saved {date}, in {directory}.": "{size} บันทึกล่าสุด {date} ใน {directory}",
+  "{size}, last saved {first} to {last}, in {directory}.": "{size} บันทึกล่าสุด {first} ถึง {last} ใน {directory}",
+  "Folder:": "โฟลเดอร์:",
+  "Saved results": "ผลลัพธ์ที่บันทึก",
   "Start over": "เริ่มใหม่",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "ล้างวิดีโออ้างอิงและนำวิดีโอทดสอบทั้งหมดออก เพื่อเริ่มการเปรียบเทียบใหม่ ผลลัพธ์ที่บันทึกยังคงอยู่",
   "Click Start over again to clear the reference.": "คลิก \"เริ่มใหม่\" อีกครั้งเพื่อล้างวิดีโออ้างอิง",
-  "Every saved score in this folder is deleted. This can't be undone.": "คะแนนที่บันทึกไว้ทั้งหมดในโฟลเดอร์นี้จะถูกลบ และไม่สามารถเลิกทำได้",
   "Show details": "แสดงรายละเอียด",
   "Hide details": "ซ่อนรายละเอียด",
   "OK": "ตกลง",
@@ -337,8 +396,6 @@
   "Storage": "ที่จัดเก็บ",
   "blank = shared user-profile folder": "ว่าง = โฟลเดอร์ที่ใช้ร่วมกันในโปรไฟล์ผู้ใช้",
   "Open": "เปิด",
-  "Saved results:": "ผลลัพธ์ที่บันทึก:",
-  "Clear saved results": "ล้างผลลัพธ์ที่บันทึก",
   "Export folder:": "โฟลเดอร์ส่งออก:",
   "Reuse a saved result when a video is added again": "ใช้ผลลัพธ์ที่บันทึกไว้ซ้ำเมื่อเพิ่มวิดีโออีกครั้ง",
   "Each session's setup, every run and its steps, and every failure with its full text. Send these files along when reporting a problem.": "การตั้งค่าของแต่ละเซสชัน ทุกการรันและขั้นตอน และทุกความล้มเหลวพร้อมข้อความเต็ม ส่งไฟล์เหล่านี้เมื่อรายงานปัญหา",
@@ -390,9 +447,6 @@
   "Could not export the log: {error}": "ไม่สามารถส่งออกล็อก: {error}",
   "There is no log to export yet.": "ยังไม่มีล็อกให้ส่งออก",
   "Log exported to {path}": "ส่งออกล็อกไปที่ {path} แล้ว",
-  "There are no saved results to clear.": "ไม่มีผลลัพธ์ที่บันทึกให้ล้าง",
-  "Saved results are already being cleared.": "กำลังล้างผลลัพธ์ที่บันทึกอยู่แล้ว",
-  "Clearing saved results...": "กำลังล้างผลลัพธ์ที่บันทึก...",
   "Reference video:": "วิดีโออ้างอิง:",
   "No reference selected.": "ยังไม่ได้เลือกวิดีโออ้างอิง",
   "Add/remove metrics": "เพิ่ม/นำเมตริกออก",
@@ -628,7 +682,6 @@
   "This saved run was measured against:\n    {source}\n\nbut the selected reference is:\n    {path}\n\nScores from two different references cannot be compared. Switch the reference to the one this run used?": "การรันที่บันทึกไว้นี้วัดเทียบกับ:\n    {source}\n\nแต่วิดีโออ้างอิงที่เลือกคือ:\n    {path}\n\nคะแนนที่วัดเทียบกับวิดีโออ้างอิงต่างกันเปรียบเทียบกันไม่ได้ สลับไปใช้วิดีโออ้างอิงที่การรันนี้ใช้หรือไม่",
   "Choose folder to save runs into": "เลือกโฟลเดอร์ที่จะบันทึกการรัน",
   "Could not {description}: {error}": "ไม่สามารถ{description}: {error}",
-  "clear saved results": "ล้างผลลัพธ์ที่บันทึกไว้",
   "delete saved results": "ลบผลลัพธ์ที่บันทึกไว้",
   "save {name}": "บันทึก {name}",
   "export {name}": "ส่งออก {name}",
@@ -1258,7 +1311,6 @@
   "Automatic (a discrete GPU first)": "อัตโนมัติ (ใช้ GPU แยกก่อน)",
   "{name} (not found)": "{name} (ไม่พบ)",
   "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU ที่คำนวณ VMAF, VMAF v1, SSIMULACRA2, Butteraugli และ CVVDP บนพีซีที่มีมากกว่าหนึ่งตัว และจะลองใช้ตัวถอดรหัสของผู้ผลิต GPU นี้ก่อนเมื่อการถอดรหัสบน GPU เป็นแบบอัตโนมัติ เมตริกที่ GPU นี้คำนวณไม่ได้จะคำนวณบน CPU แทนที่จะใช้ GPU ตัวอื่น โหมดอัตโนมัติจะใช้ GPU แยกก่อน\n\nมีผลเมื่อเปิดแอปครั้งถัดไป ตัวเลือก --gpu ในบรรทัดคำสั่งใช้เลือกสำหรับการรันครั้งเดียว",
-  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and Clear saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "กำลังคำนวณเมตริก: โฟลเดอร์ ffmpeg โฟลเดอร์ผลลัพธ์ที่บันทึก และปุ่มล้างผลลัพธ์ที่บันทึกจะถูกล็อกจนกว่าการรันจะจบ เพราะการรันใช้งานอยู่ ส่วนอื่นเปลี่ยนได้ตอนนี้",
   "Locked while metrics are calculated: the run uses it.": "ล็อกระหว่างคำนวณเมตริก: การรันใช้งานอยู่",
   "This video has {test:,} frames, but the reference has {source:,}, even though both are the same length. From the first point where they differ, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "วิดีโอนี้มี {test:,} เฟรม แต่วิดีโออ้างอิงมี {source:,} เฟรม ทั้งที่ยาวเท่ากัน ตั้งแต่จุดแรกที่ทั้งสองต่างกัน แต่ละเฟรมจะถูกเปรียบเทียบกับเฟรมอ้างอิงที่ผิด คะแนนทุกค่าหลังจุดนั้นจึงผิด มักเกิดเมื่อมีเฟรมถูกทำซ้ำหรือทิ้งไประหว่างการเข้ารหัส การเข้ารหัสด้วยอัตราเฟรมแปรผันที่ตรงกับต้นฉบับจะช่วยป้องกันได้",
   "This video may be out of sync with the reference. Only {compared:,} frames were compared, but videos of this length should have {length:,}. If the scores drop suddenly partway through and stay low, this is the likely cause. To find out for sure, turn on {setting}, then right-click this video and choose {recalculate}.": "วิดีโอนี้อาจไม่ตรงจังหวะกับวิดีโออ้างอิง มีการเปรียบเทียบเพียง {compared:,} เฟรม แต่วิดีโอที่ยาวเท่านี้ควรมี {length:,} เฟรม หากคะแนนตกลงกะทันหันกลางทางแล้วต่ำต่อไป นี่น่าจะเป็นสาเหตุ หากต้องการรู้แน่ ให้เปิด {setting} แล้วคลิกขวาที่วิดีโอนี้และเลือก {recalculate}",
@@ -1331,7 +1383,6 @@
   "Saved scores of {name}": "คะแนนที่บันทึกไว้ของ {name}",
   "Select a comparison to see its saved scores.": "เลือกการเปรียบเทียบเพื่อดูคะแนนที่บันทึกไว้",
   "Select one comparison to see its saved scores.": "เลือกการเปรียบเทียบเพียงรายการเดียวเพื่อดูคะแนนที่บันทึกไว้",
-  "Several scores of this metric are saved: the newest is used unless another is picked.": "เมตริกนี้มีคะแนนที่บันทึกไว้หลายชุด: จะใช้ชุดล่าสุด เว้นแต่จะเลือกชุดอื่น",
   "Size": "ขนาด",
   "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "โปรไฟล์ที่เลือกไม่มีเงื่อนไข: ตั้งค่าได้ใน การตั้งค่า > ช่วงที่อ่อน หรือเลือกพรีเซ็ต",
   "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "กฎที่ใช้หาช่วงที่อ่อน: กฎเหล่านี้ไม่ได้บันทึกไว้กับคะแนน แต่นำมาใช้กับคะแนนตอนนี้",
@@ -1341,8 +1392,6 @@
   "{name} (saved)": "{name} (ที่บันทึกไว้)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "ลบผลลัพธ์ที่บันทึกจาก {directory} หรือไม่\n\nวิดีโอที่ให้คะแนนแล้วจะต้องคำนวณใหม่ ผลลัพธ์ที่วิดีโออ้างอิงไม่อยู่ในที่เดิมแล้วจะถูกเก็บไว้ เพราะคำนวณคะแนนใหม่ไม่ได้ ลบผลลัพธ์เหล่านั้นได้ในแท็บผลลัพธ์ที่บันทึก",
-  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "บางรายการให้คะแนนใหม่ไม่ได้ เพราะวิดีโออ้างอิงไม่อยู่ในที่เดิมแล้ว (ทำเครื่องหมาย \"ไม่พบ\")",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nไม่พบที่ตำแหน่งนี้ หากไม่มีวิดีโอนี้ จะคำนวณคะแนนเหล่านี้ใหม่ไม่ได้",
   "Recognize test videos remuxed after scoring (reads each one again)": "จดจำวิดีโอทดสอบที่รีมักซ์หลังให้คะแนน (อ่านแต่ละรายการอีกครั้ง)",
   "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "วิดีโอทดสอบที่มักซ์หรือรีมักซ์หลังให้คะแนนแล้ว (สตรีมดิบเป็น MKV หรือ MKV เป็น MP4) จะยังคงใช้คะแนนที่บันทึกไว้ โดยจดจำจากภาพที่เข้ารหัส\n\nจึงต้องอ่านวิดีโอทดสอบแต่ละรายการอีกครั้งหลังบันทึกคะแนน ใช้เวลาเท่ากับการอ่านไฟล์ (ไม่กี่นาทีสำหรับภาพยนตร์บนเครือข่ายที่แชร์) ทำในเบื้องหลังและไม่ทำระหว่างการคำนวณ และวิดีโอที่สตรีมเริ่มต้นเหมือนวิดีโอที่ให้คะแนนแล้วจะถูกอ่านทั้งหมดเพื่อดูว่าเป็นวิดีโอเดียวกันหรือไม่ หลังจากพบคะแนนที่บันทึกของวิดีโออื่นแล้ว\n\nปิด: จดจำวิดีโอทดสอบจากไฟล์เท่านั้น",
@@ -1418,6 +1467,33 @@
   "{low} to {high} metrics": "ตัวชี้วัด {low} ถึง {high} รายการ"
  },
  "plurals": {
+  "Deleted the saved scores of {count} comparison.": [
+   "ลบคะแนนที่บันทึกไว้ของการเปรียบเทียบ {count} รายการแล้ว"
+  ],
+  "The saved scores of {count} comparison are deleted. This can't be undone.": [
+   "คะแนนที่บันทึกไว้ของการเปรียบเทียบ {count} รายการจะถูกลบ และไม่สามารถเลิกทำได้"
+  ],
+  "Would delete {count} comparison's saved scores, {size}.": [
+   "จะลบคะแนนที่บันทึกไว้ของการเปรียบเทียบ {count} รายการ {size}"
+  ],
+  "day ago": [
+   "วันที่แล้ว"
+  ],
+  "{count} of them can't be scored again: its reference video is no longer where it was scored from (marked \"not found\" in the Saved Results tab).": [
+   "{count} รายการให้คะแนนใหม่ไม่ได้ เพราะวิดีโออ้างอิงไม่อยู่ในที่ที่ใช้ให้คะแนนแล้ว (ทำเครื่องหมาย \"ไม่พบ\" ในแท็บผลลัพธ์ที่บันทึก)"
+  ],
+  "{count} saved": [
+   "บันทึก {count} ชุด"
+  ],
+  "{count} saved result, {size}, saved {first} to {last}, in {directory}": [
+   "ผลลัพธ์ที่บันทึก {count} รายการ {size} บันทึกเมื่อ {first} ถึง {last} ใน {directory}"
+  ],
+  "{count} saved result, {size}, saved {first}, in {directory}": [
+   "ผลลัพธ์ที่บันทึก {count} รายการ {size} บันทึกเมื่อ {first} ใน {directory}"
+  ],
+  "{count} score of this metric is saved: choose the one used in the details, opened by the button above.": [
+   "บันทึกคะแนนของเมตริกนี้ไว้ {count} ชุด: เลือกชุดที่ใช้ในรายละเอียด ซึ่งเปิดด้วยปุ่มด้านบน"
+  ],
   "Click Remove all again to remove {count} video. Saved results are kept.": ["คลิก \"นำออกทั้งหมด\" อีกครั้งเพื่อนำวิดีโอ {count} รายการออก ผลลัพธ์ที่บันทึกยังคงอยู่"],
   "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["คลิก \"เริ่มใหม่\" อีกครั้งเพื่อล้างวิดีโออ้างอิงและนำวิดีโอ {count} รายการออก ผลลัพธ์ที่บันทึกยังคงอยู่"],
   "{count} test video does not last as long as the reference ({length}).": ["วิดีโอทดสอบ {count} รายการมีความยาวไม่เท่ากับต้นฉบับ ({length})"],
@@ -1437,9 +1513,6 @@
   ],
   "about {count} minute": [
    "ประมาณ {count} นาที"
-  ],
-  "{count} saved result, {size:.1f} MB in {directory}": [
-   "ผลลัพธ์ที่บันทึก {count} รายการ {size:.1f} MB ใน {directory}"
   ],
   "Copied the log to the clipboard ({count} line, the middle left out -- Export log saves all of it).": [
    "คัดลอกล็อกไปยังคลิปบอร์ดแล้ว ({count} บรรทัด ละส่วนกลาง — ส่งออกล็อกจะบันทึกทั้งหมด)"
@@ -1480,9 +1553,6 @@
   "{count} video: {counts}": [
    "วิดีโอ {count} รายการ: {counts}"
   ],
-  "Removed {count} saved result.": [
-   "นำผลลัพธ์ที่บันทึก {count} รายการออกแล้ว"
-  ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "วิดีโอที่เลือก {count} รายการมีผลบิตเรตแล้ว\n\nคำนวณใหม่หรือไม่ เลือก ไม่ เพื่อคงผลลัพธ์ และคำนวณเฉพาะไฟล์ที่ยังไม่มีผลลัพธ์"
   ],
@@ -1507,17 +1577,11 @@
   "{count} frame in all.": [
    "รวม {count} เฟรม"
   ],
-  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
-   "ลบคะแนนที่บันทึกไว้ของการเปรียบเทียบ {count} รายการหรือไม่ จะกู้คืนไม่ได้: วิดีโอจะถูกคำนวณคะแนนใหม่ในครั้งถัดไปที่เปรียบเทียบ"
-  ],
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "ลบคะแนนที่บันทึกไว้ของการเปรียบเทียบ {count} รายการไม่ได้: อาจมีไฟล์ของรายการเหล่านั้นเปิดอยู่"
   ],
   "{count} saved comparison in {directory}": [
    "การเปรียบเทียบที่บันทึก {count} รายการใน {directory}"
-  ],
-  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
-   "เก็บผลลัพธ์ {count} รายการที่วิดีโออ้างอิงหายไป ลบได้ในแท็บผลลัพธ์ที่บันทึก"
   ],
   "Saved {count} file": [
    "บันทึก {count} ไฟล์แล้ว"

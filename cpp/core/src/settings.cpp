@@ -153,6 +153,11 @@ const std::unordered_map<std::string, Field>& fields() {
         {"webhook_header", &Settings::webhook_header},
         {"saved_results_column_widths", &Settings::saved_results_column_widths},
         {"saved_results_hidden_columns", &Settings::saved_results_hidden_columns},
+        {"saved_score_versions", &Settings::saved_score_versions},
+        {"saved_score_pick", &Settings::saved_score_pick},
+        {"saved_score_device", &Settings::saved_score_device},
+        {"saved_score_engine", &Settings::saved_score_engine},
+        {"saved_details_columns", &Settings::saved_details_columns},
     };
     return by_key;
 }
@@ -651,6 +656,11 @@ std::string Settings::text() const {
     data["webhook_header"] = webhook_header;
     data["saved_results_column_widths"] = saved_results_column_widths;
     data["saved_results_hidden_columns"] = saved_results_hidden_columns;
+    data["saved_score_versions"] = saved_score_versions;
+    data["saved_score_pick"] = saved_score_pick;
+    data["saved_score_device"] = saved_score_device;
+    data["saved_score_engine"] = saved_score_engine;
+    data["saved_details_columns"] = saved_details_columns;
     return python_json_dumps(data, 2);
 }
 

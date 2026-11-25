@@ -103,7 +103,13 @@ footer, applies to every metric.
 **A plane-weighted (YUV) metric** also gets its Y, U and V entries
 (`plane_of`), shown with *Y, U and V of the YUV metrics*: no tick of their
 own, outside the count and Settings' default metrics, their headers'
-tooltips from their metric's text.
+tooltips from their metric's text. They are entries of `metrics()` too: a
+count or list made from it says whether it wants them.
+
+**Saved Results takes it with nothing to add:** its scores' column shows
+every metric a comparison has saved (never a plane, which is saved in its
+metric's file), and scrolls where they are more than it holds
+(`SavedResultsPanel.TheScoresColumnHoldsEveryScoreThreeCardsARow`).
 
 **The command line by default:** its `-m` key and its place in `all` (or
 why it is left out, as HDR VMAF is), `--help`'s text, and its JSON key in
@@ -309,9 +315,11 @@ not the first. Each rule here is one a reviewer can check.
 - **A modal only where the action can't go on without an answer:** a
   decision partway through an action (Calculate the rest?), closing the
   window during a run, a form whose values the action needs (the frame rate
-  of a raw stream), and what can't be undone at all (Clear saved results,
-  which deletes every saved score: a `danger` message, its headline in the
-  danger colour, Cancel Enter's answer). And the system's own file dialogs.
+  of a raw stream), and what can't be undone at all (deleting saved
+  results: one `danger` message for every way of doing it,
+  `saved_deletion_message` in `app/saved_deletion.h`, saying what goes and
+  what can't be scored again, its headline in the danger colour, Cancel
+  Enter's answer). And the system's own file dialogs.
 - **Every modal goes through `Dialogs`** (`app/dialogs.h`), which the
   window's tests answer, and is built on `AppDialog` (`app/app_dialog.h`): in
   VML Modern on Windows the app's own title bar (`TitleBar`, as the main

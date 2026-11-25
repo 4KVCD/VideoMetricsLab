@@ -67,11 +67,46 @@ std::optional<std::pair<ComparisonResult, std::string>> load_saved_comparison(
     const SavedComparison& comparison, const std::map<std::string, std::filesystem::path>& chosen = {},
     const std::function<std::optional<SavedScore>(const std::filesystem::path&)>& read = read_saved_score);
 
+// A saved score of a metric to choose among: its file, when it was saved,
+// and how it was made (none where its file can't be read, or is out of
+// date: never chosen).
+struct SavedScoreChoice {
+    std::filesystem::path file;
+    std::chrono::system_clock::time_point saved;
+    std::optional<MetricProvenance> provenance;
+};
+
+// The rule that picks one (Settings::saved_score_pick, _device, _engine).
+struct SavedScoreRule {
+    std::string pick = "videos";  // "videos", "newest" or "newest_app"
+    std::string device = "any";   // "any", "gpu" or "cpu": first, with "newest" and "newest_app"
+    std::string engine = "any";   // "any", "app" or "ffmpeg": first, likewise
+};
+
+// The score `rule` uses among `choices` (those of one metric), or none where
+// none is usable. "videos": the newest of those `videos_would_use` takes
+// (the Videos tab's lookup, the window's), else as "newest". "newest": the
+// newest; "newest_app": the one made by the newest version of the app
+// (MetricProvenance::made_by), newest among equals; each with the device's,
+// then the engine's, first.
+std::optional<std::filesystem::path> pick_saved_score(
+    const std::vector<SavedScoreChoice>& choices, const SavedScoreRule& rule,
+    const std::function<bool(const SavedScoreChoice&)>& videos_would_use = {});
+
 // Deletes the comparison's folder, which must be one under `base`'s v2
 // folder: whether it is gone. Whole or not at all: where one of its files
 // is in use, either nothing of it is deleted (it is still listed), or it is
 // moved out of the comparisons (v2/.deleted) and what was in use is deleted
 // at the next delete.
 bool delete_saved_comparison(const std::filesystem::path& base, const SavedComparison& comparison);
+
+// Deletes the comparisons under `base` last saved (their newest file's time)
+// from `from` up to, not including, `to` (none: no bound on that side), each
+// as delete_saved_comparison does: every one of them, those whose reference
+// is gone too (the question before it said so). `removed` counts those
+// deleted; one that could not be deleted (a file in use) is not counted.
+ClearedResults delete_saved_between(const std::filesystem::path& base,
+                                    std::optional<std::chrono::system_clock::time_point> from,
+                                    std::optional<std::chrono::system_clock::time_point> to);
 
 }  // namespace vml

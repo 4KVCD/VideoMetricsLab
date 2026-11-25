@@ -1,14 +1,18 @@
 // The Settings tab while metrics are calculated: it stays open, with only
 // what a running calculation uses locked, and a note saying so.
+#include <QAbstractSpinBox>
 #include <QApplication>
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QLabel>
 #include <QComboBox>
+#include <QCoreApplication>
+#include <QDateEdit>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QRegularExpression>
 #include <QScrollBar>
 #include <QSpinBox>
@@ -22,13 +26,21 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <fstream>
+#include <map>
 #include <string>
 #include <vector>
 
 #include "dialogs.h"
 #include "file_writes.h"
 #include "segment_rules_editor.h"
+#include "metric_list.h"
 #include "settings_panel.h"
+#include "app_dialog.h"
+#include "test_videos.h"
+#include "vml/analysis_request.h"
+#include "vml/metric_cache.h"
 #include "vml/segment_presets.h"
 #include "vml/segment_profiles.h"
 #include "vml/ffmpeg_tools.h"
@@ -40,7 +52,7 @@ namespace vml::app {
 namespace {
 
 // While a run is active the ffmpeg folder, the saved results' folder and
-// Clear saved results are locked, each telling why; the export folder (and
+// deleting saved results are locked, each telling why; the export folder (and
 // the rest) can still be changed; the note shows. When the run ends all of
 // it is as before, the tooltips too.
 TEST(SettingsPanel, ARunLocksOnlyWhatItUsesAndSaysSo) {
@@ -50,12 +62,14 @@ TEST(SettingsPanel, ARunLocksOnlyWhatItUsesAndSaysSo) {
     SettingsPanel panel(settings, writes, [] { return ToolsStatus{}; }, dialogs);
     auto* ffmpeg = panel.findChild<QLineEdit*>("ffmpegFolder");
     auto* saved_results = panel.findChild<QLineEdit*>("savedResultsFolder");
-    auto* clear = panel.findChild<QPushButton*>("clearSavedResults");
+    auto* clear = panel.findChild<QPushButton*>("deleteSavedResults");
+    auto* delete_old = panel.findChild<QComboBox*>("deleteSavedScope");
     auto* note = panel.findChild<QLabel*>("runLockNote");
-    ASSERT_TRUE(ffmpeg && saved_results && clear && note);
+    ASSERT_TRUE(ffmpeg && saved_results && clear && delete_old && note);
     QLineEdit* export_folder = nullptr;
     for (QLineEdit* edit : panel.findChildren<QLineEdit*>()) {
-        if (edit != ffmpeg && edit != saved_results && edit != panel.accent_hex) {
+        if (edit != ffmpeg && edit != saved_results && edit != panel.accent_hex &&
+            qobject_cast<QAbstractSpinBox*>(edit->parentWidget()) == nullptr) {  // not a spin box's own
             export_folder = edit;
         }
     }
@@ -67,6 +81,7 @@ TEST(SettingsPanel, ARunLocksOnlyWhatItUsesAndSaysSo) {
     EXPECT_FALSE(saved_results->isEnabled());
     EXPECT_FALSE(clear->isEnabled());
     EXPECT_TRUE(clear->toolTip().contains("Locked while metrics are calculated"));
+    EXPECT_FALSE(delete_old->isEnabled());
     EXPECT_TRUE(export_folder->isEnabled());
     EXPECT_TRUE(note->isVisibleTo(&panel));
     EXPECT_TRUE(note->text().startsWith(QStringLiteral("\U0001F512 Metrics are being calculated")));  // Classic's padlock
@@ -77,7 +92,83 @@ TEST(SettingsPanel, ARunLocksOnlyWhatItUsesAndSaysSo) {
     EXPECT_TRUE(saved_results->isEnabled());
     EXPECT_TRUE(clear->isEnabled());
     EXPECT_EQ(clear->toolTip(), "its own tip");
+    EXPECT_TRUE(delete_old->isEnabled());
     EXPECT_FALSE(note->isVisibleTo(&panel));
+}
+
+// Settings > Saved Results' Delete...: the count says how many there are and
+// when they were saved; the row says what its scope would delete before it
+// is clicked; the question says it too, and how many can't be scored again;
+// and it deletes them all, those whose reference is gone too.
+TEST(SettingsPanel, DeleteSaysWhatItDeletesAndDeletesIt) {
+    const test::Folder folder;
+    Settings settings;
+    settings.cache_dir = (folder / "cache").string();
+    std::map<std::string, std::filesystem::path> saved;
+    for (const char* name : {"old", "new"}) {
+        std::ofstream(folder / (std::string(name) + ".mkv")) << name;
+        std::ofstream(folder / "t.mkv") << "t";
+        ComparisonResult result;
+        result.source = folder / (std::string(name) + ".mkv");
+        result.distorted = folder / "t.mkv";
+        result.fps = 24.0;
+        FrameMetricResult vmaf;
+        vmaf.key = "vmaf";
+        vmaf.frame = {0, 1};
+        vmaf.time = {0.0, 1.0 / 24.0};
+        vmaf.values = {90.0F, 80.0F};
+        result.metric_results.add(std::move(vmaf));
+        const AnalysisRequest request =
+            analysis_request(VmafOptions{}, {"vmaf"}, {}, CvvdpSettings{}, VideoInfo{}, VideoInfo{});
+        saved[name] = store_result(folder / "cache", result.source, result.distorted, request.recipe, result, name,
+                                   request.metrics);
+    }
+    std::filesystem::remove(folder / "old.mkv");  // its reference gone: not to be scored again
+    for (const auto& entry : std::filesystem::directory_iterator(saved["old"])) {
+        std::filesystem::last_write_time(entry.path(),
+                                         std::filesystem::last_write_time(entry.path()) - std::chrono::days(40));
+    }
+    FileWrites writes;
+    Dialogs dialogs = standard_dialogs(nullptr);
+    Message asked;
+    dialogs.message = [&asked](const Message& message) {
+        asked = message;
+        return MessageAnswer{0, false};  // Delete saved results
+    };
+    SettingsPanel panel(settings, writes, [] { return ToolsStatus{}; }, dialogs);
+    panel.refresh_status();
+    panel.wait_for_count();
+    auto* summary = panel.findChild<QLabel*>("savedResultsSummary");
+    ASSERT_NE(summary, nullptr);
+    EXPECT_TRUE(summary->text().startsWith("2 saved results, ")) << summary->text().toStdString();
+    EXPECT_TRUE(summary->text().contains(" to ")) << summary->text().toStdString();  // two dates
+
+    panel.delete_scope->setCurrentIndex(panel.delete_scope->findData("all"));
+    EXPECT_TRUE(panel.delete_preview->text().startsWith("Would delete 2 comparisons'"))
+        << panel.delete_preview->text().toStdString();
+    panel.delete_scope->setCurrentIndex(panel.delete_scope->findData("older"));
+    panel.delete_days->setValue(30);
+    EXPECT_TRUE(panel.delete_preview->text().startsWith("Would delete 1 comparison's"))
+        << panel.delete_preview->text().toStdString();
+    EXPECT_FALSE(panel.delete_days->isHidden());  // the scope's own control, the dates' hidden
+    EXPECT_TRUE(panel.delete_from->isHidden());
+    EXPECT_EQ(panel.delete_button->property("vmlRole").toString(), "danger");
+
+    QSignalSpy idle(&writes, &FileWrites::became_idle);
+    panel.delete_button->click();
+    panel.wait_for_deletion_count();
+    EXPECT_EQ(asked.kind, MessageKind::danger);
+    EXPECT_TRUE(asked.headline.contains("1 comparison are deleted")) << asked.headline.toStdString();
+    EXPECT_TRUE(asked.text.contains("1 of them can't be scored again")) << asked.text.toStdString();
+    EXPECT_EQ(asked.default_button, 1);  // Cancel
+    EXPECT_TRUE(idle.count() > 0 || idle.wait(30000));
+    QCoreApplication::processEvents();
+    EXPECT_FALSE(std::filesystem::exists(saved["old"]));
+    EXPECT_TRUE(std::filesystem::exists(saved["new"] / "context.json"));
+    // Said under Delete..., where it was asked for, past the count after it.
+    panel.wait_for_count();
+    EXPECT_EQ(panel.delete_preview->text(), "Deleted the saved scores of 1 comparison.");
+    EXPECT_TRUE(panel.delete_preview->styleSheet().contains("font-weight: 700"));  // at first; then it fades to muted
 }
 
 // Settings is in sub-tabs: General, Metrics, Weak segments, Storage and
@@ -95,7 +186,8 @@ TEST(SettingsPanel, SubTabsHoldTheSettings) {
         names.push_back(panel.sections->tabText(index));
     }
     EXPECT_EQ(names,
-              (std::vector<QString>{"General", "Appearance", "Metrics", "Weak segments", "Storage", "Notifications"}));
+              (std::vector<QString>{"General", "Appearance", "Metrics", "Weak segments", "Saved Results", "Storage",
+                                    "Notifications"}));
     const auto section_of = [&panel](const QWidget* control) {
         for (int index = 0; index < panel.sections->count(); ++index) {
             if (panel.sections->widget(index)->isAncestorOf(control)) {
@@ -111,7 +203,10 @@ TEST(SettingsPanel, SubTabsHoldTheSettings) {
     EXPECT_EQ(section_of(panel.default_gpu), "Metrics");
     EXPECT_EQ(section_of(panel.gpu_together), "Metrics");
     EXPECT_EQ(section_of(panel.weak_profile), "Weak segments");
-    EXPECT_EQ(section_of(panel.cache_edit), "Storage");
+    EXPECT_EQ(section_of(panel.cache_edit), "Saved Results");
+    EXPECT_EQ(section_of(panel.use_cache), "Saved Results");
+    EXPECT_EQ(section_of(panel.saved_versions_used), "Saved Results");
+    EXPECT_EQ(section_of(panel.export_edit), "Storage");
     EXPECT_EQ(section_of(panel.log_label), "Storage");
     EXPECT_EQ(section_of(panel.run_lock_note), QString());
     EXPECT_TRUE(panel.isAncestorOf(panel.run_lock_note));

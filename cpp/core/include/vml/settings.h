@@ -301,6 +301,22 @@ struct Settings {
     // the test video's is always shown).
     std::vector<int> saved_results_column_widths;
     std::vector<std::string> saved_results_hidden_columns;
+    // Saved Results' scores (Settings > Saved Results): with several saved
+    // scores of one metric, a card for the one used, marked with how many
+    // are saved ("used"), or a card for each ("each").
+    std::string saved_score_versions = "used";
+    // Which of a metric's several saved scores is used, unless one is picked
+    // (pick_saved_score): "videos", the one the Videos tab would use with
+    // these settings; "newest"; or "newest_app", the one made by the newest
+    // version of the app. With "newest" and "newest_app", those made on
+    // saved_score_device ("any", "gpu" or "cpu") and by saved_score_engine
+    // ("any"; "app", the app's own; "ffmpeg") come first.
+    std::string saved_score_pick = "videos";
+    std::string saved_score_device = "any";
+    std::string saved_score_engine = "any";
+    // The columns of Saved Results' details panel (its i button), after the
+    // metric and its score, in saved_details_column_keys()'s order.
+    std::vector<std::string> saved_details_columns{"min", "max", "worst_1", "saved", "device", "made", "model"};
 
     // The saved settings: defaults for a missing or unreadable file, and
     // for each value of the wrong type (that setting alone); unknown keys

@@ -6,10 +6,16 @@
 #include <QCheckBox>
 #include <QClipboard>
 #include <QButtonGroup>
+#include <QEasingCurve>
+#include <QTimer>
+#include <QVariantAnimation>
+#include <QLocale>
+#include <QDateEdit>
 #include <QComboBox>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QFontMetrics>
+#include <QRadioButton>
 #include <QRawFont>
 #include <QFormLayout>
 #include <QFutureWatcher>
@@ -35,6 +41,7 @@
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
+#include <cmath>
 #include <exception>
 #include <initializer_list>
 #include <iterator>
@@ -49,6 +56,8 @@
 #include "i18n.h"
 #include "metric_list.h"
 #include "results_export.h"
+#include "saved_deletion.h"
+#include "saved_score_details.h"
 #include "segment_rules_editor.h"
 #include "theme.h"
 #include "vml/app_log.h"
@@ -59,6 +68,7 @@
 #include "vml/metric_cache.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
+#include "vml/saved_results.h"
 #include "vml/segment_presets.h"
 #include "vml/segment_profiles.h"
 #include "vml/vship.h"
@@ -84,8 +94,11 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
       file_writes_(file_writes),
       tools_(std::move(tools)),
       dialogs_(dialogs),
-      counting_(new QFutureWatcher<CacheSummary>(this)) {
+      counting_(new QFutureWatcher<CacheSummary>(this)),
+      deletion_listing_(new QFutureWatcher<std::vector<SavedComparison>>(this)) {
     connect(counting_, &QFutureWatcher<CacheSummary>::finished, this, [this] { show_cache_summary(); });
+    connect(deletion_listing_, &QFutureWatcher<std::vector<SavedComparison>>::finished, this,
+            [this] { ask_and_delete(deletion_listing_->result()); });
     connect(&file_writes_, &FileWrites::became_idle, this, [this] { on_file_writes_idle(); });
     auto* layout = new QVBoxLayout(this);
     // Shown while metrics are calculated (set_run_active).
@@ -124,6 +137,7 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
     sections->addTab(build_appearance_page(), app::tr("Appearance"));
     add_section(app::tr("Metrics"), {build_defaults_box(), build_gpu_box()});
     add_section(app::tr("Weak segments"), {build_weak_segments_box()});
+    add_section(app::tr("Saved Results"), {build_saved_scores_box(), build_saved_results_box()});
     add_section(app::tr("Storage"), {build_storage_box()});
     sections->addTab(build_notifications_page(), app::tr("Notifications"));
     layout->addWidget(sections, 1);
@@ -160,38 +174,6 @@ QGroupBox* SettingsPanel::build_ffmpeg_box() {
 QGroupBox* SettingsPanel::build_storage_box() {
     auto* storage_box = new QGroupBox(app::tr("Storage"));
     auto* storage_form = new QFormLayout(storage_box);
-    cache_edit = new QLineEdit(text_of(settings_.cache_dir));
-    cache_edit->setPlaceholderText(app::tr("blank = shared user-profile folder"));
-    connect(cache_edit, &QLineEdit::editingFinished, this, [this] { on_edited(); });
-    auto* browse_cache = new QPushButton(app::tr("Browse"));
-    connect(browse_cache, &QPushButton::clicked, this,
-            [this] { pick_directory(app::tr("Where should saved results be kept?"), cache_edit); });
-    auto* open_cache = new QPushButton(app::tr("Open"));
-    connect(open_cache, &QPushButton::clicked, this, [this] {
-        const std::filesystem::path folder = cache_folder();
-        std::error_code ignored;
-        std::filesystem::create_directories(folder, ignored);
-        QDesktopServices::openUrl(QUrl::fromLocalFile(text_of(folder)));
-    });
-    auto* cache_row = new QHBoxLayout;
-    cache_row->addWidget(cache_edit, 1);
-    cache_row->addWidget(browse_cache);
-    cache_row->addWidget(open_cache);
-    storage_form->addRow(app::tr("Saved results:"), cache_row);
-    cache_edit->setObjectName("savedResultsFolder");
-    run_locked_.insert(run_locked_.end(), {cache_edit, browse_cache});
-
-    cache_summary = new QLabel;
-    auto* clear_cache = new QPushButton(app::tr("Clear saved results"));
-    theme::set_role(clear_cache, "danger");
-    connect(clear_cache, &QPushButton::clicked, this, [this] { clear_saved_results(); });
-    auto* summary_row = new QHBoxLayout;
-    summary_row->addWidget(cache_summary, 1);
-    summary_row->addWidget(clear_cache);
-    storage_form->addRow("", summary_row);
-    clear_cache->setObjectName("clearSavedResults");
-    run_locked_.push_back(clear_cache);
-
     export_edit = new QLineEdit(text_of(settings_.export_dir));
     export_edit->setPlaceholderText(app::tr("blank = Documents"));
     connect(export_edit, &QLineEdit::editingFinished, this, [this] { on_edited(); });
@@ -243,22 +225,6 @@ QGroupBox* SettingsPanel::build_storage_box() {
     storage_form->addRow(app::tr("After each run:"), build_after_run_export());
 
 
-    use_cache = new QCheckBox(app::tr("Reuse a saved result when a video is added again"));
-    use_cache->setChecked(settings_.use_cache);
-    connect(use_cache, &QCheckBox::toggled, this, [this] { on_edited(); });
-    storage_form->addRow("", use_cache);
-    recognise_remuxes = new QCheckBox(app::tr("Recognize test videos remuxed after scoring (reads each one again)"));
-    recognise_remuxes->setToolTip(Qt::convertFromPlainText(app::tr(
-        "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps "
-        "its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more "
-        "after its scores are saved, as long as reading the file takes (a few minutes for a film on a network "
-        "share), in the background and never during a run; and a video whose stream begins as a scored one's is "
-        "read whole to tell whether it is that video, after the other videos' saved scores are found.\n\n"
-        "Off: test videos are known by their files only."),
-        Qt::WhiteSpaceNormal));
-    recognise_remuxes->setChecked(settings_.recognise_test_remuxes);
-    connect(recognise_remuxes, &QCheckBox::toggled, this, [this] { on_edited(); });
-    storage_form->addRow("", recognise_remuxes);
     check_frame_counts = new QCheckBox(app::tr("Read entire files to check frame counts when needed (can be slow)"));
     // As rich text, which Qt wraps (a plain tooltip is one line however long)
     check_frame_counts->setToolTip(Qt::convertFromPlainText(app::tr(
@@ -317,6 +283,229 @@ QGroupBox* SettingsPanel::build_storage_box() {
     log_row->addWidget(export_log_button);
     storage_form->addRow(app::tr("Log files:"), log_row);
     return storage_box;
+}
+
+QGroupBox* SettingsPanel::build_saved_scores_box() {
+    // How Saved Results shows a comparison's scores: where a metric has
+    // several, a card for the one used or for each (Settings::
+    // saved_score_versions); and the columns of its details panel
+    // (Settings::saved_details_columns).
+    auto* box = new QGroupBox(app::tr("Saved scores"));
+    auto* layout = new QVBoxLayout(box);
+    auto* versions = new QLabel(app::tr("When a metric has several saved scores:"));
+    versions->setWordWrap(true);
+    layout->addWidget(versions);
+    // Use: which of them (Settings::saved_score_pick), and for the newest,
+    // which device and engine first (pick_saved_score).
+    const auto combo = [this](const std::string& current,
+                              const std::vector<std::pair<QString, QString>>& choices) {
+        auto* box = new QComboBox;
+        for (const auto& [text, value] : choices) {
+            box->addItem(text, value);
+        }
+        box->setCurrentIndex(std::max(0, box->findData(QString::fromStdString(current))));
+        connect(box, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
+        return box;
+    };
+    saved_pick = combo(settings_.saved_score_pick,
+                       {{app::tr("the one the Videos tab would use"), QStringLiteral("videos")},
+                        {app::tr("the newest"), QStringLiteral("newest")},
+                        {app::tr("the one made by the newest version of the app"), QStringLiteral("newest_app")}});
+    saved_pick->setObjectName(QStringLiteral("savedScorePick"));
+    saved_pick->setToolTip(app::tr(
+        "The score the card shows and Open in Metric Graphs and the exports take, unless you pick another in the "
+        "details panel. The Videos tab's: the one a run would use again with the settings as they are (where it "
+        "would use none, the newest)."));
+    saved_device = combo(settings_.saved_score_device, {{app::tr("on any device"), QStringLiteral("any")},
+                                                         {app::tr("on the GPU first"), QStringLiteral("gpu")},
+                                                         {app::tr("on the CPU first"), QStringLiteral("cpu")}});
+    saved_engine = combo(settings_.saved_score_engine, {{app::tr("by any engine"), QStringLiteral("any")},
+                                                         {app::tr("by the app's own first"), QStringLiteral("app")},
+                                                         {app::tr("by FFmpeg first"), QStringLiteral("ffmpeg")}});
+    for (QComboBox* first : {saved_device, saved_engine}) {
+        first->setToolTip(app::tr("Of the newest, or of those the newest version of the app made, these come "
+                                  "first. The Videos tab's choice goes by the settings instead."));
+    }
+    const auto follow_pick = [this] {
+        const bool own = saved_pick->currentData().toString() != QStringLiteral("videos");
+        saved_device->setEnabled(own);
+        saved_engine->setEnabled(own);
+    };
+    connect(saved_pick, &QComboBox::currentIndexChanged, this, follow_pick);
+    follow_pick();
+    auto* use_row = new QHBoxLayout;
+    use_row->addWidget(new QLabel(app::tr("Use:")));
+    use_row->addWidget(saved_pick);
+    use_row->addWidget(saved_device);
+    use_row->addWidget(saved_engine);
+    use_row->addStretch(1);
+    layout->addLayout(use_row);
+    // Show: a card for the one used, or for each (Settings::saved_score_versions).
+    saved_versions_used = new QRadioButton(app::tr("One card per metric, saying how many are saved"));
+    saved_versions_used->setToolTip(
+        app::tr("The card shows the score used; the details panel, opened by the button over the scores, lists "
+                "them all, and a click on another uses it."));
+    saved_versions_each = new QRadioButton(app::tr("A card for each saved score, to pick the one used"));
+    saved_versions_each->setToolTip(
+        app::tr("Each card shows when its score was saved; the round button on it picks the one used."));
+    auto* group = new QButtonGroup(box);
+    group->addButton(saved_versions_used);
+    group->addButton(saved_versions_each);
+    (settings_.saved_score_versions == "each" ? saved_versions_each : saved_versions_used)->setChecked(true);
+    auto* show_row = new QHBoxLayout;
+    show_row->addWidget(new QLabel(app::tr("Show:")));
+    show_row->addWidget(saved_versions_used);
+    show_row->addWidget(saved_versions_each);
+    show_row->addStretch(1);
+    layout->addLayout(show_row);
+    connect(saved_versions_each, &QRadioButton::toggled, this, [this] { on_edited(); });
+
+    auto* columns = new QLabel(app::tr("The details panel, opened by the button over the scores, shows each score's "
+                                       "metric and score, and:"));
+    columns->setWordWrap(true);
+    layout->addWidget(columns);
+    // Stacks of four, down then across: Median, StDev, Min, Max; the worst
+    // 10% to 0.1%; Score bands and how it was made (the user, 2026-11-25:
+    // the first two are cohorts).
+    auto* grid = new QGridLayout;
+    const std::vector<std::string>& keys = saved_details_column_keys();
+    for (int index = 0; index < static_cast<int>(keys.size()); ++index) {
+        const std::string& key = keys[static_cast<std::size_t>(index)];
+        auto* tick = new QCheckBox(saved_details_heading(key));
+        tick->setObjectName(QStringLiteral("savedDetails_") + QString::fromStdString(key));
+        tick->setToolTip(saved_details_tip(key));
+        tick->setChecked(std::find(settings_.saved_details_columns.begin(), settings_.saved_details_columns.end(),
+                                   key) != settings_.saved_details_columns.end());
+        connect(tick, &QCheckBox::toggled, this, [this] { on_edited(); });
+        saved_details_boxes[key] = tick;
+        grid->addWidget(tick, index % 4, index / 4);
+    }
+    grid->setColumnStretch(4, 1);
+    layout->addLayout(grid);
+    return box;
+}
+
+void SettingsPanel::show_saved_results_section() {
+    for (int index = 0; index < sections->count(); ++index) {
+        if (sections->tabText(index) == app::tr("Saved Results")) {
+            sections->setCurrentIndex(index);
+        }
+    }
+}
+
+QGroupBox* SettingsPanel::build_saved_results_box() {
+    // Where saved results are kept, how many there are, clearing them, and
+    // when they are used (Settings > Saved Results; in Storage before).
+    auto* saved_box = new QGroupBox(app::tr("Saved results"));
+    auto* saved_form = new QFormLayout(saved_box);
+    cache_edit = new QLineEdit(text_of(settings_.cache_dir));
+    cache_edit->setPlaceholderText(app::tr("blank = shared user-profile folder"));
+    connect(cache_edit, &QLineEdit::editingFinished, this, [this] { on_edited(); });
+    auto* browse_cache = new QPushButton(app::tr("Browse"));
+    connect(browse_cache, &QPushButton::clicked, this,
+            [this] { pick_directory(app::tr("Where should saved results be kept?"), cache_edit); });
+    auto* open_cache = new QPushButton(app::tr("Open"));
+    connect(open_cache, &QPushButton::clicked, this, [this] {
+        const std::filesystem::path folder = cache_folder();
+        std::error_code ignored;
+        std::filesystem::create_directories(folder, ignored);
+        QDesktopServices::openUrl(QUrl::fromLocalFile(text_of(folder)));
+    });
+    auto* cache_row = new QHBoxLayout;
+    cache_row->addWidget(cache_edit, 1);
+    cache_row->addWidget(browse_cache);
+    cache_row->addWidget(open_cache);
+    saved_form->addRow(app::tr("Folder:"), cache_row);
+    cache_edit->setObjectName("savedResultsFolder");
+    run_locked_.insert(run_locked_.end(), {cache_edit, browse_cache});
+
+    cache_summary = new QLabel;
+    cache_summary->setObjectName("savedResultsSummary");
+    cache_summary->setWordWrap(true);
+    saved_form->addRow("", cache_summary);
+
+    // Deleting them, one way for all of it (docs/ARCHITECTURE.md, "Removing
+    // and deleting"): every saved result, those not saved again for a while,
+    // or those of a stretch of dates; what that would be said under it,
+    // and the question before it the Saved Results tab's Delete... asks.
+    delete_scope = new QComboBox;
+    delete_scope->setObjectName("deleteSavedScope");
+    delete_scope->addItem(app::tr("Every saved result"), QStringLiteral("all"));
+    delete_scope->addItem(app::tr("Those saved more than"), QStringLiteral("older"));
+    delete_scope->addItem(app::tr("Those saved from"), QStringLiteral("between"));
+    delete_scope->setCurrentIndex(1);
+    delete_days = new QSpinBox;
+    delete_days->setObjectName("deleteSavedDays");
+    delete_days->setRange(1, 3650);
+    delete_days->setValue(90);
+    auto* days_label = new QLabel;
+    days_label->setObjectName("deleteSavedDaysLabel");
+    const auto say_days = [this, days_label] {
+        days_label->setText(ntr("day ago", "days ago", delete_days->value()));
+    };
+    say_days();
+    delete_from = new QDateEdit(QDate::currentDate().addDays(-90));
+    delete_to = new QDateEdit(QDate::currentDate());
+    auto* to_label = new QLabel(app::tr("to"));
+    to_label->setObjectName("deleteSavedToLabel");
+    for (QDateEdit* date : {delete_from, delete_to}) {
+        date->setCalendarPopup(true);
+        date->setDisplayFormat(QLocale().dateFormat(QLocale::ShortFormat));
+        connect(date, &QDateEdit::dateChanged, this, [this] {
+            dates_chosen_ = true;
+            show_delete_preview();
+        });
+    }
+    delete_from->setObjectName("deleteSavedFrom");
+    delete_to->setObjectName("deleteSavedTo");
+    delete_button = new QPushButton(app::tr("Delete..."));
+    delete_button->setObjectName("deleteSavedResults");
+    theme::set_role(delete_button, "danger");  // files deleted, not to be undone
+    connect(delete_button, &QPushButton::clicked, this, [this] { delete_saved_results(); });
+    connect(delete_scope, &QComboBox::currentIndexChanged, this, [this] {
+        show_delete_scope();
+        show_delete_preview();
+    });
+    connect(delete_days, &QSpinBox::valueChanged, this, [this, say_days] {
+        say_days();
+        show_delete_preview();
+    });
+    auto* delete_row = new QHBoxLayout;
+    delete_row->addWidget(delete_scope);
+    delete_row->addWidget(delete_days);
+    delete_row->addWidget(days_label);
+    delete_row->addWidget(delete_from);
+    delete_row->addWidget(to_label);
+    delete_row->addWidget(delete_to);
+    delete_row->addStretch(1);
+    delete_row->addWidget(delete_button);
+    saved_form->addRow(app::tr("Delete:"), delete_row);
+    delete_preview = new QLabel;
+    delete_preview->setObjectName("deleteSavedPreview");
+    theme::style(delete_preview, "color: {muted};");
+    saved_form->addRow("", delete_preview);
+    delete_scope->setProperty("daysLabel", QVariant::fromValue<QObject*>(days_label));
+    delete_scope->setProperty("toLabel", QVariant::fromValue<QObject*>(to_label));
+    show_delete_scope();
+    run_locked_.insert(run_locked_.end(), {delete_scope, delete_days, delete_from, delete_to, delete_button});
+
+    use_cache = new QCheckBox(app::tr("Reuse a saved result when a video is added again"));
+    use_cache->setChecked(settings_.use_cache);
+    connect(use_cache, &QCheckBox::toggled, this, [this] { on_edited(); });
+    saved_form->addRow("", use_cache);
+    recognise_remuxes = new QCheckBox(app::tr("Recognize test videos remuxed after scoring (reads each one again)"));
+    recognise_remuxes->setToolTip(Qt::convertFromPlainText(app::tr(
+        "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps "
+        "its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more "
+        "after its scores are saved, as long as reading the file takes (a few minutes for a film on a network "
+        "share), in the background and never during a run; and a video whose stream begins as a scored one's is "
+        "read whole to tell whether it is that video, after the other videos' saved scores are found.\n\n"
+        "Off: test videos are known by their files only."),
+        Qt::WhiteSpaceNormal));
+    recognise_remuxes->setChecked(settings_.recognise_test_remuxes);
+    connect(recognise_remuxes, &QCheckBox::toggled, this, [this] { on_edited(); });
+    saved_form->addRow("", recognise_remuxes);
+    return saved_box;
 }
 
 QWidget* SettingsPanel::build_export_choices() {
@@ -1013,62 +1202,187 @@ void SettingsPanel::show_confirm_close() {
     confirm_close->setChecked(settings_.confirm_close_during_run);
 }
 
-void SettingsPanel::clear_saved_results() {
-    const std::filesystem::path directory = cache_folder();
-    // The count the tab shows, made off the window's thread
-    // (refresh_status): counting a large folder here would freeze the
-    // window. While it is still being made, the question is asked anyway.
+bool SettingsPanel::deleting_everything() const { return delete_scope->currentData().toString() == "all"; }
+
+std::pair<std::optional<std::chrono::system_clock::time_point>, std::optional<std::chrono::system_clock::time_point>>
+SettingsPanel::deletion_range() const {
+    const QString scope = delete_scope->currentData().toString();
+    const auto at = [](const QDate& date) {  // the day's start, here
+        return std::chrono::system_clock::time_point(
+            std::chrono::milliseconds(date.startOfDay().toMSecsSinceEpoch()));
+    };
+    if (scope == "older") {
+        return {std::nullopt, std::chrono::system_clock::now() - std::chrono::days(delete_days->value())};
+    }
+    if (scope == "between") {
+        const QDate from = std::min(delete_from->date(), delete_to->date());
+        const QDate to = std::max(delete_from->date(), delete_to->date());
+        return {at(from), at(to.addDays(1))};  // the last day whole
+    }
+    return {std::nullopt, std::nullopt};
+}
+
+void SettingsPanel::show_delete_scope() {
+    const QString scope = delete_scope->currentData().toString();
+    delete_days->setVisible(scope == "older");
+    if (auto* label = qobject_cast<QWidget*>(delete_scope->property("daysLabel").value<QObject*>())) {
+        label->setVisible(scope == "older");
+    }
+    delete_from->setVisible(scope == "between");
+    delete_to->setVisible(scope == "between");
+    if (auto* label = qobject_cast<QWidget*>(delete_scope->property("toLabel").value<QObject*>())) {
+        label->setVisible(scope == "between");
+    }
+}
+
+void SettingsPanel::pulse_delete_preview() {
+    // Bold in the text's colour, then, after a moment, faded back to the
+    // muted line it is: each result of Delete... (what it deleted, or why
+    // it deleted nothing) drawn to the eye once (the user, 2026-11-25),
+    // without a window or a sound. The previews under it aren't.
+    // The look's text, both interfaces: the panel's, as the line's own style
+    // sheet makes its palette the muted colour.
+    const QColor from = palette().color(QPalette::WindowText);
+    const QColor to = theme::color("muted");
+    // Colour and weight together, bold to regular: the weight dropped in one
+    // step read as a snap, the colour's fade going unseen beside it (the
+    // user, 2026-11-25). Held a moment first, then two seconds of fade.
+    const auto at = [this, from, to](double t) {
+        const auto mix = [t](int a, int b) { return static_cast<int>(std::lround(a + (b - a) * t)); };
+        const QColor colour(mix(from.red(), to.red()), mix(from.green(), to.green()), mix(from.blue(), to.blue()));
+        delete_preview->setStyleSheet(
+            QStringLiteral("color: %1; font-weight: %2;").arg(colour.name()).arg(mix(700, 400)));
+    };
+    if (delete_pulse_ == nullptr) {
+        delete_pulse_ = new QVariantAnimation(this);
+        delete_pulse_->setDuration(2000);
+        delete_pulse_->setStartValue(0.0);
+        delete_pulse_->setEndValue(1.0);
+        delete_pulse_->setEasingCurve(QEasingCurve::InOutQuad);
+        connect(delete_pulse_, &QVariantAnimation::finished, this,
+                [this] { theme::style(delete_preview, "color: {muted};"); });
+    }
+    delete_pulse_->stop();
+    disconnect(delete_pulse_, &QVariantAnimation::valueChanged, this, nullptr);
+    connect(delete_pulse_, &QVariantAnimation::valueChanged, this,
+            [at](const QVariant& value) { at(value.toDouble()); });
+    at(0.0);
+    QTimer::singleShot(2000, delete_pulse_, [this] { delete_pulse_->start(); });
+}
+
+void SettingsPanel::show_delete_preview() {
+    if (!deleted_note_.isEmpty()) {  // the count after a deletion: what it deleted, once
+        delete_preview->setText(deleted_note_);
+        deleted_note_.clear();
+        return;
+    }
+    // From the count, which reads each comparison's time and size at no cost.
     const bool counted = counting_->isFinished() && counting_->future().resultCount() > 0 &&
-                         counted_folder_ == directory;
-    if (counted && counting_->result().comparisons == 0 && counting_->result().bytes == 0 &&
-        file_writes_.idle()) {
-        status->setText(app::tr("There are no saved results to clear."));
+                         counted_folder_ == cache_folder();
+    if (!counted) {
+        delete_preview->setText(app::tr("Counting the saved results..."));
         return;
     }
+    const CacheSummary summary = counting_->result();
+    const auto [from, to] = deletion_range();
+    int count = 0;
+    std::uintmax_t bytes = 0;
+    for (const CacheSummary::Comparison& saved : summary.saved) {
+        if ((!from || saved.saved >= *from) && (!to || saved.saved < *to)) {
+            ++count;
+            bytes += saved.bytes;
+        }
+    }
+    if (deleting_everything()) {
+        bytes = summary.bytes;  // the bitrate readings too
+    }
+    delete_preview->setText(count == 0 ? app::tr("No saved results in that range.")
+                                       : ntr("Would delete {count} comparison's saved scores, {size}.",
+                                             "Would delete {count} comparisons' saved scores, {size}.", count,
+                                             {{"size", saved_size_text(bytes)}}));
+}
+
+void SettingsPanel::delete_saved_results() {
     if (cleared_) {
-        status->setText(app::tr("Saved results are already being cleared."));
+        delete_preview->setText(app::tr("Saved results are already being deleted."));
+        pulse_delete_preview();
         return;
     }
-    // Every saved score at once, which can't be undone: the danger message,
-    // Enter and Esc keeping them (docs/ARCHITECTURE.md, "Asking and telling
-    // the user": a modal kept, as clicking twice is too light for it).
-    Message message;
-    message.kind = MessageKind::danger;
-    message.title = app::tr("Clear saved results");
-    message.headline = app::tr("Every saved score in this folder is deleted. This can't be undone.");
-    message.text = app::tr("Delete saved results from {directory}?\n\nVideos already scored will have to be "
-                           "recomputed. Those whose reference video is no longer where it was are kept: their "
-                           "scores could not be calculated again. Delete them in the Saved Results tab.",
-                           {{"directory", text_of(directory)}});
-    message.buttons = {{app::tr("Delete saved results"), MessageButton::Role::danger},
-                       {app::tr("Cancel"), MessageButton::Role::plain}};
-    message.default_button = 1;
-    message.escape_button = 1;
-    if (dialogs_.message(message).button != 0) {
+    // Read first, off the window's thread: the question says how many of
+    // them can't be scored again, which each comparison's context tells.
+    deletion_folder_ = cache_folder();
+    delete_button->setEnabled(false);
+    delete_preview->setText(app::tr("Counting the saved results..."));
+    deletion_listing_->setFuture(QtConcurrent::run(
+        [folder = deletion_folder_] { return list_saved_comparisons(folder); }));
+}
+
+void SettingsPanel::wait_for_deletion_count() {
+    deletion_listing_->waitForFinished();
+    QCoreApplication::sendPostedEvents(deletion_listing_);
+}
+
+void SettingsPanel::wait_for_count() {
+    counting_->waitForFinished();
+    QCoreApplication::sendPostedEvents(counting_);
+}
+
+void SettingsPanel::ask_and_delete(const std::vector<SavedComparison>& listed) {
+    delete_button->setEnabled(!run_lock_note->isVisibleTo(this));
+    show_delete_preview();
+    const std::filesystem::path directory = deletion_folder_;
+    const bool everything = deleting_everything();
+    const auto [from, to] = deletion_range();
+    std::vector<SavedComparison> chosen;
+    for (const SavedComparison& saved : listed) {
+        if ((!from || saved.saved >= *from) && (!to || saved.saved < *to)) {
+            chosen.push_back(saved);
+        }
+    }
+    if (chosen.empty() && !(everything && counting_->isFinished() && counting_->future().resultCount() > 0 &&
+                            counting_->result().bytes > 0)) {
+        delete_preview->setText(app::tr("No saved results in that range: nothing deleted."));
+        pulse_delete_preview();
+        return;
+    }
+    SavedDeletion deletion = saved_deletion(chosen, directory);
+    deletion.everything = everything;
+    if (everything && counting_->isFinished() && counting_->future().resultCount() > 0 &&
+        counted_folder_ == directory) {
+        deletion.bytes = counting_->result().bytes;  // the bitrate readings too
+    }
+    // A run may have started while it was asked: then nothing is deleted.
+    if (dialogs_.message(saved_deletion_message(deletion)).button != 0 || run_lock_note->isVisibleTo(this) ||
+        cleared_) {
         return;
     }
     // Saved scores are written and deleted through the same queue, one after
     // another. If a run just finished, its scores therefore land before they
-    // are cleared, rather than coming back after the user cleared them all.
+    // are deleted, rather than coming back after the user deleted them.
     // `directory` is the folder the question just named: if the setting
     // changes before the queue gets to this, it must not delete a folder the
     // user was never asked about.
     cleared_ = std::make_shared<ClearedResults>();
-    file_writes_.submit(app::tr("clear saved results"), [directory, cleared = cleared_] {
-        // The black bars kept with the saved results go too: cleared, they
-        // start afresh.
-        forget_crop_answers();
-        std::error_code error;
-        const std::filesystem::path black_bars = directory / black_bars_file;
-        std::filesystem::remove(black_bars, error);
-        if (error) {
-            app_log::write(app_log::Level::warning, "vml.crop_detect",
-                           "Could not delete " + platform::path_text(black_bars) + ": " + error.message());
-        }
-        // Not those whose scores could not be calculated again.
-        *cleared = vml::clear_saved_results(directory, true);
-    });
-    status->setText(app::tr("Clearing saved results..."));
+    if (everything) {
+        file_writes_.submit(app::tr("delete saved results"), [directory, cleared = cleared_] {
+            // The black bars kept with the saved results go too: deleted,
+            // they start afresh.
+            forget_crop_answers();
+            std::error_code error;
+            const std::filesystem::path black_bars = directory / black_bars_file;
+            std::filesystem::remove(black_bars, error);
+            if (error) {
+                app_log::write(app_log::Level::warning, "vml.crop_detect",
+                               "Could not delete " + platform::path_text(black_bars) + ": " + error.message());
+            }
+            *cleared = vml::clear_saved_results(directory, false);
+        });
+    } else {
+        file_writes_.submit(app::tr("delete saved results"), [directory, from, to, cleared = cleared_] {
+            *cleared = vml::delete_saved_between(directory, from, to);
+        });
+    }
+    delete_preview->setText(app::tr("Deleting saved results..."));
 }
 
 // --------------------------------------------------------------- inside the tab
@@ -1078,11 +1392,38 @@ std::filesystem::path SettingsPanel::cache_folder() const {
 }
 
 void SettingsPanel::show_cache_summary() {
+    // How many, their size, and the dates they were last saved between.
     const CacheSummary summary = counting_->result();
-    cache_summary->setText(ntr("{count} saved result, {size:.1f} MB in {directory}",
-                               "{count} saved results, {size:.1f} MB in {directory}", summary.comparisons,
-                               {{"size", static_cast<double>(summary.bytes) / 1048576.0},
-                                {"directory", text_of(counted_folder_)}}));
+    if (summary.saved.empty()) {
+        cache_summary->setText(
+            app::tr("No saved results in {directory}", {{"directory", text_of(counted_folder_)}}));
+    } else {
+        const QString first = saved_date_text(summary.saved.back().saved);
+        const QString last = saved_date_text(summary.saved.front().saved);
+        const std::vector<NamedValue> values{{"size", saved_size_text(summary.bytes)},
+                                                  {"first", first},
+                                                  {"last", last},
+                                                  {"directory", text_of(counted_folder_)}};
+        cache_summary->setText(first == last
+                                   ? ntr("{count} saved result, {size}, saved {first}, in {directory}",
+                                         "{count} saved results, {size}, saved {first}, in {directory}",
+                                         summary.comparisons, values)
+                                   : ntr("{count} saved result, {size}, saved {first} to {last}, in {directory}",
+                                         "{count} saved results, {size}, saved {first} to {last}, in {directory}",
+                                         summary.comparisons, values));
+        if (!dates_chosen_) {  // the dates to delete between start as the saved ones'
+            const QSignalBlocker from_blocker(delete_from);
+            const QSignalBlocker to_blocker(delete_to);
+            const auto day = [](std::chrono::system_clock::time_point when) {
+                return QDateTime::fromMSecsSinceEpoch(
+                           std::chrono::duration_cast<std::chrono::milliseconds>(when.time_since_epoch()).count())
+                    .date();
+            };
+            delete_from->setDate(day(summary.saved.back().saved));
+            delete_to->setDate(day(summary.saved.front().saved));
+        }
+    }
+    show_delete_preview();
 }
 
 void SettingsPanel::on_file_writes_idle() {
@@ -1093,13 +1434,13 @@ void SettingsPanel::on_file_writes_idle() {
     }
     const ClearedResults cleared = *cleared_;
     cleared_.reset();
-    QString said = ntr("Removed {count} saved result.", "Removed {count} saved results.", cleared.removed);
-    if (cleared.kept > 0) {
-        said += " " + ntr("Kept {count} whose reference video is gone: delete it in the Saved Results tab.",
-                          "Kept {count} whose reference videos are gone: delete them in the Saved Results tab.",
-                          cleared.kept);
-    }
-    status->setText(said);
+    // Said beside Delete..., where it was asked for (docs/ARCHITECTURE.md,
+    // "Asking and telling the user"), until the count shown again replaces
+    // it with what the row would delete now.
+    deleted_note_ = ntr("Deleted the saved scores of {count} comparison.",
+                        "Deleted the saved scores of {count} comparisons.", cleared.removed);
+    delete_preview->setText(deleted_note_);
+    pulse_delete_preview();
     refresh_status();
     emit saved_results_cleared();
 }
@@ -1126,6 +1467,12 @@ void SettingsPanel::on_edited() {
         settings_.video_name_end != before.video_name_end) {
         emit video_names_changed();
     }
+    if (settings_.saved_score_versions != before.saved_score_versions ||
+        settings_.saved_score_pick != before.saved_score_pick ||
+        settings_.saved_score_device != before.saved_score_device ||
+        settings_.saved_score_engine != before.saved_score_engine) {
+        emit saved_scores_changed();
+    }
     if (settings_.ffmpeg_dir != before.ffmpeg_dir) {
         emit ffmpeg_folder_changed();  // after the save: the tools are looked for in the folder saved
     }
@@ -1146,6 +1493,16 @@ void SettingsPanel::read_controls() {
     settings_.ffmpeg_dir = ffmpeg_edit->text().toStdString();
     settings_.cache_dir = cache_edit->text().toStdString();
     settings_.export_dir = export_edit->text().toStdString();
+    settings_.saved_score_versions = saved_versions_each->isChecked() ? "each" : "used";
+    settings_.saved_score_pick = saved_pick->currentData().toString().toStdString();
+    settings_.saved_score_device = saved_device->currentData().toString().toStdString();
+    settings_.saved_score_engine = saved_engine->currentData().toString().toStdString();
+    settings_.saved_details_columns.clear();
+    for (const std::string& key : saved_details_column_keys()) {
+        if (saved_details_boxes.at(key)->isChecked()) {
+            settings_.saved_details_columns.push_back(key);
+        }
+    }
     settings_.export_items.clear();
     for (const std::string& key : export_item_keys()) {
         if (export_item_boxes.at(key)->isChecked()) {
@@ -1235,8 +1592,8 @@ void SettingsPanel::set_run_active(bool active) {
     }
     if (active) {
         const QString text = app::tr("Metrics are being calculated: the ffmpeg folder, the saved results' folder and "
-                                     "Clear saved results are locked until the run ends, because the run uses them. "
-                                     "Everything else can be changed now.");
+                                     "deleting saved results are locked until the run ends, because the run uses "
+                                     "them. Everything else can be changed now.");
         run_lock_note->setText(theme::current_interface() == theme::Interface::modern
                                    ? text
                                    : QStringLiteral("\U0001F512 ") + text);

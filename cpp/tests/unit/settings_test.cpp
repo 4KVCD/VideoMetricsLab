@@ -1,6 +1,7 @@
 #include "vml/settings.h"
 
 #include <gtest/gtest.h>
+#include <algorithm>
 
 #include <filesystem>
 #include <fstream>
@@ -13,6 +14,7 @@
 #include "reference.h"
 #include "test_videos.h"
 #include "vml/app_log.h"
+#include "vml/metrics.h"
 #include "vml/platform/system.h"
 
 namespace vml {
@@ -87,6 +89,11 @@ const std::map<std::string, std::function<Json(const Settings&)>>& settings_by_k
         {"cvvdp_default_preset", [](const Settings& s) { return Json(s.cvvdp_default_preset); }},
         {"saved_results_column_widths", [](const Settings& s) { return Json(s.saved_results_column_widths); }},
         {"saved_results_hidden_columns", [](const Settings& s) { return Json(s.saved_results_hidden_columns); }},
+        {"saved_score_versions", [](const Settings& s) { return Json(s.saved_score_versions); }},
+        {"saved_score_pick", [](const Settings& s) { return Json(s.saved_score_pick); }},
+        {"saved_score_device", [](const Settings& s) { return Json(s.saved_score_device); }},
+        {"saved_score_engine", [](const Settings& s) { return Json(s.saved_score_engine); }},
+        {"saved_details_columns", [](const Settings& s) { return Json(s.saved_details_columns); }},
     };
     return by_key;
 }

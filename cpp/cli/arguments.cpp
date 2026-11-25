@@ -555,7 +555,7 @@ options:
 )";
 
 const char* const saved_sections = R"(
-The comparisons the app has saved (Settings > Storage > Saved results, the
+The comparisons the app has saved (Settings > Saved Results > Folder, the
 Saved Results tab), without their videos: their files may be gone.
 
 positional arguments:

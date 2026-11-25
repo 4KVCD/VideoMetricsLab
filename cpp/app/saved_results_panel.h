@@ -1,9 +1,12 @@
 // The Saved results tab: the comparisons saved in the results cache
 // (saved_results.h), listed, opened in Metric Graphs, exported (results,
-// per-frame scores, graphs, weak segments) and deleted. Where a metric has
-// several saved scores, the newest is used unless another is picked. The
-// table's columns are resized by dragging and hidden from the header's
-// right-click menu; both are kept in Settings.
+// per-frame scores, graphs, weak segments) and deleted. The selected
+// comparison's scores are in a column on the table's left, a card each (a
+// row each in VML Classic), and every detail of them in a panel its ⓘ
+// button opens (SavedScoresPanel). Where a metric has several saved scores,
+// the newest usable one is used unless another is picked. The table's
+// columns are resized by dragging and hidden from the header's right-click
+// menu; both are kept in Settings.
 #pragma once
 
 #include <QSet>
@@ -24,6 +27,7 @@
 #include <vector>
 
 #include "quick_save.h"
+#include "saved_score_details.h"
 #include "dialogs.h"
 #include "file_writes.h"
 #include "vml/metric_cache.h"
@@ -37,15 +41,19 @@ class QComboBox;
 class QGridLayout;
 class QGroupBox;
 class QLabel;
+class QLayout;
 class QLineEdit;
 class QMenu;
 class QPushButton;
 class QScrollArea;
 class QTableWidget;
+class QToolButton;
 template <typename T>
 class QFutureWatcher;
 
 namespace vml::app {
+
+class ElidedLabel;
 
 // A saved comparison read back: its result, label and folder.
 struct LoadedSavedResult {
@@ -81,6 +89,12 @@ public:
     // saves `formats`); Save as... on a right-click is the Export menu's.
     std::function<void(const std::vector<LoadedSavedResult>& results)> save_results;
     std::function<std::vector<std::string>()> quick_formats;
+    // Whether the Videos tab, with the settings as they are, would use the
+    // saved score `choice` of `key` for `saved`'s videos (the run's own
+    // check: metric_cache.h's run_takes): Settings > Saved Results' "the one
+    // the Videos tab would use". Unset: the newest.
+    std::function<bool(const SavedComparison& saved, const std::string& key, const SavedScoreChoice& choice)>
+        videos_would_use;
     SaveButton* save_button() const { return save_button_; }
     ~SavedResultsPanel() override;
 
@@ -124,12 +138,23 @@ public:
     // For the tests.
     QTableWidget* table() const { return table_; }
     QLineEdit* filter() const { return filter_; }
-    // The list a metric's saved score is picked from: none where it has one.
-    QComboBox* score_choice(const std::string& key) const;
+    // The score of `key` the selected comparison uses (the one picked, else
+    // its newest usable one), or none with no comparison shown or no score of
+    // `key`. pick_score makes `file` the one used, as a click in the details
+    // panel or on a card does.
+    std::optional<std::filesystem::path> used_score(const std::string& key) const;
+    void pick_score(const std::string& key, const std::filesystem::path& file);
+    // The ⓘ button over the scores, and the panel it opens (nullptr with
+    // no comparison's scores shown).
+    QToolButton* details_button() const { return details_button_; }
+    SavedScoresPanel* open_details();
     // Waits for the selected comparison's scores to be read, and shows them.
     void wait_for_details();
-    // The Saved scores box's tiles a row.
-    static constexpr int tiles_a_row = 5;
+    // The cards a row in the scores' column.
+    static constexpr int tiles_a_row = 3;
+    // Settings > Saved Results changed how the scores are shown (a card for
+    // the score used, or for each): shown again.
+    void scores_settings_changed();
     // The Saved scores box as tiles (VML Modern's) or rows (Classic's), not
     // as the interface in use has it; shown again. For tests, which run in
     // Classic.
@@ -170,9 +195,12 @@ signals:
     // A column was hidden, shown or resized (once a drag ends):
     // column_widths and hidden_columns are to be saved.
     void columns_changed();
+    // The details panel's link: Settings > Saved Results to be shown.
+    void scores_settings_requested();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
+    void changeEvent(QEvent* event) override;
 
 private:
     std::filesystem::path base() const;
@@ -181,20 +209,42 @@ private:
     void show_column(int column, bool shown);
     void apply_filter();
     void show_details();
-    // A metric's tile in the Saved scores box: its name and `score` shown
-    // large (`score_label`, set by the list to pick from); the caller adds
-    // how it was made, or that list.
-    QWidget* make_tile(const std::string& key, const QString& score, QLabel*& score_label) const;
+    // Deletes every item of `layout`, the widgets of layouts within it too.
+    static void clear_layout(QLayout* layout);
+    // A score's card: `name` (a label, or the radio button that picks it),
+    // `badge` beside it (how many are saved; none: nothing), its score
+    // large, and `line` under it (CPU or GPU, or when it was saved).
+    QWidget* make_tile(const std::string& key, QWidget* name, const QString& score, const QString& line,
+                       const QString& badge, const QString& badge_tip) const;
+    // The badge saying how many of a metric's scores are saved.
+    static QLabel* saved_badge(const std::string& key, const QString& text, const QString& tip);
     // Whether the Saved scores box shows tiles: VML Modern's, unless a test
     // asked (set_tiles).
     bool showing_tiles() const;
-    // The selected comparison's scores, as tiles or as Classic's rows.
-    void show_tiles(const SavedComparison& saved);
-    void show_rows(const SavedComparison& saved);
-    // How a saved score was made, as its file records it.
-    QStringList made_of(const std::variant<FrameMetricResult, SequenceMetricResult>& score) const;
-    // A tile's height, the same for every tile: the box is sized from it.
+    // The selected comparison's scores, as cards (VML Modern's) or rows
+    // (Classic's): one for each metric's score used, or for each score
+    // (Settings::saved_score_versions).
+    void show_scores(const SavedComparison& saved);
+    // How a saved score was made, as its file records it: CPU or GPU, the
+    // implementation and its version, the model or CVVDP's display.
+    struct Made {
+        QString device;
+        QString made;
+        QString model;
+    };
+    Made made_of(const std::variant<FrameMetricResult, SequenceMetricResult>& score) const;
+    // Why a score file is not used ("out of date..."), or empty where it is usable.
+    QString unusable_note(const std::filesystem::path& file) const;
+    // The file of `key` `saved` uses: the one picked, else its newest usable.
+    std::optional<std::filesystem::path> used_file(const SavedComparison& saved, const std::string& key) const;
+    // The details panel's rows for `saved`, a score file each.
+    std::vector<SavedScoreRow> detail_rows(const SavedComparison& saved) const;
+    // A card's height, the same for every card.
     int tile_height() const;
+    // The ⓘ button's icon, drawn in the text's colour.
+    void draw_details_icon();
+    // The scores' column's width: three cards of the widest metric name or score.
+    int scores_column_width() const;
     std::vector<const SavedComparison*> selected() const;
     SaveButton* save_button_ = nullptr;
     // Whether the selected comparisons are of more than one reference, which
@@ -233,12 +283,10 @@ private:
     bool fitting_ = false;
     QGroupBox* details_ = nullptr;
     QGridLayout* details_grid_ = nullptr;
-    // The box's scroll area, as tall as the tiles or the rows need.
-    QScrollArea* details_scroll_ = nullptr;
-    int tiles_height_ = 0;
-    int rows_height_ = 0;
+    QScrollArea* details_scroll_ = nullptr;  // the column's cards or rows, scrolled
+    QToolButton* details_button_ = nullptr;
+    ElidedLabel* details_name_ = nullptr;  // the comparison whose scores are shown
     std::optional<bool> tiles_;  // set_tiles' choice; none: the interface's
-    std::map<std::string, QComboBox*> score_combos_;
     QString rules_choice_ = QStringLiteral("in-use");
     QPushButton* open_button_ = nullptr;
     QPushButton* delete_button_ = nullptr;
@@ -256,6 +304,7 @@ private:
     struct ReadScores {
         std::filesystem::path folder;
         std::map<std::filesystem::path, std::optional<SavedScore>> scores;
+        std::map<std::filesystem::path, ScoreStats> stats;  // each score's frames', for the details panel
         std::uint64_t listing = 0;  // the listing it was read for (listing_)
         bool complete = false;      // every file read, not stopped
     };

@@ -122,6 +122,89 @@ std::optional<std::pair<ComparisonResult, std::string>> load_saved_comparison(
     return loaded;
 }
 
+namespace {
+
+// "2.6 (0123456789ab)" as numbers, {2, 6}: compared part by part; none known: empty, oldest.
+std::vector<int> app_version_of(const std::string& made_by) {
+    std::vector<int> parts;
+    int number = -1;
+    for (const char c : made_by) {
+        if (c >= '0' && c <= '9') {
+            number = (number < 0 ? 0 : number * 10) + (c - '0');
+        } else {
+            if (number >= 0) {
+                parts.push_back(number);
+                number = -1;
+            }
+            if (c != '.') {
+                break;  // the version ends at the first that is neither a digit nor a dot
+            }
+        }
+    }
+    if (number >= 0) {
+        parts.push_back(number);
+    }
+    return parts;
+}
+
+}  // namespace
+
+std::optional<std::filesystem::path> pick_saved_score(const std::vector<SavedScoreChoice>& choices,
+                                                      const SavedScoreRule& rule,
+                                                      const std::function<bool(const SavedScoreChoice&)>& videos_would_use) {
+    std::vector<const SavedScoreChoice*> usable;
+    for (const SavedScoreChoice& choice : choices) {
+        if (choice.provenance) {
+            usable.push_back(&choice);
+        }
+    }
+    if (usable.empty()) {
+        return std::nullopt;
+    }
+    // Newest first, whatever order they came in.
+    std::stable_sort(usable.begin(), usable.end(),
+                     [](const SavedScoreChoice* a, const SavedScoreChoice* b) { return a->saved > b->saved; });
+    if (rule.pick == "videos" && videos_would_use) {
+        for (const SavedScoreChoice* choice : usable) {
+            if (videos_would_use(*choice)) {
+                return choice->file;
+            }
+        }
+        // None the Videos tab would take: the newest.
+    }
+    const auto device_rank = [&rule](const MetricProvenance& made) {
+        return rule.device == "any" || made.compute_backend == rule.device ? 0 : 1;
+    };
+    const auto engine_rank = [&rule](const MetricProvenance& made) {
+        if (rule.engine == "any") {
+            return 0;
+        }
+        const bool ffmpeg = made.implementation.rfind("ffmpeg", 0) == 0;
+        return (rule.engine == "ffmpeg") == ffmpeg ? 0 : 1;
+    };
+    const bool by_version = rule.pick == "newest_app";
+    const auto better = [&](const SavedScoreChoice* a, const SavedScoreChoice* b) {
+        if (rule.pick != "videos") {
+            if (device_rank(*a->provenance) != device_rank(*b->provenance)) {
+                return device_rank(*a->provenance) < device_rank(*b->provenance);
+            }
+            if (engine_rank(*a->provenance) != engine_rank(*b->provenance)) {
+                return engine_rank(*a->provenance) < engine_rank(*b->provenance);
+            }
+        }
+        if (by_version) {
+            const std::vector<int> x = app_version_of(a->provenance->made_by);
+            const std::vector<int> y = app_version_of(b->provenance->made_by);
+            if (x != y) {
+                return x > y;
+            }
+        }
+        return false;  // as they are: newest first
+    };
+    std::stable_sort(usable.begin(), usable.end(), better);
+    return usable.front()->file;
+}
+
 bool delete_saved_comparison(const std::filesystem::path& base, const SavedComparison& comparison) {
     // Only a comparison's own folder, directly under v2: never more.
     std::error_code error;
@@ -165,6 +248,21 @@ bool delete_saved_comparison(const std::filesystem::path& base, const SavedCompa
     saved_comparison_deleted(folder);  // gone from v2: the kept listing reads it again
     std::filesystem::remove_all(moved, ignored);
     return true;
+}
+
+ClearedResults delete_saved_between(const std::filesystem::path& base,
+                                    std::optional<std::chrono::system_clock::time_point> from,
+                                    std::optional<std::chrono::system_clock::time_point> to) {
+    ClearedResults done;
+    for (const SavedComparison& comparison : list_saved_comparisons(base)) {
+        if ((from && comparison.saved < *from) || (to && comparison.saved >= *to)) {
+            continue;
+        }
+        if (delete_saved_comparison(base, comparison)) {
+            ++done.removed;
+        }
+    }
+    return done;
 }
 
 }  // namespace vml

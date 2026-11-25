@@ -1,9 +1,68 @@
 {
  "strings": {
+  "A card for each saved score, to pick the one used": "Karta pro každé uložené skóre, k výběru použitého",
+  "CPU or GPU": "CPU nebo GPU",
+  "Choose columns…": "Vybrat sloupce…",
+  "Click to use this score.": "Kliknutím použijete toto skóre.",
+  "Counting the saved results...": "Počítání uložených výsledků...",
+  "Delete:": "Odstranit:",
+  "Deleting saved results...": "Odstraňování uložených výsledků...",
+  "Each card shows when its score was saved; the round button on it picks the one used.": "Každá karta ukazuje, kdy bylo její skóre uloženo; kulaté tlačítko na ní vybírá to použité.",
+  "Every saved result": "Všechny uložené výsledky",
+  "Every saved score of this comparison: its statistics, when it was saved and how it was made": "Všechna uložená skóre tohoto porovnání: jejich statistiky, kdy byla uložena a jak vznikla",
+  "How far the frames' scores spread from their mean.": "Jak daleko se skóre snímků rozptylují od svého průměru.",
+  "Made with": "Spočítáno pomocí",
+  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and deleting saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "Počítají se metriky: složka ffmpeg, složka uložených výsledků a odstraňování uložených výsledků jsou zamčené, dokud běh neskončí, protože je běh používá. Vše ostatní lze měnit hned.",
+  "Model or display": "Model nebo displej",
+  "No saved results in that range.": "V tomto rozsahu nejsou žádné uložené výsledky.",
+  "No saved results in that range: nothing deleted.": "V tomto rozsahu nejsou žádné uložené výsledky: nic nebylo odstraněno.",
+  "No saved results in {directory}": "Žádné uložené výsledky v {directory}",
+  "Of the newest, or of those the newest version of the app made, these come first. The Videos tab's choice goes by the settings instead.": "Z nejnovějších, nebo z těch, které vytvořila nejnovější verze aplikace, mají tyto přednost. Volba karty Videa se místo toho řídí nastavením.",
+  "One card per metric, saying how many are saved": "Jedna karta na metriku s počtem uložených skóre",
+  "Saved results are already being deleted.": "Uložené výsledky se již odstraňují.",
+  "Score": "Skóre",
+  "Score bands": "Pásma skóre",
+  "Settings > Saved Results": "Nastavení > Uložené výsledky",
+  "Show:": "Zobrazit:",
+  "The bitrate readings and black-bar answers kept with them are deleted too.": "Odstraní se i měření datového toku a výsledky hledání černých pruhů uložené s nimi.",
+  "The card shows the score used; the details panel, opened by the button over the scores, lists them all, and a click on another uses it.": "Karta ukazuje použité skóre; panel podrobností, otevíraný tlačítkem nad skóre, je vypíše všechna a kliknutím na jiné se použije to.",
+  "The details panel, opened by the button over the scores, shows each score's metric and score, and:": "Panel podrobností, otevíraný tlačítkem nad skóre, ukazuje u každého skóre metriku a skóre a dále:",
+  "The highest frame's score.": "Nejvyšší skóre snímku.",
+  "The lowest frame's score.": "Nejnižší skóre snímku.",
+  "The middle frame's score.": "Skóre prostředního snímku.",
+  "The score Open in Metric Graphs and the exports take, where a metric has several. Click another of its rows to use that one.": "Skóre, které berou Otevřít v Grafech metrik a exporty, má-li metrika více skóre. Kliknutím na jiný z jejích řádků použijete ten.",
+  "The score the card shows and Open in Metric Graphs and the exports take, unless you pick another in the details panel. The Videos tab's: the one a run would use again with the settings as they are (where it would use none, the newest).": "Skóre, které ukazuje karta a berou Otevřít v Grafech metrik a exporty, pokud v panelu podrobností nevyberete jiné. Skóre karty Videa: to, které by běh znovu použil s nastavením, jak je (kde by nepoužil žádné, nejnovější).",
+  "The score {share} of the frames are worse than: the low end where a higher score is better, the high end where a lower one is (Metric Graphs' {share} Low or High).": "Skóre, od kterého je {share} snímků horších: dolní konec, je-li vyšší skóre lepší, horní konec, je-li lepší nižší (Dolních nebo Horních {share} v Grafech metrik).",
+  "The share of the frames in each of the metric's score bands, as Metric Graphs' table has them (≥ 95, < 70, ...).": "Podíl snímků v jednotlivých pásmech skóre metriky, jak je uvádí tabulka Grafů metrik (≥ 95, < 70, ...).",
+  "The whole video's score, as Metric Graphs shows it.": "Skóre celého videa, jak ho ukazují Grafy metrik.",
+  "Their videos are scored again the next time they are compared.": "Jejich videa se při příštím porovnání znovu ohodnotí.",
+  "Those saved from": "Uložené od",
+  "Those saved more than": "Uložené před více než",
+  "Use this score": "Použít toto skóre",
+  "Use:": "Použít:",
+  "Used": "Použito",
+  "VMAF's model, or the display CVVDP modelled.": "Model VMAF, nebo displej, který CVVDP simuloval.",
+  "What calculated the score, and its version.": "Čím bylo skóre spočítáno, a jeho verze.",
+  "When a metric has several saved scores:": "Má-li metrika více uložených skóre:",
+  "When the score was saved.": "Kdy bylo skóre uloženo.",
+  "Whether the score was calculated on the CPU or the GPU.": "Zda bylo skóre spočítáno na CPU, nebo na GPU.",
+  "Worst {share}": "Nejhorší {share}",
+  "by FFmpeg first": "přednostně pomocí FFmpeg",
+  "by any engine": "libovolným jádrem",
+  "by the app's own first": "přednostně vlastním jádrem aplikace",
+  "on any device": "na libovolném zařízení",
+  "on the CPU first": "přednostně na CPU",
+  "on the GPU first": "přednostně na GPU",
+  "the newest": "nejnovější",
+  "the one made by the newest version of the app": "to, které vytvořila nejnovější verze aplikace",
+  "the one the Videos tab would use": "to, které by použila karta Videa",
+  "{size}, last saved {date}, in {directory}.": "{size}, naposledy uloženo {date}, v {directory}.",
+  "{size}, last saved {first} to {last}, in {directory}.": "{size}, naposledy uloženo {first} až {last}, v {directory}.",
+  "Folder:": "Složka:",
+  "Saved results": "Uložené výsledky",
   "Start over": "Začít znovu",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Vymaže referenci a odebere všechna testovací videa pro nové porovnání. Uložené výsledky zůstanou.",
   "Click Start over again to clear the reference.": "Dalším kliknutím na „Začít znovu“ vymažete referenci.",
-  "Every saved score in this folder is deleted. This can't be undone.": "Všechna uložená skóre v této složce budou odstraněna. Tuto akci nelze vrátit zpět.",
   "Show details": "Zobrazit podrobnosti",
   "Hide details": "Skrýt podrobnosti",
   "OK": "OK",
@@ -337,8 +396,6 @@
   "Storage": "Úložiště",
   "blank = shared user-profile folder": "Prázdné = sdílená složka v profilu uživatele",
   "Open": "Otevřít",
-  "Saved results:": "Uložené výsledky:",
-  "Clear saved results": "Vymazat uložené výsledky",
   "Export folder:": "Složka exportu:",
   "Reuse a saved result when a video is added again": "Znovu použít uložený výsledek, když je video přidáno znovu",
   "Each session's setup, every run and its steps, and every failure with its full text. Send these files along when reporting a problem.": "Nastavení každé relace, každý běh a jeho kroky, každé selhání s úplným textem. Tyto soubory pošlete při hlášení problému.",
@@ -390,9 +447,6 @@
   "Could not export the log: {error}": "Protokol nelze exportovat: {error}",
   "There is no log to export yet.": "Zatím není co exportovat.",
   "Log exported to {path}": "Protokol exportován do {path}",
-  "There are no saved results to clear.": "Nejsou žádné uložené výsledky k vymazání.",
-  "Saved results are already being cleared.": "Uložené výsledky se již mažou.",
-  "Clearing saved results...": "Mazání uložených výsledků...",
   "Reference video:": "Referenční video:",
   "No reference selected.": "Není vybráno referenční video.",
   "Add/remove metrics": "Přidat/odebrat metriky",
@@ -628,7 +682,6 @@
   "This saved run was measured against:\n    {source}\n\nbut the selected reference is:\n    {path}\n\nScores from two different references cannot be compared. Switch the reference to the one this run used?": "Tento uložený běh byl měřen vůči:\n    {source}\n\nale vybraná reference je:\n    {path}\n\nSkóre vůči různým referencím nelze porovnávat. Přepnout na referenci, kterou tento běh použil?",
   "Choose folder to save runs into": "Vyberte složku pro uložení běhů",
   "Could not {description}: {error}": "Nelze {description}: {error}",
-  "clear saved results": "vymazat uložené výsledky",
   "delete saved results": "odstranit uložené výsledky",
   "save {name}": "uložit {name}",
   "export {name}": "exportovat {name}",
@@ -1258,7 +1311,6 @@
   "Automatic (a discrete GPU first)": "Automaticky (nejprve samostatná GPU)",
   "{name} (not found)": "{name} (nenalezeno)",
   "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU, která počítá VMAF, VMAF v1, SSIMULACRA2, Butteraugli a CVVDP na počítači s více GPU, a jejíhož výrobce dekodér se zkouší jako první, když je dekódování na GPU automatické. Metrika, kterou její GPU spočítat nedokáže, se počítá na CPU, ne na jiné GPU. Automaticky se nejprve použije samostatná GPU.\n\nProjeví se při příštím spuštění aplikace; volba --gpu v příkazovém řádku vybírá pro jedno spuštění.",
-  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and Clear saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "Počítají se metriky: složka ffmpeg, složka uložených výsledků a Vymazat uložené výsledky jsou zamčené, dokud běh neskončí, protože je běh používá. Vše ostatní lze měnit hned.",
   "Locked while metrics are calculated: the run uses it.": "Zamčeno během výpočtu metrik: běh to používá.",
   "This video has {test:,} frames, but the reference has {source:,}, even though both are the same length. From the first point where they differ, each frame is compared with the wrong reference frame, so every score after that point is wrong. This usually happens when frames are duplicated or dropped during encoding. Encoding with a variable frame rate that matches the source avoids it.": "Toto video má {test:,} snímků, ale referenční video má {source:,}, přestože jsou obě stejně dlouhá. Od prvního místa, kde se liší, se každý snímek porovnává se špatným referenčním snímkem, takže každé skóre od toho místa je chybné. Obvykle se to stane, když se při kódování snímky zdvojí nebo vynechají. Předejdete tomu kódováním s proměnnou snímkovou frekvencí odpovídající zdroji.",
   "This video may be out of sync with the reference. Only {compared:,} frames were compared, but videos of this length should have {length:,}. If the scores drop suddenly partway through and stay low, this is the likely cause. To find out for sure, turn on {setting}, then right-click this video and choose {recalculate}.": "Toto video možná není synchronizované s referenčním. Porovnalo se jen {compared:,} snímků, ale video této délky by jich mělo mít {length:,}. Pokud skóre někde uprostřed náhle klesne a zůstane nízké, je to pravděpodobná příčina. Pro jistotu zapněte {setting}, pak klikněte na toto video pravým tlačítkem a zvolte {recalculate}.",
@@ -1331,7 +1383,6 @@
   "Saved scores of {name}": "Uložená skóre: {name}",
   "Select a comparison to see its saved scores.": "Vyberte porovnání a zobrazí se jeho uložená skóre.",
   "Select one comparison to see its saved scores.": "Vyberte jedno porovnání a zobrazí se jeho uložená skóre.",
-  "Several scores of this metric are saved: the newest is used unless another is picked.": "Pro tuto metriku je uloženo více skóre: použije se nejnovější, pokud nevyberete jiné.",
   "Size": "Velikost",
   "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "Vybraný profil nemá žádné podmínky: nastavte je v Nastavení > Slabé úseky, nebo vyberte předvolbu.",
   "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "Pravidla, podle nichž se hledají slabé úseky: neukládají se se skóre, ale použijí se na ně nyní.",
@@ -1341,8 +1392,6 @@
   "{name} (saved)": "{name} (uloženo)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved Results tab.": "Odstranit uložené výsledky z {directory}?\n\nVidea, která již byla ohodnocena, bude nutné přepočítat. Ty, jejichž referenční video už není tam, kde bylo, zůstanou zachovány: jejich skóre by už nešlo znovu vypočítat. Odstraňte je na kartě Uložené výsledky.",
-  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Některé z nich by už nešlo znovu ohodnotit: jejich referenční video už není tam, kde bylo (označeno „nenalezeno“).",
   "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nTam nenalezeno: bez něj by tato skóre už nešlo znovu vypočítat.",
   "Recognize test videos remuxed after scoring (reads each one again)": "Rozpoznávat testovaná videa přebalená po hodnocení (každé se přečte znovu)",
   "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "Testované video zabalené nebo přebalené po ohodnocení (jeho surový stream do MKV, MKV do MP4) si ponechá uložená skóre: pozná se podle svých kódovaných snímků.\n\nVyžaduje to přečíst každé testované video po uložení skóre ještě jednou, tak dlouho, jak trvá přečíst soubor (několik minut u filmu na síťové sdílené složce), na pozadí a nikdy během výpočtu; a video, jehož stream začíná jako stream ohodnoceného videa, se přečte celé, aby se zjistilo, zda jde o totéž video, až po nalezení uložených skóre ostatních videí.\n\nVypnuto: testovaná videa se poznávají jen podle svých souborů.",
@@ -1418,6 +1467,51 @@
   "{low} to {high} metrics": "{low} až {high} metrik"
  },
  "plurals": {
+  "Deleted the saved scores of {count} comparison.": [
+   "Odstraněna uložená skóre {count} porovnání.",
+   "Odstraněna uložená skóre {count} porovnání.",
+   "Odstraněna uložená skóre {count} porovnání."
+  ],
+  "The saved scores of {count} comparison are deleted. This can't be undone.": [
+   "Uložená skóre {count} porovnání budou odstraněna. Tuto akci nelze vrátit zpět.",
+   "Uložená skóre {count} porovnání budou odstraněna. Tuto akci nelze vrátit zpět.",
+   "Uložená skóre {count} porovnání budou odstraněna. Tuto akci nelze vrátit zpět."
+  ],
+  "Would delete {count} comparison's saved scores, {size}.": [
+   "Odstranila by se uložená skóre {count} porovnání, {size}.",
+   "Odstranila by se uložená skóre {count} porovnání, {size}.",
+   "Odstranila by se uložená skóre {count} porovnání, {size}."
+  ],
+  "day ago": [
+   "dnem",
+   "dny",
+   "dny"
+  ],
+  "{count} of them can't be scored again: its reference video is no longer where it was scored from (marked \"not found\" in the Saved Results tab).": [
+   "{count} z nich nelze znovu ohodnotit: jeho referenční video už není tam, odkud bylo hodnoceno (označeno „nenalezeno“ na kartě Uložené výsledky).",
+   "{count} z nich nelze znovu ohodnotit: jejich referenční video už není tam, odkud byla hodnocena (označeno „nenalezeno“ na kartě Uložené výsledky).",
+   "{count} z nich nelze znovu ohodnotit: jejich referenční video už není tam, odkud byla hodnocena (označeno „nenalezeno“ na kartě Uložené výsledky)."
+  ],
+  "{count} saved": [
+   "{count} uložené",
+   "{count} uložená",
+   "{count} uložených"
+  ],
+  "{count} saved result, {size}, saved {first} to {last}, in {directory}": [
+   "{count} uložený výsledek, {size}, uloženo {first} až {last}, v {directory}",
+   "{count} uložené výsledky, {size}, uloženo {first} až {last}, v {directory}",
+   "{count} uložených výsledků, {size}, uloženo {first} až {last}, v {directory}"
+  ],
+  "{count} saved result, {size}, saved {first}, in {directory}": [
+   "{count} uložený výsledek, {size}, uloženo {first}, v {directory}",
+   "{count} uložené výsledky, {size}, uloženo {first}, v {directory}",
+   "{count} uložených výsledků, {size}, uloženo {first}, v {directory}"
+  ],
+  "{count} score of this metric is saved: choose the one used in the details, opened by the button above.": [
+   "Pro tuto metriku je uloženo {count} skóre: použité vyberte v podrobnostech, otevíraných tlačítkem výše.",
+   "Pro tuto metriku jsou uložena {count} skóre: použité vyberte v podrobnostech, otevíraných tlačítkem výše.",
+   "Pro tuto metriku je uloženo {count} skóre: použité vyberte v podrobnostech, otevíraných tlačítkem výše."
+  ],
   "Click Remove all again to remove {count} video. Saved results are kept.": ["Dalším kliknutím na „Odebrat vše“ odeberete {count} video. Uložené výsledky zůstanou.", "Dalším kliknutím na „Odebrat vše“ odeberete všechna {count} videa. Uložené výsledky zůstanou.", "Dalším kliknutím na „Odebrat vše“ odeberete všech {count} videí. Uložené výsledky zůstanou."],
   "Click Start over again to clear the reference and remove {count} video. Saved results are kept.": ["Dalším kliknutím na „Začít znovu“ vymažete referenci a odeberete {count} video. Uložené výsledky zůstanou.", "Dalším kliknutím na „Začít znovu“ vymažete referenci a odeberete všechna {count} videa. Uložené výsledky zůstanou.", "Dalším kliknutím na „Začít znovu“ vymažete referenci a odeberete všech {count} videí. Uložené výsledky zůstanou."],
   "{count} test video does not last as long as the reference ({length}).": ["{count} testovací video netrvá stejně dlouho jako reference ({length}).", "{count} testovací videa netrvají stejně dlouho jako reference ({length}).", "{count} testovacích videí netrvá stejně dlouho jako reference ({length})."],
@@ -1443,11 +1537,6 @@
    "asi {count} minuta",
    "asi {count} minuty",
    "asi {count} minut"
-  ],
-  "{count} saved result, {size:.1f} MB in {directory}": [
-   "{count} uložený výsledek, {size:.1f} MB v {directory}",
-   "{count} uložené výsledky, {size:.1f} MB v {directory}",
-   "{count} uložených výsledků, {size:.1f} MB v {directory}"
   ],
   "Copied the log to the clipboard ({count} line, the middle left out -- Export log saves all of it).": [
    "Protokol zkopírován do schránky ({count} řádek, prostřední část vynechána — Exportovat protokol uloží vše).",
@@ -1514,11 +1603,6 @@
    "{count} videa: {counts}",
    "{count} videí: {counts}"
   ],
-  "Removed {count} saved result.": [
-   "Odebrán {count} uložený výsledek.",
-   "Odebrány {count} uložené výsledky.",
-   "Odebráno {count} uložených výsledků."
-  ],
   "{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep its results and calculate only files without results.": [
    "{count} vybrané video už má výsledky bitrate.\n\nPřepočítat jej? Zvolte Ne pro zachování výsledků a výpočet jen souborů bez výsledků.",
    "{count} vybraná videa už mají výsledky bitrate.\n\nPřepočítat tyto soubory? Zvolte Ne pro zachování výsledků a výpočet jen souborů bez výsledků.",
@@ -1559,11 +1643,6 @@
    "celkem {count} snímky.",
    "celkem {count} snímků."
   ],
-  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
-   "Odstranit uložená skóre {count} porovnání? Nelze je vrátit: videa budou při příštím porovnání ohodnocena znovu.",
-   "Odstranit uložená skóre {count} porovnání? Nelze je vrátit: videa budou při příštím porovnání ohodnocena znovu.",
-   "Odstranit uložená skóre {count} porovnání? Nelze je vrátit: videa budou při příštím porovnání ohodnocena znovu."
-  ],
   "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
    "Uložená skóre {count} porovnání nelze odstranit: některý z jejich souborů může být otevřený.",
    "Uložená skóre {count} porovnání nelze odstranit: některý z jejich souborů může být otevřený.",
@@ -1573,11 +1652,6 @@
    "{count} uložené porovnání v {directory}",
    "{count} uložená porovnání v {directory}",
    "{count} uložených porovnání v {directory}"
-  ],
-  "Kept {count} whose reference video is gone: delete it in the Saved Results tab.": [
-   "Zachován {count} výsledek, jehož referenční video chybí: odstraňte jej na kartě Uložené výsledky.",
-   "Zachovány {count} výsledky, jejichž referenční videa chybí: odstraňte je na kartě Uložené výsledky.",
-   "Zachováno {count} výsledků, jejichž referenční videa chybí: odstraňte je na kartě Uložené výsledky."
   ],
   "Saved {count} file": [
    "Uložen {count} soubor",

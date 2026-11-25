@@ -843,6 +843,48 @@ void MainWindow::build_ui() {
     });
     saved_results_panel_ = new SavedResultsPanel(settings_, dialogs_, *file_writes_);
     saved_results_panel_->quick_formats = [this] { return quick_formats(settings_); };
+    // The Videos tab's own check of a saved score, with the settings as a new
+    // row has them (metric_cache.h's run_takes): the file its request reads,
+    // VMAF's model included, answering it, made where its metric is
+    // calculated now. Each comparison's videos read once.
+    saved_results_panel_->videos_would_use =
+        [this, infos = std::make_shared<std::map<std::filesystem::path, std::pair<VideoInfo, VideoInfo>>>()](
+            const SavedComparison& saved, const std::string& key, const SavedScoreChoice& saved_score) {
+            auto found = infos->find(saved.folder);
+            if (found == infos->end()) {
+                const std::optional<std::pair<ComparisonResult, std::string>> context = saved_comparison(saved.folder);
+                if (!context) {
+                    return false;
+                }
+                found = infos->emplace(saved.folder, std::pair(context->first.source_info, context->first.distorted_info))
+                            .first;
+            }
+            const auto& [source, distorted] = found->second;
+            const VmafOptions options = options_from_settings();
+            std::optional<CvvdpPreset> display = cvvdp_preset_named(settings_.cvvdp_default_preset,
+                                                                    settings_.cvvdp_presets_json);
+            const CvvdpSettings cvvdp = display ? display->settings : automatic_cvvdp_preset(&source).settings;
+            try {
+                const AnalysisRequest request =
+                    analysis_request(options, {key}, automatic_perceptual_backends, cvvdp, source, distorted);
+                for (const MetricRequestSpec& spec : request.metrics) {
+                    if (spec.key != key) {
+                        continue;
+                    }
+                    const auto choice = automatic_perceptual_backends.find(key);
+                    const VshipBuild build = options.vship_build;
+                    return saved_score.provenance &&
+                           run_takes(saved.folder, spec, saved_score.file, *saved_score.provenance,
+                                     choice == automatic_perceptual_backends.end() ? std::nullopt
+                                                                                   : std::optional(choice->second),
+                                     [build](const std::string&) { return vship_available(build); },
+                                     colour_tags(source, distorted));
+                }
+            } catch (const std::invalid_argument&) {
+                // No way to calculate it with these settings: the Videos tab takes none.
+            }
+            return false;
+        };
     saved_results_panel_->save_results = [this](const std::vector<LoadedSavedResult>& results) {
         if (results.empty()) {
             return;
@@ -882,8 +924,15 @@ void MainWindow::build_ui() {
         settings_.saved_results_hidden_columns = saved_results_panel_->hidden_columns();
         save_settings();
     });
+    connect(settings_panel_, &SettingsPanel::saved_scores_changed, saved_results_panel_,
+            &SavedResultsPanel::scores_settings_changed);
     tabs_->addTab(new ScrollingPage(saved_results_panel_), app::tr("Saved Results"));
-    tabs_->addTab(new ScrollingPage(settings_panel_), app::tr("Settings"));
+    auto* settings_page = new ScrollingPage(settings_panel_);
+    tabs_->addTab(settings_page, app::tr("Settings"));
+    connect(saved_results_panel_, &SavedResultsPanel::scores_settings_requested, this, [this, settings_page] {
+        tabs_->setCurrentWidget(settings_page);
+        settings_panel_->show_saved_results_section();
+    });
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
     build_tab_corner();
     make_title_buttons();
