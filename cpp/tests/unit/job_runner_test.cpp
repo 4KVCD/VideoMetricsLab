@@ -429,11 +429,12 @@ TEST(JobRunner, AVideosFactsSayHowItsMetricsCameOutAndHowLongItsPassesTook) {
     const auto cpu = std::find_if(video.passes.begin(), video.passes.end(),
                                   [](const PassTiming& pass) { return pass.task == "ffmpeg"; });
     ASSERT_NE(cpu, video.passes.end());
-    // A second to its first frame, then 48 frames in three seconds less the pause's two. The test video, decoded
+    // A second to its first report, of 24 frames, then the other 24 in three seconds less the pause's two: 24 fps,
+    // not the 48 frames over that one second. The test video, decoded
     // in software, says why, in the results JSON too: as the run said when it made its plan (it knew of the size
     // change), not as its file's details alone would (4:4:4)
     const std::string why = "its picture size changes partway through";
-    EXPECT_EQ(*cpu, (PassTiming{"ffmpeg", {"psnr", "xpsnr"}, "cpu", 4.0, 2.0, 1.0, 48, 48.0, "done", decode,
+    EXPECT_EQ(*cpu, (PassTiming{"ffmpeg", {"psnr", "xpsnr"}, "cpu", 4.0, 2.0, 1.0, 48, 24.0, "done", decode,
                                 {"", why}}));
     nlohmann::ordered_json entry;
     add_video_record(entry, &video, nullptr, "");

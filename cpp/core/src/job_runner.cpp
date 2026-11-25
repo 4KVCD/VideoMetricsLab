@@ -299,9 +299,10 @@ private:
         double pass_began = 0.0;
         double pass_paused_before = 0.0;
         long long pass_frames_before = 0;
-        // The run's clock and paused time at its first progress report
+        // The run's clock, paused time and the task's progress count at its first progress report
         std::optional<double> pass_first_frame;
         double pass_paused_at_first_frame = 0.0;
+        long long pass_count_at_first_frame = 0;
 
         bool finished() const { return result.has_value() || perceptual.has_value(); }
     };
@@ -734,6 +735,7 @@ void JobRun::report_progress(std::size_t task, long long current, long long tota
     if (tasks_[task].open && !tasks_[task].pass_first_frame) {
         tasks_[task].pass_first_frame = scheduler_.cancel.now();
         tasks_[task].pass_paused_at_first_frame = scheduler_.cancel.paused_seconds();
+        tasks_[task].pass_count_at_first_frame = current;
     }
     tasks_[task].progress = Counts{current, total, fps};
     send_snapshots();
@@ -1158,10 +1160,23 @@ void JobRun::close_pass(std::size_t task, const std::string& end, std::optional<
     } else if (pass.frames == 0) {
         pass.setup_seconds = pass.seconds;  // it scored nothing
     }
+    // Its fps: the frames scored after its first report over the time since. The frames that report already
+    // counts were scored in time not measured: FFmpeg's first -progress block comes half a second in. A pass too
+    // short to time that way (nothing, or under a tenth of a second, after its first report) is timed over its
+    // whole length, its start included.
     if (state.pass_first_frame) {
+        constexpr double shortest_timed_seconds = 0.1;
         const double scoring = scheduler_.cancel.now() - *state.pass_first_frame -
                                (scheduler_.cancel.paused_seconds() - state.pass_paused_at_first_frame);
-        pass.fps = scoring > 0 ? static_cast<double>(pass.frames) / scoring : 0.0;
+        const long long before_first =
+            std::clamp(state.pass_count_at_first_frame - state.pass_frames_before, 0LL, pass.frames);
+        const long long after_first = pass.frames - before_first;
+        const double whole = pass.seconds - pass.paused_seconds;
+        if (after_first > 0 && scoring >= shortest_timed_seconds) {
+            pass.fps = static_cast<double>(after_first) / scoring;
+        } else {
+            pass.fps = whole > 0 ? static_cast<double>(pass.frames) / whole : 0.0;
+        }
     }
     pass.end = end;
     pass.decode = shown_decoding(state);
