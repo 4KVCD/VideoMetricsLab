@@ -16,6 +16,8 @@
 
 namespace vml::cli {
 
+struct CompareArguments;
+
 // A video's metrics, each as the reports give it: its score, and the
 // statistics the Metric Graphs tab shows (results_summary.h's
 // metric_summary).
@@ -70,6 +72,15 @@ nlohmann::ordered_json error_document(const std::optional<std::string>& referenc
 bool write_csvs(std::vector<TestVideo>& videos, const std::filesystem::path& folder,
                 const std::function<void(const std::string&)>& message,
                 const std::function<void(const std::string&)>& failed, bool json = false);
+
+// --score-summary: the videos' scores as score summary (score_summary.h),
+// all of them in one JSON and one CSV file in `folder`, named after the
+// reference (<reference>.score-summary.json and .csv), with the columns and
+// CVVDP's displays `arguments` carries; reported as write_csvs reports.
+bool write_score_summary(const std::vector<TestVideo>& videos, const std::filesystem::path& reference,
+                         const std::filesystem::path& folder, const CompareArguments& arguments,
+                         const std::function<void(const std::string&)>& message,
+                         const std::function<void(const std::string&)>& failed);
 
 // --frames-json's files' ending.
 inline constexpr const char* frames_json_suffix = ".frames.json";

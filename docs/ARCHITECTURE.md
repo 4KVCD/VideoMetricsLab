@@ -301,10 +301,21 @@ checks each such button; add a new one to it.
 A window that stops the user is the last way to tell or ask them anything,
 not the first. Each rule here is one a reviewer can check.
 
-- **What happened is told where it happened.** A result, a note or a
-  failure goes beside what the user did: a card's line (the Videos footer's
-  note), a row's ⚠ and tooltip, the tab bar's indicator (exports,
-  `ExportIndicator`). No window opens to say something worked.
+- **What an action did goes up; what is going on stays.** An outcome (a
+  setting saved, rows added, a preset deleted, a run ended, an export
+  written, a write that failed) goes to the tab bar's indicator
+  (`ExportIndicator::show_note`, `MainWindow::notify_done` and
+  `notify_failed`): a line at a tab's foot was missed. Done fades; a
+  failure, and what must not be missed (a restart a setting needs, a run's
+  end), stays until clicked. A state (a run's progress, "Reading...", a
+  count, a preview, a warning about the table) stays on the line beside
+  what it describes; so does what a control's own row says of a click on
+  it (Delete...'s result, drawn bold, then faded to its muted line; Remove
+  all's "click again"). No window opens to say something worked.
+- **A setting that shows only after a restart** (the language, VML
+  Classic) asks at once, in the app's own question: Restart now or Later.
+  Later, and any change during a run (a restart would stop it), leaves a
+  note in the indicator until clicked.
 - **A line in the tab bar's indicator** (`ExportIndicator`: an export's
   outcome, `show_note`'s line of what a click did) goes through that one
   widget, never a label of its own beside it. It fades by its opacity and

@@ -2193,6 +2193,11 @@ nlohmann::ordered_json comparison_results(const CompareArguments& arguments, Com
     if (arguments.frames_json) {
         written = write_csvs(videos, python_path(*arguments.frames_json), message, failed, true) && written;
     }
+    if (arguments.score_summary) {
+        written = write_score_summary(videos, comparison.reference, python_path(*arguments.score_summary), arguments,
+                                      message, failed) &&
+                  written;
+    }
     if (arguments.csv) {
         const std::filesystem::path folder = python_path(*arguments.csv);
         written = write_csvs(videos, folder, message, failed) && written;
@@ -2596,6 +2601,8 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
         return exit_usage;
     }
     const Settings& settings = chosen.settings;
+    arguments.score_summary_columns = settings.saved_details_columns;  // --score-summary' columns, as the window's
+    arguments.cvvdp_presets_json = settings.cvvdp_presets_json;
     const SavedScoresUse saved = saved_scores_use(arguments.profile, settings);
     // Saved scores read unless asked to calculate again (--recalculate, or
     // the settings' "Reuse a saved result when a video is added again" off);

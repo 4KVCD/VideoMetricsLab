@@ -104,6 +104,8 @@ void add_to_groups(std::vector<Group>& groups, TestVideo video) {
 bool report_groups(SavedArguments arguments, const Settings& settings, std::vector<Group>& groups,
                    const std::string& read_from) {
     CompareArguments& output = arguments.output;
+    output.score_summary_columns = settings.saved_details_columns;  // --score-summary' columns, as the window's
+    output.cvvdp_presets_json = settings.cvvdp_presets_json;
     const auto message = [&output](const std::string& text) {
         if (!output.quiet) {
             print_error(text);
@@ -142,6 +144,11 @@ bool report_groups(SavedArguments arguments, const Settings& settings, std::vect
         }
         if (output.frames_json) {
             written = write_csvs(videos, python_path(*output.frames_json), message, failed, true) && written;
+        }
+        if (output.score_summary) {
+            written = write_score_summary(videos, group.source.path, python_path(*output.score_summary), output,
+                                          message, failed) &&
+                      written;
         }
         if (!rules.conditions.empty() && output.segments_dir) {
             written =
@@ -391,13 +398,30 @@ int saved(const SavedArguments& arguments, const Settings& settings) {
     }
     std::vector<Group> groups;
     for (const SavedComparison* comparison : named) {
-        std::optional<std::pair<ComparisonResult, std::string>> loaded = load_saved_comparison(*comparison);
+        // Which file each metric's score came from (the first usable, newest
+        // first, as load_saved_comparison takes them): its time is the score
+        // details' "saved".
+        std::map<std::string, std::chrono::system_clock::time_point> times;
+        const auto read = [comparison, &times](const std::filesystem::path& file) {
+            std::optional<SavedScore> score = read_saved_score(file);
+            if (score && !score->outdated) {
+                for (const SavedScoreFile& saved : comparison->scores) {
+                    if (saved.file == file) {
+                        times.try_emplace(saved.key, saved.saved);  // the first usable is the one used
+                    }
+                }
+            }
+            return score;
+        };
+        std::optional<std::pair<ComparisonResult, std::string>> loaded = load_saved_comparison(*comparison, {}, read);
         if (!loaded) {
             print_error(saved_id(*comparison).substr(0, 12) + ": its saved scores could not be read");
             ok = false;
             continue;
         }
-        add_to_groups(groups, video_of(std::move(loaded->first)));
+        TestVideo video = video_of(std::move(loaded->first));
+        video.saved_times = std::move(times);
+        add_to_groups(groups, std::move(video));
     }
     if (!groups.empty()) {
         ok = report_groups(arguments, settings, groups, "saved results") && ok;

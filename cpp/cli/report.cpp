@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <set>
 
+#include "arguments.h"
 #include "common.h"
 #include "stills.h"
 #include "vml/build_info.h"
+#include "vml/score_summary.h"
 #include "vml/difference.h"
 #include "vml/export_csv.h"
 #include "vml/frame_pairing.h"
@@ -345,8 +347,8 @@ std::string results_table(const VideoInfo& source, const std::vector<TestVideo>&
 
 Json error_document(const std::optional<std::string>& reference, const std::string& error, const std::string& code,
                     const RunRecord* record) {
-    Json document{{"app", "VideoMetricsLab"}, {"version", VML_VERSION}, {"commit", build_commit()},
-                  {"format", results_format}, {"cancelled", false}};
+    Json document{{"app", "VideoMetricsLab"}, {"url", project_url}, {"version", VML_VERSION},
+                  {"commit", build_commit()}, {"format", results_format}, {"cancelled", false}};
     if (reference) {
         document["reference"] = Json{{"path", *reference}};
     }
@@ -364,7 +366,7 @@ Json results_document(const VideoInfo& source, const std::vector<TestVideo>& vid
                       const RunRecord* record) {
     Json reference{{"path", platform::path_text(source.path)}};
     add_media(reference, source);
-    Json document{{"app", "VideoMetricsLab"}, {"version", VML_VERSION}, {"commit", build_commit()}, {"format", results_format},
+    Json document{{"app", "VideoMetricsLab"}, {"url", project_url}, {"version", VML_VERSION}, {"commit", build_commit()}, {"format", results_format},
                   {"cancelled", cancelled}, {"reference", reference}, {"videos", Json::array()}};
     if (record != nullptr) {
         add_run_record(document, *record);
@@ -513,6 +515,52 @@ bool write_csvs(std::vector<TestVideo>& videos, const std::filesystem::path& fol
                           written;
             }
         }
+    }
+    return written;
+}
+
+bool write_score_summary(const std::vector<TestVideo>& videos, const std::filesystem::path& reference,
+                         const std::filesystem::path& folder, const CompareArguments& arguments,
+                         const std::function<void(const std::string&)>& message,
+                         const std::function<void(const std::string&)>& failed) {
+    std::vector<ScoreSummaryEntry> entries;
+    for (const TestVideo& video : videos) {
+        if (video.result) {
+            entries.push_back({video.label(), video.path, reference,
+                               score_summary(*video.result, arguments.cvvdp_presets_json, video.saved_times)});
+        }
+        for (const TestVideo& other : video.other_displays) {
+            if (other.result) {
+                entries.push_back({other.label(), other.path, reference,
+                                   score_summary(*other.result, arguments.cvvdp_presets_json)});
+            }
+        }
+    }
+    if (entries.empty()) {
+        return true;  // nothing scored: nothing to write
+    }
+    std::error_code error;
+    std::filesystem::create_directories(folder, error);
+    if (error) {
+        failed("The score summary folder could not be made: " + python_os_error(error, folder));
+        return false;
+    }
+    std::set<std::filesystem::path> reserved;
+    const std::string name = platform::path_text(reference.stem());
+    const std::filesystem::path json = unique_output_path(folder, name, ".score-summary.json", reserved);
+    const std::filesystem::path csv = unique_output_path(folder, name, ".score-summary.csv", reserved);
+    const std::vector<std::string>& columns = arguments.score_summary_columns;
+    bool written = true;
+    if (const std::optional<std::string> failure = write_json_file(json, score_summary_json(entries, columns))) {
+        failed("The score summary could not be written: " + *failure);
+        written = false;
+    }
+    if (const std::optional<std::string> failure = write_bytes_file(csv, score_summary_csv(entries, columns))) {
+        failed("The score summary could not be written: " + *failure);
+        written = false;
+    }
+    if (written) {
+        message("Score summary in " + platform::path_text(json) + " and " + platform::path_text(csv));
     }
     return written;
 }

@@ -69,10 +69,12 @@ QString fields_help() {
 QWidget* SettingsPanel::build_notifications_page() {
     test_notifier_ = new Notifier(this);
     connect(test_notifier_, &Notifier::sent, this, [this](const QString& service, const QString& error) {
-        status->setText(error.isEmpty()
-                            ? app::tr("Notification sent to {service}.", {{"service", service}})
-                            : app::tr("Couldn't send the notification to {service}: {error}",
-                                      {{"service", service}, {"error", error}}));
+        if (error.isEmpty()) {
+            say(app::tr("Notification sent to {service}.", {{"service", service}}));
+        } else {
+            say(app::tr("Couldn't send the notification to {service}: {error}", {{"service", service}, {"error", error}}),
+                ExportIndicator::Note::failed);
+        }
     });
     template_typing_ = new QTimer(this);
     template_typing_->setSingleShot(true);
@@ -576,10 +578,10 @@ void SettingsPanel::send_notification_test(const QString& service) {
         settings_, sample_notified_run(app::tr("Test notification")),
         QDateTime::currentDateTimeUtc().toString(Qt::ISODate).toStdString(), service.toStdString());
     if (plan.requests.empty()) {
-        status->setText(notification_problems(plan).join(' '));
+        say(notification_problems(plan).join(' '), ExportIndicator::Note::failed);
         return;
     }
-    status->setText(app::tr("Sending a test to {service}...", {{"service", service}}));
+    say(app::tr("Sending a test to {service}...", {{"service", service}}), ExportIndicator::Note::info);
     test_notifier_->send(plan.requests);
 }
 

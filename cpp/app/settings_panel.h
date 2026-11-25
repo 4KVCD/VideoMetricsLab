@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "dialogs.h"
+#include "export_indicator.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/settings.h"
 
@@ -65,6 +66,11 @@ class SettingsPanel : public QWidget {
     Q_OBJECT
 
 public:
+    // Where the panel says what an action did (the window's tab bar
+    // indicator, ExportIndicator::show_note), and how an export of the log
+    // went (its show_outcome). Unset: nothing said (tests may set them).
+    std::function<void(const QString& text, ExportIndicator::Note kind)> notify;
+    ExportReport report_export;
     // `settings` are the window's own, which this panel edits and saves;
     // `file_writes` the window's queue of writes, which clearing the saved
     // results goes through; `tools` gives the window's latest check of
@@ -275,7 +281,6 @@ public:
     QPushButton* notify_presets = nullptr;
     QPushButton* insert_field = nullptr;
     QLabel* notify_preview = nullptr;
-    QLabel* status = nullptr;
 
 signals:
     // The defaults for newly added videos may have changed (any edit).
@@ -293,6 +298,10 @@ signals:
     // How Saved Results shows a comparison's scores changed (a card for the
     // score used, or for each).
     void saved_scores_changed();
+    // A setting saved shows only once the app starts again (the language,
+    // VML Classic): `what` says so; the window offers to restart. Empty: the
+    // setting went back, and no restart is needed any more.
+    void restart_needed(const QString& what);
     // How test videos' names are shown changed (Video names).
     void video_names_changed();
 
@@ -386,6 +395,9 @@ private:
     QString deleted_note_;  // what the last deletion deleted, said once under Delete...
     QVariantAnimation* delete_pulse_ = nullptr;  // that line fading from bold to muted
     void pulse_delete_preview();
+    void say(const QString& text, ExportIndicator::Note kind = ExportIndicator::Note::done) const;
+    std::string started_language_;  // the language the app started in: another shows after a restart
+    QString restart_said_;           // the restart last asked for (restart_needed), or none
     // The range delete_scope names: the saved times from (none: no bound) up
     // to, not including, the second; everything with "all".
     std::pair<std::optional<std::chrono::system_clock::time_point>,

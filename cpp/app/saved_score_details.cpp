@@ -1,6 +1,7 @@
 #include "saved_score_details.h"
 
 #include <QGuiApplication>
+#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QScreen>
@@ -10,9 +11,11 @@
 #include <algorithm>
 
 #include "i18n.h"
+#include "quick_save.h"
 #include "theme.h"
 #include "window_helpers.h"
 #include "vml/metrics.h"
+#include "vml/score_summary.h"
 #include "vml/number_format.h"
 
 namespace vml::app {
@@ -59,12 +62,7 @@ QString metric_name(const std::string& key) {
 }  // namespace
 
 const std::vector<std::string>& saved_details_column_keys() {
-    // In stacks of four in Settings: the summary; the worst frames' tails;
-    // the bands and how it was made, most telling first; when it was saved.
-    static const std::vector<std::string> keys{"median",  "stdev",   "min",       "max",   "worst_10",
-                                               "worst_5", "worst_1", "worst_0_1", "bands", "model",
-                                               "made",    "device",  "saved"};
-    return keys;
+    return score_summary_column_keys();  // one list, the file's and the panel's
 }
 
 QString saved_details_heading(const std::string& key) {
@@ -114,7 +112,11 @@ SavedScoresPanel::SavedScoresPanel(const QString& title, std::vector<SavedScoreR
     auto* heading = new QLabel(title);
     theme::set_role(heading, "title");
     heading->setTextFormat(Qt::PlainText);
-    layout->addWidget(heading);
+    auto* head = new QHBoxLayout;
+    head->addWidget(heading, 1);
+    save_button_ = new SaveButton;  // the window says what it saves (SavedResultsPanel::open_details)
+    head->addWidget(save_button_);
+    layout->addLayout(head);
 
     std::vector<std::string> shown;  // in the keys' own order
     for (const std::string& key : saved_details_column_keys()) {

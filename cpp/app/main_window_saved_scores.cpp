@@ -492,7 +492,7 @@ void MainWindow::recompute_rows(const std::vector<int>& rows, bool forget_saved)
             set_row_info(row, *row_data.video_info);
         }
     }
-    show_status(ntr("Cleared {count} result -- make sure it is checked, then click Calculate metrics to recompute.",
+    notify_done(ntr("Cleared {count} result -- make sure it is checked, then click Calculate metrics to recompute.",
                     "Cleared {count} results -- make sure they're checked, then click Calculate metrics to recompute.",
                     static_cast<long long>(rows.size())));
     sync_frame_compare();

@@ -14,6 +14,7 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
+#include <QProcess>
 #include <QPushButton>
 #include <QScreen>
 #include <QSplitter>
@@ -258,7 +259,7 @@ MainWindow::MainWindow() {
         },
         [this] { QMetaObject::invokeMethod(this, [this] { end_stream_status(); }, Qt::QueuedConnection); });
     connect(file_writes_, &FileWrites::write_failed, this, [this](const QString& description, const QString& error) {
-        show_status(app::tr("Could not {description}: {error}", {{"description", description}, {"error", error}}));
+        notify_failed(app::tr("Could not {description}: {error}", {{"description", description}, {"error", error}}));
     });
 
     // Before the window is built: building it may already change the videos.
@@ -482,7 +483,54 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         store_open_videos();
         settings_.save();
     }
+    if (restart_on_close_) {
+        // Restart now, asked for (offer_restart): the app again, as it was
+        // started (the portable launcher's profile is in the environment it
+        // inherits), now that this one has saved everything.
+        QProcess::startDetached(QCoreApplication::applicationFilePath(), QCoreApplication::arguments().mid(1));
+    }
     QMainWindow::closeEvent(event);
+}
+
+void MainWindow::offer_restart(const QString& what) {
+    if (what.isEmpty()) {  // changed back: no restart needed, and nothing to say so
+        export_indicator_->dismiss_note(restart_note_);
+        restart_note_.clear();
+        return;
+    }
+    // A setting that shows only once the app starts again (the language, VML
+    // Classic): offered at once in a question of the app's own, rather than
+    // a line at Settings' foot that went unnoticed. During a run, restarting
+    // would stop it: the title bar says so instead, until clicked.
+    if (run_active_) {
+        restart_note_ = what + " " + app::tr("Restart the app once the run ends.");
+        export_indicator_->show_note(restart_note_, ExportIndicator::Note::kept);
+        return;
+    }
+    Message message;
+    message.kind = MessageKind::question;
+    message.title = app::tr("Restart to apply");
+    message.headline = what;
+    message.text = settings_.remember_videos
+                       ? app::tr("Restart the app now? The videos open now are opened again.")
+                       : app::tr("Restart the app now? The videos open now are not opened again ({setting}).",
+                                 {{"setting", app::tr("Settings") + " > " + app::tr("General") + " > " +
+                                                  app::tr("Reopen the videos that were open when the app was "
+                                                          "last closed")}});
+    message.buttons = {{app::tr("Restart now"), MessageButton::Role::primary},
+                       {app::tr("Later"), MessageButton::Role::plain}};
+    message.default_button = 0;
+    message.escape_button = 1;
+    if (dialogs_.message(message).button == 0 && !run_active_) {
+        restart_on_close_ = true;
+        close();
+        if (!closing_) {
+            restart_on_close_ = false;  // the close was refused: no second copy later
+        }
+        return;
+    }
+    restart_note_ = what;
+    export_indicator_->show_note(what, ExportIndicator::Note::kept);  // Later: kept until clicked
 }
 
 void MainWindow::store_open_videos() {
@@ -592,9 +640,17 @@ void MainWindow::reopen_videos(const QString& reference, const QStringList& test
 
 void MainWindow::show_status(const QString& text) { status_label_->setText(text); }
 
+void MainWindow::notify_done(const QString& text) { export_indicator_->show_note(text); }
+
+void MainWindow::notify_info(const QString& text) { export_indicator_->show_note(text, ExportIndicator::Note::info); }
+
+void MainWindow::notify_failed(const QString& text) {
+    export_indicator_->show_note(text, ExportIndicator::Note::failed);
+}
+
 void MainWindow::save_settings() {
     if (const std::optional<std::string> error = settings_.save()) {
-        show_status(tr_message(QString::fromStdString(*error)));
+        notify_failed(tr_message(QString::fromStdString(*error)));
     }
 }
 
@@ -764,7 +820,7 @@ void MainWindow::build_ui() {
         .submit = [this](const QString& description, std::function<QStringList()> write,
                          bool quiet) { submit_export(description, std::move(write), quiet); },
         .show_saving = [this](const QString& why) { export_indicator_->show_saving(why); },
-        .show_status = [this](const QString& text) { show_status(text); },
+        .show_status = [this](const QString& text) { export_indicator_->show_note(text, ExportIndicator::Note::kept); },
     });
     // Settings' Exported graphs, read at each export as the folder is.
     const auto export_colours = [this] {
@@ -827,6 +883,11 @@ void MainWindow::build_ui() {
     bd_rate_panel_->quick_saves = quick_saves;
     tabs_->addTab(new ScrollingPage(bd_rate_panel_), app::tr("BD-rate"));
     settings_panel_ = new SettingsPanel(settings_, *file_writes_, [this] { return tools_status_; }, dialogs_);
+    settings_panel_->notify = [this](const QString& text, ExportIndicator::Note kind) {
+        export_indicator_->show_note(text, kind);
+    };
+    settings_panel_->report_export = [this](const ExportOutcome& outcome) { export_indicator_->show_outcome(outcome); };
+    connect(settings_panel_, &SettingsPanel::restart_needed, this, [this](const QString& what) { offer_restart(what); });
     connect(settings_panel_, &SettingsPanel::defaults_changed, this, [this] { on_default_settings_changed(); });
     connect(settings_panel_, &SettingsPanel::decoded_videos_changed, frame_compare_panel_,
             &FrameComparePanel::set_decoded_videos);
@@ -889,6 +950,11 @@ void MainWindow::build_ui() {
             }
             return false;
         };
+    saved_results_panel_->save_score_summary = [this](const std::vector<LoadedSavedResult>& results) {
+        if (!results.empty()) {
+            quick_save_score_summary(saved_score_summary(results), results.front().label);
+        }
+    };
     saved_results_panel_->save_results = [this](const std::vector<LoadedSavedResult>& results) {
         if (results.empty()) {
             return;
@@ -1220,9 +1286,11 @@ void MainWindow::build_test_table() {
             const std::shared_ptr<CompletedRun>& run = rows_[static_cast<std::size_t>(index.row())]->completed_run;
             if (run == nullptr) {
                 export_indicator_->show_note(
-                    app::tr("{name} has no scores yet to show in Metric Graphs.", {{"name", name}}));
+                    app::tr("{name} has no scores yet to show in Metric Graphs.", {{"name", name}}),
+                    ExportIndicator::Note::info);
             } else if (!line_removed(index.row())) {
-                export_indicator_->show_note(app::tr("{name} is already in Metric Graphs.", {{"name", name}}));
+                export_indicator_->show_note(app::tr("{name} is already in Metric Graphs.", {{"name", name}}),
+                                             ExportIndicator::Note::info);
             } else {
                 open_or_update_graph({run}, false);
                 export_indicator_->show_note(app::tr("{name} is back in Metric Graphs.", {{"name", name}}));
@@ -1604,7 +1672,7 @@ void MainWindow::on_download_ffmpeg() {
     });
     connect(ffmpeg_download_, &FfmpegDownload::cancelled, this, [this, finished] {
         finished();
-        show_status(app::tr("FFmpeg download cancelled"));
+        notify_info(app::tr("FFmpeg download cancelled"));
     });
     ffmpeg_download_->start();
 #endif
@@ -1645,7 +1713,7 @@ void MainWindow::ffmpeg_found(const ToolsStatus& status, const std::filesystem::
     if (download_ffmpeg_button_ != nullptr) {
         download_ffmpeg_button_->setVisible(false);
     }
-    show_status(app::tr("Using ffmpeg {version} from {directory}",
+    notify_done(app::tr("Using ffmpeg {version} from {directory}",
                         {{"version", format_version(status.ffmpeg.version)}, {"directory", text_of(directory)}}));
 }
 

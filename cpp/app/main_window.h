@@ -49,6 +49,7 @@
 #include "row_state.h"
 #include "run_badge.h"
 #include "worst_frame_list.h"
+#include "vml/score_summary.h"
 #include "vml/analysis_request.h"
 #include "vml/cvvdp.h"
 #include "vml/ffmpeg_tools.h"
@@ -339,6 +340,18 @@ private:
     void restore_open_videos();
     void reopen_videos(const QString& reference, const QStringList& tests);
     void show_status(const QString& text);
+    // What an action did, in the tab bar's indicator (docs/ARCHITECTURE.md,
+    // "Asking and telling the user"): fading, or kept in the failure colour
+    // until clicked. The run line keeps what is going on.
+    void notify_done(const QString& text);
+    // Why an action did nothing, plain and fading ("...nothing to run.").
+    void notify_info(const QString& text);
+    // Offers to restart the app for a setting that shows only then (`what`
+    // says which); during a run, a note kept in the title bar instead.
+    void offer_restart(const QString& what);
+    QString restart_note_;  // the kept note of a restart to make, taken away if the setting goes back
+    bool restart_on_close_ = false;  // Restart now chosen: started again as the window closes
+    void notify_failed(const QString& text);
     void save_settings();
 
     // ---------------------------------------------------------- the settings
@@ -674,6 +687,12 @@ private:
     SegmentRules archive_rules() const;
     // Writes `document` as Export results saves it, JSON or CSV, where the
     // user says, suggested after `name`.
+    // Score summary (score_summary.h): of saved comparisons; saved where the
+    // user says (Score summary as JSON / CSV...), or at one click in the
+    // quick saves' formats (the details panel's save icon).
+    std::vector<ScoreSummaryEntry> saved_score_summary(const std::vector<LoadedSavedResult>& results) const;
+    void save_score_summary(std::vector<ScoreSummaryEntry> entries, const QString& name, bool csv);
+    void quick_save_score_summary(std::vector<ScoreSummaryEntry> entries, const QString& name);
     void save_results_document(const nlohmann::ordered_json& document, const QString& name, bool csv);
     // Writes each result's per-frame scores, JSON or CSV, into a folder the
     // user picks, each file named after its label.

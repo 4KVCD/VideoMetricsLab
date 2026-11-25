@@ -188,7 +188,16 @@ with it. **Interface** is a card each, with a picture of it, VML Modern first:
   own controls.
 
 VML Modern shows at once; VML Classic, chosen while VML Modern is shown, when
-the app is next started. **Accent**, usable with VML Modern, is the system's
+the app is next started: the app offers to restart now (**Restart now**,
+which reopens the videos open if Reopen the videos is ticked) or **Later**,
+which leaves a note in the title bar until you click it. A new language
+asks the same. During a run there's only the note: restarting would stop
+it.
+
+What an action did shows at the right end of the tab bar, beside Export:
+"Settings saved.", rows added, a preset saved, a run's end, a log exported.
+A success fades after a few seconds; a failure, a run whose videos failed,
+and a restart to make stay until you click them. **Accent**, usable with VML Modern, is the system's
 (**Same as Windows**), one of six colours, a colour picked with **Custom...**,
 or one typed as `#RRGGBB` in the box beside it; text on it is dark or light,
 whichever reads. VML Classic keeps the system's accent. **Theme** is the
@@ -790,6 +799,7 @@ $run.videos[0].metrics.vmaf.score
 | `--csv FOLDER` | Write each video's per-frame scores as `<video>.csv`, as the window's per-frame scores export writes them. |
 | `--json FILE` | Also write the results as JSON. `--json -` prints the JSON instead of the tables, for a script to read. |
 | `--frames-json FOLDER` | Write each video's per-frame scores as JSON, `<video>.frames.json`, as the window's per-frame JSON export writes them (see [The results file](RESULTS_JSON.md#per-frame-scores-as-json)). The same names and numbers after a name taken as `--csv`. |
+| `--score-summary FOLDER` | Write the videos' score summary: each metric's score with the statistics of its frames and how it was made, the columns ticked in Settings > Saved Results, as `<reference>.score-summary.json` and `.csv` (see [The results file](RESULTS_JSON.md#score-summary-as-json-and-csv)). Also with `saved show` and `report`. |
 | `--batch CSV` | Compare the videos a CSV file lists, in place of REFERENCE and TEST, all in one run (the start-up and the GPU checks once, not once per reference). A row per test video, with the columns `reference` and `test` (a file or a pattern) and, if wanted, `sequence` and any others, which `--scores-csv` keeps; paths are relative to the CSV file's folder. The tables come per reference, and `--json` writes `{"batch": [...]}`, each reference's results as without `--batch`. A reference that cannot be read is said and the others are still compared (exit code 4). Not with `--difference`. |
 | `--scores-csv FILE` | Write each test video's bitrate (`kbps`) and scores to FILE, a row per video, with its `sequence` (the `--batch` row's, else the reference's file name), `test`, `reference` and the `--batch` row's other columns: the file `bdrate --anchor` and `--test` read. A video whose bitrate is not known, or with only a part compared (`--range`, `--duration`), is left out, said. A CSV file for programs: no byte order mark (before 2.7 it had one), its lines ended CR LF. |
 | `--worst N` | After the tables, each metric's N worst dips: the worst frame of each (a frame within 1 s of a worse one is part of its dip), with every metric's score there. |
@@ -929,7 +939,7 @@ be gone:
 `saved` and `report` take the settings as compare does: the app's, `--settings FILE`'s or, with `--no-settings`, the defaults. They give the saved results' folder and the weak segment profiles. `saved --cache-dir FOLDER` reads and deletes the saved results in FOLDER, as `compare --cache-dir FOLDER` saved them.
 
 `saved show` and `report` take compare's outputs: `--json`, `--csv`,
-`--frames-json`, `--run-dir`, `--worst`, `--segments` (with `saved`,
+`--frames-json`, `--score-summary`, `--run-dir`, `--worst`, `--segments` (with `saved`,
 `profile:NAME` and `preset:KEY`) and its options, `--segments-dir`,
 `--segments-report` and `--stills` (whose videos must still be there). The JSON is compare's results file, its `read_from`
 `"saved results"` or `"run files"`; a video's `settings`, `black_bars`,

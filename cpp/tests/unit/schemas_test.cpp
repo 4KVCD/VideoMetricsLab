@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -30,6 +31,7 @@
 #include "vml/results_summary.h"
 #include "vml/run_file.h"
 #include "vml/run_record.h"
+#include "vml/score_summary.h"
 #include "vml/weak_frames.h"
 
 namespace vml::cli {
@@ -189,6 +191,7 @@ TEST(Schemas, HoldEveryDocument) {
     nlohmann::ordered_json results = results_document(VideoInfo{}, videos, summarize(videos), false);
     add_segments_json(results, videos, rules);
     EXPECT_EQ(schema_errors("results", results), std::vector<std::string>{});
+    EXPECT_EQ(results["url"], "https://github.com/4KVCD/VideoMetricsLab");  // the program's home, after its name
     const nlohmann::ordered_json batch{
         {"batch", {results, {{"reference", "gone.mkv"}, {"error", "it could not be read"}}}}};
     EXPECT_EQ(schema_errors("results", batch), std::vector<std::string>{});
@@ -243,7 +246,36 @@ TEST(Schemas, HoldEveryDocument) {
     EXPECT_EQ(schema_errors("devices", broken).size(), 2u);
 }
 
-// saved show and delete find a comparison by the first hex digits of its ID
+// Score summary: each metric's score with the columns asked for, in their
+// own order, the statistics of its frames and its bands; an endless score
+// (PSNR of an identical frame) as "inf"; the saved time only where known. Its
+// JSON holds to its schema; its CSV is a row a score.
+TEST(Schemas, ScoreSummaryHoldsTheColumnsAskedFor) {
+    const TestVideo video = scored_video();
+    const auto saved = std::chrono::system_clock::from_time_t(1764079331);  // 2025-11-25T14:02:11Z
+    const std::vector<ScoreSummaryEntry> entries{
+        {"a", "a.mkv", "r.mkv", score_summary(*video.result, "", {{"vmaf", saved}})}};
+    const std::vector<std::string> columns{"saved", "max", "bands", "no_such_column", "min"};
+    const nlohmann::ordered_json json = score_summary_json(entries, columns);
+    EXPECT_EQ(schema_errors("score-summary", json), std::vector<std::string>{});
+    EXPECT_EQ(json["url"], "https://github.com/4KVCD/VideoMetricsLab");
+    EXPECT_EQ(json["columns"], nlohmann::ordered_json({"min", "max", "bands", "saved"}));
+    const nlohmann::ordered_json& scores = json["comparisons"][0]["scores"];
+    ASSERT_EQ(scores.size(), 3U);  // VMAF, PSNR, CVVDP, in the metrics' order
+    EXPECT_EQ(scores[0]["metric"], "vmaf");
+    EXPECT_EQ(scores[0]["min"], 70.0);
+    EXPECT_EQ(scores[0]["max"], 95.0);
+    EXPECT_EQ(scores[0]["saved"], "2025-11-25T14:02:11Z");
+    EXPECT_FALSE(scores[0]["bands"].empty());
+    EXPECT_EQ(scores[1]["max"], "inf");
+    EXPECT_TRUE(scores[1]["saved"].is_null());
+    EXPECT_FALSE(scores[0].contains("median"));  // not asked for
+    const std::string csv = score_summary_csv(entries, columns);
+    EXPECT_EQ(csv.substr(0, csv.find('\n')), "Comparison,Metric,Score,Min,Max,Score bands,Saved");
+    EXPECT_EQ(std::count(csv.begin(), csv.end(), '\n'), 4);  // the heading, a row a score
+}
+
+// saved show and delete find a comparison by the first hex digits of its ID// saved show and delete find a comparison by the first hex digits of its ID
 // (at least 6 to show, 12 to delete) or, to show, by its test video's path;
 // saved list --json holds to its schema.
 TEST(Schemas, SavedComparisonsAreNamedAndListed) {

@@ -11,6 +11,7 @@
 #include "i18n.h"
 #include "window_helpers.h"
 #include "vml/build_info.h"
+#include "vml/score_summary.h"
 #include "vml/export_csv.h"
 #include "vml/frame_pairing.h"
 #include "vml/metrics.h"
@@ -145,7 +146,7 @@ Json export_document(const std::optional<VideoInfo>& reference, const std::vecto
         source = Json{{"path", platform::path_text(reference->path)}};
         add_media(source, *reference);
     }
-    Json document{{"app", "VideoMetricsLab"}, {"version", VML_VERSION}, {"commit", build_commit()}, {"format", results_format},
+    Json document{{"app", "VideoMetricsLab"}, {"url", project_url}, {"version", VML_VERSION}, {"commit", build_commit()}, {"format", results_format},
                   {"reference", source}, {"videos", Json::array()}};
     add_run_record(document, runs_record(runs, machine));
     for (const ExportedRun& run : runs) {
@@ -162,6 +163,9 @@ QString export_contents(const std::vector<std::string>& items) {
     }
     if (has("frames")) {
         kinds << app::tr("per-frame scores");
+    }
+    if (has("score_summary")) {
+        kinds << app::tr("score summary");
     }
     if (has("graphs")) {
         kinds << app::tr("graphs");
@@ -201,6 +205,9 @@ QString export_item_title(const std::string& key) {
     }
     if (key == "frames") {
         return app::tr("Per-frame scores");
+    }
+    if (key == "score_summary") {
+        return app::tr("Score summary");
     }
     if (key == "graphs") {
         return app::tr("Graphs");
@@ -349,6 +356,23 @@ std::vector<BundleFile> export_files(const Settings& settings, const std::vector
         }
         if (csv) {
             files.push_back({stem + ".csv", results_csv(made)});
+        }
+    }
+    if (wanted("score_summary") && (json || csv) && !videos.empty()) {
+        // Every video's scores in one file of each format, as the command
+        // line's --score-summary writes them.
+        std::vector<ScoreSummaryEntry> entries;
+        for (const BundleVideo& video : videos) {
+            entries.push_back({video.label.toStdString(), video.path, reference,
+                               score_summary(*video.result, settings.cvvdp_presets_json)});
+        }
+        const std::string stem = file_safe(name + QStringLiteral(" - score summary")).toStdString();
+        if (json) {
+            files.push_back(
+                {stem + ".json", python_json_dumps(score_summary_json(entries, settings.saved_details_columns)) + "\n"});
+        }
+        if (csv) {
+            files.push_back({stem + ".csv", score_summary_csv(entries, settings.saved_details_columns)});
         }
     }
     if (wanted("frames") && (json || csv)) {

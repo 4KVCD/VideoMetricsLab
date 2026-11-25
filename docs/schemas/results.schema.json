@@ -58,6 +58,9 @@
         "app": {
           "const": "VideoMetricsLab"
         },
+        "url": {
+          "type": "string"
+        },
         "version": {
           "type": "string"
         },

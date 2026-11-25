@@ -15,6 +15,7 @@
 #include <QWidget>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <filesystem>
@@ -60,6 +61,9 @@ struct LoadedSavedResult {
     std::shared_ptr<const ComparisonResult> result;
     QString label;
     std::filesystem::path folder;
+    // When each metric's score used was saved, by its key: the score
+    // details' "saved" column.
+    std::map<std::string, std::chrono::system_clock::time_point> saved{};
 };
 
 class SavedResultsPanel : public QWidget {
@@ -67,7 +71,18 @@ class SavedResultsPanel : public QWidget {
 
 public:
     // `contents`: what Settings' Exports include (the right-click menu's).
-    enum class Export { contents, results_json, results_csv, frames_json, frames_csv, graphs, segments, run_file };
+    enum class Export {
+        contents,
+        results_json,
+        results_csv,
+        frames_json,
+        frames_csv,
+        score_summary_json,
+        score_summary_csv,
+        graphs,
+        segments,
+        run_file
+    };
 
     // The quick grabs the Videos table's and Saved Results' menus share
     // (docs/ARCHITECTURE.md, "Exports"), after their archive item: results
@@ -95,6 +110,9 @@ public:
     // the Videos tab would use". Unset: the newest.
     std::function<bool(const SavedComparison& saved, const std::string& key, const SavedScoreChoice& choice)>
         videos_would_use;
+    // The details panel's save icon: the selected comparison's score
+    // details, saved at one click in the quick saves' formats.
+    std::function<void(const std::vector<LoadedSavedResult>& results)> save_score_summary;
     SaveButton* save_button() const { return save_button_; }
     ~SavedResultsPanel() override;
 

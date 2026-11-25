@@ -279,7 +279,7 @@ void MainWindow::stop_showing_waiting_to_run(const QString& text) {
 // Nothing to run: each of the `checked` rows (`count` of them) has every
 // metric asked for. Their scores are what was asked for: on the graph.
 void MainWindow::show_already_scored(const std::vector<int>& checked, long long count) {
-    show_status(ntr("The {count} checked video already has all requested metrics -- nothing to run.",
+    notify_info(ntr("The {count} checked video already has all requested metrics -- nothing to run.",
                     "All {count} checked videos already have all requested metrics -- nothing to run.", count));
     std::vector<std::shared_ptr<CompletedRun>> done;
     for (const int row : checked) {
@@ -1454,6 +1454,15 @@ void MainWindow::on_all_finished() {
     pause_button_->setText(app::tr("Pause"));
     job_lines_.hide_all();
     show_status(run_end_message());
+    // Also in the title bar, where it is seen from any tab: kept until
+    // clicked where videos failed (hover their names for why).
+    const QString ended = run_end_message();
+    const bool troubled = run_counts().failed > 0;
+    if (troubled) {
+        notify_failed(ended);
+    } else {
+        export_indicator_->show_note(ended, ExportIndicator::Note::kept);
+    }
     {
         const InEnglish english;  // the log is always in English
         logger.info("Run status: " + run_end_message().toStdString());
@@ -1531,7 +1540,7 @@ void MainWindow::notify_run_end() {
     const NotificationPlan plan =
         plan_notification(settings_, run, QDateTime::currentDateTimeUtc().toString(Qt::ISODate).toStdString());
     if (const QStringList problems = notification_problems(plan); !problems.isEmpty()) {
-        show_status(problems.join(' '));
+        notify_failed(problems.join(' '));
         const InEnglish english;  // the log is always in English
         for (const QString& problem : notification_problems(plan)) {
             logger.warning("Notification not sent: " + problem.toStdString());
@@ -1547,7 +1556,7 @@ void MainWindow::notify_run_end() {
                 logger.info("Notification sent to " + service.toStdString());
                 return;  // the run's own message stays in the status bar
             }
-            show_status(app::tr("Couldn't send the notification to {service}: {error}",
+            notify_failed(app::tr("Couldn't send the notification to {service}: {error}",
                                 {{"service", service}, {"error", error}}));
             logger.warning("Notification to " + service.toStdString() + " failed: " + error.toStdString());
         });

@@ -744,7 +744,7 @@ SavedScoresPanel* SavedResultsPanel::open_details() {
         return nullptr;
     }
     const SavedComparison& saved = *chosen.front();
-    auto* panel = new SavedScoresPanel(app::tr("Saved scores of {name}", {{"name", qt_text(saved.label)}}),
+    auto* panel = new SavedScoresPanel(app::tr("Score summary of {name}", {{"name", qt_text(saved.label)}}),
                                        detail_rows(saved), settings_.saved_details_columns, this);
     panel->setAttribute(Qt::WA_DeleteOnClose);
     panel->set_anchor(details_button_);
@@ -753,6 +753,28 @@ SavedScoresPanel* SavedResultsPanel::open_details() {
         show_details();  // the cards follow; the panel stays open
     };
     connect(panel, &SavedScoresPanel::settings_requested, this, [this] { emit scores_settings_requested(); });
+    // Its save icon: this score summary at one click, or as JSON or CSV
+    // where asked (Save as...).
+    SaveButton* save = panel->save_button();
+    save->why_not = [this] {
+        return !quick_formats || quick_formats().empty() ? no_format_text() : QString();
+    };
+    save->describe = [this] {
+        return quick_save_tooltip(app::tr("this score summary"),
+                                  quick_formats ? quick_formats() : std::vector<std::string>{});
+    };
+    save->save = [this] {
+        if (save_score_summary) {
+            save_score_summary(selected_results());
+        }
+    };
+    save->save_as = [this](QMenu& menu) {
+        for (const auto& [text, kind] : {std::pair(app::tr("Score summary as JSON..."), Export::score_summary_json),
+                                         std::pair(app::tr("Score summary as CSV..."), Export::score_summary_csv)}) {
+            connect(menu.addAction(text), &QAction::triggered, this,
+                    [this, kind] { emit export_requested(kind, selected_results()); });
+        }
+    };
     panel->show_under(details_button_);
     return panel;
 }
@@ -976,8 +998,18 @@ std::vector<LoadedSavedResult> SavedResultsPanel::selected_results() const {
         const std::optional<std::pair<ComparisonResult, std::string>> loaded =
             load_saved_comparison(*saved, chosen, read);
         if (loaded) {
+            // When each score used was saved: the one picked, else its newest.
+            std::map<std::string, std::chrono::system_clock::time_point> times;
+            for (const std::string& key : saved->keys()) {
+                const std::optional<std::filesystem::path> used = used_file(*saved, key);
+                for (const SavedScoreFile& file : saved->scores) {
+                    if (file.key == key && used && file.file == *used) {
+                        times[key] = file.saved;
+                    }
+                }
+            }
             results.push_back({std::make_shared<const ComparisonResult>(loaded->first), qt_text(loaded->second),
-                               saved->folder});
+                               saved->folder, std::move(times)});
         }
     }
     return results;
@@ -1103,6 +1135,8 @@ void SavedResultsPanel::add_quick_grabs(QMenu& menu, bool enabled, const std::fu
     add(app::tr("Results as CSV..."), Export::results_csv);
     add(app::tr("Per-frame scores as JSON..."), Export::frames_json);
     add(app::tr("Per-frame scores as CSV..."), Export::frames_csv);
+    add(app::tr("Score summary as JSON..."), Export::score_summary_json);
+    add(app::tr("Score summary as CSV..."), Export::score_summary_csv);
     QAction* graphs = add(app::tr("Graphs as ZIP..."), Export::graphs);
     if (!enabled || !refused.contains(Export::graphs)) {  // not refused: what it holds
         graphs->setToolTip(app::tr("Each video's graph of every metric, and with several of one reference every "
