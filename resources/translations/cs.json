@@ -1,5 +1,14 @@
 {
  "strings": {
+  "A dot: the worst frame of a dip, as Worst frames lists them.": "Tečka: nejhorší snímek propadu, jak je uvádí seznam Nejhorší snímky.",
+  "A line across: the frame selected in Worst frames, or the one under the pointer.": "Čára napříč: snímek vybraný v seznamu Nejhorší snímky, nebo ten pod ukazatelem.",
+  "Graph legend": "Legenda grafu",
+  "Lower is better for {metric}: its graph is drawn upside down, so worse is still lower.": "Pro {metric} je nižší lepší: jeho graf je vykreslen vzhůru nohama, takže horší je stále níž.",
+  "Shaded twice: the weak segment selected in Weak segments.": "Dvakrát vystínováno: slabý úsek vybraný v seznamu Slabé úseky.",
+  "Shaded: a weak segment, where the conditions hold.": "Vystínováno: slabý úsek, kde platí podmínky.",
+  "What the graph shows": "Co graf ukazuje",
+  "{metric} of each frame of the video.": "{metric} každého snímku videa.",
+  "{metric} of each second of the video.": "{metric} každé sekundy videa.",
   "Dips listed": "Zobrazené propady",
   "How many dips to list, up to {count}.": "Kolik propadů uvést, nejvýše {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Nejhorší snímek každého propadu, nejhorší první, dokud nekliknete na záhlaví: snímek do 1 s od horšího patří k jeho propadu.",

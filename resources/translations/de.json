@@ -1,5 +1,14 @@
 {
  "strings": {
+  "A dot: the worst frame of a dip, as Worst frames lists them.": "Ein Punkt: das schlechteste Bild eines Einbruchs, wie Schlechteste Bilder sie auflistet.",
+  "A line across: the frame selected in Worst frames, or the one under the pointer.": "Eine Linie quer: das in Schlechteste Bilder ausgewählte Bild oder das unter dem Zeiger.",
+  "Graph legend": "Diagrammlegende",
+  "Lower is better for {metric}: its graph is drawn upside down, so worse is still lower.": "Für {metric} ist niedriger besser: Sein Diagramm wird auf dem Kopf stehend gezeichnet, sodass schlechter weiterhin unten ist.",
+  "Shaded twice: the weak segment selected in Weak segments.": "Doppelt schattiert: der in Schwache Abschnitte ausgewählte schwache Abschnitt.",
+  "Shaded: a weak segment, where the conditions hold.": "Schattiert: ein schwacher Abschnitt, wo die Bedingungen zutreffen.",
+  "What the graph shows": "Was das Diagramm zeigt",
+  "{metric} of each frame of the video.": "{metric} jedes Bildes des Videos.",
+  "{metric} of each second of the video.": "{metric} jeder Sekunde des Videos.",
   "Dips listed": "Gelistete Einbrüche",
   "How many dips to list, up to {count}.": "Wie viele Einbrüche aufgelistet werden, bis zu {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Das schlechteste Bild jedes Einbruchs, das schlechteste zuerst, bis auf eine Spaltenüberschrift geklickt wird: Ein Bild innerhalb 1 s um ein schlechteres gehört zu dessen Einbruch.",

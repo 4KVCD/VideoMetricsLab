@@ -1,5 +1,14 @@
 {
  "strings": {
+  "A dot: the worst frame of a dip, as Worst frames lists them.": "Een punt: het slechtste frame van een dip, zoals Slechtste frames ze opsomt.",
+  "A line across: the frame selected in Worst frames, or the one under the pointer.": "Een lijn dwars: het frame dat in Slechtste frames is geselecteerd, of dat onder de aanwijzer.",
+  "Graph legend": "Legenda van de grafiek",
+  "Lower is better for {metric}: its graph is drawn upside down, so worse is still lower.": "Lager is beter voor {metric}: de grafiek wordt ondersteboven getekend, zodat slechter nog steeds lager is.",
+  "Shaded twice: the weak segment selected in Weak segments.": "Dubbel gearceerd: het zwakke segment dat in Zwakke segmenten is geselecteerd.",
+  "Shaded: a weak segment, where the conditions hold.": "Gearceerd: een zwak segment, waar de voorwaarden gelden.",
+  "What the graph shows": "Wat de grafiek toont",
+  "{metric} of each frame of the video.": "{metric} van elk frame van de video.",
+  "{metric} of each second of the video.": "{metric} van elke seconde van de video.",
   "Dips listed": "Getoonde dips",
   "How many dips to list, up to {count}.": "Hoeveel dips te tonen, tot {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Het slechtste frame van elke dip, slechtste eerst tot op een kolomkop wordt geklikt: een frame binnen 1 s van een slechter frame hoort bij diens dip.",

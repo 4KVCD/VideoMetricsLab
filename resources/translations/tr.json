@@ -1,5 +1,14 @@
 {
  "strings": {
+  "A dot: the worst frame of a dip, as Worst frames lists them.": "Nokta: bir düşüşün en kötü karesi, En kötü kareler'in listelediği gibi.",
+  "A line across: the frame selected in Worst frames, or the one under the pointer.": "Boydan boya çizgi: En kötü kareler'de seçili kare ya da işaretçinin altındaki.",
+  "Graph legend": "Grafik açıklaması",
+  "Lower is better for {metric}: its graph is drawn upside down, so worse is still lower.": "{metric} için düşük daha iyi: grafiği ters çizilir, böylece daha kötü yine aşağıdadır.",
+  "Shaded twice: the weak segment selected in Weak segments.": "İki kez gölgeli: Zayıf bölümler'de seçili zayıf bölüm.",
+  "Shaded: a weak segment, where the conditions hold.": "Gölgeli: koşulların sağlandığı bir zayıf bölüm.",
+  "What the graph shows": "Grafik ne gösteriyor",
+  "{metric} of each frame of the video.": "Videonun her karesinin {metric} değeri.",
+  "{metric} of each second of the video.": "Videonun her saniyesinin {metric} değeri.",
   "Dips listed": "Listelenen düşüşler",
   "How many dips to list, up to {count}.": "Kaç düşüş listelensin, en fazla {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Her düşüşün en kötü karesi, bir başlığa tıklanana kadar en kötüsü önce: daha kötü bir kareye 1 s içindeki bir kare onun düşüşüne aittir.",

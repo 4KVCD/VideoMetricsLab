@@ -1,5 +1,14 @@
 {
  "strings": {
+  "A dot: the worst frame of a dip, as Worst frames lists them.": "Un point : la pire image d'un creux, telles que Pires images les liste.",
+  "A line across: the frame selected in Worst frames, or the one under the pointer.": "Une ligne en travers : l'image sélectionnée dans Pires images, ou celle sous le pointeur.",
+  "Graph legend": "Légende du graphique",
+  "Lower is better for {metric}: its graph is drawn upside down, so worse is still lower.": "Plus c'est bas, mieux c'est pour {metric} : son graphique est tracé à l'envers, donc le pire reste plus bas.",
+  "Shaded twice: the weak segment selected in Weak segments.": "Ombré deux fois : le segment faible sélectionné dans Segments faibles.",
+  "Shaded: a weak segment, where the conditions hold.": "Ombré : un segment faible, là où les conditions sont remplies.",
+  "What the graph shows": "Ce que montre le graphique",
+  "{metric} of each frame of the video.": "{metric} de chaque image de la vidéo.",
+  "{metric} of each second of the video.": "{metric} de chaque seconde de la vidéo.",
   "Dips listed": "Creux listés",
   "How many dips to list, up to {count}.": "Combien de creux lister, jusqu'à {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "La pire image de chaque creux, la pire d'abord jusqu'au clic sur un en-tête : une image à moins de 1 s d'une pire fait partie de son creux.",

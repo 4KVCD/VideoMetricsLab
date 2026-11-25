@@ -45,6 +45,7 @@ class QSpinBox;
 class QSplitter;
 class QTabBar;
 class QTableWidget;
+class QToolButton;
 class QVBoxLayout;
 
 namespace vml::app {
@@ -123,6 +124,7 @@ public:
     QTabBar* metric_bar() const { return metric_bar_; }
     QComboBox* profile_combo() const { return profile_combo_; }
     QComboBox* count_combo() const { return count_combo_; }
+    QToolButton* legend_button() const { return legend_button_; }
     QSpinBox* count_spin() const { return count_spin_; }
     QPushButton* save_button() const { return save_button_; }
     QPushButton* save_new_button() const { return save_new_button_; }
@@ -145,6 +147,8 @@ signals:
 protected:
     // The work area resized (by the window or the divider): the lists arranged for its width.
     bool eventFilter(QObject* watched, QEvent* event) override;
+    // The theme changed: the legend's ⓘ drawn in its text colour.
+    void changeEvent(QEvent* event) override;
 
 private:
     QWidget* build_toolbar();
@@ -313,6 +317,9 @@ private:
     QWidget* segments_card_ = nullptr;
     QComboBox* count_combo_ = nullptr;
     QSpinBox* count_spin_ = nullptr;  // Custom...'s number, shown with it
+    QToolButton* legend_button_ = nullptr;  // the graph's ⓘ
+    // What the graph shows, under its ⓘ: the metric shown's line, dots and shading.
+    void open_legend();
     // The dips listed changed (the drop-down or the number box): the list
     // and the graph's dots made again, Settings told.
     void apply_count(int count);

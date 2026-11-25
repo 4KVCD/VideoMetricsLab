@@ -18,6 +18,7 @@
 #include <QTabBar>
 #include <QTableWidget>
 #include <QTableWidgetItem>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -29,6 +30,8 @@
 #include <span>
 
 #include "chart.h"
+#include "graph_legend.h"
+#include "popup_panel.h"
 #include "export_image.h"
 #include "i18n.h"
 #include "theme.h"
@@ -265,6 +268,15 @@ WorstFramesTab::WorstFramesTab(Dialogs dialogs, QWidget* parent) : QWidget(paren
     video_title_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     auto* graph_head = new QHBoxLayout;
     graph_head->addWidget(video_title_, 1);
+    // What the graph's line, dots and shading mean (GraphLegend).
+    legend_button_ = new QToolButton;
+    legend_button_->setObjectName(QStringLiteral("worstGraphLegend"));
+    legend_button_->setAutoRaise(true);
+    legend_button_->setToolTip(app::tr("What the graph shows"));
+    legend_button_->setAccessibleName(app::tr("Graph legend"));
+    legend_button_->setIcon(info_icon(palette().color(QPalette::WindowText), devicePixelRatioF()));
+    PopupPanel::open_on_press(legend_button_, [this] { open_legend(); });
+    graph_head->addWidget(legend_button_);
     graph_head->addWidget(save_button(Card::graph));
     chart_layout_->addLayout(graph_head);
     // The graph as tall as the lists: with the conditions on the left, the
@@ -1454,6 +1466,26 @@ QString WorstFramesTab::segment_details(const WeakSegment& segment) const {
 std::optional<int> WorstFramesTab::worst_frame_of_row(int row) const {
     const QTableWidgetItem* item = worst_table_->item(row, 0);
     return item != nullptr ? std::optional(item->data(Qt::UserRole).toInt()) : std::nullopt;
+}
+
+void WorstFramesTab::open_legend() {
+    if (metric_ == nullptr) {
+        return;
+    }
+    const WeakFramesVideo* video = chosen_video();
+    const std::optional<ScoreSamples> samples =
+        video != nullptr ? score_samples(video->result->metric_results, std::string(metric_->key)) : std::nullopt;
+    auto* legend = new GraphLegend(qt_text(metric_->label), metric_->direction == MetricDirection::lower_is_better,
+                                   samples && samples->per_second, this);
+    legend->open_under(legend_button_);
+}
+
+void WorstFramesTab::changeEvent(QEvent* event) {
+    QWidget::changeEvent(event);
+    if ((event->type() == QEvent::PaletteChange || event->type() == QEvent::StyleChange) &&
+        legend_button_ != nullptr) {
+        legend_button_->setIcon(info_icon(palette().color(QPalette::WindowText), devicePixelRatioF()));  // the theme's text colour
+    }
 }
 
 void WorstFramesTab::apply_count(int count) {

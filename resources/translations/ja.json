@@ -1,5 +1,14 @@
 {
  "strings": {
+  "A dot: the worst frame of a dip, as Worst frames lists them.": "点：落ち込みの最悪フレーム（最悪のフレームの一覧と同じ）。",
+  "A line across: the frame selected in Worst frames, or the one under the pointer.": "横切る線：最悪のフレームで選択したフレーム、またはポインターの下のフレーム。",
+  "Graph legend": "グラフの凡例",
+  "Lower is better for {metric}: its graph is drawn upside down, so worse is still lower.": "{metric} は低いほど良好です。グラフは上下反転して描かれるため、悪いほど下になります。",
+  "Shaded twice: the weak segment selected in Weak segments.": "二重の網掛け：弱い区間で選択した弱い区間。",
+  "Shaded: a weak segment, where the conditions hold.": "網掛け：条件を満たす弱い区間。",
+  "What the graph shows": "グラフの見方",
+  "{metric} of each frame of the video.": "動画の各フレームの {metric}。",
+  "{metric} of each second of the video.": "動画の各秒の {metric}。",
   "Dips listed": "一覧の落ち込み数",
   "How many dips to list, up to {count}.": "一覧に表示する落ち込みの数（最大 {count}）。",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "各落ち込みの最悪フレーム（見出しをクリックするまでは悪い順）。より悪いフレームから 1 秒以内のフレームはその落ち込みに含まれます。",

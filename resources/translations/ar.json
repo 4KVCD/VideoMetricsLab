@@ -1,5 +1,14 @@
 {
  "strings": {
+  "A dot: the worst frame of a dip, as Worst frames lists them.": "نقطة: أسوأ إطار في انخفاض، كما تسردها «أسوأ الإطارات».",
+  "A line across: the frame selected in Worst frames, or the one under the pointer.": "خط عرضي: الإطار المحدد في «أسوأ الإطارات»، أو الإطار الواقع تحت المؤشر.",
+  "Graph legend": "مفتاح الرسم البياني",
+  "Lower is better for {metric}: its graph is drawn upside down, so worse is still lower.": "الأقل أفضل لـ {metric}: يُرسم رسمه البياني مقلوبًا، فيبقى الأسوأ في الأسفل.",
+  "Shaded twice: the weak segment selected in Weak segments.": "مظلل مرتين: المقطع الضعيف المحدد في «المقاطع الضعيفة».",
+  "Shaded: a weak segment, where the conditions hold.": "مظلل: مقطع ضعيف، حيث تتحقق الشروط.",
+  "What the graph shows": "ما يعرضه الرسم البياني",
+  "{metric} of each frame of the video.": "{metric} لكل إطار من الفيديو.",
+  "{metric} of each second of the video.": "{metric} لكل ثانية من الفيديو.",
   "Dips listed": "الانخفاضات المسرودة",
   "How many dips to list, up to {count}.": "عدد الانخفاضات المراد سردها، حتى {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "أسوأ إطار في كل انخفاض، الأسوأ أولًا حتى يُنقر على عنوان عمود: الإطار الواقع ضمن 1 ث من إطار أسوأ جزء من انخفاضه.",

@@ -1,5 +1,14 @@
 {
  "strings": {
+  "A dot: the worst frame of a dip, as Worst frames lists them.": "Un punto: el peor fotograma de una caída, como los lista Peores fotogramas.",
+  "A line across: the frame selected in Worst frames, or the one under the pointer.": "Una línea transversal: el fotograma seleccionado en Peores fotogramas, o el que está bajo el puntero.",
+  "Graph legend": "Leyenda del gráfico",
+  "Lower is better for {metric}: its graph is drawn upside down, so worse is still lower.": "Para {metric}, más bajo es mejor: su gráfico se dibuja invertido, así que lo peor sigue estando más abajo.",
+  "Shaded twice: the weak segment selected in Weak segments.": "Sombreado doble: el segmento débil seleccionado en Segmentos débiles.",
+  "Shaded: a weak segment, where the conditions hold.": "Sombreado: un segmento débil, donde se cumplen las condiciones.",
+  "What the graph shows": "Qué muestra el gráfico",
+  "{metric} of each frame of the video.": "{metric} de cada fotograma del video.",
+  "{metric} of each second of the video.": "{metric} de cada segundo del video.",
   "Dips listed": "Caídas listadas",
   "How many dips to list, up to {count}.": "Cuántas caídas listar, hasta {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "El peor fotograma de cada caída, el peor primero hasta que se hace clic en un encabezado: un fotograma a menos de 1 s de uno peor forma parte de su caída.",

@@ -1,5 +1,14 @@
 {
  "strings": {
+  "A dot: the worst frame of a dip, as Worst frames lists them.": "圓點：每次低谷的最差影格，與最差影格清單一致。",
+  "A line across: the frame selected in Worst frames, or the one under the pointer.": "貫穿線：在最差影格中選取的影格，或指標下的影格。",
+  "Graph legend": "圖表圖例",
+  "Lower is better for {metric}: its graph is drawn upside down, so worse is still lower.": "{metric} 越低越好：其圖表上下顛倒繪製，因此較差的仍在下方。",
+  "Shaded twice: the weak segment selected in Weak segments.": "雙重陰影：在弱片段中選取的弱片段。",
+  "Shaded: a weak segment, where the conditions hold.": "陰影：弱片段，即條件成立之處。",
+  "What the graph shows": "圖表顯示的內容",
+  "{metric} of each frame of the video.": "影片每個影格的 {metric}。",
+  "{metric} of each second of the video.": "影片每一秒的 {metric}。",
   "Dips listed": "列出的低谷數",
   "How many dips to list, up to {count}.": "要列出的低谷數，最多 {count}。",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "每次低谷的最差影格，在按一下欄標題前最差的在前：與更差影格相距 1 秒以內的影格屬於其低谷。",

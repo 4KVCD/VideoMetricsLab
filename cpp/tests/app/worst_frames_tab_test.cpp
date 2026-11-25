@@ -12,6 +12,7 @@
 #include <QPushButton>
 #include <QTabBar>
 #include <QTableWidget>
+#include <QToolButton>
 
 #include <gtest/gtest.h>
 
@@ -24,6 +25,7 @@
 #include <vector>
 
 #include "chart.h"
+#include "graph_legend.h"
 #include "worst_frames_tab.h"
 
 #include "quick_save.h"
@@ -379,6 +381,34 @@ TEST(WorstFramesTab, ListsACustomNumberOfDips) {
 
     tab.set_worst_count(5000);  // past the most
     EXPECT_EQ(tab.count_spin()->value(), most_worst_frames);
+}
+
+// The graph's ⓘ opens what it shows: the metric's line, a worst frame's
+// dot, a weak segment's shading, the segment selected, the frame selected;
+// for a metric where lower is better, that its graph is upside down.
+TEST(WorstFramesTab, TheGraphsLegendSaysWhatItShows) {
+    std::vector<float> values(90, 95.0F);
+    values[10] = 40.0F;
+    Settings settings;
+    Bench bench(settings);
+    WorstFramesTab& tab = bench.tab;
+    tab.set_videos({{"row:a", "a", vmaf_result("a.mkv", values)}});
+    ASSERT_NE(tab.legend_button(), nullptr);
+    EXPECT_FALSE(tab.legend_button()->icon().isNull());
+    tab.legend_button()->click();  // opened on its press, as a button's menu is
+    auto* legend = tab.findChild<GraphLegend*>();
+    ASSERT_NE(legend, nullptr);
+    EXPECT_TRUE(legend->isVisible());
+    const QStringList texts = legend->texts();
+    ASSERT_EQ(texts.size(), 5);
+    EXPECT_EQ(texts[0], "VMAF v0.6.1 of each frame of the video.");
+    EXPECT_TRUE(texts[1].startsWith("A dot"));
+    legend->close();
+
+    const GraphLegend upside_down("Butteraugli", true, false);
+    ASSERT_EQ(upside_down.texts().size(), 6);
+    EXPECT_TRUE(upside_down.texts().back().startsWith("Lower is better for Butteraugli"));
+    EXPECT_EQ(GraphLegend("CVVDP", false, true).texts().front(), "CVVDP of each second of the video.");
 }
 
 TEST(WorstFramesTab, DetailsTellsTheFrameUnderThePointerElseTheRowSelected) {

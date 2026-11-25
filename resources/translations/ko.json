@@ -1,5 +1,14 @@
 {
  "strings": {
+  "A dot: the worst frame of a dip, as Worst frames lists them.": "점: 가장 나쁜 프레임 목록에 나오는, 급락의 가장 나쁜 프레임.",
+  "A line across: the frame selected in Worst frames, or the one under the pointer.": "가로지르는 선: 가장 나쁜 프레임에서 선택한 프레임, 또는 포인터 아래의 프레임.",
+  "Graph legend": "그래프 범례",
+  "Lower is better for {metric}: its graph is drawn upside down, so worse is still lower.": "{metric}은(는) 낮을수록 좋습니다. 그래프를 위아래로 뒤집어 그리므로 나쁠수록 여전히 아래에 있습니다.",
+  "Shaded twice: the weak segment selected in Weak segments.": "두 번 음영: 약한 구간에서 선택한 약한 구간.",
+  "Shaded: a weak segment, where the conditions hold.": "음영: 조건을 만족하는 약한 구간.",
+  "What the graph shows": "그래프가 보여 주는 것",
+  "{metric} of each frame of the video.": "영상의 각 프레임의 {metric}.",
+  "{metric} of each second of the video.": "영상의 각 초의 {metric}.",
   "Dips listed": "나열된 급락 수",
   "How many dips to list, up to {count}.": "나열할 급락 수, 최대 {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "각 급락의 가장 나쁜 프레임, 머리글을 클릭하기 전까지는 나쁜 순서: 더 나쁜 프레임에서 1초 이내의 프레임은 그 급락에 속합니다.",

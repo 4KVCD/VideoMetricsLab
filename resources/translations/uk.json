@@ -1,5 +1,14 @@
 {
  "strings": {
+  "A dot: the worst frame of a dip, as Worst frames lists them.": "Крапка: найгірший кадр провалу, як їх перелічує список «Найгірші кадри».",
+  "A line across: the frame selected in Worst frames, or the one under the pointer.": "Лінія впоперек: кадр, вибраний у списку «Найгірші кадри», або кадр під вказівником.",
+  "Graph legend": "Легенда графіка",
+  "Lower is better for {metric}: its graph is drawn upside down, so worse is still lower.": "Для {metric} менше — краще: його графік намальовано перевернутим, тож гірше все одно нижче.",
+  "Shaded twice: the weak segment selected in Weak segments.": "Подвійне затінення: слабка ділянка, вибрана у списку «Слабкі ділянки».",
+  "Shaded: a weak segment, where the conditions hold.": "Затінення: слабка ділянка, де виконуються умови.",
+  "What the graph shows": "Що показує графік",
+  "{metric} of each frame of the video.": "{metric} кожного кадру відео.",
+  "{metric} of each second of the video.": "{metric} кожної секунди відео.",
   "Dips listed": "Показано провалів",
   "How many dips to list, up to {count}.": "Скільки провалів показати, не більше {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Найгірший кадр кожного провалу, найгірші першими, доки не клацнуто заголовок: кадр у межах 1 с від гіршого належить до його провалу.",

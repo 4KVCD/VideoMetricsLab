@@ -1,5 +1,14 @@
 {
  "strings": {
+  "A dot: the worst frame of a dip, as Worst frames lists them.": "Точка: худший кадр провала, как их перечисляет список «Худшие кадры».",
+  "A line across: the frame selected in Worst frames, or the one under the pointer.": "Линия поперёк: кадр, выбранный в списке «Худшие кадры», или кадр под указателем.",
+  "Graph legend": "Легенда графика",
+  "Lower is better for {metric}: its graph is drawn upside down, so worse is still lower.": "Для {metric} чем ниже, тем лучше: его график нарисован перевёрнутым, поэтому худшее по-прежнему ниже.",
+  "Shaded twice: the weak segment selected in Weak segments.": "Двойная заливка: слабый участок, выбранный в списке «Слабые участки».",
+  "Shaded: a weak segment, where the conditions hold.": "Заливка: слабый участок, где выполняются условия.",
+  "What the graph shows": "Что показывает график",
+  "{metric} of each frame of the video.": "{metric} каждого кадра видео.",
+  "{metric} of each second of the video.": "{metric} каждой секунды видео.",
   "Dips listed": "Показано провалов",
   "How many dips to list, up to {count}.": "Сколько провалов показать, не более {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Худший кадр каждого провала, худшие первыми, пока не нажат заголовок столбца: кадр в пределах 1 с от худшего относится к его провалу.",

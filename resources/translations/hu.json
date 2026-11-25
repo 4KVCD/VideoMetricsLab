@@ -1,5 +1,14 @@
 {
  "strings": {
+  "A dot: the worst frame of a dip, as Worst frames lists them.": "Pont: egy visszaesés legrosszabb képkockája, ahogy a Legrosszabb képkockák listázza őket.",
+  "A line across: the frame selected in Worst frames, or the one under the pointer.": "Keresztbe húzott vonal: a Legrosszabb képkockák listában kijelölt képkocka, vagy a mutató alatti.",
+  "Graph legend": "Grafikon jelmagyarázata",
+  "Lower is better for {metric}: its graph is drawn upside down, so worse is still lower.": "{metric} esetén az alacsonyabb a jobb: a grafikonja fejjel lefelé van rajzolva, így a rosszabb továbbra is lejjebb van.",
+  "Shaded twice: the weak segment selected in Weak segments.": "Kétszer árnyékolva: a Gyenge szakaszok listában kijelölt gyenge szakasz.",
+  "Shaded: a weak segment, where the conditions hold.": "Árnyékolva: gyenge szakasz, ahol a feltételek teljesülnek.",
+  "What the graph shows": "Mit mutat a grafikon",
+  "{metric} of each frame of the video.": "A videó egyes képkockáinak {metric} értéke.",
+  "{metric} of each second of the video.": "A videó egyes másodperceinek {metric} értéke.",
   "Dips listed": "Listázott visszaesések",
   "How many dips to list, up to {count}.": "Hány visszaesés legyen listázva, legfeljebb {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Minden visszaesés legrosszabb képkockája, a legrosszabb elöl, amíg egy oszlopfejlécre nem kattint: egy rosszabbtól 1 s-on belüli képkocka annak visszaeséséhez tartozik.",

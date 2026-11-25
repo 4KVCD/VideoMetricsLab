@@ -97,7 +97,8 @@ calculated in resolution tests.
    shortest segment, or, with every condition, a frame where another doesn't
    hold). On the right, pick the metric in the bar at the top. The graph
    shows the video's scores with its weak segments shaded and its worst
-   frames dotted. Below it, side by side where the window has room and one
+   frames dotted; the ⓘ beside its save icon says what each of its marks
+   means. Below it, side by side where the window has room and one
    above the other where it hasn't:
    - **Worst frames**: the worst frame of each of the metric's 10, 25 or 50
      worst dips, or as many as you give after **Custom...** (up to 999). A

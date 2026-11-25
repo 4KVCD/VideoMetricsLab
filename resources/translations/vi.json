@@ -1,5 +1,14 @@
 {
  "strings": {
+  "A dot: the worst frame of a dip, as Worst frames lists them.": "Dấu chấm: khung tệ nhất của một chỗ tụt, như Khung tệ nhất liệt kê.",
+  "A line across: the frame selected in Worst frames, or the one under the pointer.": "Đường kẻ xuyên qua: khung được chọn trong Khung tệ nhất, hoặc khung dưới con trỏ.",
+  "Graph legend": "Chú giải biểu đồ",
+  "Lower is better for {metric}: its graph is drawn upside down, so worse is still lower.": "Với {metric}, càng thấp càng tốt: biểu đồ của nó được vẽ lộn ngược, nên tệ hơn vẫn nằm thấp hơn.",
+  "Shaded twice: the weak segment selected in Weak segments.": "Tô bóng hai lần: đoạn yếu được chọn trong Đoạn yếu.",
+  "Shaded: a weak segment, where the conditions hold.": "Tô bóng: một đoạn yếu, nơi các điều kiện đều đúng.",
+  "What the graph shows": "Biểu đồ thể hiện gì",
+  "{metric} of each frame of the video.": "{metric} của từng khung hình trong video.",
+  "{metric} of each second of the video.": "{metric} của từng giây trong video.",
   "Dips listed": "Số chỗ tụt được liệt kê",
   "How many dips to list, up to {count}.": "Số chỗ tụt cần liệt kê, tối đa {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Khung tệ nhất của mỗi chỗ tụt, tệ nhất trước cho đến khi nhấp vào một tiêu đề cột: một khung cách một khung tệ hơn không quá 1 s thuộc chỗ tụt của khung đó.",

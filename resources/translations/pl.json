@@ -1,5 +1,14 @@
 {
  "strings": {
+  "A dot: the worst frame of a dip, as Worst frames lists them.": "Kropka: najgorsza klatka spadku, tak jak wymienia je lista Najgorsze klatki.",
+  "A line across: the frame selected in Worst frames, or the one under the pointer.": "Linia w poprzek: klatka zaznaczona na liście Najgorsze klatki lub ta pod wskaźnikiem.",
+  "Graph legend": "Legenda wykresu",
+  "Lower is better for {metric}: its graph is drawn upside down, so worse is still lower.": "Dla {metric} im niżej, tym lepiej: jego wykres jest rysowany do góry nogami, więc gorsze nadal jest niżej.",
+  "Shaded twice: the weak segment selected in Weak segments.": "Zacienione podwójnie: słaby odcinek zaznaczony na liście Słabe odcinki.",
+  "Shaded: a weak segment, where the conditions hold.": "Zacienione: słaby odcinek, gdzie spełnione są warunki.",
+  "What the graph shows": "Co pokazuje wykres",
+  "{metric} of each frame of the video.": "{metric} każdej klatki wideo.",
+  "{metric} of each second of the video.": "{metric} każdej sekundy wideo.",
   "Dips listed": "Wymienione spadki",
   "How many dips to list, up to {count}.": "Ile spadków wymienić, maksymalnie {count}.",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "Najgorsza klatka każdego spadku, najgorsza pierwsza, dopóki nie kliknie się nagłówka: klatka w odległości do 1 s od gorszej należy do jej spadku.",

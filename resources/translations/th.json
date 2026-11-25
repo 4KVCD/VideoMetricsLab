@@ -1,5 +1,14 @@
 {
  "strings": {
+  "A dot: the worst frame of a dip, as Worst frames lists them.": "จุด: เฟรมที่แย่ที่สุดของช่วงที่คะแนนตก ตามที่รายการ “เฟรมที่แย่ที่สุด” แสดง",
+  "A line across: the frame selected in Worst frames, or the one under the pointer.": "เส้นตัดขวาง: เฟรมที่เลือกใน “เฟรมที่แย่ที่สุด” หรือเฟรมใต้ตัวชี้",
+  "Graph legend": "คำอธิบายกราฟ",
+  "Lower is better for {metric}: its graph is drawn upside down, so worse is still lower.": "สำหรับ {metric} ยิ่งต่ำยิ่งดี: กราฟจึงวาดกลับหัว เพื่อให้ค่าที่แย่กว่ายังอยู่ต่ำกว่า",
+  "Shaded twice: the weak segment selected in Weak segments.": "แรเงาสองชั้น: ช่วงที่อ่อนที่เลือกใน “ช่วงที่อ่อน”",
+  "Shaded: a weak segment, where the conditions hold.": "แรเงา: ช่วงที่อ่อน ซึ่งเงื่อนไขเป็นจริง",
+  "What the graph shows": "กราฟแสดงอะไร",
+  "{metric} of each frame of the video.": "{metric} ของแต่ละเฟรมของวิดีโอ",
+  "{metric} of each second of the video.": "{metric} ของแต่ละวินาทีของวิดีโอ",
   "Dips listed": "จำนวนช่วงที่คะแนนตกที่แสดง",
   "How many dips to list, up to {count}.": "จำนวนช่วงที่คะแนนตกที่จะแสดง สูงสุด {count}",
   "The worst frame of each dip, worst first until a heading is clicked: a frame within 1 s of a worse one is part of its dip.": "เฟรมที่แย่ที่สุดของแต่ละช่วงที่คะแนนตก เรียงจากแย่ที่สุดจนกว่าจะคลิกหัวคอลัมน์: เฟรมที่อยู่ห่างจากเฟรมที่แย่กว่าไม่เกิน 1 วินาทีเป็นส่วนหนึ่งของช่วงนั้น",
