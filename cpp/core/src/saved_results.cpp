@@ -228,7 +228,15 @@ bool delete_saved_comparison(const std::filesystem::path& base, const SavedCompa
     // is cleared, never the folder itself, which another delete may be
     // moving into.
     const std::filesystem::path aside = v2 / ".deleted";
+    // Only a folder of v2's own, or none yet: were it a link (a junction or
+    // symlink someone made), clearing it would empty the folder it points to,
+    // and the comparison would be moved there.
     std::error_code ignored;
+    const std::filesystem::file_type aside_type = std::filesystem::symlink_status(aside, ignored).type();
+    if (aside_type != std::filesystem::file_type::directory && aside_type != std::filesystem::file_type::not_found) {
+        return false;
+    }
+    ignored.clear();
     std::filesystem::directory_iterator left(aside, ignored);
     for (; !ignored && left != std::filesystem::directory_iterator(); left.increment(ignored)) {
         std::error_code still_open;

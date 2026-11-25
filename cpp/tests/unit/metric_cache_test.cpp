@@ -883,6 +883,25 @@ TEST(MetricCache, SavedComparisonsAreListedReadAndDeleted) {
     elsewhere.folder = folder / "s.mp4";  // not a folder under v2
     EXPECT_FALSE(delete_saved_comparison(cache, elsewhere));
     EXPECT_TRUE(std::filesystem::exists(folder / "s.mp4"));
+    // v2's .deleted a link someone made (a symlink, or on Windows a junction):
+    // refused, and the folder it points to left alone (clearing the old
+    // leftovers in it emptied that folder). Where links can be made: Windows
+    // makes symlinks only with Developer Mode or as admin.
+    {
+        const std::filesystem::path aside = cache / "v2" / ".deleted";
+        const std::filesystem::path pointed = folder / "pointed";
+        std::filesystem::create_directories(pointed);
+        touch(pointed / "keep.txt", "keep");
+        std::filesystem::remove_all(aside);
+        std::error_code no_link;
+        std::filesystem::create_directory_symlink(pointed, aside, no_link);
+        if (!no_link) {
+            EXPECT_FALSE(delete_saved_comparison(cache, list[1]));
+            EXPECT_TRUE(std::filesystem::exists(pointed / "keep.txt"));
+            EXPECT_TRUE(std::filesystem::exists(second / "context.json"));
+            std::filesystem::remove(aside);  // the link, not what it points to
+        }
+    }
 #ifdef _WIN32
     // A comparison one of whose files is open, without leave to delete it
     // (the tab's details reader, a lookup, an antivirus): nothing of it is
