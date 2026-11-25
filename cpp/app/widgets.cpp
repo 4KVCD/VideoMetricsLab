@@ -292,6 +292,17 @@ void FillColumnTable::select_row_if_none_is(int row) {
                                       QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
 }
 
+QItemSelectionModel::SelectionFlags FillColumnTable::selectionCommand(const QModelIndex& index,
+                                                                     const QEvent* event) const {
+    if (index.isValid() && event != nullptr &&
+        std::find(unselecting_columns.begin(), unselecting_columns.end(), index.column()) !=
+            unselecting_columns.end() &&
+        (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseMove)) {
+        return QItemSelectionModel::NoUpdate;
+    }
+    return QTableWidget::selectionCommand(index, event);
+}
+
 void FillColumnTable::keep_a_row_selected() {
     keeps_a_row_ = true;
     connect(selectionModel(), &QItemSelectionModel::selectionChanged, this, [this] {
@@ -548,6 +559,9 @@ void FillColumnTable::freeze_leading_columns(int count) {
     view->setSelectionModel(selectionModel());
     delete own_selection;
     view->setItemDelegate(itemDelegate());
+    for (int column = 0; column < columnCount(); ++column) {
+        view->setItemDelegateForColumn(column, itemDelegateForColumn(column));  // a remove mark's, say
+    }
     view->setSelectionBehavior(selectionBehavior());
     view->setSelectionMode(selectionMode());
     view->setEditTriggers(NoEditTriggers);  // the table edits, if anything
@@ -1201,6 +1215,92 @@ void MarkedCellDelegate::paint(QPainter* painter, const QStyleOptionViewItem& op
     const int thick = std::max(2, option.rect.height() / 8);
     painter->fillRect(QRect(option.rect.left(), option.rect.top(), option.rect.width(), thick), band);
     painter->fillRect(QRect(option.rect.left(), option.rect.bottom() - thick + 1, option.rect.width(), thick), band);
+}
+
+void RemoveMarkDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
+                               const QModelIndex& index) const {
+    QStyleOptionViewItem plain = option;
+    initStyleOption(&plain, index);
+    plain.text.clear();
+    plain.icon = QIcon();
+    plain.state &= ~QStyle::State_HasFocus;  // the current cell's frame is the row's, not the mark's
+    const QWidget* widget = option.widget;
+    QStyle* style = widget != nullptr ? widget->style() : QApplication::style();
+    style->drawControl(QStyle::CE_ItemViewItem, &plain, painter, widget);  // the row's background
+    const bool disabled = off && off(index);
+    // The send mark is clicked dimmed too (the indicator says why nothing is
+    // sent), so its hover is drawn then too; a locked remove mark's isn't.
+    const bool hovered = (!disabled || shape_ == Shape::send) && (option.state & QStyle::State_MouseOver) != 0;
+    // The text's colour on a selected row too, as the row's own text is
+    // drawn in both interfaces (Windows' style keeps it on its light
+    // selection; HighlightedText was dark there in Classic's dark theme).
+    // Dimmed: a third of it, as the palette's disabled text is close to the
+    // text in some looks (VML Modern's).
+    QColor colour = option.palette.color(QPalette::Active, QPalette::Text);
+    if (disabled) {
+        colour.setAlphaF(0.35F);
+    }
+    QPen pen(colour);
+    pen.setWidthF(hovered ? 2.2 : 1.2);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    QColor tint = colour;
+    tint.setAlphaF(0.16F);  // under the pointer, the shape filled faintly too
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing);
+    painter->setPen(pen);
+    painter->setBrush(hovered ? QBrush(tint) : Qt::NoBrush);
+    const QRectF square(QPointF(0, 0), QSizeF(mark - 1, mark - 1));
+    const QRectF placed = square.translated(QRectF(option.rect).center() - square.center());
+    if (shape_ == Shape::remove) {
+        painter->drawEllipse(placed);
+        const double arm = (mark - 1) * 0.2;
+        const QPointF centre = placed.center();
+        painter->drawLine(centre + QPointF(-arm, -arm), centre + QPointF(arm, arm));
+        painter->drawLine(centre + QPointF(-arm, arm), centre + QPointF(arm, -arm));
+    } else {
+        // A box open on its right, an arrow leaving it there.
+        const double left = placed.left();
+        const double top = placed.top() + 1.5;
+        const double bottom = placed.bottom() - 1.5;
+        const double right = placed.left() + placed.width() * 0.62;
+        const double middle = placed.center().y();
+        QPainterPath box;
+        box.moveTo(right, middle - 2.6);
+        box.lineTo(right, top);
+        box.lineTo(left, top);
+        box.lineTo(left, bottom);
+        box.lineTo(right, bottom);
+        box.lineTo(right, middle + 2.6);
+        if (hovered) {
+            painter->fillRect(QRectF(QPointF(left, top), QPointF(right, bottom)), tint);
+        }
+        painter->setBrush(Qt::NoBrush);
+        painter->drawPath(box);
+        const double tip = placed.right();
+        painter->drawLine(QPointF(left + 3.0, middle), QPointF(tip, middle));
+        painter->drawLine(QPointF(tip - 3.2, middle - 3.2), QPointF(tip, middle));
+        painter->drawLine(QPointF(tip - 3.2, middle + 3.2), QPointF(tip, middle));
+    }
+    painter->restore();
+}
+
+void RemoveMarkDelegate::track_hover(QAbstractItemView* view) {
+    view->viewport()->setAttribute(Qt::WA_Hover);
+    view->viewport()->setMouseTracking(true);
+}
+
+QSize RemoveMarkDelegate::sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const {
+    return {mark + 12, std::max(mark + 6, QStyledItemDelegate::sizeHint(option, index).height())};
+}
+
+bool RemoveMarkDelegate::helpEvent(QHelpEvent* event, QAbstractItemView* view, const QStyleOptionViewItem& option,
+                                   const QModelIndex& index) {
+    if (!tooltip || event->type() != QEvent::ToolTip) {
+        return QStyledItemDelegate::helpEvent(event, view, option, index);
+    }
+    QToolTip::showText(event->globalPos(), tooltip(index), view->viewport(), option.rect);
+    return true;
 }
 
 QFont symbol_font(const QFont& font) {

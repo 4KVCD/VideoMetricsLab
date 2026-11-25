@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Show {name} in Metric Graphs again": "แสดง {name} ในกราฟเมตริกอีกครั้ง",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} ยังไม่มีคะแนนที่จะแสดงในกราฟเมตริก",
+  "{name} is already in Metric Graphs.": "{name} อยู่ในกราฟเมตริกแล้ว",
+  "{name} is back in Metric Graphs.": "{name} กลับมาอยู่ในกราฟเมตริกแล้ว",
+  "Locked while metrics are calculated.": "ล็อกระหว่างคำนวณเมตริก",
+  "Remove {name} from the list": "นำ {name} ออกจากรายการ",
   "Start over": "เริ่มใหม่",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "ล้างวิดีโออ้างอิงและนำวิดีโอทดสอบทั้งหมดออก เพื่อเริ่มการเปรียบเทียบใหม่ ผลลัพธ์ที่บันทึกยังคงอยู่",
   "Click Start over again to clear the reference.": "คลิก \"เริ่มใหม่\" อีกครั้งเพื่อล้างวิดีโออ้างอิง",

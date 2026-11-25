@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Show {name} in Metric Graphs again": "{name} を指標グラフに再表示",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} には指標グラフに表示するスコアがまだありません。",
+  "{name} is already in Metric Graphs.": "{name} はすでに指標グラフにあります。",
+  "{name} is back in Metric Graphs.": "{name} を指標グラフに戻しました。",
+  "Locked while metrics are calculated.": "指標の計算中はロックされます。",
+  "Remove {name} from the list": "{name} をリストから削除",
   "Start over": "最初からやり直す",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "参照動画をクリアし、すべてのテスト動画を削除して、新しい比較を始めます。保存済みの結果は残ります。",
   "Click Start over again to clear the reference.": "もう一度「最初からやり直す」をクリックすると参照動画をクリアします。",

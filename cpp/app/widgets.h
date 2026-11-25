@@ -5,6 +5,7 @@
 
 #include <QFont>
 #include <QHeaderView>
+#include <QItemSelectionModel>
 #include <QLabel>
 #include <QList>
 #include <QPushButton>
@@ -17,6 +18,7 @@
 #include <QTabWidget>
 #include <QTableWidget>
 
+#include <functional>
 #include <optional>
 #include <tuple>
 #include <utility>
@@ -80,6 +82,40 @@ public:
 // its own rows dragged within it (rowsMoved), moving nothing itself: what a
 // row is lives with its owner. Its leading columns can stay in place while
 // the others scroll sideways (freeze_leading_columns).
+// A row's mark, a click on which acts on that row, drawn rather than a
+// character (U+2BBE and the like are in few fonts) in the text's colour, its
+// pen heavier and its shape tinted under the pointer:
+// - `remove`: a circled cross that removes the row (Metric Graphs' lines, the
+//   Videos table's videos). Not the danger colour: a row removed deletes
+//   nothing (docs/ARCHITECTURE.md, "Removing and deleting").
+// - `send`: an arrow out of a box, which sends the row's line back to
+//   Metric Graphs (the Videos table's).
+// The cell's text is not drawn. `tooltip`, where set, says what a click on
+// the cell does (else the cell's own tooltip); where `off` says so, the mark
+// is drawn disabled, and the caller ignores its clicks.
+class RemoveMarkDelegate : public QStyledItemDelegate {
+public:
+    enum class Shape { remove, send };
+    explicit RemoveMarkDelegate(QObject* parent = nullptr, Shape shape = Shape::remove)
+        : QStyledItemDelegate(parent), shape_(shape) {}
+
+    static constexpr int mark = 14;  // the shape's size, in pixels
+    std::function<QString(const QModelIndex&)> tooltip;
+    std::function<bool(const QModelIndex&)> off;
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override;
+    QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override;
+    bool helpEvent(QHelpEvent* event, QAbstractItemView* view, const QStyleOptionViewItem& option,
+                   const QModelIndex& index) override;
+
+    // Hovering drawn on `view`: its viewport told of the pointer's moves
+    // (Qt::WA_Hover), which an item view's viewport is not by default.
+    static void track_hover(QAbstractItemView* view);
+
+private:
+    Shape shape_;
+};
+
 class FillColumnTable : public QTableWidget {
     Q_OBJECT
 
@@ -119,6 +155,9 @@ public:
     // selected (Ctrl+click on the only one, a drag over no row, removing the
     // rows selected) selects the last row selected again, or the nearest.
     void keep_a_row_selected();
+    // Columns whose cells a press doesn't select (a row mark's): the
+    // selection stays as it was, and only the click acts.
+    std::vector<int> unselecting_columns;
 
 signals:
     // Files dropped on the table from outside it: their paths, once the
@@ -130,6 +169,8 @@ signals:
 
 protected:
     void mousePressEvent(QMouseEvent* event) override;
+    QItemSelectionModel::SelectionFlags selectionCommand(const QModelIndex& index,
+                                                         const QEvent* event = nullptr) const override;
     void resizeEvent(QResizeEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dragMoveEvent(QDragMoveEvent* event) override;

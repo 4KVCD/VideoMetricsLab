@@ -1,5 +1,6 @@
 #include "export_indicator.h"
 
+#include <QSizePolicy>
 #include <QDesktopServices>
 #include <QEvent>
 #include <QGraphicsOpacityEffect>
@@ -94,6 +95,12 @@ ExportIndicator::ExportIndicator(QWidget* parent) : QWidget(parent) {
     });
     label_->installEventFilter(this);
     layout->addWidget(label_);
+    // Hidden, it keeps its room: the tab bar's corner then isn't laid out
+    // again as it goes, which drew the buttons beside it a few pixels over
+    // for a frame, a flash where the line had just faded (2026-11-25).
+    QSizePolicy keep = sizePolicy();
+    keep.setRetainSizeWhenHidden(true);
+    setSizePolicy(keep);
     opacity_ = new QGraphicsOpacityEffect(this);
     opacity_->setOpacity(1.0);
     setGraphicsEffect(opacity_);
@@ -102,7 +109,7 @@ ExportIndicator::ExportIndicator(QWidget* parent) : QWidget(parent) {
     fading_->setStartValue(1.0);
     fading_->setEndValue(0.0);
     connect(fading_, &QPropertyAnimation::finished, this, [this] {
-        if (state_ == State::saved) {
+        if (state_ == State::saved || state_ == State::note) {
             state_ = State::idle;
             hide();
         }
@@ -155,6 +162,18 @@ void ExportIndicator::show_outcome(const ExportOutcome& outcome) {
     }
 }
 
+void ExportIndicator::show_note(const QString& note) {
+    if (state_ == State::failed || state_ == State::saving) {
+        return;  // a failure is kept until clicked; a save under way says so
+    }
+    fading_->stop();
+    opacity_->setOpacity(1.0);
+    note_ = note;
+    state_ = State::note;
+    show_text();
+    fade_timer_->start();
+}
+
 QString ExportIndicator::text() const { return label_->text(); }
 
 void ExportIndicator::show_text() {
@@ -171,6 +190,9 @@ void ExportIndicator::show_text() {
     case State::saving:
         text = QStringLiteral("<span style=\"color: %1;\">%2</span>")
                    .arg(theme::color("muted").name(), app::tr("Saving...").toHtmlEscaped());
+        break;
+    case State::note:
+        text = note_.toHtmlEscaped();
         break;
     case State::saved:
         text = QStringLiteral("<span style=\"color: %1;\">&#x2713;</span> %2")
@@ -193,12 +215,13 @@ void ExportIndicator::show_text() {
     label_->setText(text);
     label_->setToolTip(state_ == State::failed  ? outcome_.details
                        : state_ == State::saved ? outcome_.files.join(QLatin1Char('\n'))
+                       : state_ == State::note  ? QString()
                                                 : saving_why_);
     show();
 }
 
 void ExportIndicator::fade() {
-    if (state_ == State::saved) {
+    if (state_ == State::saved || state_ == State::note) {
         fading_->start();
     }
 }

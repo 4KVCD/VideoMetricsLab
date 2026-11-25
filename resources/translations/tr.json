@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Show {name} in Metric Graphs again": "{name} metrik grafiklerinde yeniden gösterilsin",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} için metrik grafiklerinde gösterilecek puan henüz yok.",
+  "{name} is already in Metric Graphs.": "{name} zaten metrik grafiklerinde.",
+  "{name} is back in Metric Graphs.": "{name} yeniden metrik grafiklerinde.",
+  "Locked while metrics are calculated.": "Metrikler hesaplanırken kilitli.",
+  "Remove {name} from the list": "Listeden kaldır: {name}",
   "Start over": "Baştan başla",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Referansı temizler ve yeni bir karşılaştırma için tüm test videolarını kaldırır. Kaydedilen sonuçlar korunur.",
   "Click Start over again to clear the reference.": "Referansı temizlemek için \"Baştan başla\"ya tekrar tıklayın.",

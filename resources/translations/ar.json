@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Show {name} in Metric Graphs again": "إظهار {name} في رسوم المقاييس مجددًا",
+  "{name} has no scores yet to show in Metric Graphs.": "ليس لدى {name} درجات بعد لعرضها في رسوم المقاييس.",
+  "{name} is already in Metric Graphs.": "{name} موجود بالفعل في رسوم المقاييس.",
+  "{name} is back in Metric Graphs.": "عاد {name} إلى رسوم المقاييس.",
+  "Locked while metrics are calculated.": "مقفل أثناء حساب المقاييس.",
+  "Remove {name} from the list": "إزالة {name} من القائمة",
   "Start over": "البدء من جديد",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "يمسح المرجع ويزيل كل فيديوهات الاختبار لبدء مقارنة جديدة. تبقى النتائج المحفوظة.",
   "Click Start over again to clear the reference.": "انقر «البدء من جديد» مرة أخرى لمسح المرجع.",

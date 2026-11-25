@@ -6,6 +6,7 @@
 #include "click_twice.h"
 #include "quick_save.h"
 
+#include <QAbstractItemView>
 #include <QCheckBox>
 #include <QDialog>
 #include <QFont>
@@ -1330,11 +1331,33 @@ std::optional<int> MainWindow::row_index_of_path(const std::filesystem::path& pa
     return std::nullopt;
 }
 
+bool MainWindow::line_removed(int row) const {
+    if (row < 0 || row >= static_cast<int>(rows_.size())) {
+        return false;
+    }
+    const std::shared_ptr<CompletedRun>& run = rows_[static_cast<std::size_t>(row)]->completed_run;
+    return run != nullptr && graph_panel_->removed(run->graph_identity);
+}
+
+void MainWindow::repaint_row_marks() {
+    if (distorted_table_ == nullptr) {
+        return;  // before the table is built
+    }
+    distorted_table_->viewport()->update();
+    if (auto* frozen = distorted_table_->findChild<QAbstractItemView*>(QStringLiteral("frozenColumns"))) {
+        frozen->viewport()->update();
+    }
+}
+
 void MainWindow::on_remove_distorted() {
     std::set<int, std::greater<>> rows;
     for (const QModelIndex& index : distorted_table_->selectionModel()->selectedIndexes()) {
         rows.insert(index.row());
     }
+    remove_distorted_rows(std::move(rows));
+}
+
+void MainWindow::remove_distorted_rows(std::set<int, std::greater<>> rows) {
     // A video's CVVDP display rows (add_cvvdp_display_rows) go with it: they
     // only score its CVVDP on other displays, and Export results lists them
     // under it. Its film grain twin, a comparison of its own, stays.

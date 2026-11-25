@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Show {name} in Metric Graphs again": "Mostra di nuovo {name} nei Grafici metriche",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} non ha ancora punteggi da mostrare nei Grafici metriche.",
+  "{name} is already in Metric Graphs.": "{name} è già nei Grafici metriche.",
+  "{name} is back in Metric Graphs.": "{name} è di nuovo nei Grafici metriche.",
+  "Locked while metrics are calculated.": "Bloccato durante il calcolo delle metriche.",
+  "Remove {name} from the list": "Rimuovi {name} dall'elenco",
   "Start over": "Ricomincia",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Svuota il riferimento e rimuove tutti i video di prova, per un nuovo confronto. I risultati salvati vengono mantenuti.",
   "Click Start over again to clear the reference.": "Fai di nuovo clic su «Ricomincia» per svuotare il riferimento.",

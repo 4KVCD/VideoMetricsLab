@@ -4,11 +4,13 @@
 // shows or hides columns without ticking what rows calculate.
 #include <QApplication>
 #include <QCheckBox>
+#include <QHeaderView>
 #include <QLabel>
 #include <QPointer>
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QSignalSpy>
+#include <QTableView>
 #include <QTableWidget>
 #include <QTest>
 #include <QToolButton>
@@ -327,6 +329,29 @@ TEST_F(MetricsPanelInWindow, ShowingAMetricLeavesWhatRowsCalculate) {
     EXPECT_EQ(std::count(saved.hidden_metrics.begin(), saved.hidden_metrics.end(), "ssim_yuv"), 1);
     EXPECT_TRUE(table->horizontalHeaderItem(col_psnr_yuv_y)->toolTip().contains("the Y plane alone"));
     list->window()->close();
+}
+
+// Each video's remove mark starts its row, as Metric Graphs' lines have it,
+// frozen with the tick box and File name, and drawn there too (the frozen
+// columns are a view of their own).
+TEST_F(MetricsPanelInWindow, AVideosRemoveMarkStartsItsRow) {
+    auto* table = window_->findChild<FillColumnTable*>();
+    ASSERT_NE(table, nullptr);
+    const QHeaderView* header = table->horizontalHeader();
+    EXPECT_EQ(header->logicalIndex(0), col_remove);
+    EXPECT_EQ(header->logicalIndex(1), col_graph);  // its line sent back to Metric Graphs
+    EXPECT_EQ(header->logicalIndex(2), col_check);
+    EXPECT_EQ(header->logicalIndex(3), col_path);
+    EXPECT_NE(dynamic_cast<RemoveMarkDelegate*>(table->itemDelegateForColumn(col_remove)), nullptr);
+    EXPECT_NE(dynamic_cast<RemoveMarkDelegate*>(table->itemDelegateForColumn(col_graph)), nullptr);
+    EXPECT_TRUE(table->viewport()->testAttribute(Qt::WA_Hover));  // its hover drawn
+    const auto* frozen = table->findChild<QTableView*>(QStringLiteral("frozenColumns"));
+    ASSERT_NE(frozen, nullptr);
+    EXPECT_EQ(frozen->itemDelegateForColumn(col_remove), table->itemDelegateForColumn(col_remove));
+    for (const int column : {col_remove, col_graph, col_check, col_path}) {
+        EXPECT_FALSE(frozen->horizontalHeader()->isSectionHidden(column)) << column;  // frozen
+    }
+    EXPECT_TRUE(frozen->horizontalHeader()->isSectionHidden(col_info));
 }
 
 }  // namespace

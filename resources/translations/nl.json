@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Show {name} in Metric Graphs again": "{name} weer tonen in de metriekgrafieken",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} heeft nog geen scores om in de metriekgrafieken te tonen.",
+  "{name} is already in Metric Graphs.": "{name} staat al in de metriekgrafieken.",
+  "{name} is back in Metric Graphs.": "{name} staat weer in de metriekgrafieken.",
+  "Locked while metrics are calculated.": "Vergrendeld terwijl metrieken worden berekend.",
+  "Remove {name} from the list": "{name} uit de lijst verwijderen",
   "Start over": "Opnieuw beginnen",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Maakt de referentie leeg en verwijdert alle testvideo's, voor een nieuwe vergelijking. Opgeslagen resultaten blijven bewaard.",
   "Click Start over again to clear the reference.": "Klik nogmaals op 'Opnieuw beginnen' om de referentie leeg te maken.",

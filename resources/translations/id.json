@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Show {name} in Metric Graphs again": "Tampilkan lagi {name} di Grafik metrik",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} belum punya skor untuk ditampilkan di Grafik metrik.",
+  "{name} is already in Metric Graphs.": "{name} sudah ada di Grafik metrik.",
+  "{name} is back in Metric Graphs.": "{name} kembali ada di Grafik metrik.",
+  "Locked while metrics are calculated.": "Dikunci selama metrik dihitung.",
+  "Remove {name} from the list": "Hapus {name} dari daftar",
   "Start over": "Mulai ulang",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Mengosongkan referensi dan menghapus semua video uji, untuk perbandingan baru. Hasil tersimpan tetap ada.",
   "Click Start over again to clear the reference.": "Klik \"Mulai ulang\" lagi untuk mengosongkan referensi.",

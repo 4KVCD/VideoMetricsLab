@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Show {name} in Metric Graphs again": "Znovu zobrazit {name} v grafech metrik",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} zatím nemá skóre, které by šlo zobrazit v grafech metrik.",
+  "{name} is already in Metric Graphs.": "{name} už je v grafech metrik.",
+  "{name} is back in Metric Graphs.": "{name} je zpět v grafech metrik.",
+  "Locked while metrics are calculated.": "Zamčeno během výpočtu metrik.",
+  "Remove {name} from the list": "Odebrat {name} ze seznamu",
   "Start over": "Začít znovu",
   "Clears the reference and removes every test video, for a new comparison. Saved results are kept.": "Vymaže referenci a odebere všechna testovací videa pro nové porovnání. Uložené výsledky zůstanou.",
   "Click Start over again to clear the reference.": "Dalším kliknutím na „Začít znovu“ vymažete referenci.",
