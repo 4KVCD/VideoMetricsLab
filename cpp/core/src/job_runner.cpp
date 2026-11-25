@@ -1457,7 +1457,7 @@ void Scheduler::run() {
     }
     std::vector<std::thread> threads;
     for (std::size_t lane = 0; lane + 1 < lanes.size(); ++lane) {
-        // Named in the log as the Python app names them.
+        // Named in the log as the Python app named them.
         std::string thread_name = lanes[lane] == gpu_pool ? "vmaf-gpu" : "vmaf-cpu-" + std::to_string(lane);
         threads.emplace_back([this, pool = lanes[lane], thread_name = std::move(thread_name)]() mutable {
             app_log::set_thread_name(std::move(thread_name));

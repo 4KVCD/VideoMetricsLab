@@ -24,7 +24,7 @@ struct NpyArray {
     std::string data;
 };
 
-// Arrays of the types the Python app saves scores in: frame numbers as
+// Arrays of the types the Python app saved scores in: frame numbers as
 // 32-bit integers, times as 64-bit floats, scores as 32-bit floats, a
 // whole-video score as a 64-bit float scalar, and text as a Unicode scalar
 // (numpy's '<U', 4 bytes a character).

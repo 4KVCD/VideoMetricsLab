@@ -1609,7 +1609,7 @@ std::pair<CropBox, CropBox> detect_pair(const std::string& ffmpeg, const VideoIn
         }
     };
     std::thread reference([&] {
-        app_log::set_thread_name("crop-reference");  // in the log, as the Python app names it
+        app_log::set_thread_name("crop-reference");  // in the log, as the Python app named it
         detect(0, source, source_hwaccel);
     });
     detect(1, distorted, distorted_hwaccel);

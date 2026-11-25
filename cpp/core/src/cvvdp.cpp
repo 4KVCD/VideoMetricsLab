@@ -298,7 +298,7 @@ std::string with_user_preset(const std::string& user_presets_json, const std::st
     }
     display.validate();
     Json presets = Json::parse(without_user_preset(user_presets_json, kept_name));
-    // As the Python app saves a display (asdict): the resolution as the
+    // As the Python app saved a display (asdict): the resolution as the
     // whole numbers its editor gives, the rest as numbers with a fraction.
     const auto resolution = [](double value) {
         return value == std::floor(value) ? Json(static_cast<long long>(value)) : Json(value);

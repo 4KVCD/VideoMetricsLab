@@ -1,4 +1,4 @@
-// InboundPipe on Windows: a named pipe, as the Python app makes it
+// InboundPipe on Windows: a named pipe, as the Python app made it
 // (vmaf_gpu._StreamReader).
 #include "vml/platform/pipe.h"
 

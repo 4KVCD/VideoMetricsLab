@@ -1,6 +1,6 @@
-// The app's preferences, saved in settings.json between sessions. A port of
-// vmaf_app/core/settings.py: the same file, read the same way, so both apps
-// share it.
+// The app's preferences, saved in settings.json between sessions: the
+// file the Python app (v2.0 and before) kept, read the same way, so a
+// profile it left keeps working.
 #pragma once
 
 #include <filesystem>
@@ -301,7 +301,7 @@ struct Settings {
     // The saved settings: defaults for a missing or unreadable file, and
     // for each value of the wrong type (that setting alone); unknown keys
     // are ignored. Reading makes the settings folder if it is missing, as
-    // the Python app does.
+    // the Python app did.
     static Settings load();
     // load() from a given file, for tests.
     static Settings load_from(const std::filesystem::path& file);
@@ -314,7 +314,7 @@ struct Settings {
     // Where settings.json is: in app_data_folder().
     static std::filesystem::path file();
 
-    // Saves the settings as the Python app does (json.dumps(asdict(self),
+    // Saves the settings as the Python app did (json.dumps(asdict(self),
     // indent=2)): every setting, in its order. The file is written whole
     // beside the old one, then put in its place, so a crash or a full disk
     // part-way through never leaves a cut-off file. Returns nothing on
