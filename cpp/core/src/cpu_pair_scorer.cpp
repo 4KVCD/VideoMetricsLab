@@ -8,6 +8,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 
 #include "vml/butteraugli.h"
 #include "vml/jxl_linear.h"
@@ -35,6 +36,18 @@ JxlLinearRgb reading_of(const VideoColour& colour) {
     return *reading;
 }
 
+// What the run says when the engines cannot get the memory a picture size
+// needs, when they are built or as a thread's rows grow while scoring.
+PerceptualRunError out_of_memory(std::size_t width, std::size_t height) {
+    return PerceptualRunError("There is not enough memory to score " + std::to_string(width) + "x" +
+                              std::to_string(height) + " pictures with SSIMULACRA2 or Butteraugli.");
+}
+
+// What the run says when an engine's thread cannot start.
+PerceptualRunError no_thread(const std::system_error& error) {
+    return PerceptualRunError(std::string("SSIMULACRA2 or Butteraugli could not start its threads: ") + error.what());
+}
+
 }  // namespace
 
 float butteraugli_intensity_of(const VideoColour& source, const VideoColour& test) {
@@ -53,6 +66,7 @@ float butteraugli_intensity_of(const VideoColour& source, const VideoColour& tes
 struct CpuPairScorer::State {
     std::vector<std::string> keys;
     std::size_t width = 0;
+    std::size_t height = 0;
     std::vector<std::uint16_t> source;
     std::vector<std::uint16_t> test;
     std::optional<Ssimulacra2> ssimulacra2;
@@ -83,7 +97,8 @@ CpuPairScorer::CpuPairScorer(const std::vector<std::string>& keys, const VideoCo
     State& s = *state_;
     s.keys = keys;
     s.width = static_cast<std::size_t>(width);
-    const auto rows = static_cast<std::size_t>(height);
+    s.height = static_cast<std::size_t>(height);
+    const std::size_t rows = s.height;
     const JxlLinearRgb source_reading = reading_of(source_colour);
     const JxlLinearRgb test_reading = reading_of(test_colour);
     try {
@@ -101,8 +116,9 @@ CpuPairScorer::CpuPairScorer(const std::vector<std::string>& keys, const VideoCo
             }
         }
     } catch (const std::bad_alloc&) {
-        throw PerceptualRunError("There is not enough memory to score " + std::to_string(width) + "x" +
-                                 std::to_string(height) + " pictures with SSIMULACRA2 or Butteraugli.");
+        throw out_of_memory(s.width, s.height);
+    } catch (const std::system_error& error) {
+        throw no_thread(error);
     }
 }
 
@@ -116,17 +132,24 @@ std::vector<double> CpuPairScorer::score() {
     State& s = *state_;
     double ssimulacra2 = 0.0;
     double butteraugli = 0.0;
-    if (s.ssimulacra2 && s.butteraugli) {
-        // SSIMULACRA2 (its pool's threads) beside Butteraugli (its own): both
-        // only read the pictures. The future's destructor waits for it, also when
-        // Butteraugli throws.
-        std::future<double> ssimulacra2_done = std::async(std::launch::async, [&s] { return s.ssimulacra2_score(); });
-        butteraugli = s.butteraugli_score();
-        ssimulacra2 = ssimulacra2_done.get();
-    } else if (s.ssimulacra2) {
-        ssimulacra2 = s.ssimulacra2_score();
-    } else if (s.butteraugli) {
-        butteraugli = s.butteraugli_score();
+    try {
+        if (s.ssimulacra2 && s.butteraugli) {
+            // SSIMULACRA2 (its pool's threads) beside Butteraugli (its own):
+            // both only read the pictures. The future's destructor waits for
+            // it, also when Butteraugli throws.
+            std::future<double> ssimulacra2_done =
+                std::async(std::launch::async, [&s] { return s.ssimulacra2_score(); });
+            butteraugli = s.butteraugli_score();
+            ssimulacra2 = ssimulacra2_done.get();
+        } else if (s.ssimulacra2) {
+            ssimulacra2 = s.ssimulacra2_score();
+        } else if (s.butteraugli) {
+            butteraugli = s.butteraugli_score();
+        }
+    } catch (const std::bad_alloc&) {
+        throw out_of_memory(s.width, s.height);  // a thread's scratch rows could not grow
+    } catch (const std::system_error& error) {
+        throw no_thread(error);  // SSIMULACRA2's thread beside Butteraugli
     }
     std::vector<double> values;
     for (const std::string& key : s.keys) {

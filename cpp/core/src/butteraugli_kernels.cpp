@@ -1410,9 +1410,12 @@ float* ScratchRows(size_t count, size_t stride) {
   thread_local Scratch scratch;
   const size_t floats = count * stride;
   if (scratch.floats < floats) {
+    // The new rows before the old ones go: if they cannot be had, the thread
+    // keeps a valid block (its destructor frees it) and the error goes up.
+    float* const grown = static_cast<float*>(::operator new[](floats * sizeof(float), std::align_val_t{64}));
+    std::fill_n(grown, floats, 0.0f);  // the padding never holds NaNs
     ::operator delete[](scratch.data, std::align_val_t{64});
-    scratch.data = static_cast<float*>(::operator new[](floats * sizeof(float), std::align_val_t{64}));
-    std::fill_n(scratch.data, floats, 0.0f);  // the padding never holds NaNs
+    scratch.data = grown;
     scratch.floats = floats;
   }
   return scratch.data;

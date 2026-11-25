@@ -70,6 +70,7 @@ private:
     void dispatch(std::size_t rows, std::size_t band_rows, Call call, void* fn);
     void take_bands(std::uint32_t pass) noexcept;  // a pass's fn must not throw: others may be running it
     void worker();
+    void stop_workers() noexcept;  // ends and joins the threads started
 
     std::vector<std::thread> workers_;
 

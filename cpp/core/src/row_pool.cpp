@@ -39,10 +39,21 @@ inline void cpu_relax() {
 RowPool::RowPool(std::size_t threads) {
     const std::size_t helpers = threads > 1 ? threads - 1 : 0;
     workers_.reserve(helpers);
-    for (std::size_t i = 0; i < helpers; ++i) workers_.emplace_back([this] { worker(); });
+    try {
+        for (std::size_t i = 0; i < helpers; ++i) workers_.emplace_back([this] { worker(); });
+    } catch (...) {
+        // A thread that cannot start (std::system_error): the destructor does
+        // not run for a pool that was never built, so the threads already
+        // started are stopped here, as joinable threads left behind would end
+        // the process.
+        stop_workers();
+        throw;
+    }
 }
 
-RowPool::~RowPool() {
+RowPool::~RowPool() { stop_workers(); }
+
+void RowPool::stop_workers() noexcept {
     stop_.store(true);
     pass_.fetch_add(1);  // seq_cst, as the sleepers' check
     pass_.notify_all();

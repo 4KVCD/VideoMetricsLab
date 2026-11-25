@@ -391,7 +391,7 @@ public:
         pictures_[0] = source;
         pictures_[1] = test;
         stride_ = stride;
-        // A row that throws (a thread's first scratch rows not allocated)
+        // A row that throws (a thread's scratch rows not allocated or grown)
         // must not leave the pool, whose threads cannot throw: the step's
         // other rows are skipped and the error is thrown here. The next
         // picture is whole again, as every row is written before it is read.
