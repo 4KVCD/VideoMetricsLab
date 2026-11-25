@@ -227,6 +227,11 @@ The unit tests run on the development PC before each commit.
 - Readable first: plain names, and comments in plain sentences that say
   why, as in the rest of the repository.
 - Warnings are errors, on every compiler.
+- The layout is `.clang-format`'s (`native/.clang-format` in `native/`),
+  for the lines a change touches: `git clang-format` before a commit. Whole
+  files are not reformatted (the code was laid out by hand before it, and
+  about 4 % of the lines would change); `.clang-format-ignore` lists the
+  code that keeps its upstream's layout.
 - A behaviour gets one test, through the real code, compared with the
   expected values in `tests/reference` wherever they cover it.
 - On macOS, `std::to_chars` for doubles needs macOS 13.3 or later; Qt 6.12

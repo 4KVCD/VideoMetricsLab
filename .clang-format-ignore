@@ -1,0 +1,13 @@
+# Code clang-format leaves alone: others' code, kept as its upstream lays it out so that it can be compared and
+# updated, and generated files.
+cpp/third_party/**
+native/amf/**
+native/dav1d/**
+native/av2/splot_api.h
+native/ffmpeg/**
+native/ffnvcodec/**
+native/onevpl/**
+native/vulkan/**
+native/*_spv.h
+# Ported from libjxl with the same Highway code, line for line (see its first comment)
+cpp/core/src/butteraugli_kernels.cpp

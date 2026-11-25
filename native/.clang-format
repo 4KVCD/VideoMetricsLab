@@ -1,0 +1,35 @@
+# The native decoders' layout (built with MinGW g++ as C++17): the repository's, but with `char *out`, short ifs
+# on one line and binary operators starting the continued line, as this folder's code has them. For the lines a
+# change touches only, as the repository's .clang-format says.
+BasedOnStyle: Google
+Standard: c++17
+IndentWidth: 4
+ContinuationIndentWidth: 4
+ConstructorInitializerIndentWidth: 4
+AccessModifierOffset: -4
+IndentCaseLabels: false
+NamespaceIndentation: None
+FixNamespaceComments: true
+ColumnLimit: 120
+BreakStringLiterals: false
+ReflowComments: false
+DerivePointerAlignment: false
+PointerAlignment: Right
+BreakBeforeBraces: Attach
+BreakBeforeBinaryOperators: NonAssignment
+AlignAfterOpenBracket: Align
+BinPackArguments: true
+BinPackParameters: true
+AllowAllArgumentsOnNextLine: true
+AllowAllParametersOfDeclarationOnNextLine: true
+AllowShortFunctionsOnASingleLine: All
+AllowShortLambdasOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+BreakConstructorInitializers: BeforeColon
+PackConstructorInitializers: NextLine
+Cpp11BracedListStyle: true
+SpacesBeforeTrailingComments: 2
+IncludeBlocks: Preserve
+SortIncludes: Never

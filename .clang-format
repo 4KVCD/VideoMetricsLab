@@ -1,0 +1,35 @@
+# The C++ code's layout (cpp/), for formatting the lines a change touches: `git clang-format` before a commit, or
+# the editor's format-selection. Not for whole files: the code was laid out by hand before this file, and running
+# clang-format over a whole file would change about 4 % of its lines. native/ has its own (native/.clang-format);
+# .clang-format-ignore lists the code that keeps its upstream's layout. Written for clang-format 20.
+BasedOnStyle: Google
+Standard: c++20
+IndentWidth: 4
+ContinuationIndentWidth: 4
+ConstructorInitializerIndentWidth: 4
+AccessModifierOffset: -4
+IndentCaseLabels: false
+NamespaceIndentation: None
+FixNamespaceComments: true
+ColumnLimit: 120
+BreakStringLiterals: false
+ReflowComments: false
+DerivePointerAlignment: false
+PointerAlignment: Left
+BreakBeforeBraces: Attach
+AlignAfterOpenBracket: Align
+BinPackArguments: true
+BinPackParameters: true
+AllowAllArgumentsOnNextLine: true
+AllowAllParametersOfDeclarationOnNextLine: true
+AllowShortFunctionsOnASingleLine: All
+AllowShortLambdasOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+BreakConstructorInitializers: BeforeColon
+PackConstructorInitializers: NextLine
+Cpp11BracedListStyle: true
+SpacesBeforeTrailingComments: 2
+IncludeBlocks: Preserve
+SortIncludes: Never
