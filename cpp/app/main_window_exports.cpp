@@ -630,7 +630,7 @@ MainWindow::ExportPlan MainWindow::export_plan(std::vector<BundleVideo> videos,
         export_files(settings_, plan.videos, reference, document, rules, several, name, plan.frames, segments_skipped);
     if (segments_skipped) {
         logger.info("No weak segments exported for " + name.toStdString() + ": the rules have no condition");
-        show_status(app::tr("{name}'s weak segments weren't exported: no condition is set in Settings > Weak "
+        notify_failed(app::tr("{name}'s weak segments weren't exported: no condition is set in Settings > Weak "
                             "segments.",
                             {{"name", name}}));
     }

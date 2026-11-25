@@ -294,6 +294,30 @@ TEST(SettingsPanel, NotificationServicesAreListedAndTickedEitherWay) {
 // light or dark by its segment. The accent's choices are usable only while
 // VML Modern is picked. (VML Modern is not picked here: applied, it would be
 // every later test's style.)
+// What an edit did goes to the window's indicator (notify), not a line at
+// the tab's foot; a setting that shows only after a restart asks for one.
+TEST(SettingsPanel, SaysWhatAnEditDidAndWhenARestartIsNeeded) {
+    Settings settings;
+    FileWrites writes;
+    const Dialogs dialogs = standard_dialogs(nullptr);
+    SettingsPanel panel(settings, writes, [] { return ToolsStatus{}; }, dialogs);
+    QStringList said;
+    panel.notify = [&said](const QString& text, ExportIndicator::Note) { said << text; };
+    QSignalSpy restart(&panel, &SettingsPanel::restart_needed);
+    panel.use_cache->toggle();
+    EXPECT_EQ(said, QStringList{"Settings saved."});
+    EXPECT_EQ(restart.count(), 0);
+    const int started = panel.language->currentIndex();
+    panel.language->setCurrentIndex(started == 1 ? 2 : 1);
+    ASSERT_EQ(restart.count(), 1);
+    EXPECT_TRUE(restart.at(0).at(0).toString().contains("next started"));
+    // Back to the language the app started in: no restart needed, said with
+    // nothing, which takes the window's note away.
+    panel.language->setCurrentIndex(started);
+    ASSERT_EQ(restart.count(), 2);
+    EXPECT_TRUE(restart.at(1).at(0).toString().isEmpty());
+}
+
 TEST(SettingsPanel, AppearanceSavesEachChoice) {
     Settings settings;
     settings.interface_style = "modern";

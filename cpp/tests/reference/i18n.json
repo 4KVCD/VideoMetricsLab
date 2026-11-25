@@ -725,12 +725,6 @@
    }
   },
   {
-   "text": "Could not export the log: {error}",
-   "values": {
-    "error": "<error>"
-   }
-  },
-  {
    "text": "Could not initialize Vship {metric}: {error}",
    "values": {
     "metric": "<metric>",
@@ -1014,12 +1008,6 @@
    "text": "Loading test frame {frame:,}…",
    "values": {
     "frame": 1234567
-   }
-  },
-  {
-   "text": "Log exported to {path}",
-   "values": {
-    "path": "<path>"
    }
   },
   {
@@ -2371,7 +2359,6 @@
     "<name> konnte nicht analysiert werden: <error>",
     "Schwarze Balken in <path> konnten nicht automatisch erkannt werden: FFmpeg hat in den untersuchten Abschnitten keine Bilder gefunden. Die Datei ist möglicherweise beschädigt oder unvollständig.",
     "Schwarze Balken in <path> konnten nicht automatisch erkannt werden: <detail>. Wählen Sie für dieses Video „Keine (ganzes Bild verwenden)“, um ohne Zuschnitt fortzufahren.",
-    "Das Protokoll konnte nicht exportiert werden: <error>",
     "Vship <metric> konnte nicht initialisiert werden: <error>",
     "Bild konnte nicht geladen werden:\n<error>",
     "Die Videodatei <side> konnte nicht zum Dekodieren geöffnet werden.",
@@ -2417,7 +2404,6 @@
     "GPU-Bewertung fehlgeschlagen (<error>); der CPU-Versuch ist ebenfalls fehlgeschlagen: <reason>",
     "Quellbild 1,234,567 wird geladen…",
     "Testbild 1,234,567 wird geladen…",
-    "Protokoll exportiert nach <path>",
     "Mittelwert <axis_label> über alle bewerteten Bilder.\n",
     "Bei Bild <frame> kam kein Bild zurück; es liegt vielleicht hinter dem Ende des Videos.",
     "Keine Ergebnisse für die angeforderten Metriken: <metrics>",
@@ -3080,7 +3066,6 @@
     "Не удалось проанализировать <name>: <error>",
     "Не удалось автоматически определить чёрные полосы в <path>: FFmpeg не нашёл изображения в проверенных участках. Файл может быть повреждён или обрезан.",
     "Не удалось автоматически определить чёрные полосы в <path>: <detail>. Выберите для этого видео «Нет (весь кадр)», чтобы продолжить без обрезки.",
-    "Не удалось экспортировать журнал: <error>",
     "Не удалось инициализировать Vship <metric>: <error>",
     "Не удалось загрузить кадр:\n<error>",
     "Не удалось открыть видеофайл <side> для декодирования.",
@@ -3126,7 +3111,6 @@
     "Оценка на GPU не удалась (<error>); повтор на CPU тоже не удался: <reason>",
     "Загрузка кадра 1,234,567 исходника…",
     "Загрузка кадра 1,234,567 теста…",
-    "Журнал экспортирован в <path>",
     "Среднее <axis_label> по всем оценённым кадрам.\n",
     "Для кадра <frame> изображение не получено; возможно, он за концом видео.",
     "Нет результатов для запрошенных метрик: <metrics>",
@@ -3789,7 +3773,6 @@
     "تعذّر تحليل <name>: <error>",
     "تعذّر الاكتشاف التلقائي للأشرطة السوداء في <path>: لم يجد FFmpeg أي صور في الأجزاء التي أُخذت منه عينات. قد يكون الملف تالفًا أو مقطوعًا.",
     "تعذّر الاكتشاف التلقائي للأشرطة السوداء في <path>: <detail>. اختر «بلا (الإطار كاملًا)» لهذا الفيديو للمتابعة دون اقتصاص.",
-    "تعذّر تصدير السجل: <error>",
     "تعذّرت تهيئة Vship <metric>: <error>",
     "تعذّر تحميل الإطار:\n<error>",
     "تعذّر فتح ملف الفيديو <side> لفك ترميزه.",
@@ -3835,7 +3818,6 @@
     "فشل التقييم على GPU (<error>)؛ وفشلت إعادة المحاولة على المعالج أيضًا: <reason>",
     "جارٍ تحميل إطار المصدر 1,234,567…",
     "جارٍ تحميل إطار الاختبار 1,234,567…",
-    "صُدِّر السجل إلى <path>",
     "متوسط <axis_label> على كل الإطارات المقيَّمة.\n",
     "لم يُعَد أي إطار عند الإطار <frame>؛ ربما يقع بعد نهاية الفيديو.",
     "لا نتائج للمقاييس المطلوبة: <metrics>",
@@ -4498,7 +4480,6 @@
     "<name> を解析できませんでした：<error>",
     "<path> の黒帯を自動検出できませんでした：調べた部分に FFmpeg が映像を見つけられませんでした。ファイルが壊れているか、途中で切れている可能性があります。",
     "<path> の黒帯を自動検出できませんでした：<detail>。クロップせずに続けるには、この動画に［なし（フレーム全体を使う）］を選んでください。",
-    "ログをエクスポートできませんでした：<error>",
     "Vship <metric> を初期化できませんでした：<error>",
     "フレームを読み込めませんでした：\n<error>",
     "デコードのために <side> の動画ファイルを開けませんでした。",
@@ -4544,7 +4525,6 @@
     "GPU での採点に失敗しました（<error>）。CPU での再試行も失敗しました：<reason>",
     "ソースのフレーム 1,234,567 を読み込み中…",
     "テストのフレーム 1,234,567 を読み込み中…",
-    "ログを <path> にエクスポートしました",
     "採点した全フレームの <axis_label> の平均。\n",
     "フレーム <frame> で画像が返されませんでした。動画の終わりを超えている可能性があります。",
     "要求した指標の結果がありません：<metrics>",
@@ -5207,7 +5187,6 @@
     "无法分析 <name>：<error>",
     "无法自动检测 <path> 中的黑边：FFmpeg 在抽样检查的部分中没有找到画面。文件可能已损坏或被截断。",
     "无法自动检测 <path> 中的黑边：<detail>。为此视频选择“无（使用完整画面）”即可不裁切继续。",
-    "无法导出日志：<error>",
     "无法初始化 Vship <metric>：<error>",
     "无法加载帧：\n<error>",
     "无法打开 <side> 视频文件进行解码。",
@@ -5253,7 +5232,6 @@
     "GPU 评分失败（<error>）；CPU 重试也失败：<reason>",
     "正在加载源视频第 1,234,567 帧…",
     "正在加载测试视频第 1,234,567 帧…",
-    "日志已导出到 <path>",
     "所有已评分帧的 <axis_label> 平均值。\n",
     "在第 <frame> 帧没有返回画面；它可能已超出视频结尾。",
     "请求的指标没有结果：<metrics>",
@@ -5916,7 +5894,6 @@
     "วิเคราะห์ <name> ไม่ได้: <error>",
     "ตรวจหาแถบดำใน <path> อัตโนมัติไม่ได้: FFmpeg ไม่พบภาพในช่วงที่สุ่มตรวจ ไฟล์อาจเสียหายหรือถูกตัดสั้น",
     "ตรวจหาแถบดำใน <path> อัตโนมัติไม่ได้: <detail> เลือก \"ไม่มี (ทั้งเฟรม)\" สำหรับวิดีโอนี้เพื่อดำเนินต่อโดยไม่ครอป",
-    "ไม่สามารถส่งออกล็อก: <error>",
     "เริ่มต้น Vship <metric> ไม่ได้: <error>",
     "โหลดเฟรมไม่ได้:\n<error>",
     "เปิดไฟล์วิดีโอ<side>เพื่อถอดรหัสไม่ได้",
@@ -5962,7 +5939,6 @@
     "การให้คะแนนบน GPU ล้มเหลว (<error>) และการลองใหม่บน CPU ก็ล้มเหลว: <reason>",
     "กำลังโหลดเฟรมต้นฉบับ 1,234,567…",
     "กำลังโหลดเฟรมทดสอบ 1,234,567…",
-    "ส่งออกล็อกไปที่ <path> แล้ว",
     "ค่าเฉลี่ย <axis_label> ของทุกเฟรมที่ให้คะแนน\n",
     "ไม่มีเฟรมส่งกลับมาที่เฟรม <frame> อาจเกินจุดสิ้นสุดของวิดีโอ",
     "ไม่มีผลลัพธ์สำหรับเมตริกที่ขอ: <metrics>",

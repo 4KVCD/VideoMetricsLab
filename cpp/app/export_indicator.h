@@ -1,7 +1,8 @@
-// How the window's exports say how they went (issue #224): the indicator
-// at the tab bar's right end (ExportIndicator), in place of the
-// windows that said "Export complete" or "Export failed" and of the status
-// lines that said "Exported to ...". No export opens a window to say it
+// How the window says what an action did (issue #224, then every outcome:
+// docs/ARCHITECTURE.md, "Asking and telling the user"): the indicator at the
+// tab bar's right end (ExportIndicator), in place of the windows that said
+// "Export complete" or "Export failed" and of the status lines and footers
+// that said what a click had done. No export opens a window to say it
 // worked.
 #pragma once
 
@@ -65,11 +66,24 @@ public:
     void show_saving(const QString& why = {});
     // How it went.
     void show_outcome(const ExportOutcome& outcome);
-    // A line of what a click did, or why it did nothing, where the window
-    // has no line beside it to say so (a row's mark on the Videos tab):
-    // shown as a save that went through is, fading. It replaces what was
-    // shown, but for a failure, which stays until clicked.
-    void show_note(const QString& note);
+    // A line of what an action did, or why it did nothing:
+    // - `done`: something done, shown as a save that went through is, its
+    //   check in the good colour drawing the eye, fading ("Settings
+    //   saved.", a line sent back to the graph);
+    // - `info`: why a click did nothing, plain, fading ("...is already in
+    //   Metric Graphs.", "...nothing to run.");
+    // - `kept`: kept until clicked, for what must not be missed (the app to
+    //   be restarted for a setting, a run's end);
+    // - `failed`: in the failure colour with a cross, kept until clicked (a
+    //   write that failed, a run with failed videos); `details`, where set,
+    //   is its tooltip.
+    // A `done` or `info` note doesn't replace a failure or a kept note, nor
+    // a save under way; the others replace whatever is shown.
+    enum class Note { done, info, kept, failed };
+    void show_note(const QString& note, Note kind = Note::done, const QString& details = {});
+    // A kept note no longer true (a setting changed back): taken away, where
+    // it is `note` that is shown.
+    void dismiss_note(const QString& note);
 
     // For the tests: the text shown (rich text), and whether a failure is.
     QString text() const;
@@ -93,9 +107,12 @@ private:
     QTimer* fade_timer_ = nullptr;
     QGraphicsOpacityEffect* opacity_ = nullptr;
     QPropertyAnimation* fading_ = nullptr;
-    enum class State { idle, saving, saved, failed, note } state_ = State::idle;
+    enum class State { idle, saving, saved, failed, note, kept_note } state_ = State::idle;
     ExportOutcome outcome_;
     QString note_;
+    bool note_failed_ = false;  // the failure shown is a note's (show_note), not an export's
+    bool note_done_ = false;    // the note shown is of something done: drawn with its check
+    QString note_details_;
     QString saving_why_;
     bool dismiss_pending_ = false;  // a click to dismiss a failure, unless it was on a link
     bool failed_ = false;

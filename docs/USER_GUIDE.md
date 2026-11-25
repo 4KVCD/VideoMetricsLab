@@ -188,7 +188,16 @@ with it. **Interface** is a card each, with a picture of it, VML Modern first:
   own controls.
 
 VML Modern shows at once; VML Classic, chosen while VML Modern is shown, when
-the app is next started. **Accent**, usable with VML Modern, is the system's
+the app is next started: the app offers to restart now (**Restart now**,
+which reopens the videos open if Reopen the videos is ticked) or **Later**,
+which leaves a note in the title bar until you click it. A new language
+asks the same. During a run there's only the note: restarting would stop
+it.
+
+What an action did shows at the right end of the tab bar, beside Export:
+"Settings saved.", rows added, a preset saved, a run's end, a log exported.
+A success fades after a few seconds; a failure, a run whose videos failed,
+and a restart to make stay until you click them. **Accent**, usable with VML Modern, is the system's
 (**Same as Windows**), one of six colours, a colour picked with **Custom...**,
 or one typed as `#RRGGBB` in the box beside it; text on it is dark or light,
 whichever reads. VML Classic keeps the system's accent. **Theme** is the

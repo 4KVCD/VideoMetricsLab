@@ -94,6 +94,7 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
       file_writes_(file_writes),
       tools_(std::move(tools)),
       dialogs_(dialogs),
+      started_language_(settings.language),
       counting_(new QFutureWatcher<CacheSummary>(this)),
       deletion_listing_(new QFutureWatcher<std::vector<SavedComparison>>(this)) {
     connect(counting_, &QFutureWatcher<CacheSummary>::finished, this, [this] { show_cache_summary(); });
@@ -141,9 +142,6 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
     add_section(app::tr("Storage"), {build_storage_box()});
     sections->addTab(build_notifications_page(), app::tr("Notifications"));
     layout->addWidget(sections, 1);
-    status = new QLabel;
-    theme::style(status, "color: {muted};");
-    layout->addWidget(status);
     new WheelPastValueBoxes(this);  // the wheel scrolls this page, never changes a setting
     // The tools and saved results are filled in when the tab is shown
     // (refresh_status).
@@ -1476,14 +1474,31 @@ void SettingsPanel::on_edited() {
     if (settings_.ffmpeg_dir != before.ffmpeg_dir) {
         emit ffmpeg_folder_changed();  // after the save: the tools are looked for in the folder saved
     }
-    const bool classic_later = settings_.interface_style != before.interface_style &&
-                               theme::interface_of(settings_.interface_style) == theme::Interface::classic &&
-                               theme::current_interface() == theme::Interface::modern;
-    status->setText(error                                     ? tr_message(text_of(*error))
-                    : settings_.language != before.language ? app::tr("Settings saved. The new language shows when "
-                                                                       "the app is next started.")
-                    : classic_later ? app::tr("Settings saved. VML Classic shows when the app is next started.")
-                                    : app::tr("Settings saved."));
+    // A change that shows only once the app starts again: the window offers
+    // to restart it now. Changed back (VML Modern picked again, the language
+    // the app started in), none is needed: said with an empty `what`, which
+    // takes the note away.
+    if (!error) {
+        const bool language_later = settings_.language != started_language_;
+        const bool interface_later = theme::interface_of(settings_.interface_style) == theme::Interface::classic &&
+                                     theme::current_interface() == theme::Interface::modern;
+        const QString what = language_later  ? app::tr("The new language shows when the app is next started.")
+                             : interface_later ? app::tr("VML Classic shows when the app is next started.")
+                                               : QString();
+        if (what != restart_said_) {
+            restart_said_ = what;
+            emit restart_needed(what);
+        }
+    }
+    // What happened, in the tab bar's indicator: the line at the tab's foot
+    // was easily missed (docs/ARCHITECTURE.md, "Asking and telling the user").
+    // After the restart's note is taken away, where a change went back: a
+    // done note doesn't replace a kept one.
+    if (error) {
+        say(tr_message(text_of(*error)), ExportIndicator::Note::failed);
+    } else {
+        say(app::tr("Settings saved."));
+    }
     if (settings_.ffmpeg_dir != before.ffmpeg_dir || settings_.cache_dir != before.cache_dir) {
         refresh_status();
     }
@@ -1664,22 +1679,29 @@ void SettingsPanel::pick_directory(const QString& title, QLineEdit* edit) {
     }
 }
 
+void SettingsPanel::say(const QString& text, ExportIndicator::Note kind) const {
+    if (notify) {
+        notify(text, kind);
+    }
+}
+
 void SettingsPanel::on_copy_log() {
     std::optional<std::pair<std::string, bool>> shared;
     try {
         shared = app_log::log_text_to_share();
     } catch (const std::runtime_error& error) {
-        status->setText(app::tr("Could not read the log: {error}", {{"error", QString::fromUtf8(error.what())}}));
+        say(app::tr("Could not read the log: {error}", {{"error", QString::fromUtf8(error.what())}}),
+            ExportIndicator::Note::failed);
         return;
     }
     if (!shared) {
-        status->setText(app::tr("There is no log to copy yet."));
+        say(app::tr("There is no log to copy yet."), ExportIndicator::Note::info);
         return;
     }
     const QString text = QString::fromStdString(shared->first);
     QApplication::clipboard()->setText(text);
     const long long lines = text.count('\n') + 1;
-    status->setText(shared->second ? ntr("Copied the log to the clipboard ({count} line, the middle left out -- "
+    say(shared->second ? ntr("Copied the log to the clipboard ({count} line, the middle left out -- "
                                          "Export log saves all of it).",
                                          "Copied the log to the clipboard ({count} lines, the middle left out -- "
                                          "Export log saves all of it).",
@@ -1700,15 +1722,15 @@ void SettingsPanel::on_export_log() {
     try {
         names = app_log::export_logs(platform::path_from_text(path.toStdString()));
     } catch (const std::exception& error) {
-        status->setText(app::tr("Could not export the log: {error}", {{"error", QString::fromUtf8(error.what())}}));
+        report_to(report_export, {{}, could_not_write(path), QString::fromUtf8(error.what())});
         return;
     }
     if (names.empty()) {
-        status->setText(app::tr("There is no log to export yet."));
+        say(app::tr("There is no log to export yet."), ExportIndicator::Note::info);
         return;
     }
     logger.info("Log exported to " + path.toStdString());
-    status->setText(app::tr("Log exported to {path}", {{"path", path}}));
+    report_to(report_export, {{path}, {}, {}});  // as any export says it: "Saved ..." and Open folder
 }
 
 }  // namespace vml::app

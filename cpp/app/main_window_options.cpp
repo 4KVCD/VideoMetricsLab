@@ -450,7 +450,7 @@ void MainWindow::add_opposite_scale_direction_rows(const std::vector<int>& rows)
                     "mismatch against the reference, or aren't a normal comparison (e.g. a resolution test)."));
         return;
     }
-    show_status(ntr("Added {count} row testing the opposite scaling direction -- check it and click Calculate "
+    notify_done(ntr("Added {count} row testing the opposite scaling direction -- check it and click Calculate "
                     "metrics.",
                     "Added {count} rows testing the opposite scaling direction -- check them and click Calculate "
                     "metrics.",
@@ -678,7 +678,11 @@ void MainWindow::save_cvvdp_preset(const CvvdpDisplayDialog& dialog, const Cvvdp
                        "Settings); choose it in the CVVDP display list to use it for the selected videos.",
                        {{"name", quoted}});
     }
-    show_status(error ? tr_message(QString::fromStdString(*error)) : done);
+    if (error) {
+        notify_failed(tr_message(QString::fromStdString(*error)));
+    } else {
+        notify_done(done);
+    }
 }
 
 void MainWindow::on_cvvdp_delete_preset() {
@@ -705,8 +709,11 @@ void MainWindow::on_cvvdp_delete_preset() {
     if (!panel_target_rows_.empty()) {
         write_panel_options(rows_[static_cast<std::size_t>(panel_target_rows_.front())]->options);
     }
-    show_status(error ? tr_message(QString::fromStdString(*error))
-                      : app::tr("Deleted the CVVDP preset \"{name}\".", {{"name", quoted}}));
+    if (error) {
+        notify_failed(tr_message(QString::fromStdString(*error)));
+    } else {
+        notify_done(app::tr("Deleted the CVVDP preset \"{name}\".", {{"name", quoted}}));
+    }
 }
 
 void MainWindow::on_cvvdp_other_display_requested() {
@@ -776,7 +783,7 @@ void MainWindow::add_cvvdp_display_rows(const std::vector<int>& rows, const Cvvd
                                 {{"display", display}}));
         return;
     }
-    show_status(ntr("Added {count} row scoring CVVDP on {display} -- click Calculate metrics.",
+    notify_done(ntr("Added {count} row scoring CVVDP on {display} -- click Calculate metrics.",
                     "Added {count} rows scoring CVVDP on {display} -- click Calculate metrics.", added,
                     {{"display", display}}));
 }
@@ -912,7 +919,7 @@ void MainWindow::add_film_grain_twin(int row) {
                           twin.video_info->with_film_grain = !with;
                       });
     show_panel_film_grain();  // a selected original row's choice is now held
-    show_status(app::tr("Added {name} again, scored with the other film grain choice -- check it and click "
+    notify_done(app::tr("Added {name} again, scored with the other film grain choice -- check it and click "
                         "Calculate metrics.",
                         {{"name", name_of(original_path)}}));
 }

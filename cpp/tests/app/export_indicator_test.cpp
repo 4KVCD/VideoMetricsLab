@@ -4,6 +4,8 @@
 #include "export_indicator.h"
 
 #include <QCoreApplication>
+#include <QLabel>
+#include <QTest>
 
 #include <gtest/gtest.h>
 
@@ -59,7 +61,7 @@ TEST(ExportIndicator, SaysWhyNothingWasSaved) {
 TEST(ExportIndicator, ANoteSaysWhatAClickDidButNotOverAFailure) {
     ExportIndicator indicator;
     indicator.show_outcome({{"Y:/out/a.json"}, {}, {}});
-    indicator.show_note("crf20.mkv is already in Metric Graphs.");
+    indicator.show_note("crf20.mkv is already in Metric Graphs.", ExportIndicator::Note::info);
     EXPECT_EQ(indicator.text().toStdString(), "crf20.mkv is already in Metric Graphs.");
     EXPECT_FALSE(indicator.failed());
     // Hidden, it keeps its room, so nothing beside it moves as it goes: its
@@ -70,6 +72,39 @@ TEST(ExportIndicator, ANoteSaysWhatAClickDidButNotOverAFailure) {
     indicator.show_note("a note");
     EXPECT_TRUE(indicator.failed());
     EXPECT_TRUE(indicator.text().contains("Not saved:"));
+}
+
+// A kept note (a restart to make, a run's end) and a failed one stay until
+// clicked: a done note doesn't replace them, a click dismisses them. A failed
+// note is the failure colour's cross and its line, not an export's "Not
+// saved:".
+TEST(ExportIndicator, KeptAndFailedNotesStayUntilClicked) {
+    ExportIndicator indicator;
+    indicator.show();
+    indicator.show_note("VML Classic shows when the app is next started.", ExportIndicator::Note::kept);
+    indicator.show_note("Settings saved.");
+    EXPECT_EQ(indicator.text().toStdString(), "VML Classic shows when the app is next started.");
+    indicator.show_note("Could not write a.json", ExportIndicator::Note::failed, "the whole reason");
+    EXPECT_TRUE(indicator.failed());
+    EXPECT_TRUE(indicator.text().contains("Could not write a.json"));
+    EXPECT_FALSE(indicator.text().contains("Not saved:"));
+    auto* line = indicator.findChild<QLabel*>();
+    ASSERT_NE(line, nullptr);
+    EXPECT_EQ(line->toolTip(), "the whole reason");
+    QTest::mouseClick(line, Qt::LeftButton);
+    QCoreApplication::processEvents();
+    EXPECT_FALSE(indicator.isVisible());  // dismissed
+    // Something done has its check; why nothing was done hasn't. A kept note
+    // goes when what it said is no longer so (dismiss_note).
+    indicator.show_note("Settings saved.");
+    EXPECT_TRUE(indicator.text().contains("&#x2713;")) << indicator.text().toStdString();
+    indicator.show_note("crf20.mkv is already in Metric Graphs.", ExportIndicator::Note::info);
+    EXPECT_FALSE(indicator.text().contains("&#x2713;"));
+    indicator.show_note("VML Classic shows when the app is next started.", ExportIndicator::Note::kept);
+    indicator.dismiss_note("another note");
+    EXPECT_TRUE(indicator.isVisible());
+    indicator.dismiss_note("VML Classic shows when the app is next started.");
+    EXPECT_FALSE(indicator.isVisible());
 }
 
 // A write queued with what to call when it is done calls it on the window's

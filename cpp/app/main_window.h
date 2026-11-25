@@ -339,6 +339,18 @@ private:
     void restore_open_videos();
     void reopen_videos(const QString& reference, const QStringList& tests);
     void show_status(const QString& text);
+    // What an action did, in the tab bar's indicator (docs/ARCHITECTURE.md,
+    // "Asking and telling the user"): fading, or kept in the failure colour
+    // until clicked. The run line keeps what is going on.
+    void notify_done(const QString& text);
+    // Why an action did nothing, plain and fading ("...nothing to run.").
+    void notify_info(const QString& text);
+    // Offers to restart the app for a setting that shows only then (`what`
+    // says which); during a run, a note kept in the title bar instead.
+    void offer_restart(const QString& what);
+    QString restart_note_;  // the kept note of a restart to make, taken away if the setting goes back
+    bool restart_on_close_ = false;  // Restart now chosen: started again as the window closes
+    void notify_failed(const QString& text);
     void save_settings();
 
     // ---------------------------------------------------------- the settings

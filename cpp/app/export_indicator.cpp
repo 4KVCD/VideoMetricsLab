@@ -152,6 +152,7 @@ void ExportIndicator::show_outcome(const ExportOutcome& outcome) {
     fading_->stop();
     opacity_->setOpacity(1.0);
     outcome_ = outcome;
+    note_failed_ = false;
     failed_ = !outcome.error.isEmpty();
     state_ = failed_ ? State::failed : State::saved;
     show_text();
@@ -162,16 +163,31 @@ void ExportIndicator::show_outcome(const ExportOutcome& outcome) {
     }
 }
 
-void ExportIndicator::show_note(const QString& note) {
-    if (state_ == State::failed || state_ == State::saving) {
-        return;  // a failure is kept until clicked; a save under way says so
+void ExportIndicator::show_note(const QString& note, Note kind, const QString& details) {
+    const bool fades = kind == Note::done || kind == Note::info;
+    if (fades && (state_ == State::failed || state_ == State::saving || state_ == State::kept_note)) {
+        return;  // a failure and a kept note stay until clicked; a save under way says so
     }
     fading_->stop();
+    fade_timer_->stop();
     opacity_->setOpacity(1.0);
     note_ = note;
-    state_ = State::note;
+    note_details_ = details;
+    note_failed_ = kind == Note::failed;
+    note_done_ = kind == Note::done;
+    failed_ = note_failed_;
+    state_ = fades ? State::note : kind == Note::kept ? State::kept_note : State::failed;
     show_text();
-    fade_timer_->start();
+    if (fades) {
+        fade_timer_->start();
+    }
+}
+
+void ExportIndicator::dismiss_note(const QString& note) {
+    if (state_ == State::kept_note && note_ == note) {
+        state_ = State::idle;
+        hide();
+    }
 }
 
 QString ExportIndicator::text() const { return label_->text(); }
@@ -192,7 +208,11 @@ void ExportIndicator::show_text() {
                    .arg(theme::color("muted").name(), app::tr("Saving...").toHtmlEscaped());
         break;
     case State::note:
-        text = note_.toHtmlEscaped();
+    case State::kept_note:
+        text = state_ == State::note && note_done_
+                   ? QStringLiteral("<span style=\"color: %1;\">&#x2713;</span> %2")
+                         .arg(theme::color("good").name(), note_.toHtmlEscaped())
+                   : note_.toHtmlEscaped();
         break;
     case State::saved:
         text = QStringLiteral("<span style=\"color: %1;\">&#x2713;</span> %2")
@@ -200,6 +220,11 @@ void ExportIndicator::show_text() {
                dot + link(QStringLiteral("open"), app::tr("Open folder"));
         break;
     case State::failed: {
+        if (note_failed_) {  // a note's: the cross and the line, all of it in the tooltip
+            text = QStringLiteral("<span style=\"color: %1;\">&#x2715; %2</span>")
+                       .arg(theme::color("failed").name(), note_.toHtmlEscaped());
+            break;
+        }
         // A long reason cut short, so that the tabs keep their room: all of
         // it is in Details and the tooltip.
         QString why = outcome_.error.simplified();
@@ -213,7 +238,9 @@ void ExportIndicator::show_text() {
     }
     }
     label_->setText(text);
-    label_->setToolTip(state_ == State::failed  ? outcome_.details
+    label_->setToolTip(state_ == State::failed && note_failed_ ? (note_details_.isEmpty() ? note_ : note_details_)
+                       : state_ == State::kept_note        ? app::tr("Click to dismiss.")
+                       : state_ == State::failed           ? outcome_.details
                        : state_ == State::saved ? outcome_.files.join(QLatin1Char('\n'))
                        : state_ == State::note  ? QString()
                                                 : saving_why_);
@@ -231,7 +258,8 @@ bool ExportIndicator::eventFilter(QObject* watched, QEvent* event) {
     // Details shows the reason, and the failure stays with it. Seen here
     // before the label takes the release, which then says whether a link was
     // clicked (linkActivated): so it is looked at once that is done.
-    if (watched == label_ && event->type() == QEvent::MouseButtonRelease && state_ == State::failed) {
+    if (watched == label_ && event->type() == QEvent::MouseButtonRelease &&
+        (state_ == State::failed || state_ == State::kept_note)) {
         dismiss_pending_ = true;
         QTimer::singleShot(0, this, [this] {
             if (dismiss_pending_) {
@@ -243,7 +271,7 @@ bool ExportIndicator::eventFilter(QObject* watched, QEvent* event) {
 }
 
 void ExportIndicator::dismiss_failure() {
-    if (state_ == State::failed) {
+    if (state_ == State::failed || state_ == State::kept_note) {
         state_ = State::idle;
         failed_ = false;
         QToolTip::hideText();
