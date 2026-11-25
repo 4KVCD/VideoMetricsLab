@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "Vergrendeld terwijl metrieken worden berekend.",
+  "Remove {name} from the list": "{name} uit de lijst verwijderen",
+  "Show {name} in Metric Graphs again": "{name} weer tonen in de metriekgrafieken",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} heeft nog geen scores om in de metriekgrafieken te tonen.",
+  "{name} is already in Metric Graphs.": "{name} staat al in de metriekgrafieken.",
+  "{name} is back in Metric Graphs.": "{name} staat weer in de metriekgrafieken.",
   "A card for each saved score, to pick the one used": "Een kaart per opgeslagen score, om de gebruikte te kiezen",
   "CPU or GPU": "CPU of GPU",
   "Choose columns…": "Kolommen kiezen…",

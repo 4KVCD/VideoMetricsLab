@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "Bị khóa khi đang tính chỉ số.",
+  "Remove {name} from the list": "Bỏ {name} khỏi danh sách",
+  "Show {name} in Metric Graphs again": "Hiện lại {name} trong Biểu đồ chỉ số",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} chưa có điểm để hiển thị trong Biểu đồ chỉ số.",
+  "{name} is already in Metric Graphs.": "{name} đã có trong Biểu đồ chỉ số.",
+  "{name} is back in Metric Graphs.": "{name} đã trở lại Biểu đồ chỉ số.",
   "A card for each saved score, to pick the one used": "Một thẻ cho mỗi điểm đã lưu, để chọn điểm được dùng",
   "CPU or GPU": "CPU hay GPU",
   "Choose columns…": "Chọn cột…",

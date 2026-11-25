@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "Dikunci selama metrik dihitung.",
+  "Remove {name} from the list": "Hapus {name} dari daftar",
+  "Show {name} in Metric Graphs again": "Tampilkan lagi {name} di Grafik metrik",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} belum punya skor untuk ditampilkan di Grafik metrik.",
+  "{name} is already in Metric Graphs.": "{name} sudah ada di Grafik metrik.",
+  "{name} is back in Metric Graphs.": "{name} kembali ada di Grafik metrik.",
   "A card for each saved score, to pick the one used": "Satu kartu untuk setiap skor tersimpan, untuk memilih yang dipakai",
   "CPU or GPU": "CPU atau GPU",
   "Choose columns…": "Pilih kolom…",

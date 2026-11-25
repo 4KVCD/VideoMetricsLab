@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "计算指标期间锁定。",
+  "Remove {name} from the list": "从列表中移除 {name}",
+  "Show {name} in Metric Graphs again": "在指标图表中重新显示 {name}",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} 尚无可在指标图表中显示的分数。",
+  "{name} is already in Metric Graphs.": "{name} 已在指标图表中。",
+  "{name} is back in Metric Graphs.": "{name} 已回到指标图表中。",
   "A card for each saved score, to pick the one used": "每个已保存的分数一张卡片，用于选择所用的分数",
   "CPU or GPU": "CPU 或 GPU",
   "Choose columns…": "选择列…",

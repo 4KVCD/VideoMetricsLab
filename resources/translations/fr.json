@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "Verrouillé pendant le calcul des métriques.",
+  "Remove {name} from the list": "Retirer {name} de la liste",
+  "Show {name} in Metric Graphs again": "Afficher de nouveau {name} dans les Graphiques des métriques",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} n'a pas encore de scores à afficher dans les Graphiques des métriques.",
+  "{name} is already in Metric Graphs.": "{name} est déjà dans les Graphiques des métriques.",
+  "{name} is back in Metric Graphs.": "{name} est de retour dans les Graphiques des métriques.",
   "A card for each saved score, to pick the one used": "Une carte par score enregistré, pour choisir celui utilisé",
   "CPU or GPU": "CPU ou GPU",
   "Choose columns…": "Choisir les colonnes…",

@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "مقفل أثناء حساب المقاييس.",
+  "Remove {name} from the list": "إزالة {name} من القائمة",
+  "Show {name} in Metric Graphs again": "إظهار {name} في رسوم المقاييس مجددًا",
+  "{name} has no scores yet to show in Metric Graphs.": "ليس لدى {name} درجات بعد لعرضها في رسوم المقاييس.",
+  "{name} is already in Metric Graphs.": "{name} موجود بالفعل في رسوم المقاييس.",
+  "{name} is back in Metric Graphs.": "عاد {name} إلى رسوم المقاييس.",
   "A card for each saved score, to pick the one used": "بطاقة لكل درجة محفوظة، لاختيار الدرجة المستخدمة",
   "CPU or GPU": "CPU أو GPU",
   "Choose columns…": "اختيار الأعمدة…",

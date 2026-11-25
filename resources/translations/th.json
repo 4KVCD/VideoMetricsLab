@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "ล็อกระหว่างคำนวณเมตริก",
+  "Remove {name} from the list": "นำ {name} ออกจากรายการ",
+  "Show {name} in Metric Graphs again": "แสดง {name} ในกราฟเมตริกอีกครั้ง",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} ยังไม่มีคะแนนที่จะแสดงในกราฟเมตริก",
+  "{name} is already in Metric Graphs.": "{name} อยู่ในกราฟเมตริกแล้ว",
+  "{name} is back in Metric Graphs.": "{name} กลับมาอยู่ในกราฟเมตริกแล้ว",
   "A card for each saved score, to pick the one used": "การ์ดสำหรับคะแนนที่บันทึกไว้แต่ละชุด เพื่อเลือกชุดที่ใช้",
   "CPU or GPU": "CPU หรือ GPU",
   "Choose columns…": "เลือกคอลัมน์…",

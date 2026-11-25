@@ -45,6 +45,7 @@
 class QCheckBox;
 class QLabel;
 class QPushButton;
+class QStyledItemDelegate;
 class QTableWidget;
 class QTableWidgetItem;
 class QTabWidget;
@@ -350,6 +351,9 @@ public:
     // here. Called as lines are added or removed, so at each visit to the
     // tab too (the window's sync_graph adds every row's).
     void refresh_restore_button();
+    // Whether the user removed the line of `identity` (a row's): the row's
+    // send mark on the Videos tab brings it back.
+    bool removed(const std::string& identity) const { return suppressed_identities_.contains(identity); }
 
 signals:
     // The metric the user chose to look at.
@@ -360,6 +364,9 @@ signals:
     // Show removed videos: the rows' lines removed here, to add again with
     // restore (the window has their results).
     void restore_removed_requested();
+    // Lines were added or removed (at refresh_restore_button): the Videos
+    // tab's send marks are drawn again.
+    void lines_changed();
 
 private:
     friend class GraphPanelTest;  // the graph's tests (tests/app)
@@ -475,6 +482,7 @@ private:
 
     QLabel* stats_hint_ = nullptr;
     QTableWidget* stats_table_ = nullptr;
+    QStyledItemDelegate* remove_marks_ = nullptr;  // the remove column's, moved to it as columns change
     QTabWidget* tabs_ = nullptr;
     std::map<std::string, MetricPage*> pages_;
     // The metrics with a tab and a mean column, in the app's order: those

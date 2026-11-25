@@ -148,6 +148,10 @@ enum Column : int {
     col_vmaf_yuv_y,
     col_vmaf_yuv_u,
     col_vmaf_yuv_v,
+    // A row's remove mark and its send-to-graph mark (RemoveMarkDelegate),
+    // shown first.
+    col_remove,
+    col_graph,
     column_count,
 };
 
@@ -478,6 +482,15 @@ private:
     void clear_sort_indicator();
     std::optional<int> row_index_of_path(const std::filesystem::path& path) const;
     void on_remove_distorted();
+    // Removes `rows` (indexes into rows_) and their CVVDP display rows, and
+    // their lines from Metric Graphs: Remove selected's, a row's remove mark's.
+    void remove_distorted_rows(std::set<int, std::greater<>> rows);
+    // Whether row `row` has scores whose line the user removed from Metric
+    // Graphs: its send mark brings it back.
+    bool line_removed(int row) const;
+    // The rows' marks drawn again (a run started or ended, a line removed or
+    // back), in the frozen columns' own view too.
+    void repaint_row_marks();
     void on_remove_all_distorted();
     // The footer's note: Remove all's or Start over's line while one is
     // armed (click_twice_), else the length note.
@@ -1016,6 +1029,7 @@ private:
     FillColumnTable* distorted_table_ = nullptr;
     CheckableHeaderView* metric_header_ = nullptr;
     QPushButton* remove_all_button_ = nullptr;
+    QPushButton* remove_selected_button_ = nullptr;  // locked during a run, the rows' remove marks with it
     QPushButton* start_over_button_ = nullptr;
     // Beside them: an armed button's line, else the length note.
     QLabel* footer_note_ = nullptr;

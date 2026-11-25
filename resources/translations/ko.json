@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "지표를 계산하는 동안 잠김.",
+  "Remove {name} from the list": "목록에서 {name} 제거",
+  "Show {name} in Metric Graphs again": "{name}을(를) 지표 그래프에 다시 표시",
+  "{name} has no scores yet to show in Metric Graphs.": "{name}에는 아직 지표 그래프에 표시할 점수가 없습니다.",
+  "{name} is already in Metric Graphs.": "{name}은(는) 이미 지표 그래프에 있습니다.",
+  "{name} is back in Metric Graphs.": "{name}이(가) 지표 그래프에 다시 표시됩니다.",
   "A card for each saved score, to pick the one used": "저장된 점수마다 카드 하나, 사용할 점수를 선택",
   "CPU or GPU": "CPU 또는 GPU",
   "Choose columns…": "열 선택…",

@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "Metrikler hesaplanırken kilitli.",
+  "Remove {name} from the list": "Listeden kaldır: {name}",
+  "Show {name} in Metric Graphs again": "{name} metrik grafiklerinde yeniden gösterilsin",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} için metrik grafiklerinde gösterilecek puan henüz yok.",
+  "{name} is already in Metric Graphs.": "{name} zaten metrik grafiklerinde.",
+  "{name} is back in Metric Graphs.": "{name} yeniden metrik grafiklerinde.",
   "A card for each saved score, to pick the one used": "Her kayıtlı puan için bir kart, kullanılacak olanı seçmek için",
   "CPU or GPU": "CPU veya GPU",
   "Choose columns…": "Sütunları seç…",

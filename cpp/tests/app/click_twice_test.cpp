@@ -1,5 +1,5 @@
 // Remove all and Start over are clicked twice in place of a window asking
-// (click_twice.h): the second click confirms, a double-click doesn't, and
+// (click_twice.h): the second click confirms, however soon (a double-click's), and
 // arming another button or letting go starts again.
 #include <gtest/gtest.h>
 
@@ -11,9 +11,10 @@
 namespace vml::app {
 namespace {
 
-TEST(ClickTwice, TheSecondClickConfirmsAndADoubleClickDoesNot) {
-    qint64 now = 1000;
-    ClickTwice guard(nullptr, [&now] { return now; });
+// However soon it comes: a second click within the double-click time was
+// ignored, the button left armed until a third (the user, 2026-11-25).
+TEST(ClickTwice, TheSecondClickConfirms) {
+    ClickTwice guard(nullptr);
     QPushButton remove("Remove all");
     remove.setProperty("vmlRole", "quiet");
     int changes = 0;
@@ -24,11 +25,6 @@ TEST(ClickTwice, TheSecondClickConfirmsAndADoubleClickDoesNot) {
     EXPECT_EQ(guard.line(), "Click Remove all again");
     EXPECT_EQ(remove.property("vmlRole").toString(), "danger");
 
-    now += QApplication::doubleClickInterval() - 1;  // a double-click's second click
-    EXPECT_FALSE(guard.click(&remove, "Click Remove all again"));
-    EXPECT_EQ(guard.armed(), &remove);
-
-    now += 2;  // a second decision
     EXPECT_TRUE(guard.click(&remove, "Click Remove all again"));
     EXPECT_EQ(guard.armed(), nullptr);
     EXPECT_TRUE(guard.line().isEmpty());
@@ -37,21 +33,17 @@ TEST(ClickTwice, TheSecondClickConfirmsAndADoubleClickDoesNot) {
 }
 
 TEST(ClickTwice, ArmingAnotherOrLettingGoStartsAgain) {
-    qint64 now = 0;
-    ClickTwice guard(nullptr, [&now] { return now; });
+    ClickTwice guard(nullptr);
     QPushButton remove("Remove all");
     QPushButton start_over("Start over");
 
     guard.click(&remove, "remove");
-    now += 5000;
     EXPECT_FALSE(guard.click(&start_over, "start over"));  // the other's first click arms it instead
     EXPECT_EQ(guard.armed(), &start_over);
     EXPECT_EQ(guard.line(), "start over");
-    now += 5000;
     EXPECT_FALSE(guard.click(&remove, "remove"));  // armed again, not confirmed
 
     guard.disarm();  // another decision (a run starting, another button)
-    now += 5000;
     EXPECT_FALSE(guard.click(&remove, "remove"));
 }
 

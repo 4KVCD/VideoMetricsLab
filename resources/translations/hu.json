@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "Zárolva a metrikák számítása alatt.",
+  "Remove {name} from the list": "Eltávolítás a listáról: {name}",
+  "Show {name} in Metric Graphs again": "{name} újra megjelenítése a metrikagrafikonokon",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} még nem rendelkezik a metrikagrafikonokon megjeleníthető pontszámokkal.",
+  "{name} is already in Metric Graphs.": "{name} már szerepel a metrikagrafikonokon.",
+  "{name} is back in Metric Graphs.": "{name} ismét szerepel a metrikagrafikonokon.",
   "A card for each saved score, to pick the one used": "Minden mentett pontszámhoz egy kártya, a használt kiválasztásához",
   "CPU or GPU": "CPU vagy GPU",
   "Choose columns…": "Oszlopok kiválasztása…",

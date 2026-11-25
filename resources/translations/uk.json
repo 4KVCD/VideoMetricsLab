@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "Заблоковано під час обчислення метрик.",
+  "Remove {name} from the list": "Прибрати {name} зі списку",
+  "Show {name} in Metric Graphs again": "Знову показати {name} на графіках метрик",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} ще не має оцінок для графіків метрик.",
+  "{name} is already in Metric Graphs.": "{name} уже є на графіках метрик.",
+  "{name} is back in Metric Graphs.": "{name} знову на графіках метрик.",
   "A card for each saved score, to pick the one used": "Картка для кожної збереженої оцінки, щоб вибрати використовувану",
   "CPU or GPU": "CPU чи GPU",
   "Choose columns…": "Вибрати стовпці…",

@@ -305,6 +305,13 @@ not the first. Each rule here is one a reviewer can check.
   failure goes beside what the user did: a card's line (the Videos footer's
   note), a row's ⚠ and tooltip, the tab bar's indicator (exports,
   `ExportIndicator`). No window opens to say something worked.
+- **A line in the tab bar's indicator** (`ExportIndicator`: an export's
+  outcome, `show_note`'s line of what a click did) goes through that one
+  widget, never a label of its own beside it. It fades by its opacity and
+  then hides keeping its room (`retainSizeWhenHidden`), so the tab bar's
+  corner is never laid out again as it goes: laid out again, the buttons
+  beside it were drawn over for a frame, a flash where the line had just
+  faded. A failure stays until clicked; a note never replaces one.
 - **An action that can't run yet is disabled**, its tooltip saying why, rather
   than enabled and then refusing in a window.
 - **A destructive action that can be redone is clicked twice**
@@ -329,6 +336,33 @@ not the first. Each rule here is one a reviewer can check.
   `QDialog`: `show_message`, `ask_line`, `ProgressDialog`, `choose_color` and
   `AppDialog` take their places. `QFileDialog` is called in `dialogs.cpp`
   alone. `DialogRules.EveryDialogIsTheAppsOwn` fails on any other.
+
+## Removing and deleting
+
+What a control takes away decides how it looks and what it asks. "Remove"
+takes something out of the window; "Delete" takes files off the disk. A
+control's words, colour and question follow from which of the three it is:
+
+- **Takes a row out of a view** (a line from Metric Graphs, a video from
+  the Videos table): nothing is lost; its scores are saved and it can be
+  added again. Its control is the circled ✕ that starts the row
+  (`RemoveMarkDelegate`, `app/widgets.h`), drawn in the text's colour,
+  heavier under the pointer, never in the danger colour; one click removes
+  it, with no question. Remove selected, under the Videos table, is the same
+  for the rows selected. Beside a video's ✕, its send mark (an arrow out of
+  a box) puts its line back in Metric Graphs; a click that has nothing to
+  do says why in the tab bar's indicator (`ExportIndicator::show_note`),
+  never in a window.
+- **Clears the session** (Remove all, Start over): everything in the window
+  at once, still nothing on disk. The `danger` role, clicked twice
+  (`ClickTwice`, "Asking and telling the user").
+- **Deletes files** (saved results): what is deleted must be scored again,
+  and some can't be (their reference video is gone). The `danger` role on
+  every such button, and a `danger` message before it runs, Cancel Enter's
+  answer.
+
+A control locked during a run says so in its tooltip and is drawn disabled,
+the row's ✕ with Remove selected.
 
 ## Exports
 

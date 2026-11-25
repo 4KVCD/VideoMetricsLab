@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "指標の計算中はロックされます。",
+  "Remove {name} from the list": "{name} をリストから削除",
+  "Show {name} in Metric Graphs again": "{name} を指標グラフに再表示",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} には指標グラフに表示するスコアがまだありません。",
+  "{name} is already in Metric Graphs.": "{name} はすでに指標グラフにあります。",
+  "{name} is back in Metric Graphs.": "{name} を指標グラフに戻しました。",
   "A card for each saved score, to pick the one used": "保存済みのスコアごとに 1 枚のカード。使うものを選べます",
   "CPU or GPU": "CPU または GPU",
   "Choose columns…": "列を選択…",

@@ -65,6 +65,11 @@ public:
     void show_saving(const QString& why = {});
     // How it went.
     void show_outcome(const ExportOutcome& outcome);
+    // A line of what a click did, or why it did nothing, where the window
+    // has no line beside it to say so (a row's mark on the Videos tab):
+    // shown as a save that went through is, fading. It replaces what was
+    // shown, but for a failure, which stays until clicked.
+    void show_note(const QString& note);
 
     // For the tests: the text shown (rich text), and whether a failure is.
     QString text() const;
@@ -88,8 +93,9 @@ private:
     QTimer* fade_timer_ = nullptr;
     QGraphicsOpacityEffect* opacity_ = nullptr;
     QPropertyAnimation* fading_ = nullptr;
-    enum class State { idle, saving, saved, failed } state_ = State::idle;
+    enum class State { idle, saving, saved, failed, note } state_ = State::idle;
     ExportOutcome outcome_;
+    QString note_;
     QString saving_why_;
     bool dismiss_pending_ = false;  // a click to dismiss a failure, unless it was on a link
     bool failed_ = false;

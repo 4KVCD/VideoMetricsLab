@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "計算指標期間鎖定。",
+  "Remove {name} from the list": "從清單移除 {name}",
+  "Show {name} in Metric Graphs again": "在指標圖表中重新顯示 {name}",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} 尚無可在指標圖表中顯示的分數。",
+  "{name} is already in Metric Graphs.": "{name} 已在指標圖表中。",
+  "{name} is back in Metric Graphs.": "{name} 已回到指標圖表中。",
   "A card for each saved score, to pick the one used": "每個已儲存的分數一張卡片，用於選擇所用的分數",
   "CPU or GPU": "CPU 或 GPU",
   "Choose columns…": "選擇欄…",

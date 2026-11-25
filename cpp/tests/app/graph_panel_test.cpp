@@ -7,6 +7,8 @@
 // line kept away, an image to export.
 #include "graph_panel.h"
 
+#include <QHeaderView>
+#include <QTest>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCoreApplication>
@@ -707,6 +709,27 @@ TEST_F(GraphPanelTest, ARunHasOneLineAndOneTheUserRemovedStaysAwayUnlessAskedFor
     panel.add_run({shared(vmaf_result("c.mkv", {70, 70})), "c", "file c", false});
     panel.remove_runs({id_of(panel, "c")});
     EXPECT_FALSE(restore->isEnabled());
+}
+
+// A line's remove mark is the table's first column, at the start of its row
+// (at the end of a wide table it was missed), whatever the metric shown;
+// clicking it removes the line.
+TEST_F(GraphPanelTest, TheRemoveMarkStartsALinesRow) {
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    panel.add_run({shared(vmaf_result("a.mkv", {80, 80})), "a", {}, true});
+    panel.add_run({shared(vmaf_result("b.mkv", {85, 85})), "b", {}, true});
+    QTableWidget& stats = table(panel);
+    const int remove = stats.columnCount() - 1;
+    EXPECT_EQ(stats.horizontalHeader()->logicalIndex(0), remove);
+    EXPECT_EQ(stats.horizontalHeader()->logicalIndex(1), 0);  // the line's name after it
+    EXPECT_EQ(stats.item(0, remove)->toolTip(), "Remove a from the graph");
+    stats.resize(900, 200);
+    stats.show();
+    const QRect mark = stats.visualRect(stats.model()->index(0, remove));
+    ASSERT_LT(mark.left(), stats.visualRect(stats.model()->index(0, 0)).left());
+    QTest::mouseClick(stats.viewport(), Qt::LeftButton, {}, mark.center());
+    EXPECT_EQ(entries(panel).size(), 1u);
 }
 
 TEST_F(GraphPanelTest, AnUpdatedLineKeepsItsPlace) {

@@ -1,5 +1,11 @@
 {
  "strings": {
+  "Locked while metrics are calculated.": "Zamčeno během výpočtu metrik.",
+  "Remove {name} from the list": "Odebrat {name} ze seznamu",
+  "Show {name} in Metric Graphs again": "Znovu zobrazit {name} v grafech metrik",
+  "{name} has no scores yet to show in Metric Graphs.": "{name} zatím nemá skóre, které by šlo zobrazit v grafech metrik.",
+  "{name} is already in Metric Graphs.": "{name} už je v grafech metrik.",
+  "{name} is back in Metric Graphs.": "{name} je zpět v grafech metrik.",
   "A card for each saved score, to pick the one used": "Karta pro každé uložené skóre, k výběru použitého",
   "CPU or GPU": "CPU nebo GPU",
   "Choose columns…": "Vybrat sloupce…",
