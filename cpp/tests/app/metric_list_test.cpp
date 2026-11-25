@@ -202,9 +202,11 @@ protected:
 MainWindow* MetricsPanelInWindow::window_ = nullptr;
 
 // Add/remove metrics and Export open their panels on the press, as a
-// button's menu opens, not a whole press later on the release; the button
-// is drawn up again. A click() (UI Automation's Invoke) or Space opens one
-// panel.
+// button's menu opens, not a whole press later on the release. A click() (UI
+// Automation's Invoke) or Space opens one panel. However it was opened, the
+// button is down while its panel is open and up once it closes, as a Qt
+// button's menu holds its button: drawn up at once, it flashed pressed for as
+// long as the panel took to build (15-28 ms for Add/remove metrics).
 TEST_F(MetricsPanelInWindow, APressOpensThePanelAtOnce) {
     QPushButton* metrics = nullptr;
     for (QPushButton* button : window_->findChildren<QPushButton*>()) {
@@ -220,26 +222,29 @@ TEST_F(MetricsPanelInWindow, APressOpensThePanelAtOnce) {
         }
         return open;
     };
+    const auto close_panels = [] {
+        for (PopupPanel* panel : window_->findChildren<PopupPanel*>()) {
+            panel->close();
+        }
+        QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    };
     for (QPushButton* button : {metrics, exports}) {
+        const std::string name = button->text().toStdString();
         QTest::mousePress(button, Qt::LeftButton, {}, button->rect().center());  // no release
-        EXPECT_EQ(open_panels(), 1) << button->text().toStdString();
-        EXPECT_FALSE(button->isDown());
-        for (PopupPanel* panel : window_->findChildren<PopupPanel*>()) {
-            panel->close();
-        }
-        QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        EXPECT_EQ(open_panels(), 1) << name;
+        EXPECT_TRUE(button->isDown()) << name << ", pressed";
+        close_panels();
+        EXPECT_FALSE(button->isDown()) << name << ", closed";
         button->click();
-        EXPECT_EQ(open_panels(), 1) << button->text().toStdString();
-        for (PopupPanel* panel : window_->findChildren<PopupPanel*>()) {
-            panel->close();
-        }
-        QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        EXPECT_EQ(open_panels(), 1) << name;
+        EXPECT_TRUE(button->isDown()) << name << ", click()";
+        close_panels();
+        EXPECT_FALSE(button->isDown()) << name << ", closed";
         QTest::keyClick(button, Qt::Key_Space);  // the keyboard's press and release
-        EXPECT_EQ(open_panels(), 1) << button->text().toStdString();
-        for (PopupPanel* panel : window_->findChildren<PopupPanel*>()) {
-            panel->close();
-        }
-        QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        EXPECT_EQ(open_panels(), 1) << name;
+        EXPECT_TRUE(button->isDown()) << name << ", Space";
+        close_panels();
+        EXPECT_FALSE(button->isDown()) << name << ", closed";
     }
 }
 

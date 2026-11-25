@@ -8,11 +8,44 @@ namespace vml::app {
 
 PopupPanel::PopupPanel(QWidget* parent) : QFrame(parent, Qt::Popup) {}
 
+PopupPanel::~PopupPanel() {
+    // Deleted while open, with no hide first: the button is let up still.
+    if (isVisible()) {
+        hold_anchor_down(false);
+    }
+}
+
+void PopupPanel::set_anchor(QWidget* anchor) {
+    anchor_ = anchor;
+    if (auto* button = qobject_cast<QAbstractButton*>(anchor)) {
+        // A click() (UI Automation's Invoke) lets the button up after its
+        // pressed signal has opened the panel: down again while it is open.
+        connect(button, &QAbstractButton::released, this, [this] {
+            if (isVisible()) {
+                hold_anchor_down(true);
+            }
+        });
+    }
+}
+
+void PopupPanel::hold_anchor_down(bool down) {
+    if (auto* button = qobject_cast<QAbstractButton*>(anchor_.data())) {
+        button->setDown(down);
+    }
+}
+
 void PopupPanel::open_on_press(QAbstractButton* button, std::function<void()> open) {
-    QObject::connect(button, &QAbstractButton::pressed, button, [button, open = std::move(open)] {
-        button->setDown(false);
-        open();
-    });
+    QObject::connect(button, &QAbstractButton::pressed, button, [open = std::move(open)] { open(); });
+}
+
+void PopupPanel::showEvent(QShowEvent* event) {
+    QFrame::showEvent(event);
+    hold_anchor_down(true);
+}
+
+void PopupPanel::hideEvent(QHideEvent* event) {
+    QFrame::hideEvent(event);
+    hold_anchor_down(false);
 }
 
 void PopupPanel::mousePressEvent(QMouseEvent* event) {

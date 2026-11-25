@@ -256,6 +256,36 @@ When you add to the window:
   `vml_appearance_tests` saves every tab in each when `VML_UI_SNAPSHOTS` names
   a folder (`CONTRIBUTING.md`).
 
+### Buttons that open a panel
+
+A button that opens a menu or a panel behaves as a Qt button's menu does,
+whichever it opens. A menu set with `QPushButton::setMenu` or
+`QToolButton::setMenu` does all of this already (the title bar's theme
+button). A panel is a `PopupPanel` (`app/popup_panel.h`; Add/remove metrics'
+`MetricsPanel`, the tab bar's `ExportPanel`), which does it given its button:
+
+- **It opens on the press**, not on the click's release a whole press later,
+  which reads as lag (130-140 ms against a menu's 28, measured).
+  `PopupPanel::open_on_press` connects the button's `pressed`, which a mouse
+  press, Space and a `click()` (UI Automation's Invoke) all emit, each
+  opening the panel once. Not `clicked`.
+- **The button is drawn pressed while its panel is open**, and up once it
+  closes, however it opened (a press, Space, `click()`, a right-click
+  elsewhere) and however it closed. `PopupPanel::set_anchor` gives the panel
+  its button, which it holds down from its show to its hide. Drawn up at the
+  press instead, the button flashed pressed for as long as the panel took to
+  build.
+- **It closes on a second press on its button, a press outside it, or Esc.**
+  The second press closes it without reaching the button
+  (`Qt::WA_NoMouseReplay`, `set_anchor` again), whose click would open it at
+  once; a press anywhere else closes it and still lands (a tab clicked is
+  switched to).
+
+A new button that opens a panel takes all three: a `PopupPanel` given its
+button with `set_anchor`, opened with `open_on_press`. Not a `QDialog`, not a
+popup of its own, not `clicked`. `MetricsPanelInWindow.APressOpensThePanelAtOnce`
+checks each such button; add a new one to it.
+
 ## Asking and telling the user
 
 A window that stops the user is the last way to tell or ask them anything,
