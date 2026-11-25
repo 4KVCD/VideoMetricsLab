@@ -110,6 +110,13 @@ std::string_view scored_by(std::string_view key);
 // the same model choice.
 bool uses_vmaf_model(std::string_view key);
 
+// Whether `key` is one of the metrics the app's libvmaf-fast alone scores
+// (libvmaf_cpu.h), never FFmpeg's filters, or a plane of one: the 6:1:1
+// metrics (PSNR YUV, SSIM YUV: FFmpeg's filters have no SSIM of the chroma
+// planes), MS-SSIM, MS-SSIM YUV, PSNR-HVS-M, CAMBI, CIEDE2000 and VMAF YUV.
+// Throws std::out_of_range for an unknown key.
+bool scored_in_app(std::string_view key);
+
 // `keys` (in the registry's order) with the metrics those made from others
 // need: VMAF for VMAF YUV and its Y, which are made from VMAF's score.
 std::vector<std::string> with_metric_inputs(std::vector<std::string> keys);

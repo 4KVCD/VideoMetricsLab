@@ -100,11 +100,14 @@ nlohmann::ordered_json devices_json(const DeviceFindings& found, const std::vect
     for (const char* key : {"psnr", "ssim", "xpsnr"}) {
         metrics[key] = where("cpu", std::nullopt, cpu_detail);
     }
-    // The app's own metrics: FFmpeg's filters do not score them.
-    for (const char* key : {"psnr_yuv", "psnr_yuv_mse", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi",
-                             "ciede2000"}) {
-        metrics[key] = found.cpu_metrics_in_app ? where("cpu", std::nullopt, cpu_detail)
-                                                : where(nullptr, std::nullopt, "not available: needs the app's libvmaf");
+    // The app's own metrics (scored_in_app): FFmpeg's filters do not score them. VMAF YUV is next.
+    for (const MetricDefinition& metric : vml::metrics()) {
+        if (!scored_in_app(metric.key) || metric.is_plane() || metric.key == "vmaf_yuv") {
+            continue;
+        }
+        metrics[std::string(metric.key)] =
+            found.cpu_metrics_in_app ? where("cpu", std::nullopt, cpu_detail)
+                                     : where(nullptr, std::nullopt, "not available: needs the app's libvmaf");
     }
     // VMAF YUV: VMAF's score with its U and V, which the app's libvmaf scores on the GPU where VMAF is on Vulkan.
     metrics["vmaf_yuv"] = !found.cpu_metrics_in_app ? where(nullptr, std::nullopt, "not available: needs the app's libvmaf")

@@ -351,19 +351,6 @@ const char* const xpsnr_refusal =
     "XPSNR of videos of more than 8 bits is calculated by the app alone, which cannot calculate it for this "
     "comparison (FFmpeg's xpsnr filter reads such pictures wrongly at some widths)";
 
-// The metrics the app's libvmaf-fast alone scores (libvmaf_cpu.h), never
-// FFmpeg's filters: the 6:1:1 metrics (PSNR YUV, SSIM YUV: FFmpeg's filters
-// have no SSIM of the chroma planes), and MS-SSIM, MS-SSIM YUV, PSNR-HVS-M,
-// CAMBI and CIEDE2000; and the planes of those that have them.
-constexpr std::array<std::string_view, 9> app_scored_metrics{"psnr_yuv", "psnr_yuv_mse", "ssim_yuv",
-                                                             "ms_ssim",  "ms_ssim_yuv",  "psnr_hvs",
-                                                             "cambi",    "ciede2000",    "vmaf_yuv"};
-
-bool app_scored(std::string_view key) {
-    const std::string_view metric = scored_by(key);
-    return std::find(app_scored_metrics.begin(), app_scored_metrics.end(), metric) != app_scored_metrics.end();
-}
-
 // The CAMBI options of a comparison's test video (CambiInput): its own size
 // once cropped (a resolution test's: the size the source is scaled down to),
 // its bit depth and whether it is PQ.
@@ -374,7 +361,7 @@ CambiInput cambi_input(const VideoInfo& distorted, const std::optional<CropBox>&
 }
 
 // The metrics of `options` that FFmpeg's filters cannot score for a
-// comparison at `bit_depth`, each with why: the app's own (app_scored_metrics), and XPSNR
+// comparison at `bit_depth`, each with why: the app's own (scored_in_app), and XPSNR
 // where FFmpeg would score it wrongly (ffmpeg_scores_xpsnr). The app scores
 // them, or nobody does.
 std::map<std::string, std::string> app_only_metrics(const VmafOptions& options, int bit_depth) {
@@ -384,7 +371,7 @@ std::map<std::string, std::string> app_only_metrics(const VmafOptions& options, 
     }
     for (const MetricDefinition& metric : metrics()) {
         const std::string_view key = metric.key;
-        if (app_scored(key) && options.metric_enabled(key)) {
+        if (scored_in_app(key) && options.metric_enabled(key)) {
             const bool yuv = scored_by(key) == "psnr_yuv" || scored_by(key) == "psnr_yuv_mse" ||
                              scored_by(key) == "ssim_yuv";
             refused[std::string(key)] =
@@ -612,12 +599,12 @@ ParsedScores gpu_scores(const PairScores& scored, double fps, const VmafOptions&
 std::string metric_names(const GpuPlan& plan) {
     std::vector<std::string> names;
     for (const auto& [key, model] : plan.models) {
-        names.push_back(key == "psnr"       ? "PSNR"
-                        : key == "ssim"     ? "SSIM"
-                        : key == "xpsnr"    ? "XPSNR"
-                        : key == "vmaf_hdr" ? "HDR VMAF"
-                        : app_scored(key)   ? std::string(metric_definition(key).short_label)
-                                            : key);
+        names.push_back(key == "psnr"        ? "PSNR"
+                        : key == "ssim"      ? "SSIM"
+                        : key == "xpsnr"     ? "XPSNR"
+                        : key == "vmaf_hdr"  ? "HDR VMAF"
+                        : scored_in_app(key) ? std::string(metric_definition(key).short_label)
+                                             : key);
     }
     std::string text;
     for (std::size_t i = 0; i < names.size(); ++i) {
@@ -991,7 +978,7 @@ std::optional<GpuPlan> cpu_metrics_plan(const VmafOptions& options, std::pair<in
     }
     bool app_only = false;  // a metric FFmpeg's filters do not score
     for (const MetricDefinition& metric : vml::metrics()) {  // a plane right after its metric
-        if (app_scored(metric.key) && options.metric_enabled(metric.key)) {
+        if (scored_in_app(metric.key) && options.metric_enabled(metric.key)) {
             metrics.emplace_back(metric.key);
             app_only = true;
         }
@@ -1695,7 +1682,7 @@ bool cpu_metrics_in_app() {
 }
 
 bool is_cpu_metric(std::string_view key) {
-    return key == "psnr" || key == "ssim" || key == "xpsnr" || app_scored(key);
+    return key == "psnr" || key == "ssim" || key == "xpsnr" || scored_in_app(key);
 }
 
 bool cpu_metrics_need_every_frame(const std::vector<std::string>& keys, int n_subsample) {

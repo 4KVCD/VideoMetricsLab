@@ -29,12 +29,13 @@ namespace {
 // The columns the export always had come first, in their old order, so a
 // new metric never moves them.
 constexpr std::array<std::string_view, 5> first_columns{"vmaf", "vmaf_neg", "psnr", "ssim", "xpsnr"};
-// Columns only exports that have their scores get, so that every other
-// export keeps the columns it always had: HDR VMAF scores PQ videos only, and
-// the app's own metrics and their planes are off unless asked for.
-constexpr std::array<std::string_view, 10> scored_only_columns{
-    "vmaf_hdr", "psnr_yuv", "psnr_yuv_mse", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000",
-    "vmaf_yuv"};
+// Whether only exports that have its scores get the column, so that every
+// other export keeps the columns it always had: HDR VMAF scores PQ videos
+// only, and the app's own metrics (scored_in_app) and the planes are off
+// unless asked for.
+bool scored_only_column(const MetricDefinition& metric) {
+    return metric.key == "vmaf_hdr" || scored_in_app(metric.key) || metric.is_plane();
+}
 
 template <std::size_t N>
 bool is_one_of(const std::array<std::string_view, N>& keys, std::string_view key) {
@@ -48,9 +49,8 @@ std::vector<std::string> column_keys(const MetricResultSet& scores) {
         keys.emplace_back(first);
     }
     for (const MetricDefinition& metric : metrics()) {
-        const bool scored_only = is_one_of(scored_only_columns, metric.key) || metric.is_plane();
         if (metric.kind == MetricKind::frame && !is_one_of(first_columns, metric.key) &&
-            (!scored_only || scores.frame(std::string(metric.key)) != nullptr)) {
+            (!scored_only_column(metric) || scores.frame(std::string(metric.key)) != nullptr)) {
             keys.emplace_back(metric.key);
         }
     }

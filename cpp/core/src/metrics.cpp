@@ -229,6 +229,12 @@ std::string_view scored_by(std::string_view key) {
 
 bool uses_vmaf_model(std::string_view key) { return key == "vmaf" || scored_by(key) == "vmaf_yuv"; }
 
+bool scored_in_app(std::string_view key) {
+    constexpr std::array<std::string_view, 9> in_app{"psnr_yuv", "psnr_yuv_mse", "ssim_yuv",  "ms_ssim",  "ms_ssim_yuv",
+                                                     "psnr_hvs", "cambi",        "ciede2000", "vmaf_yuv"};
+    return std::find(in_app.begin(), in_app.end(), scored_by(key)) != in_app.end();
+}
+
 std::vector<std::string> with_metric_inputs(std::vector<std::string> keys) {
     const auto has = [&keys](std::string_view key) { return std::find(keys.begin(), keys.end(), key) != keys.end(); };
     if ((has("vmaf_yuv") || has("vmaf_yuv_y")) && !has("vmaf")) {
