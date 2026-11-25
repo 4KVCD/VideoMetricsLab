@@ -137,7 +137,7 @@ TEST(TableSelection, ARowStaysSelectedWhileThereAreRows) {
 }
 
 // With Highlight best/worst results ticked, a selected row's best and worst
-// cells keep their green and red, the selection a tint over them; a cell
+// cells keep their green and red, the selection a band along their edges; a cell
 // with no colour is selected as before. Without the delegate the selection
 // filled every cell of the row, hiding the marks.
 TEST(TableSelection, ASelectedRowKeepsItsBestAndWorstColours) {
@@ -151,23 +151,30 @@ TEST(TableSelection, ASelectedRowKeepsItsBestAndWorstColours) {
     table.item(0, 1)->setData(Qt::BackgroundRole, QColor(0, 0, 0, 0));  // as apply_best_worst clears one
     table.resize(400, 200);
     table.show();
+    // The marked cell current, in a table focused from the keyboard: the
+    // style draws its focus frame over it, as macOS's does in this test
+    // (#216). The frame's tint once put the cell's band 22 off the selection's colour.
+    table.activateWindow();
+    table.setFocus();
+    table.setAttribute(Qt::WA_KeyboardFocusChange);
+    const QModelIndex marked = table.model()->index(0, 0);
+    table.selectionModel()->setCurrentIndex(marked, QItemSelectionModel::NoUpdate);
+    QCoreApplication::processEvents();
+    const QRect cell = table.visualRect(marked);
+    const QPoint middle_at(cell.right() - 3, cell.center().y());
+    const QColor unselected = table.viewport()->grab().toImage().pixelColor(middle_at);
     table.selectRow(0);
     QCoreApplication::processEvents();
     const QImage shot = table.viewport()->grab().toImage();
-    const QRect cell = table.visualRect(table.model()->index(0, 0));
-    const QRect plain = table.visualRect(table.model()->index(0, 1));
-    const QColor selected = shot.pixelColor(plain.center());
-    // The marked cell's middle is its green, as it is unselected; its top
-    // edge is the selection's colour, as the plain selected cell shows it.
-    // (The style blends an item's background a little.)
-    const QColor middle = shot.pixelColor(cell.right() - 3, cell.center().y());
-    EXPECT_LE(std::abs(middle.red() - green.red()) + std::abs(middle.green() - green.green()) +
-                  std::abs(middle.blue() - green.blue()),
-              40);
+    const QColor selected = shot.pixelColor(table.visualRect(table.model()->index(0, 1)).center());
+    // The marked cell's middle is as it is unselected (the style's own
+    // drawing of its green and its focus frame); its top edge is the
+    // selection's colour, as the plain selected cell shows it.
+    const QColor middle = shot.pixelColor(middle_at);
+    EXPECT_EQ(middle.rgb(), unselected.rgb()) << middle.name().toStdString() << " " << unselected.name().toStdString();
+    EXPECT_GT(middle.green(), std::max(middle.red(), middle.blue()) + 100) << middle.name().toStdString();
     const QColor edge = shot.pixelColor(cell.right() - 3, cell.top());
-    EXPECT_LE(std::abs(edge.red() - selected.red()) + std::abs(edge.green() - selected.green()) +
-                  std::abs(edge.blue() - selected.blue()),
-              6);
+    EXPECT_EQ(edge.rgb(), selected.rgb()) << edge.name().toStdString() << " " << selected.name().toStdString();
 }
 
 // Issue #202: files dropped from outside are said once the drop has returned,

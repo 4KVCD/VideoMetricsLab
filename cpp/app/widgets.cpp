@@ -1179,8 +1179,11 @@ void MarkedCellDelegate::paint(QPainter* painter, const QStyleOptionViewItem& op
     // background, as the view paints a cell (the row's panel, then the
     // item), a few pixels of it. VML Modern's style sheet lays a
     // translucent accent tint in each, which over the mark itself would
-    // blend with the green or red.
+    // blend with the green or red. Not the cell's focus: the style draws its
+    // focus frame over the whole item (the cell painted above has it), and in
+    // the sample it tinted the band (Fusion on macOS: #3b92cb, not #308cc6).
     QStyleOptionViewItem blank(option);
+    blank.state &= ~(QStyle::State_HasFocus | QStyle::State_KeyboardFocusChange);
     blank.text.clear();
     blank.icon = QIcon();
     blank.features = QStyleOptionViewItem::None;
