@@ -136,8 +136,10 @@ void MainWindow::build_tab_corner() {
     // bar's height and puts its bottom on the tab pane's top, which Modern's
     // style sheet sets a pixel into the tab bar, so the corner's first row
     // lies above the tab widget and is not drawn: the Export button's rounded
-    // top border was cut off. Room at the right for its border too.
-    theme::modern_margins(tab_corner_, QMargins(0, 1, 2, 1));
+    // top border was cut off. Room at the right for its border too. None
+    // below: the corner is a row shorter than the button's 28 (Modern's
+    // button), and a margin there cut off its bottom border instead.
+    theme::modern_margins(tab_corner_, QMargins(0, 1, 2, 0));
     // The indicator and Export, in a row of their own: in VML Classic two
     // pixels above the tab pane, which the title buttons there (the progress
     // button) are not, being placed as when they were the corner alone.
