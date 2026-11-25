@@ -11,6 +11,7 @@
 #include <QDeadlineTimer>
 #include <QDoubleSpinBox>
 #include <QFont>
+#include <QFontDatabase>
 #include <QFontMetrics>
 #include <QGuiApplication>
 #include <QIcon>
@@ -124,6 +125,27 @@ protected:
 };
 
 namespace {
+
+// The width a layout gives `widget`: its size hint, widened to its minimum
+// width. (A check box's minimumSizeHint follows its text, whatever its
+// minimum width.)
+int laid_out_width(QWidget* widget) {
+    return QWidgetItem(widget).sizeHint().width();
+}
+
+// A font whose digits differ in width, as macOS's system font's do ("1"
+// narrower than "0"), or "" where none is found. Qt's offscreen platform
+// draws every character of Windows' fonts the same width, so it is loaded
+// from its file.
+QString uneven_digits_family() {
+    for (const char* file : {"C:/Windows/Fonts/georgia.ttf", "/System/Library/Fonts/Supplemental/Georgia.ttf"}) {
+        const int id = QFontDatabase::addApplicationFont(QString::fromUtf8(file));
+        if (id >= 0) {
+            return QFontDatabase::applicationFontFamilies(id).value(0);
+        }
+    }
+    return {};
+}
 
 VideoInfo video(const std::string& name, int width, int height, long long frames) {
     VideoInfo info;
@@ -492,12 +514,12 @@ TEST_F(FramePanelTest, TheLoopRowSaysWhatItLoops) {
     EXPECT_TRUE(panel->loop_before_spin->isEnabled());
     EXPECT_TRUE(panel->loop_after_frames_spin->isEnabled());
     EXPECT_EQ(panel->timeline->band(), (std::optional<std::pair<int, int>>{{0, 34}}));
-    const int box_width = panel->loop_checkbox->minimumSizeHint().width();
-    const int range_width = panel->loop_range_label->minimumSizeHint().width();
+    const int box_width = laid_out_width(panel->loop_checkbox);
+    const int range_width = laid_out_width(panel->loop_range_label);
     panel->set_frame(60);  // another frame gone to: the loop around it
     // The row keeps its width, so the centred row doesn't move.
-    EXPECT_EQ(panel->loop_checkbox->minimumSizeHint().width(), box_width);
-    EXPECT_EQ(panel->loop_range_label->minimumSizeHint().width(), range_width);
+    EXPECT_EQ(laid_out_width(panel->loop_checkbox), box_width);
+    EXPECT_EQ(laid_out_width(panel->loop_range_label), range_width);
     EXPECT_EQ(panel->loop_checkbox->text().toStdString(), "Loop around frame 60:");
     EXPECT_EQ(panel->loop_range_label->text().toStdString(), "(looping frames 36" + dash + "84)");
     EXPECT_EQ(panel->timeline->band(), (std::optional<std::pair<int, int>>{{36, 84}}));
@@ -521,6 +543,41 @@ TEST_F(FramePanelTest, TheLoopRowSaysWhatItLoops) {
     EXPECT_TRUE(slider.band_rect().isEmpty());
     // The still's button beside the frame's controls.
     EXPECT_EQ(panel->save_still_button->parentWidget(), panel->next_frame_button->parentWidget());
+}
+
+// #216: in a font whose digits differ in width, as macOS's, the loop's row
+// still keeps its width at every frame. It was sized for the last frame's
+// number, the largest but not the widest: "108" is wider than "119", so at
+// frame 108 the tick box grew and the centred row moved.
+TEST_F(FramePanelTest, TheLoopRowKeepsItsWidthInAFontWithUnevenDigits) {
+    const QString family = uneven_digits_family();
+    if (family.isEmpty()) {
+        GTEST_SKIP() << "no font with digits of different widths found";
+    }
+    const auto panel = std::make_unique<FrameComparePanel>([] { return std::string("no-ffmpeg-here"); },
+                                                           PreviewColorMode::unmanaged, 3);
+    idle_view(*panel);
+    // Unhinted, as macOS draws text: the digits' advances are fractions of
+    // a pixel, so a width summed from separately rounded measurements comes
+    // out a pixel apart from one frame to the next.
+    QFont font(family);
+    font.setPixelSize(13);
+    font.setHintingPreference(QFont::PreferNoHinting);
+    panel->setFont(font);
+    const QFontMetrics metrics(panel->loop_checkbox->font());
+    ASSERT_GT(metrics.horizontalAdvance("108"), metrics.horizontalAdvance("119"));  // the case to catch
+    const QFontMetricsF exact(panel->loop_checkbox->font());
+    EXPECT_NE(exact.horizontalAdvance("1"), std::round(exact.horizontalAdvance("1")));  // fractional, as on a Mac
+    const test::Folder folder;
+    panel->set_runs({tagged(folder, "bt709", "bt709")});  // 24 fps, frames 0 to 119
+    panel->set_frame(10);
+    const int box_width = laid_out_width(panel->loop_checkbox);
+    const int range_width = laid_out_width(panel->loop_range_label);
+    for (const int frame : {60, 108, 119, 0, 88}) {
+        panel->set_frame(frame);
+        EXPECT_EQ(laid_out_width(panel->loop_checkbox), box_width) << "frame " << frame;
+        EXPECT_EQ(laid_out_width(panel->loop_range_label), range_width) << "frame " << frame;
+    }
 }
 
 // A way of decoding that failed before the one playing ("retry: " and
