@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Copied": "복사됨",
+  "Copy": "복사",
+  "Copy all of it": "모두 복사",
+  "Playback's details: how each video is decoded and shown, and its sound. Selectable and copyable.": "재생 세부 정보: 각 영상을 디코딩하고 표시하는 방식과 오디오. 선택하고 복사할 수 있습니다.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "설정 > 저장된 결과가 고르는 각 지표의 점수를 통계, 계산 방식과 함께 지표마다 한 행으로 선택한 형식으로: 모든 동영상을 파일 하나에(<video> - score details.json).",
   "Export score summary": "점수 요약 내보내기",
   "Score summary": "점수 요약",

@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Copied": "已複製",
+  "Copy": "複製",
+  "Copy all of it": "全部複製",
+  "Playback's details: how each video is decoded and shown, and its sound. Selectable and copyable.": "播放細節：每部影片如何解碼和顯示，以及其音訊。可選取和複製。",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "「設定 > 已儲存的結果」所選的每個指標的分數，及其統計和產生方式，每個指標一列，以勾選的格式：所有影片儲存在一個檔案中（<video> - score details.json）。",
   "Export score summary": "匯出分數摘要",
   "Score summary": "分數摘要",

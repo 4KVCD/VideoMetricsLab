@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Copied": "Kopyalandı",
+  "Copy": "Kopyala",
+  "Copy all of it": "Tümünü kopyala",
+  "Playback's details: how each video is decoded and shown, and its sound. Selectable and copyable.": "Oynatma ayrıntıları: her videonun nasıl çözüldüğü ve gösterildiği, ve sesi. Seçilebilir ve kopyalanabilir.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Ayarlar > Kaydedilen sonuçlar'ın seçtiği her metriğin puanı, istatistikleri ve nasıl elde edildiği; metrik başına bir satır, işaretli biçimlerde: tüm videolarınki tek dosyada (<video> - score details.json).",
   "Export score summary": "Puan özetini dışa aktar",
   "Score summary": "Puan özeti",

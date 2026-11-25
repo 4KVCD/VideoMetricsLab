@@ -9,6 +9,7 @@
 #include <QImage>
 #include <QMetaType>
 #include <QPixmap>
+#include <QPointer>
 #include <QString>
 #include <QThread>
 #include <QWidget>
@@ -309,6 +310,9 @@ public:
     QLabel* color_status_label = nullptr;
     QComboBox* source_resolution_combo = nullptr;
     QPushButton* advanced_info_button = nullptr;
+    // Advanced info as it is now: playback's details, a line each, plain
+    // (what its panel shows and copies).
+    QString advanced_info_text() const;
     ElidedLabel* showing_label = nullptr;
     FrameView* viewer = nullptr;
     PlayPauseButton* play_button = nullptr;
@@ -467,6 +471,9 @@ private:
     void on_video_playing_changed(bool playing);
     void on_video_status_changed(const QString& message);
     QString concise_playback_status() const;
+    // Advanced info's panel (TextPanel), under its button; kept up to date
+    // while it is open.
+    void open_advanced_info();
 
     std::function<std::string()> ffmpeg_;
     int decoded_videos_;
@@ -519,6 +526,8 @@ private:
     bool syncing_video_position_ = false;
     // Playback's status as the view said it, in English.
     QString video_status_;
+    QStringList advanced_info_lines_;  // playback's details, translated (on_video_status_changed)
+    QPointer<class TextPanel> advanced_info_panel_;
     // The Worst frames list handed over, and the stop shown last.
     std::optional<WorstFrameList> worst_list_;
     std::size_t worst_index_ = 0;

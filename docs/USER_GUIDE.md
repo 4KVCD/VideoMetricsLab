@@ -640,6 +640,10 @@ optional. Use still mode for frame inspection or playback mode for motion.
   (Film grain in the Options panel). VVC's H.274 grain is added by VVdeC,
   at any bit depth.
 - Review HDR preview and source-resolution options for your comparison.
+- **Advanced info** opens playback's details: how each video is decoded
+  and shown, and its sound, a line each (what is set up when playback
+  starts or changes, not figures that tick by as it plays). Select any of
+  it, or **Copy** all of it, for a bug report say.
 
 This is an A/B switching view, not two permanently side-by-side players.
 Crop geometry is most reliable when supplied by a completed analysis. Read

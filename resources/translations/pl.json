@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Copied": "Skopiowano",
+  "Copy": "Kopiuj",
+  "Copy all of it": "Kopiuj wszystko",
+  "Playback's details: how each video is decoded and shown, and its sound. Selectable and copyable.": "Szczegóły odtwarzania: jak każde wideo jest dekodowane i wyświetlane oraz jego dźwięk. Można je zaznaczyć i skopiować.",
   "Each metric's score with the statistics and how it was made that Settings > Saved Results picks, a row a metric, in the formats ticked: all the videos' in one file (<video> - score details.json).": "Ocena każdej metryki ze statystykami i tym, jak powstała, wybranymi w Ustawienia > Zapisane wyniki, jeden wiersz na metrykę, w zaznaczonych formatach: wszystkich wideo w jednym pliku (<video> - score details.json).",
   "Export score summary": "Eksportuj podsumowanie ocen",
   "Score summary": "Podsumowanie ocen",
