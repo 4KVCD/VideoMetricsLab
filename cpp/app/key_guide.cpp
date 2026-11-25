@@ -6,6 +6,7 @@
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QScopedValueRollback>
 
 #include <algorithm>
 #include <array>
@@ -34,13 +35,45 @@ QFont scaled(const QFont& font, double factor) {
 
 KeyGuide::KeyGuide(QWidget* parent) : QFrame(parent) {
     setObjectName(QStringLiteral("keyGuide"));
-    setStyleSheet(QStringLiteral("#keyGuide { background: #0a0a0a; border: 1px solid #555; border-radius: 12px; }"));
     grid_ = new QGridLayout(this);
     add_row(0, {QStringLiteral("S")}, app::tr("Hold to see the source"));
     add_row(1, {QString::fromUtf8("\xE2\x86\x90"), QString::fromUtf8("\xE2\x86\x92")},  // ← →
             app::tr("Switch test video"));
     add_row(2, {app::tr("Space")}, app::tr("Play / pause"));
     set_scale(scales.front());
+    show_look();
+}
+
+void KeyGuide::set_themed(bool themed) {
+    if (themed != themed_) {
+        themed_ = themed;
+        show_look();
+    }
+}
+
+void KeyGuide::show_look() {
+    // A style sheet set here changes the palette too: that change is this
+    // one's, not the theme's (changeEvent), and would come back here forever.
+    const QScopedValueRollback restyling(restyling_, true);
+    // On the video's black screen: light on black. In the theme's colours:
+    // the palette's (re-read as it changes, changeEvent), so that the guide
+    // looks like the window's other controls in each interface and theme.
+    if (themed_) {
+        setStyleSheet(QStringLiteral("#keyGuide { background: palette(base); border: 1px solid palette(mid); "
+                                     "border-radius: 12px; }"));
+    } else {
+        setStyleSheet(QStringLiteral("#keyGuide { background: #0a0a0a; border: 1px solid #555; border-radius: 12px; }"));
+    }
+    const QString cap = themed_ ? QStringLiteral("color: palette(button-text); background: palette(button); "
+                                                 "border: 2px solid palette(mid); ")
+                                : QStringLiteral("color: #fff; background: #262626; border: 2px solid #8a8a8a; ");
+    for (QLabel* key : keys_) {
+        key->setStyleSheet(cap + QStringLiteral("border-bottom-width: 4px; border-radius: 8px; padding: 0 8px;"));
+    }
+    for (QLabel* action : actions_) {
+        action->setStyleSheet(themed_ ? QStringLiteral("background: transparent;")
+                                      : QStringLiteral("color: #eee; background: transparent;"));
+    }
 }
 
 // A row: its keys, drawn as keys, next to what they do.
@@ -56,14 +89,11 @@ void KeyGuide::add_row(int row, const std::vector<QString>& keys, const QString&
     for (const QString& key : in_order) {
         auto* cap = new QLabel(key);
         cap->setAlignment(Qt::AlignCenter);
-        cap->setStyleSheet(QStringLiteral("color: #fff; background: #262626; border: 2px solid #8a8a8a; "
-                                          "border-bottom-width: 4px; border-radius: 8px; padding: 0 8px;"));
         caps->addWidget(cap);
         keys_.push_back(cap);
     }
     grid_->addLayout(caps, row, 0);
     auto* label = new QLabel(action);
-    label->setStyleSheet(QStringLiteral("color: #eee; background: transparent;"));
     grid_->addWidget(label, row, 1);
     actions_.push_back(label);
 }
@@ -89,6 +119,8 @@ void KeyGuide::changeEvent(QEvent* event) {
     if (event->type() == QEvent::FontChange) {
         scale_ = 0;  // the window's text size changed: every size again
         fit(room_);
+    } else if (event->type() == QEvent::PaletteChange && themed_ && !restyling_) {
+        show_look();  // the theme changed: its colours again
     }
 }
 

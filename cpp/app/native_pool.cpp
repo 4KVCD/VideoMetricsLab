@@ -19,6 +19,7 @@
 
 #include "native_device.h"
 #include "video_compare_view.h"
+#include "video_surround.h"
 #include "vml/app_log.h"
 #include "vml/native_playback.h"
 #include "vml/platform/system.h"
@@ -71,11 +72,12 @@ PairedFrameWidget::PairedFrameWidget(VideoCompareView* view)
 }
 
 void PairedFrameWidget::paintEvent(QPaintEvent* /*event*/) {
-    // Painted dark. Little of it shows: under its presenter's window nothing
-    // painted here does (the presenter fills its window dark itself until
-    // its first frame), so only before that window is made, and in a strip
-    // the view grows by until the window follows at the next frame.
-    QPainter(this).fillRect(rect(), QColor("#171717"));
+    // Painted black, as the frame's surround (video_surround.h). Little of it
+    // shows: under its presenter's window nothing painted here does (the
+    // presenter fills its window black itself until its first frame), so
+    // only before that window is made, and in a strip the view grows by until
+    // the window follows at the next frame.
+    QPainter(this).fillRect(rect(), video_surround());
 }
 
 void PairedFrameWidget::mousePressEvent(QMouseEvent* event) {

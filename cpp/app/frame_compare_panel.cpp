@@ -34,6 +34,7 @@
 #ifdef VML_NATIVE_PLAYBACK
 #include "native_pool.h"
 #endif
+#include "video_surround.h"
 #include "widgets.h"
 #include "window_helpers.h"
 #include "vml/app_log.h"
@@ -197,15 +198,19 @@ FrameView::FrameView(Zoom& zoom, QWidget* parent)
     label_ = new QLabel(app::tr(nothing_to_compare));
     label_->setAlignment(Qt::AlignCenter);
     label_->setWordWrap(true);
-    label_->setStyleSheet("color: #ddd; background: transparent;");
     column->addWidget(label_);
     column->addSpacing(16);
     key_guide_ = new KeyGuide;
     column->addWidget(key_guide_, 0, Qt::AlignHCenter);
     column->addStretch(1);
+    show_look();  // light on black until show_empty
 }
 
 void FrameView::set_message(const QString& message, bool with_keys) {
+    if (empty_) {
+        empty_ = false;
+        show_look();
+    }
     image_ = QImage();
     scaled_ = QPixmap();
     label_->setText(message);
@@ -215,7 +220,27 @@ void FrameView::set_message(const QString& message, bool with_keys) {
     zoom_changed();
 }
 
+void FrameView::show_empty(const QString& message) {
+    set_message(message, true);
+    empty_ = true;
+    show_look();
+    update();
+}
+
+void FrameView::show_look() {
+    // With nothing to compare, the tab's screen is the theme's: its text and
+    // the keys' guide in the palette's colours. Else the message is light on
+    // the black screen.
+    label_->setStyleSheet(empty_ ? QStringLiteral("background: transparent;")
+                                 : QStringLiteral("color: #ddd; background: transparent;"));
+    key_guide_->set_themed(empty_);
+}
+
 void FrameView::set_image(const QImage& image) {
+    if (empty_) {
+        empty_ = false;
+        show_look();
+    }
     image_ = image;
     scaled_ = QPixmap();
     screen_text_->hide();
@@ -268,7 +293,9 @@ void FrameView::mouseReleaseEvent(QMouseEvent* event) {
 void FrameView::paintEvent(QPaintEvent* /*event*/) {
     // The frame where the zoom puts it, scaled once per size.
     QPainter painter(this);
-    painter.fillRect(rect(), QColor("#171717"));
+    // Black around a frame and while one loads (video_surround.h); with
+    // nothing to compare, the theme's own (show_empty).
+    painter.fillRect(rect(), empty_ ? palette().color(QPalette::Window) : video_surround());
     if (!image_.isNull()) {
         const double ratio = devicePixelRatioF();
         const Placement place = zoom_.placement({width(), height()}, {image_.width(), image_.height()}, ratio);
@@ -724,7 +751,7 @@ void FrameComparePanel::set_runs(std::vector<FrameComparisonEntry> entries) {
     update_enabled_state();
     update_labels();
     if (entries_.empty()) {
-        viewer->set_message(app::tr(nothing_to_compare));
+        viewer->show_empty(app::tr(nothing_to_compare));
         content_stack_->setCurrentWidget(viewer);
         if (video_view != nullptr) {
             video_view->clear();

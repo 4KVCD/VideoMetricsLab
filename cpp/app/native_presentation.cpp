@@ -6,6 +6,7 @@
 
 #include "native_common.h"
 #include "native_device.h"
+#include "video_surround.h"
 #include "vml/model_select.h"
 #include "vml/native_playback.h"
 #include "vml/platform/library.h"
@@ -14,8 +15,8 @@ namespace vml::app {
 
 namespace {
 
-// The colour around a frame: the views' background (#171717).
-constexpr std::array<float, 4> background{0x17 / 255.0f, 0x17 / 255.0f, 0x17 / 255.0f, 1.0f};
+// The colour around a frame: black, as the views' (video_surround.h).
+constexpr std::array<float, 4> background = video_surround_rgba;
 // DXGI colour spaces: SDR (sRGB-coded BT.709) and HDR10 (PQ in BT.2020).
 constexpr int sdr_space = 0;
 constexpr int hdr10_space = 12;

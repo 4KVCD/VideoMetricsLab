@@ -20,6 +20,9 @@ public:
     explicit KeyGuide(QWidget* parent = nullptr);
     // Takes the largest of its text sizes at which it fits in `room`.
     void fit(QSize room);
+    // In the theme's colours (the tab's screen with nothing to compare), or
+    // light on black (the default: on the video's black screen).
+    void set_themed(bool themed);
 
 protected:
     void changeEvent(QEvent* event) override;
@@ -27,12 +30,15 @@ protected:
 private:
     void add_row(int row, const std::vector<QString>& keys, const QString& action);
     void set_scale(double scale);
+    void show_look();
 
     QGridLayout* grid_ = nullptr;
     std::vector<QLabel*> keys_;
     std::vector<QLabel*> actions_;
     QSize room_;
     double scale_ = 0;  // the text's size, as a multiple of the window's
+    bool themed_ = false;
+    bool restyling_ = false;  // in show_look: its own palette changes
 };
 
 }  // namespace vml::app
