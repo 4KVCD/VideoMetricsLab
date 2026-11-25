@@ -39,6 +39,7 @@
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
+#include "vml/run_errors.h"
 #include "vml/run_json.h"
 #include "vml/ssimulacra2.h"
 #include "vml/stats.h"
@@ -998,16 +999,13 @@ PerceptualTaskOutput score_cpu_task_apart(const PerceptualRequest& request, cons
                     output = perceptual_output_from(result, folder);
                 }
             });
-    } catch (const Cancelled&) {
-        throw;
-    } catch (const VideoSizeChanged&) {
-        throw;  // the process's, kept by run_isolated: the task is made again
-    } catch (const FilmGrainRefusal&) {
-        throw;
     } catch (const IsolatedCrashError& error) {
         logger.error(join(keys, " and ") + " on the CPU failed: " + error.what());
         throw PerceptualRunError(error.what());
     } catch (const std::runtime_error& error) {
+        if (ends_the_run(error)) {
+            throw;  // the process's, kept by run_isolated
+        }
         throw PerceptualRunError(error.what());  // the process's own error, as its message
     }
     if (cut_short) {

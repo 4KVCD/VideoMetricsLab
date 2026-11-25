@@ -40,6 +40,7 @@
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
+#include "vml/run_errors.h"
 #include "vml/run_json.h"
 #include "vml/size_changes.h"
 #include "vml/threads.h"
@@ -1941,13 +1942,10 @@ PerceptualTaskOutput run_vship_pass(const PerceptualRequest& request, const Pass
         try {
             run_vship_child(request, plan, on_progress, on_status, cancel, vvdec_used, output, cut_short);
             break;
-        } catch (const Cancelled&) {
-            throw;
-        } catch (const VideoSizeChanged&) {
-            throw;  // the child's, kept by run_isolated
-        } catch (const FilmGrainRefusal&) {
-            throw;  // likewise: final (the app's decoder failed, or its pictures cannot be fed)
         } catch (const std::runtime_error& error) {
+            if (ends_the_run(error)) {
+                throw;  // the child's, kept by run_isolated
+            }
             if (!retried && vvdec_used && !vvdec_turned_off()) {
                 turn_off_vvdec(std::string("its pass failed: ") + error.what(), on_status);
                 continue;
@@ -2060,13 +2058,7 @@ private:
             output = VshipTask(request_, keys, device_, source_crop_, distorted_crop_, together_, hooks_, cancel_,
                                build_)
                          .run();
-        } catch (const Cancelled&) {
-            throw;
         } catch (const ComparisonCutShortError&) {
-            throw;
-        } catch (const VideoSizeChanged&) {
-            throw;
-        } catch (const FilmGrainRefusal&) {
             throw;
         } catch (const VshipPassesFailedError& error) {
             // The others failed too. Each keeps its own reason.
@@ -2076,6 +2068,9 @@ private:
             }
             throw VshipPassesFailedError(error.what(), reasons);
         } catch (const std::exception& error) {
+            if (ends_the_run(error)) {
+                throw;
+            }
             PerceptualFailures reasons;
             for (const std::string& key : keys) {
                 set_failure(reasons, key, error.what());
@@ -2189,17 +2184,14 @@ private:
             PerceptualTaskOutput output;
             try {
                 output = run_pass(group, progress);
-            } catch (const Cancelled&) {
-                throw;
             } catch (const ComparisonCutShortError&) {
                 // A video that ends early is cut short for every metric: the
                 // file's fault, the same in each pass and on the CPU.
                 throw;
-            } catch (const VideoSizeChanged&) {
-                throw;  // every pass is made again, the video scaled first (run_perceptual_task)
-            } catch (const FilmGrainRefusal&) {
-                throw;  // the same in every pass and on the CPU
             } catch (const std::exception& error) {
+                if (ends_the_run(error)) {
+                    throw;  // the same in every pass and on the CPU
+                }
                 if (cancel_.cancelled()) {
                     throw Cancelled();
                 }
@@ -2329,20 +2321,15 @@ public:
         gpu_started_ = true;
         try {
             gpu_output = routes_.run_gpu(request_, gpu_, *device_, crops, together_, hooks_, cancel_);
-        } catch (const Cancelled&) {
-            throw;
         } catch (const ComparisonCutShortError&) {
             // A video cut short (one that ends early) is not retried with
             // stock Vship or on the CPU: it would stop as short, after hours
             // instead of the GPU's minutes.
             throw;
-        } catch (const VideoSizeChanged&) {
-            throw;  // the task is made again, the video scaled first (run_perceptual_task)
-        } catch (const FilmGrainRefusal&) {
-            // Not retried with stock Vship or on the CPU either: the app's
-            // decoder failed, or its pictures cannot be fed, there too.
-            throw;
         } catch (const std::exception& error) {
+            if (ends_the_run(error)) {
+                throw;  // not retried with stock Vship or on the CPU either
+            }
             if (cancel_.cancelled()) {
                 throw Cancelled();
             }
@@ -2493,15 +2480,12 @@ private:
         PerceptualTaskOutput output;
         try {
             output = routes_.run_vship51(request_, keys, *device_, crops, together_, hooks_, cancel_);
-        } catch (const Cancelled&) {
-            throw;
         } catch (const ComparisonCutShortError&) {
             throw;
-        } catch (const VideoSizeChanged&) {
-            throw;
-        } catch (const FilmGrainRefusal&) {
-            throw;
         } catch (const std::exception& again) {
+            if (ends_the_run(again)) {
+                throw;
+            }
             if (cancel_.cancelled()) {
                 throw Cancelled();
             }

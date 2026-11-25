@@ -23,6 +23,7 @@
 #include "vml/number_format.h"
 #include "vml/platform/pipe.h"
 #include "vml/platform/system.h"
+#include "vml/run_errors.h"
 #include "vml/threads.h"
 #include "vml/vmaf_cuda.h"
 #include "vml/vmaf_v1_gpu.h"
@@ -52,16 +53,6 @@ class FramesCutError : public LibvmafError {
 public:
     using LibvmafError::LibvmafError;
 };
-
-bool frames_cut(const std::exception_ptr& error) {
-    try {
-        std::rethrow_exception(error);
-    } catch (const FramesCutError&) {
-        return true;
-    } catch (...) {
-        return false;
-    }
-}
 
 // Fills `size` bytes at `into` from the pipe, in a few large reads
 // (read_full). False at the stream's end before the first byte; throws
@@ -671,22 +662,6 @@ struct GpuAttempt::State {
     bool gpu_vmaf = true;  // a GPU VMAF pass, not the CPU metrics' alone (backend "cpu")
 };
 
-namespace {
-
-// Whether `error` is CIEDE2000's or CAMBI's on the GPU failing partway, which score_plan answers by making the
-// pass again with them on the CPU: it must reach it as it is.
-bool gpu_metrics_failed(const std::exception_ptr& error) {
-    try {
-        std::rethrow_exception(error);
-    } catch (const GpuMetricsFailed&) {
-        return true;
-    } catch (...) {
-        return false;
-    }
-}
-
-}  // namespace
-
 GpuAttempt::GpuAttempt(const GpuPlan& plan, int n_subsample) : state_(std::make_unique<State>()) {
     State& s = *state_;
     s.gpu_vmaf = plan.backend != "cpu";
@@ -808,8 +783,10 @@ std::optional<PairScores> GpuAttempt::finish(bool ffmpeg_succeeded) {
     s.beside.reset();
     // Frames cut short where FFmpeg failed are that failure, which the
     // caller reports and tries another decode plan for.
-    if (s.error && !(frames_cut(s.error) && !ffmpeg_succeeded)) {
-        if (gpu_metrics_failed(s.error)) {
+    if (s.error && !(holds<FramesCutError>(s.error) && !ffmpeg_succeeded)) {
+        // CIEDE2000's or CAMBI's on the GPU failing partway, which score_plan answers by making the pass again
+        // with them on the CPU: it must reach it as it is.
+        if (holds<GpuMetricsFailed>(s.error)) {
             std::rethrow_exception(s.error);
         }
         throw LibvmafError((s.gpu_vmaf ? "GPU VMAF failed: " : "") + message_of(s.error));

@@ -37,6 +37,7 @@
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
+#include "vml/run_errors.h"
 #include "vml/run_json.h"
 #include "vml/size_changes.h"
 #include "vml/temp_files.h"
@@ -1217,14 +1218,8 @@ ParsedScores score_plan_apart(std::string_view task, const RunFrames& run, const
         bool vvdec_used = false;
         try {
             return run_plan_child(task, run, options, plan, on_progress, on_status, vvdec_used);
-        } catch (const Cancelled&) {
-            throw;
-        } catch (const VideoSizeChanged&) {
-            throw;
-        } catch (const FilmGrainRefusal&) {
-            throw;
         } catch (const std::runtime_error& error) {
-            if (retried || !vvdec_used || vvdec_turned_off()) {
+            if (ends_the_run(error) || retried || !vvdec_used || vvdec_turned_off()) {
                 throw;
             }
             turn_off_vvdec(std::string("its pass failed: ") + error.what(), on_status);
@@ -1290,13 +1285,10 @@ std::optional<ParsedScores> run_on_gpu(const RunFrames& run, const VmafOptions& 
                                        const ProgressCallback& on_progress, const StatusCallback& on_status) {
     try {
         return score_on_gpu(run, options, plan, on_progress, on_status);
-    } catch (const Cancelled&) {
-        throw;
-    } catch (const VideoSizeChanged&) {
-        throw;  // the run is made again, the video marked (run_vmaf)
-    } catch (const FilmGrainRefusal&) {
-        throw;  // final: the CPU's FFmpeg gets its pictures from the same decoder (grain_feed.h)
     } catch (const std::exception& error) {
+        if (ends_the_run(error)) {
+            throw;
+        }
         logger.error(std::string("VMAF on the GPU failed; calculating it on the CPU: ") + error.what());
         forget_gpu_checks();  // the saved check said this GPU works: check it again next start
         if (on_status) {
@@ -1356,13 +1348,10 @@ public:
             if (error_) {
                 std::rethrow_exception(error_);
             }
-        } catch (const Cancelled&) {
-            throw;
-        } catch (const VideoSizeChanged&) {
-            throw;  // the run is made again, the video marked (run_vmaf)
-        } catch (const FilmGrainRefusal&) {
-            throw;  // final, for the run's other metrics too
         } catch (const std::exception& error) {
+            if (ends_the_run(error)) {
+                throw;
+            }
             logger.error(std::string("A part of the run failed, the others' scores stand: ") + error.what());
             ParsedScores none;
             for (const std::string& key : keys) {
@@ -1464,17 +1453,11 @@ std::optional<ParsedScores> run_cpu_metrics(const RunFrames& run, const VmafOpti
     std::optional<ParsedScores> frames;
     try {
         frames = score_cpu_plan(run, scored, plan, progress.part(0), on_status);
-    } catch (const Cancelled&) {
-        xpsnr.reset();  // stopped and waited for
-        throw;
-    } catch (const VideoSizeChanged&) {
-        xpsnr.reset();
-        throw;  // the run is made again, the video marked (run_vmaf)
-    } catch (const FilmGrainRefusal&) {
-        xpsnr.reset();
-        throw;  // final: FFmpeg gets its pictures from the same decoder (grain_feed.h)
     } catch (const std::exception& error) {
-        xpsnr.reset();
+        xpsnr.reset();  // stopped and waited for
+        if (ends_the_run(error)) {
+            throw;
+        }
         logger.error(metric_names(plan) + " in the app failed; FFmpeg calculates them: " + error.what());
         if (failure != nullptr) {
             *failure = error.what();
@@ -2250,13 +2233,10 @@ std::optional<RunScores> score_gpu_and_cpu(const RunFrames& run, const VmafOptio
     if (cpu && shares_pass(run, *gpu, *cpu, cpu_options)) {
         try {
             return score_shared(run, options, *gpu, *cpu, on_progress, on_status);
-        } catch (const Cancelled&) {
-            throw;
-        } catch (const VideoSizeChanged&) {
-            throw;  // the run is made again, the video marked (run_vmaf)
-        } catch (const FilmGrainRefusal&) {
-            throw;  // final: every route decodes it with the same decoder (grain_feed.h)
         } catch (const std::exception& error) {
+            if (ends_the_run(error)) {
+                throw;
+            }
             logger.warning("VMAF on the GPU with " + metric_names(*cpu) +
                            " beside it failed; scoring them apart: " + error.what());
         }
@@ -2355,13 +2335,10 @@ ParsedScores score_hdr(const RunFrames& run, const VmafOptions& options,
     try {
         log_hdr_vmaf(plan);
         return score_cpu_plan(run, options, plan, on_progress, on_status);
-    } catch (const Cancelled&) {
-        throw;
-    } catch (const VideoSizeChanged&) {
-        throw;  // the run is made again, the video marked (run_vmaf)
-    } catch (const FilmGrainRefusal&) {
-        throw;  // final: every route decodes it with the same decoder (grain_feed.h)
     } catch (const std::exception& error) {
+        if (ends_the_run(error)) {
+            throw;
+        }
         logger.error(std::string("HDR VMAF failed: ") + error.what());
         refused.failed["vmaf_hdr"] = std::string("HDR VMAF failed: ") + error.what();
         return refused;
@@ -2427,13 +2404,10 @@ std::optional<RunScores> score_hdr_beside(const RunFrames& run, const VmafOption
         }
         scores.parts.push_back(std::move(scored));
         return scores;
-    } catch (const Cancelled&) {
-        throw;
-    } catch (const VideoSizeChanged&) {
-        throw;  // the run is made again, the video marked (run_vmaf)
-    } catch (const FilmGrainRefusal&) {
-        throw;  // final: every route decodes it with the same decoder (grain_feed.h)
     } catch (const std::exception& error) {
+        if (ends_the_run(error)) {
+            throw;
+        }
         logger.warning("HDR VMAF beside the run's other metrics failed; scoring them apart: " +
                        std::string(error.what()));
         return std::nullopt;

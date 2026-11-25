@@ -67,6 +67,7 @@ add_library(vml_core
     src/results.cpp
     src/results_summary.cpp
     src/row_pool.cpp
+    src/run_errors.cpp
     src/run_file.cpp
     src/run_json.cpp
     src/run_line.cpp
