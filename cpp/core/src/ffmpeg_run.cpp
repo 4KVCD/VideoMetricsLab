@@ -1256,15 +1256,22 @@ ParsedScores score_on_gpu(const RunEnvironment& environment, const VideoInfo& so
     }
     std::string beside;
     if (!plan.beside.empty()) {
-        GpuPlan cpu;
-        for (const std::string& key : plan.beside) {
-            cpu.models.emplace_back(key, key);
+        // CIEDE2000 and CAMBI may go to the GPU with one given them, VMAF YUV's U and V on the Vulkan engine's
+        // (cpu_plan); libvmaf on the CPU scores the others, HDR VMAF's on threads of its own (log_hdr_vmaf).
+        const std::vector<std::string> maybe_gpu =
+            may_run_on_gpu(plan.beside, plan.extra_gpu.has_value(), plan.vmaf_on_vulkan);
+        const auto on_cpu = [&maybe_gpu](const std::string& key) {
+            return std::find(maybe_gpu.begin(), maybe_gpu.end(), key) == maybe_gpu.end();
+        };
+        const bool cpu_library = std::any_of(plan.beside.begin(), plan.beside.end(), on_cpu);
+        const bool cpu_metrics = std::any_of(plan.beside.begin(), plan.beside.end(), [&on_cpu](const std::string& key) {
+            return is_cpu_metric(key) && on_cpu(key);
+        });
+        beside = ", with " + cpu_metrics_text(plan.beside, maybe_gpu) + " beside it from the same frames";
+        if (cpu_library) {
+            beside += " (" + cpu_library_build() +
+                      (cpu_metrics ? ", the CPU's metrics on " + std::to_string(plan.threads) + " threads" : "") + ")";
         }
-        // HDR VMAF's threads are its own (log_hdr_vmaf)
-        const bool cpu_metrics = std::any_of(plan.beside.begin(), plan.beside.end(),
-                                             [](const std::string& key) { return is_cpu_metric(key); });
-        beside = ", with " + metric_names(cpu) + " beside it from the same frames (" + cpu_library_build() +
-                 (cpu_metrics ? ", the CPU's metrics on " + std::to_string(plan.threads) + " threads" : "") + ")";
     }
     logger.info("VMAF on the GPU (" + models +
                 "): " + (plan.backend == "vulkan" ? vulkan_library_build() : cuda_library_build()) + beside);

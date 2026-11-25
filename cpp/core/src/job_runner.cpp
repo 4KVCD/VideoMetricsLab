@@ -39,21 +39,6 @@
 
 namespace vml {
 
-std::string cpu_metrics_text(const std::vector<std::string>& keys, bool gpu_offered) {
-    const std::vector<std::string> gpu_can =
-        gpu_offered ? gpu_metrics_of(keys, false, {}) : std::vector<std::string>{};  // size and CAMBI's options aside
-    std::vector<std::string> here;
-    std::vector<std::string> maybe_gpu;  // in `keys`' order
-    for (const std::string& key : keys) {
-        (std::find(gpu_can.begin(), gpu_can.end(), key) != gpu_can.end() ? maybe_gpu : here).push_back(key);
-    }
-    std::string text = metric_labels(here);
-    if (!maybe_gpu.empty()) {
-        text += (text.empty() ? "" : "; ") + metric_labels(maybe_gpu, " and ") + " on the GPU where it can";
-    }
-    return text;
-}
-
 namespace {
 
 // Whether a run cutting `source_crop` and `distorted_crop` from `source` and

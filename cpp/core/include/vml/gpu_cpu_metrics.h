@@ -23,6 +23,23 @@ namespace vml {
 std::vector<std::string> gpu_metrics_of(const std::vector<std::string>& metrics, bool odd_size,
                                         const std::vector<std::pair<std::string, std::string>>& cambi_options);
 
+// Which of `keys` (CpuScorer's) may go to the GPU, in `keys`' order: CIEDE2000 and CAMBI with `cie_cambi_offered`
+// (gpu_metrics_of, the size and CAMBI's options aside), VMAF YUV's U and V (and VMAF YUV, as a task names them) with
+// `chroma_vmaf_offered` (VMAF's GPU is the Vulkan engine's: GpuPlan::vmaf_on_vulkan). Where they go is decided only
+// as the scorer starts: it keeps a metric the GPU cannot take (ChromaVmaf's U and V above 10 bits or with a model
+// file, say) on the CPU.
+std::vector<std::string> may_run_on_gpu(const std::vector<std::string>& keys, bool cie_cambi_offered,
+                                        bool chroma_vmaf_offered);
+
+// The CPU scorer's metrics `keys` as a task's name in the log and vml-cli's list of what a run calculates gives
+// them: "PSNR; CAMBI and CIEDE2000 (ΔE) on the GPU where it can", those in `maybe_gpu` (may_run_on_gpu) named so,
+// as where they go is decided only as the scorer starts (it says so then: StatusKind::metrics_on_gpu).
+std::string cpu_metrics_text(const std::vector<std::string>& keys, const std::vector<std::string>& maybe_gpu);
+
+// The same before VMAF's GPU backend is known: with `gpu_offered` (VMAF's place is the GPU:
+// VmafOptions::vmaf_on_gpu), every metric the GPU may take is named so.
+std::string cpu_metrics_text(const std::vector<std::string>& keys, bool gpu_offered);
+
 // CIEDE2000 or CAMBI on the GPU failed after they started (a lost device, say),
 // as CpuScorer says it: the pass is made again with them in libvmaf on the
 // CPU (score_plan), its other metrics failing for this alone otherwise.

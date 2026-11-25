@@ -6,6 +6,8 @@
 #include <optional>
 
 #include "vml/app_log.h"
+#include "vml/chroma_vmaf.h"
+#include "vml/metrics.h"
 #include "vml/vmaf_v1_gpu.h"
 #include "vml/vmaf_vulkan.h"
 
@@ -38,6 +40,40 @@ std::vector<std::string> gpu_metrics_of(const std::vector<std::string>& metrics,
         on_gpu.emplace_back("cambi");
     }
     return on_gpu;
+}
+
+std::vector<std::string> may_run_on_gpu(const std::vector<std::string>& keys, bool cie_cambi_offered,
+                                        bool chroma_vmaf_offered) {
+    const std::vector<std::string> cie_cambi =
+        cie_cambi_offered ? gpu_metrics_of(keys, false, {}) : std::vector<std::string>{};
+    // VMAF YUV, as a task names U and V asked for it alone (job_runner's as_asked), is VMAF's Y and those planes.
+    const auto chroma_vmaf = [](const std::string& key) {
+        return key == vmaf_u_key || key == vmaf_v_key || key == "vmaf_yuv";
+    };
+    std::vector<std::string> maybe;
+    for (const std::string& key : keys) {
+        if (has(cie_cambi, key) || (chroma_vmaf_offered && chroma_vmaf(key))) {
+            maybe.push_back(key);
+        }
+    }
+    return maybe;
+}
+
+std::string cpu_metrics_text(const std::vector<std::string>& keys, const std::vector<std::string>& maybe_gpu) {
+    std::vector<std::string> here;
+    std::vector<std::string> gpu;  // in `keys`' order
+    for (const std::string& key : keys) {
+        (has(maybe_gpu, key) ? gpu : here).push_back(key);
+    }
+    std::string text = metric_labels(here);
+    if (!gpu.empty()) {
+        text += (text.empty() ? "" : "; ") + metric_labels(gpu, " and ") + " on the GPU where it can";
+    }
+    return text;
+}
+
+std::string cpu_metrics_text(const std::vector<std::string>& keys, bool gpu_offered) {
+    return cpu_metrics_text(keys, may_run_on_gpu(keys, gpu_offered, gpu_offered));
 }
 
 struct GpuMetricsScorer::State {
