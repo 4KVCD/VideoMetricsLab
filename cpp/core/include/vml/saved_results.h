@@ -102,8 +102,9 @@ bool delete_saved_comparison(const std::filesystem::path& base, const SavedCompa
 
 // Deletes the comparisons under `base` last saved (their newest file's time)
 // from `from` up to, not including, `to` (none: no bound on that side), each
-// as delete_saved_comparison does: every one of them, those whose reference
-// is gone too (the question before it said so). `removed` counts those
+// as delete_saved_comparison does: every one cache_summary counts, those
+// whose reference is gone and those whose context.json can't be read too
+// (the question before it said so). `removed` counts those
 // deleted; one that could not be deleted (a file in use) is not counted.
 ClearedResults delete_saved_between(const std::filesystem::path& base,
                                     std::optional<std::chrono::system_clock::time_point> from,

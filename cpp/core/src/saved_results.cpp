@@ -253,12 +253,17 @@ bool delete_saved_comparison(const std::filesystem::path& base, const SavedCompa
 ClearedResults delete_saved_between(const std::filesystem::path& base,
                                     std::optional<std::chrono::system_clock::time_point> from,
                                     std::optional<std::chrono::system_clock::time_point> to) {
+    // The comparisons Settings counted and said would go (cache_summary): every
+    // folder with a context.json, one this app can't read among them, which
+    // list_saved_comparisons leaves out.
     ClearedResults done;
-    for (const SavedComparison& comparison : list_saved_comparisons(base)) {
+    for (const CacheSummary::Comparison& comparison : cache_summary(base).saved) {
         if ((from && comparison.saved < *from) || (to && comparison.saved >= *to)) {
             continue;
         }
-        if (delete_saved_comparison(base, comparison)) {
+        SavedComparison folder;
+        folder.folder = comparison.folder;
+        if (delete_saved_comparison(base, folder)) {
             ++done.removed;
         }
     }

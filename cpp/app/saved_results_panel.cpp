@@ -323,6 +323,7 @@ void SavedResultsPanel::refresh() {
 void SavedResultsPanel::show_list(std::vector<SavedComparison> list) {
     list_ = std::move(list);
     details_read_ = {};  // its files may have changed since: read again
+    emit listed();
     ++listing_;
     stop_details_read();
     folder_label_->setText(ntr("{count} saved comparison in {directory}", "{count} saved comparisons in {directory}",
@@ -615,8 +616,8 @@ QString SavedResultsPanel::unusable_note(const std::filesystem::path& file) cons
     return score->outdated ? app::tr("out of date: scored again when compared") : QString();
 }
 
-std::optional<std::filesystem::path> SavedResultsPanel::used_file(const SavedComparison& saved,
-                                                                  const std::string& key) const {
+std::optional<std::filesystem::path> SavedResultsPanel::used_file(const SavedComparison& saved, const std::string& key,
+                                                                  ScoreReads* reads) const {
     if (const auto picked = picked_.find(saved.folder); picked != picked_.end()) {
         if (const auto file = picked->second.find(key);
             file != picked->second.end() && unusable_note(file->second).isEmpty()) {
@@ -642,7 +643,13 @@ std::optional<std::filesystem::path> SavedResultsPanel::used_file(const SavedCom
     for (SavedScoreChoice& choice : choices) {
         std::optional<SavedScore> read;
         const SavedScore* score = shown ? read_score(choice.file) : nullptr;
-        if (!shown) {
+        if (!shown && reads != nullptr) {
+            const auto [kept, first_read] = reads->try_emplace(choice.file);
+            if (first_read) {
+                kept->second = read_saved_score(choice.file);
+            }
+            score = kept->second ? &*kept->second : nullptr;
+        } else if (!shown) {
             read = read_saved_score(choice.file);
             score = read ? &*read : nullptr;
         }
@@ -942,12 +949,17 @@ std::vector<LoadedSavedResult> SavedResultsPanel::selected_results() const {
     std::vector<LoadedSavedResult> results;
     for (const SavedComparison* saved : selected()) {
         const auto picked = picked_.find(saved->folder);
-        // The scores the box has read, where it has: not read again.
-        const auto read = [this, saved](const std::filesystem::path& file) -> std::optional<SavedScore> {
+        // The scores the details or the choice among several have read, where
+        // they have: each file read once (on the window's thread, as before).
+        ScoreReads reads;
+        const auto read = [this, saved, &reads](const std::filesystem::path& file) -> std::optional<SavedScore> {
             if (details_read_.folder == saved->folder) {
                 if (const auto found = details_read_.scores.find(file); found != details_read_.scores.end()) {
                     return found->second;
                 }
+            }
+            if (const auto kept = reads.find(file); kept != reads.end()) {
+                return std::move(kept->second);  // read once (readable or not), and needed no more
             }
             return read_saved_score(file);
         };
@@ -956,7 +968,7 @@ std::vector<LoadedSavedResult> SavedResultsPanel::selected_results() const {
             picked != picked_.end() ? picked->second : std::map<std::string, std::filesystem::path>{};
         for (const std::string& key : saved->keys()) {
             if (!chosen.contains(key)) {
-                if (const std::optional<std::filesystem::path> used = used_file(*saved, key)) {
+                if (const std::optional<std::filesystem::path> used = used_file(*saved, key, &reads)) {
                     chosen[key] = *used;
                 }
             }

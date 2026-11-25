@@ -197,6 +197,8 @@ signals:
     void columns_changed();
     // The details panel's link: Settings > Saved Results to be shown.
     void scores_settings_requested();
+    // The list was read again: what was known of its comparisons may be gone.
+    void listed();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -235,8 +237,15 @@ private:
     Made made_of(const std::variant<FrameMetricResult, SequenceMetricResult>& score) const;
     // Why a score file is not used ("out of date..."), or empty where it is usable.
     QString unusable_note(const std::filesystem::path& file) const;
-    // The file of `key` `saved` uses: the one picked, else its newest usable.
-    std::optional<std::filesystem::path> used_file(const SavedComparison& saved, const std::string& key) const;
+    // The score files read for a comparison other than the one shown: a file
+    // read to choose among a metric's several scores is not read again to
+    // load it.
+    using ScoreReads = std::map<std::filesystem::path, std::optional<SavedScore>>;
+    // The file of `key` `saved` uses: the one picked, else the one Settings'
+    // rule picks (pick_saved_score). The files it reads to choose are kept in
+    // `reads` where given.
+    std::optional<std::filesystem::path> used_file(const SavedComparison& saved, const std::string& key,
+                                                   ScoreReads* reads = nullptr) const;
     // The details panel's rows for `saved`, a score file each.
     std::vector<SavedScoreRow> detail_rows(const SavedComparison& saved) const;
     // A card's height, the same for every card.

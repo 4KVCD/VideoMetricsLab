@@ -771,16 +771,17 @@ TEST(MetricCache, ClearingKeepsTheComparisonsWhoseReferenceIsGone) {
     EXPECT_FALSE(std::filesystem::exists(bitrate_store_folder(cache)));
 }
 
-// Settings > Saved Results' "older than": the comparisons last saved before
-// the day given are deleted, those whose reference is gone kept (their
-// scores could not be calculated again), newer ones left.
+// Settings > Saved Results' date range: the comparisons last saved in it are
+// deleted, those whose reference is gone too, and one whose context.json
+// this app can't read, as Settings counted it (#246's review: counted, then
+// left); newer ones left.
 TEST(MetricCache, ComparisonsSavedInARangeAreDeletedThoseWithoutTheirReferenceToo) {
     const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
     const test::Folder folder;
     const AnalysisRequest request = request_from(stored);
     const std::filesystem::path cache = folder / "cache";
     std::map<std::string, std::filesystem::path> saved;
-    for (const char* name : {"old", "old_gone", "new"}) {
+    for (const char* name : {"old", "old_gone", "old_unreadable", "new"}) {
         const std::filesystem::path reference = folder / (std::string(name) + ".mp4");
         touch(reference, name);
         touch(folder / "t.mp4", "t");
@@ -790,7 +791,8 @@ TEST(MetricCache, ComparisonsSavedInARangeAreDeletedThoseWithoutTheirReferenceTo
         saved[name] = store_result(cache, reference, folder / "t.mp4", request.recipe, result, name, request.metrics);
     }
     std::filesystem::remove(folder / "old_gone.mp4");
-    for (const char* name : {"old", "old_gone"}) {  // saved 40 days ago
+    touch(saved["old_unreadable"] / "context.json", "{");
+    for (const char* name : {"old", "old_gone", "old_unreadable"}) {  // saved 40 days ago
         for (const auto& entry : std::filesystem::directory_iterator(saved[name])) {
             std::filesystem::last_write_time(entry.path(),
                                              std::filesystem::last_write_time(entry.path()) - std::chrono::days(40));
@@ -798,16 +800,17 @@ TEST(MetricCache, ComparisonsSavedInARangeAreDeletedThoseWithoutTheirReferenceTo
     }
     // The count Settings shows has each comparison's time and size.
     const CacheSummary summary = cache_summary(cache);
-    ASSERT_EQ(summary.saved.size(), 3U);
+    ASSERT_EQ(summary.saved.size(), 4U);
     EXPECT_EQ(summary.saved.front().folder, saved["new"]);  // newest first
     EXPECT_LT(summary.saved.back().saved, std::chrono::system_clock::now() - std::chrono::days(39));
     EXPECT_GT(summary.saved.back().bytes, 0U);
-    // From 50 days ago to 30: the two old ones, whatever their reference.
+    // From 50 days ago to 30: the three old ones, whatever their reference or context.
     const auto now = std::chrono::system_clock::now();
     const ClearedResults done = delete_saved_between(cache, now - std::chrono::days(50), now - std::chrono::days(30));
-    EXPECT_EQ(done.removed, 2);
+    EXPECT_EQ(done.removed, 3);
     EXPECT_FALSE(std::filesystem::exists(saved["old"]));
     EXPECT_FALSE(std::filesystem::exists(saved["old_gone"]));
+    EXPECT_FALSE(std::filesystem::exists(saved["old_unreadable"]));
     EXPECT_TRUE(std::filesystem::exists(saved["new"] / "context.json"));
 }
 

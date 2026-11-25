@@ -846,9 +846,12 @@ void MainWindow::build_ui() {
     // The Videos tab's own check of a saved score, with the settings as a new
     // row has them (metric_cache.h's run_takes): the file its request reads,
     // VMAF's model included, answering it, made where its metric is
-    // calculated now. Each comparison's videos read once.
+    // calculated now. Each comparison's videos read once, until the list is
+    // read again (its comparisons deleted, or saved anew).
+    const auto infos = std::make_shared<std::map<std::filesystem::path, std::pair<VideoInfo, VideoInfo>>>();
+    connect(saved_results_panel_, &SavedResultsPanel::listed, this, [infos] { infos->clear(); });
     saved_results_panel_->videos_would_use =
-        [this, infos = std::make_shared<std::map<std::filesystem::path, std::pair<VideoInfo, VideoInfo>>>()](
+        [this, infos](
             const SavedComparison& saved, const std::string& key, const SavedScoreChoice& saved_score) {
             auto found = infos->find(saved.folder);
             if (found == infos->end()) {
