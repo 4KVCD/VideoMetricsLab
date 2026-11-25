@@ -2,7 +2,9 @@
 
 #include <QContextMenuEvent>
 #include <QEvent>
+#include <QIconEngine>
 #include <QImage>
+#include <QPointer>
 #include <QMenu>
 #include <QPainter>
 #include <QPainterPath>
@@ -143,6 +145,71 @@ ExportOutcome save_quick(const QString& folder, const std::vector<QuickFile>& fi
     }
     return outcome;
 }
+
+// ------------------------------------------------------------ the Export button's icon
+
+namespace {
+
+class ExportIconEngine : public QIconEngine {
+public:
+    explicit ExportIconEngine(QWidget* button) : button_(button) {}
+
+    void paint(QPainter* painter, const QRect& rect, QIcon::Mode mode, QIcon::State) override {
+        const QPalette colors = button_ != nullptr ? button_->palette() : QPalette();
+        const QColor ink =
+            colors.color(mode == QIcon::Disabled ? QPalette::Disabled : QPalette::Active, QPalette::ButtonText);
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing);
+        QPen pen(ink, std::max<qreal>(1.3, rect.height() / 11.0));
+        pen.setCapStyle(Qt::RoundCap);
+        pen.setJoinStyle(Qt::RoundJoin);
+        painter->setPen(pen);
+        painter->setBrush(Qt::NoBrush);
+        // A square at the left of `rect`: the rest is room before the text.
+        const QRectF box = QRectF(rect.left(), rect.top(), rect.height(), rect.height()).adjusted(1.5, 1.0, -1.5, -1.5);
+        // The tray: open at the top, its sides a third of the height.
+        const qreal tray = box.top() + box.height() * 0.62;
+        QPainterPath outline;
+        outline.moveTo(box.left(), tray);
+        outline.lineTo(box.left(), box.bottom());
+        outline.lineTo(box.right(), box.bottom());
+        outline.lineTo(box.right(), tray);
+        painter->drawPath(outline);
+        // The arrow, rising out of it.
+        const qreal middle = box.center().x();
+        const qreal head = box.width() * 0.3;
+        painter->drawLine(QPointF(middle, box.top()), QPointF(middle, box.top() + box.height() * 0.76));
+        QPainterPath arrow;
+        arrow.moveTo(middle - head, box.top() + head);
+        arrow.lineTo(middle, box.top());
+        arrow.lineTo(middle + head, box.top() + head);
+        painter->drawPath(arrow);
+        painter->restore();
+    }
+
+    QPixmap pixmap(const QSize& size, QIcon::Mode mode, QIcon::State state) override {
+        return scaledPixmap(size, mode, state, 1.0);
+    }
+
+    QPixmap scaledPixmap(const QSize& size, QIcon::Mode mode, QIcon::State state, qreal scale) override {
+        // Drawn at the screen's own pixels, sharp at any scaling.
+        QPixmap drawn(size * scale);
+        drawn.setDevicePixelRatio(scale);
+        drawn.fill(Qt::transparent);
+        QPainter painter(&drawn);
+        paint(&painter, QRect(QPoint(0, 0), size), mode, state);
+        return drawn;
+    }
+
+    QIconEngine* clone() const override { return new ExportIconEngine(button_); }
+
+private:
+    QPointer<QWidget> button_;
+};
+
+}  // namespace
+
+QIcon export_icon(QWidget* button) { return QIcon(new ExportIconEngine(button)); }
 
 // ------------------------------------------------------------ the save icon
 

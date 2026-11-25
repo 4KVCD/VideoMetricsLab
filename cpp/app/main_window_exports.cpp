@@ -151,6 +151,8 @@ void MainWindow::build_tab_corner() {
     layout->addWidget(export_indicator_);
     tab_export_button_ = new QPushButton(app::tr("Export"));
     tab_export_button_->setObjectName("tabExportButton");
+    tab_export_button_->setIcon(export_icon(tab_export_button_));
+    tab_export_button_->setIconSize(QSize(20, 16));  // the glyph, 16 square, then room before the word
     tab_export_button_->setToolTip(app::tr("Export everything for these videos: results, per-frame scores, graphs, "
                                            "worst frames and weak segments, as Settings > Storage > Exports include "
                                            "says."));

@@ -4,6 +4,7 @@
 // says how it went on the indicator (export_indicator.h).
 #pragma once
 
+#include <QIcon>
 #include <QString>
 #include <QStringList>
 #include <QPixmap>
@@ -107,6 +108,14 @@ std::vector<QString> quick_save_paths(const QString& folder, const std::vector<Q
 // Writes `files` in `folder` at their quick_save_paths, in order, stopping at
 // the first that fails: the files written, or why not.
 ExportOutcome save_quick(const QString& folder, const std::vector<QuickFile>& files);
+
+// The tab bar's Export button's icon (issue #224's mockup): an arrow rising
+// out of a tray, drawn in `button`'s text color (grayed when it is
+// disabled) each time it is painted, as SaveButton draws its disk: it
+// follows every theme in both interfaces, with no icon file to keep. The
+// glyph is square, at the left of the icon's size: any more is room before
+// the button's text.
+QIcon export_icon(QWidget* button);
 
 // A card's save icon, in its top-right corner: one click saves what the card
 // shows (`save`); a right-click offers Save as... (`save_as` fills the menu).
