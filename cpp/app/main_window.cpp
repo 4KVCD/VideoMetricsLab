@@ -7,7 +7,6 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
-#include <QDesktopServices>
 #include <QEvent>
 #include <QFileInfo>
 #include <QGroupBox>
@@ -15,10 +14,6 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
-#include <QNetworkAccessManager>
-#include <QNetworkProxyFactory>
-#include <QNetworkReply>
-#include <QNetworkRequest>
 #include <QPushButton>
 #include <QScreen>
 #include <QSplitter>
@@ -37,6 +32,7 @@
 
 #include "bd_rate_panel.h"
 #include "bitrate_panel.h"
+#include "export_queue.h"
 #include "cvvdp_display_dialog.h"
 #include "ffmpeg_download_dialog.h"
 #include "file_writes.h"
@@ -55,6 +51,7 @@
 #include "video_names.h"
 #include "click_twice.h"
 #include "title_bar.h"
+#include "update_offer.h"
 #include "vml/app_log.h"
 #include "vml/append.h"
 #include "vml/ffmpeg_tools.h"
@@ -244,6 +241,8 @@ MainWindow::MainWindow() {
     // the status line, not in a dialog: a dialog taking the focus minutes
     // later would be worse than the failure it announces.
     file_writes_ = new FileWrites(this);
+    update_offer_ = new UpdateOffer({this, settings_, [this] { save_settings(); }, [this] { return title_buttons_; },
+                                     [this] { return cache_folder(); }});
     stream_records_ = std::make_shared<StreamRecords>();
     // What the records read, on the status line: queued to the window's
     // thread (the records' own calls it from theirs).
@@ -427,9 +426,9 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         bitrate_panel_->cancel();
         // An export waiting for the bitrate the Bitrate tab was reading is
         // written now, without the bitrate not read, rather than lost: the
-        // user was told it would be written (queue_bundle), and the writes
-        // are waited for below.
-        write_ready_bundles(true);
+        // user was told it would be written (ExportQueue::queue), and the
+        // writes are waited for below.
+        export_queue_->write_ready(true);
         stream_records_->set_reporting({}, {});  // nothing more for the window
         stream_records_->stop();                 // a test stream being read is recorded at its next save
         cancel_stream_check();
@@ -751,6 +750,22 @@ void MainWindow::build_ui() {
     bitrate_panel_->dialogs = standard_dialogs(bitrate_panel_, export_dir);
     // Its readings are saved with the saved scores, and found there again.
     bitrate_panel_->store_folder = [this] { return cache_folder(); };
+    // The graphs' colours as Settings' Exported graphs say at each write.
+    export_queue_ = new ExportQueue({
+        .parent = this,
+        .bitrate = *bitrate_panel_,
+        .style =
+            [this] {
+                return BundleStyle{video_colors_,
+                                   theme::export_chart_colours(settings_.export_graph_theme,
+                                                               settings_.export_graph_background,
+                                                               settings_.export_graph_text)};
+            },
+        .submit = [this](const QString& description, std::function<QStringList()> write,
+                         bool quiet) { submit_export(description, std::move(write), quiet); },
+        .show_saving = [this](const QString& why) { export_indicator_->show_saving(why); },
+        .show_status = [this](const QString& text) { show_status(text); },
+    });
     // Settings' Exported graphs, read at each export as the folder is.
     const auto export_colours = [this] {
         return theme::export_chart_colours(settings_.export_graph_theme, settings_.export_graph_background,
@@ -917,11 +932,7 @@ void MainWindow::make_title_buttons() {
         show_theme_in_title();
     });
     connect(title_buttons_, &TitleButtons::theme_menu_opening, this, [this] { show_theme_in_title(); });
-    connect(title_buttons_, &TitleButtons::update_clicked, this, [this] {
-        if (pending_update_) {
-            show_update(*pending_update_);
-        }
-    });
+    connect(title_buttons_, &TitleButtons::update_clicked, this, [this] { update_offer_->show_pending(); });
 }
 
 bool MainWindow::nativeEvent(const QByteArray& type, void* message, qintptr* result) {
@@ -1305,7 +1316,7 @@ QWidget* MainWindow::build_run_panel() {
         theme::style(line, "color: {run_line};");
         line->setVisible(false);
         layout->addWidget(line);
-        job_progress_labels_.push_back(line);
+        job_lines_.add_label(line);
     }
     layout->addStretch(1);
     return panel;
@@ -1359,109 +1370,7 @@ void MainWindow::fit_to_style() {
     bd_rate_panel_->fit_to_style();
 }
 
-void MainWindow::check_for_updates() {
-    if (!settings_.check_for_updates) {
-        return;
-    }
-    // Through the system's proxy, if it names one, as the Python app's
-    // urllib asks.
-    QNetworkProxyFactory::setUseSystemConfiguration(true);
-    auto* network = new QNetworkAccessManager(this);
-    QNetworkRequest request(QUrl(QString::fromUtf8(releases_url.data(), static_cast<qsizetype>(releases_url.size()))));
-    request.setRawHeader("Accept", "application/vnd.github+json");
-    // GitHub refuses requests without a User-Agent.
-    request.setHeader(QNetworkRequest::UserAgentHeader, "VideoMetricsLab/" VML_VERSION);
-    request.setTransferTimeout(update_check_timeout_seconds * 1000);
-    QNetworkReply* reply = network->get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, network] {
-        const QString error = reply->error() == QNetworkReply::NoError ? QString() : reply->errorString();
-        const QByteArray body = reply->readAll();
-        reply->deleteLater();
-        network->deleteLater();
-        on_update_answer(body.toStdString(), error);
-    });
-}
-
-void MainWindow::on_update_answer(const std::string& body, const QString& error) {
-    std::optional<Release> release;
-    try {
-        if (!error.isEmpty()) {
-            throw UpdateCheckError(error.toStdString());
-        }
-        release = release_from_answer(body);
-    } catch (const UpdateCheckError& failure) {
-        logger.info(std::string("Update check: GitHub could not be asked (") + failure.what() + ")");
-        return;
-    }
-    if (!is_newer(release->version, VML_VERSION)) {
-        logger.info("Update check: VideoMetricsLab " VML_VERSION " is the latest release");
-        return;
-    }
-    if (!offers_package_here(*release)) {
-        logger.info("Update check: VideoMetricsLab " + release->version +
-                    " is available, but not yet for this system (this is " VML_VERSION ")");
-        return;
-    }
-    logger.info("Update check: VideoMetricsLab " + release->version + " is available (this is " VML_VERSION ")");
-    offer_update(*release);
-}
-
-void MainWindow::offer_update(const Release& release) {
-    // Nothing is shown for a release the user chose to skip.
-    if (release.version == settings_.skipped_update_version) {
-        return;
-    }
-    if (title_buttons_ != nullptr) {
-        // VML Modern: a badge in the title bar, not a dialog taking the focus
-        // at the start; a click on it shows the dialog.
-        pending_update_ = release;
-        title_buttons_->set_update(QString::fromStdString(release.version));
-        return;
-    }
-    show_update(release);
-}
-
-void MainWindow::show_update(const Release& release) {
-    if (update_box_ != nullptr) {
-        update_box_->raise();
-        return;
-    }
-    Message message;
-    message.title = app::tr("Update available");
-    message.headline = app::tr("{app} {version} is available. You have {current}.",
-                               {{"app", "VideoMetricsLab"},
-                                {"version", QString::fromStdString(release.version)},
-                                {"current", VML_VERSION}});
-    message.text = app::tr("Updating does not affect your saved results or settings: they are stored "
-                           "separately from the app, in {cache_dir} and {user_data_dir}.",
-                           {{"cache_dir", text_of(cache_folder())},
-                            {"user_data_dir", text_of(Settings::file().parent_path())}});
-    if (!python_strip(release.notes).empty()) {
-        message.details = QString::fromStdString(release.notes);
-    }
-    constexpr int download = 0;
-    constexpr int skip = 1;
-    message.buttons = {{app::tr("Download"), MessageButton::Role::primary},
-                       {app::tr("Skip this version"), MessageButton::Role::plain},
-                       {app::tr("Later"), MessageButton::Role::plain}};
-    // Not waited for: the window goes on while it is open.
-    AppDialog* box = message_dialog(this, message, [this, release](MessageAnswer answer) {
-        if (answer.button == download) {
-            // This system's package itself, where the release names it (the
-            // Python app opened the page).
-            QDesktopServices::openUrl(QUrl(QString::fromStdString(release.download_url.value_or(release.page_url))));
-        } else if (answer.button == skip) {
-            settings_.skipped_update_version = release.version;
-            save_settings();
-            pending_update_.reset();
-            if (title_buttons_ != nullptr) {
-                title_buttons_->set_update({});
-            }
-        }
-    });
-    update_box_ = box;
-    box->open();
-}
+void MainWindow::check_for_updates() { update_offer_->check(); }
 
 bool MainWindow::cvvdp_default_automatic() const {
     return !cvvdp_preset_named(settings_.cvvdp_default_preset, settings_.cvvdp_presets_json);

@@ -1,25 +1,26 @@
 // The window's graph exports (graph_bundle.h): Export > Graphs as ZIP, a
 // scored video's results with or without its graphs from its right-click
 // menu, and Settings' export of each video's results and graphs after its
-// run; and the weak segments report, of every video or after each run. The bitrate graphs need the files' bitrate, which the Bitrate tab reads
-// after each run: an export made before it is read waits for it, and says so.
+// run; and the weak segments report, of every video or after each run. The
+// bitrate graphs need the files' bitrate, which the Bitrate tab reads after
+// each run: an export made before it is read waits for it, and says so
+// (export_queue.h).
 #include "main_window.h"
 
 #include <QHBoxLayout>
 #include <QMenu>
 #include <QPushButton>
-#include <QTimer>
 
 #include <algorithm>
 #include <exception>
 #include <fstream>
-#include <iterator>
 #include <set>
 #include <stdexcept>
 #include <utility>
 
 #include "bitrate_panel.h"
 #include "export_indicator.h"
+#include "export_queue.h"
 #include "file_writes.h"
 #include "frame_compare_panel.h"
 #include "graph_panel.h"
@@ -28,7 +29,6 @@
 #include "bd_rate_panel.h"
 #include "quick_save.h"
 #include "i18n.h"
-#include "theme.h"
 #include "vml/app_log.h"
 #include "vml/bitrate_store.h"
 #include "vml/export_csv.h"
@@ -39,6 +39,7 @@
 #include "vml/segment_profiles.h"
 #include "vml/weak_frames.h"
 #include "vml/zip_archive.h"
+#include "widgets.h"
 #include "window_helpers.h"
 
 namespace vml::app {
@@ -46,9 +47,6 @@ namespace vml::app {
 namespace {
 
 const app_log::Logger logger("vml.graph_export");
-
-// How often a waiting export looks whether its bitrate is read.
-constexpr int bundle_poll_ms = 500;
 
 // Writes `bytes` to `out` whole, or throws.
 void write_bytes(const std::filesystem::path& out, const std::string& bytes) {
@@ -60,63 +58,9 @@ void write_bytes(const std::filesystem::path& out, const std::string& bytes) {
     }
 }
 
-// Says where an export was written where its name was taken.
-void log_numbered(const std::filesystem::path& wanted, const std::filesystem::path& written) {
-    if (written != wanted) {
-        logger.info(platform::path_text(wanted.filename()) + " is taken: exported as " +
-                    platform::path_text(written));
-    }
-}
-
-// `out`, or where it is taken, a free name beside it (unique_output_names):
-// for a .zip file the user did not name, of Settings' after-run export.
-std::filesystem::path free_path(const std::filesystem::path& out) {
-    std::set<std::filesystem::path> reserved;
-    const std::filesystem::path free =
-        unique_output_names(out.parent_path(), {platform::path_text(out.filename())}, reserved).front();
-    log_numbered(out, free);
-    return free;
-}
-
-// The paths as the indicator lists them.
-QStringList texts_of(const std::vector<std::filesystem::path>& paths) {
-    QStringList texts;
-    for (const std::filesystem::path& path : paths) {
-        texts.append(text_of(path));
-    }
-    return texts;
-}
-
-// write_loose_export, saying where its files were written if numbered: the
-// files written.
-QStringList write_loose(const std::filesystem::path& folder, const std::vector<BundleFile>& files) {
-    const std::vector<std::filesystem::path> written = write_loose_export(folder, files);
-    if (!written.empty()) {
-        log_numbered(folder / platform::path_from_text(files.front().first), written.front());
-    }
-    return texts_of(written);
-}
-
 // An export that cannot be made: said on the indicator, as one that failed,
 // not in a window.
 ExportOutcome refused(const QString& why) { return {{}, why, why}; }
-
-// Whether the Bitrate tab is still reading `path` (or is about to).
-bool still_reading(const BitratePanel& panel, const std::filesystem::path& path) {
-    const std::optional<BitrateState> state = panel.state_of(path);
-    return state == BitrateState::queued || state == BitrateState::reading || state == BitrateState::packets_read;
-}
-
-// The files whose bitrate an export draws as the Bitrate tab reads it
-// (bitrate_files), by path.
-std::vector<std::filesystem::path> bitrate_paths(const std::filesystem::path& reference,
-                                                const std::vector<BundleVideo>& videos, const SavedBitrates& saved) {
-    std::vector<std::filesystem::path> paths;
-    for (const VideoInfo& file : bitrate_files(reference, videos, saved)) {
-        paths.push_back(file.path);
-    }
-    return paths;
-}
 
 }  // namespace
 
@@ -610,7 +554,7 @@ void MainWindow::export_rows_as(SavedResultsPanel::Export kind) {
                                                 file_safe(name + QStringLiteral(" - graphs")) + ".zip",
                                                 app::tr("Zip archive (*.zip)"));
         if (!path.isEmpty()) {
-            queue_bundle({videos, source_info_->path, path_of(path), {}, true, false});
+            export_queue_->queue({videos, source_info_->path, path_of(path), {}, true, false});
         }
         return;
     }
@@ -726,8 +670,9 @@ void MainWindow::save_export(ExportPlan plan, const std::optional<std::filesyste
         // named after the video's file, which another video's may share).
         const bool numbered = folder.has_value();
         if (plan.graphs) {
-            queue_bundle({plan.videos, plan.reference, destination, std::move(plan.files), plan.several, automatic,
-                          false, numbered, std::move(plan.saved_bitrate), std::move(plan.frames), folders, shared});
+            export_queue_->queue({plan.videos, plan.reference, destination, std::move(plan.files), plan.several,
+                                  automatic, false, numbered, std::move(plan.saved_bitrate), std::move(plan.frames),
+                                  folders, shared});
             return;
         }
         const QString description = app::tr("export {name}", {{"name", name_of(destination)}});
@@ -764,8 +709,8 @@ void MainWindow::save_export(ExportPlan plan, const std::optional<std::filesyste
     // Written at once with the graphs, if any, so that where a name is taken
     // they are all numbered alike (write_loose_export).
     if (plan.graphs) {
-        queue_bundle({plan.videos, plan.reference, destination, std::move(plan.files), plan.several, automatic, true,
-                      false, std::move(plan.saved_bitrate), std::move(plan.frames), folders, shared});
+        export_queue_->queue({plan.videos, plan.reference, destination, std::move(plan.files), plan.several, automatic,
+                              true, false, std::move(plan.saved_bitrate), std::move(plan.frames), folders, shared});
     } else if (automatic) {
         submit_export(
             app::tr("export {name}", {{"name", plan.name}}),
@@ -925,7 +870,7 @@ void MainWindow::export_when_whole(const RowData& row_data) {
     // an earlier one): else its own end exports it, or nothing does.
     const auto owner_job = std::find(job_rows_.begin(), job_rows_.end(), owner);
     if (!owner || owner_job == job_rows_.end() ||
-        !finished_jobs_.contains(static_cast<int>(owner_job - job_rows_.begin())) || !owner->completed_run ||
+        !run_progress_.finished.contains(static_cast<int>(owner_job - job_rows_.begin())) || !owner->completed_run ||
         owner->completed_run->partial || owner->completed_run->record != run_record_) {
         return;
     }
@@ -935,7 +880,7 @@ void MainWindow::export_when_whole(const RowData& row_data) {
     for (std::size_t job = 0; job < job_rows_.size(); ++job) {
         const RowData& job_row = *job_rows_[job];
         if (job_row.cvvdp_display_of && *job_row.cvvdp_display_of == owner->path && row_index_of(&job_row) &&
-            !finished_jobs_.contains(static_cast<int>(job))) {
+            !run_progress_.finished.contains(static_cast<int>(job))) {
             whole = false;
         }
     }
@@ -944,99 +889,6 @@ void MainWindow::export_when_whole(const RowData& row_data) {
         export_automatically(*owner);
     } else {
         auto_export_waiting_.push_back(owner);
-    }
-}
-
-void MainWindow::queue_bundle(PendingBundle bundle) {
-    // What the Bitrate tab has not read, nor is reading, is read now: a
-    // video loaded with saved scores, say, or one encoded again under its
-    // name since the tab read it (add_files reads that again). A file it
-    // could not read is not tried again. They are read where they are now,
-    // the paths the export looks their bitrate up by, not where saved scores
-    // say they were.
-    const std::vector<VideoInfo> files = bitrate_files(bundle.reference, bundle.videos, bundle.saved_bitrate);
-    const bool unread = std::any_of(files.begin(), files.end(), [this](const VideoInfo& file) {
-        return bitrate_panel_->wants_reading(file.path);
-    });
-    if (unread) {
-        bitrate_panel_->add_and_analyze(files);
-    }
-    pending_bundles_.push_back(std::move(bundle));
-    write_ready_bundles();
-    if (!pending_bundles_.empty()) {
-        if (bundle_timer_ == nullptr) {
-            bundle_timer_ = new QTimer(this);
-            bundle_timer_->setInterval(bundle_poll_ms);
-            connect(bundle_timer_, &QTimer::timeout, this, [this] { write_ready_bundles(); });
-        }
-        bundle_timer_->start();
-        if (!pending_bundles_.back().automatic) {
-            export_indicator_->show_saving(
-                app::tr("The bitrate graphs are still being built; the graphs will be exported to {path} "
-                        "as soon as they're done.",
-                        {{"path", text_of(pending_bundles_.back().destination)}}));
-        }
-    }
-}
-
-void MainWindow::write_ready_bundles(bool now) {
-    const BundleStyle style{video_colors_,
-                            theme::export_chart_colours(settings_.export_graph_theme,
-                                                        settings_.export_graph_background,
-                                                        settings_.export_graph_text)};
-    for (auto bundle = pending_bundles_.begin(); bundle != pending_bundles_.end();) {
-        const std::vector<std::filesystem::path> paths =
-            bitrate_paths(bundle->reference, bundle->videos, bundle->saved_bitrate);
-        if (!now && std::any_of(paths.begin(), paths.end(), [this](const auto& path) {
-                return still_reading(*bitrate_panel_, path);
-            })) {
-            ++bundle;
-            continue;
-        }
-        const PendingBundle ready = std::move(*bundle);
-        bundle = pending_bundles_.erase(bundle);
-        std::vector<BundleFile> files = ready.extra;
-        std::vector<BundleFile> metric_graphs = metric_graph_files(ready.videos, style, ready.together);
-        files.insert(files.end(), std::make_move_iterator(metric_graphs.begin()),
-                     std::make_move_iterator(metric_graphs.end()));
-        std::vector<BundleVideo> with_files;
-        std::copy_if(ready.videos.begin(), ready.videos.end(), std::back_inserter(with_files),
-                     [](const BundleVideo& video) { return !video.result->resample_target; });
-        std::vector<QString> missing;
-        std::vector<BundleFile> bitrate_graphs =
-            bitrate_graph_files(*bitrate_panel_, ready.reference, with_files, style, missing, ready.saved_bitrate);
-        files.insert(files.end(), std::make_move_iterator(bitrate_graphs.begin()),
-                     std::make_move_iterator(bitrate_graphs.end()));
-        const QString destination = text_of(ready.destination);
-        // An archive of several videos: each one's files in a folder of its
-        // own (save_export's folders). One the user asked for says how it
-        // went on the indicator; the after-run one only where it fails.
-        std::function<QStringList()> write;
-        if (ready.loose) {
-            write = [files = std::move(files), frames = ready.frames, out = ready.destination, folders = ready.folders,
-                     shared = ready.shared] {
-                return write_loose(out, in_video_folders(made_files(files, frames), folders, shared));
-            };
-        } else {
-            write = [files = std::move(files), frames = ready.frames, out = ready.destination,
-                     numbered = ready.numbered, folders = ready.folders, shared = ready.shared] {
-                const std::filesystem::path written = numbered ? free_path(out) : out;
-                write_zip(written, in_video_folders(made_files(files, frames), folders, shared));
-                return QStringList{text_of(written)};
-            };
-        }
-        const QString description = app::tr("export {name}", {{"name", name_of(ready.destination)}});
-        submit_export(description, std::move(write), ready.automatic);
-        logger.info("Graphs exported to " + platform::path_text(ready.destination) +
-                    (missing.empty() ? std::string() : " without the bitrate of " + QStringList(missing.begin(), missing.end()).join(", ").toStdString()));
-        if (!missing.empty()) {  // the files are said on the indicator; what they lack, here
-            show_status(app::tr("Graphs exported to {path}, without a bitrate graph for {names}: their bitrate "
-                                "couldn't be read.",
-                                {{"path", destination}, {"names", QStringList(missing.begin(), missing.end()).join(", ")}}));
-        }
-    }
-    if (pending_bundles_.empty() && bundle_timer_ != nullptr) {
-        bundle_timer_->stop();
     }
 }
 
@@ -1100,7 +952,7 @@ void MainWindow::export_saved_results(SavedResultsPanel::Export kind, const std:
             return;
         }
         SavedBitrates saved = saved_bitrates(videos, results);
-        queue_bundle({videos, first_reference, path_of(path), {}, true, false, false, false, std::move(saved)});
+        export_queue_->queue({videos, first_reference, path_of(path), {}, true, false, false, false, std::move(saved)});
         return;
     }
     case SavedResultsPanel::Export::segments: {

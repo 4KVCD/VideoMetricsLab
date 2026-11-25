@@ -23,6 +23,7 @@ add_library(vml_app STATIC
     export_indicator.cpp
     export_panel.cpp
     ffmpeg_download_dialog.cpp
+    export_queue.cpp
     file_writes.cpp
     formatting.cpp
     frame_compare_inspect.cpp
@@ -32,6 +33,7 @@ add_library(vml_app STATIC
     graph_panel.cpp
     i18n.cpp
     key_guide.cpp
+    job_lines.cpp
     main_window.cpp
     main_window_compare.cpp
     main_window_exports.cpp
@@ -67,6 +69,7 @@ add_library(vml_app STATIC
     stream_records.cpp
     theme.cpp
     title_bar.cpp
+    update_offer.cpp
     video_compare_view.cpp
     video_names.cpp
     widgets.cpp

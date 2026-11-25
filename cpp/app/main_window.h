@@ -41,6 +41,7 @@
 #include "export_indicator.h"
 #include "export_panel.h"
 #include "graph_bundle.h"
+#include "job_lines.h"
 #include "probe_worker.h"
 #include "quick_save.h"
 #include "results_export.h"
@@ -57,7 +58,6 @@
 #include "vml/run_line.h"
 #include "vml/run_record.h"
 #include "vml/settings.h"
-#include "vml/update_check.h"
 #include "vml/video.h"
 #include "vml/weak_frames.h"
 
@@ -84,6 +84,7 @@ class FileWrites;
 class StreamRecords;
 class BdRatePanel;
 class BitratePanel;
+class ExportQueue;
 class FrameComparePanel;
 struct FrameComparisonEntry;
 class FillColumnTable;
@@ -94,6 +95,7 @@ class OptionsPanel;
 class QuietTabWidget;
 class RunWorker;
 class SettingsPanel;
+class UpdateOffer;
 class TitleBar;
 class TitleButtons;
 class VideoColors;
@@ -359,14 +361,6 @@ private:
     // Keeps the black bars found in the saved scores' folder now named.
     void use_crop_store();
 
-    // ------------------------------------------------------- the update check
-    // GitHub's answer (`body`), or why it could not be asked (`error`).
-    void on_update_answer(const std::string& body, const QString& error);
-    // Offers a newer release, unless the user chose to skip it.
-    void offer_update(const Release& release);
-    // The update offered: the dialog, from the title bar's badge or, without
-    // one, at once.
-    void show_update(const Release& release);
     // The title buttons (title_bar.h), made with the window: in VML Modern
     // in the app's title bar where the window has one, else at the tab bar's
     // right end; in VML Classic the progress button alone, at the tab bar's
@@ -645,34 +639,6 @@ private:
     // on file_writes_ (written_by), the indicator saying "Saving..." until
     // they are.
     QuickSaves window_quick_saves();
-    // Graphs to save as one .zip file (graph_bundle.h) once the bitrate they
-    // need is read: of `videos`, compared with `reference`, with `extra`
-    // files (a video's results); `together`: the videos' graphs together as
-    // well; `automatic`: Settings' export after a run, which says less.
-    struct PendingBundle {
-        std::vector<BundleVideo> videos;
-        std::filesystem::path reference;
-        std::filesystem::path destination;
-        std::vector<BundleFile> extra;
-        bool together = true;
-        bool automatic = false;
-        // Each file written into `destination`, a folder, rather than a .zip,
-        // replacing none there (write_loose_export).
-        bool loose = false;
-        // The .zip replaces no file at `destination`: it takes a free name
-        // beside it (Settings' after-run export, named after the video).
-        bool numbered = false;
-        // Saved comparisons' files drawn as their bitrate was saved
-        // (saved_bitrates).
-        SavedBitrates saved_bitrate{};
-        // Per-frame scores, made with the files (made_files).
-        std::vector<FrameFiles> frames{};
-        // With several videos, the folders their own files go in, and the
-        // stems of the files of all of them (in_video_folders); none: as
-        // they are.
-        std::vector<QString> folders{};
-        std::vector<std::string> shared{};
-    };
     // The scored test videos of the reference the Videos tab compares with,
     // in its order; a row's, when it is one of them.
     std::vector<BundleVideo> scored_videos() const;
@@ -744,7 +710,7 @@ private:
         bool graphs = false;
         bool several = false;
         QString name;
-        SavedBitrates saved_bitrate{};  // PendingBundle's
+        SavedBitrates saved_bitrate{};  // PendingBundle's (export_queue.h)
     };
     ExportPlan export_plan(std::vector<BundleVideo> videos, const std::filesystem::path& reference,
                            const std::function<nlohmann::ordered_json()>& document, const SegmentRules& rules,
@@ -785,11 +751,6 @@ private:
     void export_when_whole(const RowData& row_data);
     // The document Export results makes with `row_data`'s video alone.
     std::optional<nlohmann::ordered_json> row_document(const RowData& row_data) const;
-    // Saves `bundle` when its bitrate is read, starting to read what is not.
-    void queue_bundle(PendingBundle bundle);
-    // Writes the exports whose bitrate is read; with `now`, every one,
-    // without the bitrate of a file not read (the window closing).
-    void write_ready_bundles(bool now = false);
 
     // ------------------------------------------------------------ the scores
     std::vector<std::string> reusable_metric_keys(const RowData& row_data) const;
@@ -851,8 +812,6 @@ private:
     void on_pause_clicked();
     void on_job_started(int index);
     void redraw_job_lines();
-    void set_job_line(int index, const QString& text, const QString& tooltip = QString());
-    void arrange_job_lines();
     void mark_job_over(int index);
     QString job_label(int index) const;
     void update_run_status();
@@ -997,8 +956,6 @@ private:
     std::vector<std::shared_ptr<RowData>> auto_export_waiting_;
     std::vector<VmafOptions> job_options_;
     std::vector<CvvdpSettings> job_cvvdp_;
-    std::vector<int> running_jobs_;  // in the order they started
-    std::set<int> finished_jobs_;
     int run_failed_count_ = 0;
     Notifier* notifier_ = nullptr;  // made at the first run-end notification
     int run_partial_count_ = 0;  // videos with some metrics failed, the rest scored
@@ -1014,22 +971,29 @@ private:
     std::vector<std::shared_ptr<const RunFacts>> job_facts_;
     RunHold run_hold_ = RunHold::none;
     QString run_hold_message_;
-    // Each video's line: the latest state of its tasks, the line's text and
-    // tooltip, which of the lines shows it, what it shows apart from its
-    // figures, and whether its figures are due on the next tick.
-    std::map<int, std::vector<TaskSnapshot>> job_task_progress_;
-    std::map<int, std::pair<QString, QString>> job_line_text_;
-    std::map<int, QStringList> job_line_parts_;  // its metric groups' parts, for the progress button's tooltip
-    std::map<int, int> job_line_slot_;
-    std::map<int, LineShape> job_line_shape_;
-    std::set<int> job_lines_due_;
-    // Each video's GPU fallbacks (a GPU route that failed, and where its
-    // metrics went instead), as the engine says them (fallback_note): on its
-    // row once it is over, and counted in the run's end message.
-    std::map<int, std::vector<std::string>> job_fallbacks_;
-    // Each running task's recent progress on the run's clock, by job, task
-    // and pass: (seconds, frames done).
-    std::map<std::tuple<int, std::string, long long>, std::deque<std::pair<double, long long>>> rate_samples_;
+    // The run's bookkeeping of its videos, by job index; emptied as a run
+    // starts (reset).
+    struct RunProgress {
+        std::vector<int> running;  // in the order they started
+        std::set<int> finished;
+        // Each video's line: the latest state of its tasks, what it shows
+        // apart from its figures, and whether its figures are due on the next
+        // tick.
+        std::map<int, std::vector<TaskSnapshot>> tasks;
+        std::map<int, QStringList> line_parts;  // its metric groups' parts, for the progress button's tooltip
+        std::map<int, LineShape> line_shape;
+        std::set<int> lines_due;
+        // Each video's GPU fallbacks (a GPU route that failed, and where its
+        // metrics went instead), as the engine says them (fallback_note): on
+        // its row once it is over, and counted in the run's end message.
+        std::map<int, std::vector<std::string>> fallbacks;
+        // Each running task's recent progress on the run's clock, by job,
+        // task and pass: (seconds, frames done).
+        std::map<std::tuple<int, std::string, long long>, std::deque<std::pair<double, long long>>> rate_samples;
+
+        void reset() { *this = RunProgress(); }
+    };
+    RunProgress run_progress_;
     QTimer* run_tick_timer_ = nullptr;
     // apply_best_worst once the window is next idle: one pass over the table
     // for every change that lands in one go (a run's results, the saved
@@ -1073,13 +1037,12 @@ private:
     FrameComparePanel* frame_compare_panel_ = nullptr;
     BitratePanel* bitrate_panel_ = nullptr;
     BdRatePanel* bd_rate_panel_ = nullptr;
-    // The newer release offered, while its message is open.
-    QPointer<AppDialog> update_box_;
+    // The update check, and the newer release it offers (update_offer.h).
+    UpdateOffer* update_offer_ = nullptr;
     TitleBar* title_bar_ = nullptr;          // Windows, VML Modern: the window's own title bar
     TitleButtons* title_buttons_ = nullptr;  // the progress, theme and update buttons (Classic: progress)
     RunBadge run_badge_;                     // what the progress button shows
     bool ticks_check_due_ = false;           // check_ticks_soon's, until it runs
-    std::optional<Release> pending_update_;  // offered on the badge, shown when it is clicked
     // The GPU checks a run is waiting for (wait_for_gpu_checks), while it is,
     // and what the status line said before it waited for something.
     QFutureWatcher<void>* gpu_check_watcher_ = nullptr;
@@ -1096,10 +1059,6 @@ private:
     std::vector<std::shared_ptr<RowData>> checked_rows_for_run_;
     // The test videos' card's save icon (issue #224).
     SaveButton* videos_save_ = nullptr;
-    // Graph exports waiting for their bitrate (queue_bundle), and the timer
-    // that looks whether it is read.
-    std::vector<PendingBundle> pending_bundles_;
-    QTimer* bundle_timer_ = nullptr;
     // The tab bar's right end (build_tab_corner), and the indicator there
     // that says how each export went.
     QWidget* tab_corner_ = nullptr;
@@ -1107,8 +1066,10 @@ private:
     // The Export button there, and its panel.
     QPushButton* tab_export_button_ = nullptr;
     ExportPanel* export_panel_ = nullptr;
+    // Graph exports waiting for their bitrate (export_queue.h).
+    ExportQueue* export_queue_ = nullptr;
     QLabel* status_label_ = nullptr;
-    std::vector<ElidedLabel*> job_progress_labels_;
+    JobLines job_lines_;  // one line per running video, under the Run button
 };
 
 }  // namespace vml::app

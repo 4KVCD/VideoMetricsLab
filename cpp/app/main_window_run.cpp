@@ -396,20 +396,8 @@ void MainWindow::begin_run(const std::vector<int>& checked, std::vector<std::sha
         job_options_.push_back(row_data->options);
         job_cvvdp_.push_back(row_data->cvvdp);
     }
-    job_task_progress_.clear();
-    rate_samples_.clear();
-    running_jobs_.clear();
-    finished_jobs_.clear();
-    job_line_slot_.clear();
-    job_line_text_.clear();
-    job_line_parts_.clear();
-    job_line_shape_.clear();
-    job_lines_due_.clear();
-    job_fallbacks_.clear();
-    for (ElidedLabel* line : job_progress_labels_) {
-        line->setVisible(false);
-        line->clear_text();
-    }
+    run_progress_.reset();
+    job_lines_.clear();
     run_failed_count_ = 0;
     run_partial_count_ = 0;
     run_was_cancelled_ = false;
@@ -757,74 +745,30 @@ void MainWindow::on_job_started(int index) {
     if (const std::optional<int> row = row_index_of(job_rows_[static_cast<std::size_t>(index)].get())) {
         set_row_status(*row, RowState::calculating);
     }
-    if (std::find(running_jobs_.begin(), running_jobs_.end(), index) == running_jobs_.end()) {
-        running_jobs_.push_back(index);
+    if (std::find(run_progress_.running.begin(), run_progress_.running.end(), index) == run_progress_.running.end()) {
+        run_progress_.running.push_back(index);
     }
-    if (!job_line_text_.contains(index)) {
-        job_line_text_[index] = {app::tr("{label} — starting…", {{"label", job_label(index)}}), QString()};
-        arrange_job_lines();
-    }
+    job_lines_.open(index, app::tr("{label} — starting…", {{"label", job_label(index)}}));
     update_run_status();
 }
 
 void MainWindow::redraw_job_lines() {
     // Every video's line with figures, now: on Pause and Resume.
-    for (const auto& [index, line] : job_line_text_) {
-        if (job_task_progress_.contains(index)) {
+    for (const int index : job_lines_.indices()) {
+        if (run_progress_.tasks.contains(index)) {
             render_job_progress(index);
-        }
-    }
-}
-
-void MainWindow::set_job_line(int index, const QString& text, const QString& tooltip) {
-    // What a video's line says, kept so that the lines can be laid out again.
-    const auto line = job_line_text_.find(index);
-    if (line == job_line_text_.end()) {
-        return;
-    }
-    line->second = {text, tooltip};
-    if (const auto slot = job_line_slot_.find(index); slot != job_line_slot_.end()) {
-        job_progress_labels_[static_cast<std::size_t>(slot->second)]->set_text(text, tooltip);
-    }
-}
-
-void MainWindow::arrange_job_lines() {
-    // The videos in progress, one line each, in list order. Don't give a
-    // video the first free line: a later video can then sit above an earlier
-    // one, the lines change places as videos finish, and a reused line keeps
-    // the previous video's tooltip.
-    std::vector<int> order;
-    for (const auto& [index, line] : job_line_text_) {  // in index order
-        if (order.size() == job_progress_labels_.size()) {
-            break;
-        }
-        order.push_back(index);
-    }
-    job_line_slot_.clear();
-    for (std::size_t slot = 0; slot < job_progress_labels_.size(); ++slot) {
-        ElidedLabel* label = job_progress_labels_[slot];
-        if (slot < order.size()) {
-            job_line_slot_[order[slot]] = static_cast<int>(slot);
-            const auto& [text, tooltip] = job_line_text_.at(order[slot]);
-            label->setVisible(true);
-            label->set_text(text, tooltip);
-        } else {
-            label->setVisible(false);
-            label->clear_text();
         }
     }
 }
 
 void MainWindow::mark_job_over(int index) {
     // Takes a video out of the live figures and frees its line.
-    finished_jobs_.insert(index);
-    job_task_progress_.erase(index);
-    job_lines_due_.erase(index);
-    job_line_shape_.erase(index);
-    job_line_parts_.erase(index);
-    if (job_line_text_.erase(index) > 0) {
-        arrange_job_lines();
-    }
+    run_progress_.finished.insert(index);
+    run_progress_.tasks.erase(index);
+    run_progress_.lines_due.erase(index);
+    run_progress_.line_shape.erase(index);
+    run_progress_.line_parts.erase(index);
+    job_lines_.close(index);
     update_run_status();
 }
 
@@ -847,8 +791,9 @@ void MainWindow::update_run_status() {
         show_status(run_hold_message_);
         return;
     }
-    const int running = static_cast<int>(std::count_if(running_jobs_.begin(), running_jobs_.end(),
-                                                       [this](int index) { return !finished_jobs_.contains(index); }));
+    const int running =
+        static_cast<int>(std::count_if(run_progress_.running.begin(), run_progress_.running.end(),
+                                       [this](int index) { return !run_progress_.finished.contains(index); }));
     if (run_hold_ != RunHold::paused && running == 0 && !(run_active_ && !job_rows_.empty())) {
         return;
     }
@@ -857,8 +802,9 @@ void MainWindow::update_run_status() {
 }
 
 QString MainWindow::queue_line() const {
-    const int running = static_cast<int>(std::count_if(running_jobs_.begin(), running_jobs_.end(),
-                                                       [this](int index) { return !finished_jobs_.contains(index); }));
+    const int running =
+        static_cast<int>(std::count_if(run_progress_.running.begin(), run_progress_.running.end(),
+                                       [this](int index) { return !run_progress_.finished.contains(index); }));
     const std::optional<double> elapsed = run_elapsed();
     const QString elapsed_text =
         elapsed ? "   ·   " + app::tr("Elapsed: {time}", {{"time", format_hms(*elapsed)}}) : QString();
@@ -872,14 +818,14 @@ RunCounts MainWindow::run_counts() const {
     // a rough measure, shown as a thin bar, as the status line explains.
     RunCounts counts;
     counts.total = static_cast<int>(job_rows_.size());
-    counts.finished = static_cast<int>(finished_jobs_.size());
+    counts.finished = static_cast<int>(run_progress_.finished.size());
     counts.failed = run_failed_count_ + run_partial_count_;
     if (counts.total == 0) {
         return counts;
     }
-    double counted = static_cast<double>(finished_jobs_.size());
-    for (const auto& [index, tasks] : job_task_progress_) {
-        if (finished_jobs_.contains(index) || tasks.empty()) {
+    double counted = static_cast<double>(run_progress_.finished.size());
+    for (const auto& [index, tasks] : run_progress_.tasks) {
+        if (run_progress_.finished.contains(index) || tasks.empty()) {
             continue;
         }
         double sum = 0.0;
@@ -924,12 +870,13 @@ QString tooltip_video(const QString& name, const QStringList& lines, bool wrap =
 
 QString MainWindow::running_tooltip() const {
     QString html = tooltip_lines({queue_line()});
-    for (const int index : running_jobs_) {  // in the order they started
-        if (finished_jobs_.contains(index)) {
+    for (const int index : run_progress_.running) {  // in the order they started
+        if (run_progress_.finished.contains(index)) {
             continue;
         }
-        const auto parts = job_line_parts_.find(index);
-        html += tooltip_video(job_label(index), parts != job_line_parts_.end() ? parts->second : QStringList());
+        const auto parts = run_progress_.line_parts.find(index);
+        html +=
+            tooltip_video(job_label(index), parts != run_progress_.line_parts.end() ? parts->second : QStringList());
     }
     return html;
 }
@@ -1082,7 +1029,7 @@ QString MainWindow::run_summary(int running, int total) const {
     // waits for the GPU is in progress. Videos skipped because they were
     // already scored are counted too, because the message saying so at the
     // start is replaced within a second.
-    const int done = static_cast<int>(finished_jobs_.size());
+    const int done = static_cast<int>(run_progress_.finished.size());
     const int queued = std::max(0, total - done - running);
     // Failures as they happen: otherwise a video that failed would leave the
     // lines below and count as done until the run's end message said so.
@@ -1128,7 +1075,7 @@ void MainWindow::pause_free_rates(int index, std::vector<TaskSnapshot>& tasks) {
         if (task.state != "running") {
             continue;
         }
-        auto& samples = rate_samples_[{index, task.backend, task.phase ? (*task.phase)[0] : 0}];
+        auto& samples = run_progress_.rate_samples[{index, task.backend, task.phase ? (*task.phase)[0] : 0}];
         if (!samples.empty() && task.current < samples.back().second) {
             samples.clear();  // counting again from the start: a retry
         }
@@ -1146,20 +1093,20 @@ void MainWindow::pause_free_rates(int index, std::vector<TaskSnapshot>& tasks) {
 void MainWindow::on_task_progress(int index, std::vector<TaskSnapshot> tasks) {
     // Kept; the line is drawn again at once only when what it says apart
     // from its figures changes, and its figures on the next tick.
-    if (finished_jobs_.contains(index)) {
+    if (run_progress_.finished.contains(index)) {
         return;  // the video is over; its line is gone
     }
     note_fallbacks(index, tasks);
     pause_free_rates(index, tasks);
     LineShape shape = line_shape(tasks);
-    job_task_progress_[index] = std::move(tasks);
-    const auto known = job_line_shape_.find(index);
-    if (known == job_line_shape_.end() || known->second != shape) {
-        job_line_shape_[index] = std::move(shape);
+    run_progress_.tasks[index] = std::move(tasks);
+    const auto known = run_progress_.line_shape.find(index);
+    if (known == run_progress_.line_shape.end() || known->second != shape) {
+        run_progress_.line_shape[index] = std::move(shape);
         render_job_progress(index);
-        job_lines_due_.erase(index);
+        run_progress_.lines_due.erase(index);
     } else {
-        job_lines_due_.insert(index);
+        run_progress_.lines_due.insert(index);
     }
 }
 
@@ -1173,7 +1120,7 @@ void MainWindow::note_fallbacks(int index, const std::vector<TaskSnapshot>& task
             continue;
         }
         std::string note = fallback_note(task.step.text);
-        std::vector<std::string>& notes = job_fallbacks_[index];
+        std::vector<std::string>& notes = run_progress_.fallbacks[index];
         if (std::find(notes.begin(), notes.end(), note) == notes.end()) {
             notes.push_back(std::move(note));
         }
@@ -1182,8 +1129,8 @@ void MainWindow::note_fallbacks(int index, const std::vector<TaskSnapshot>& task
 
 QString MainWindow::with_fallbacks(int index, const QString& detail) const {
     // A finished video's row detail, with its GPU fallbacks after it.
-    const auto notes = job_fallbacks_.find(index);
-    if (notes == job_fallbacks_.end()) {
+    const auto notes = run_progress_.fallbacks.find(index);
+    if (notes == run_progress_.fallbacks.end()) {
         return detail;
     }
     QStringList lines{app::tr("GPU fallbacks:")};
@@ -1197,18 +1144,19 @@ int MainWindow::fallback_count() const {
     // The videos with a GPU fallback and every score, whose rows show it, for
     // the run's end message: one that failed, wholly or partly, is counted as
     // that, and its row names the fallback too.
-    return static_cast<int>(std::count_if(job_fallbacks_.begin(), job_fallbacks_.end(), [this](const auto& notes) {
-        const RowData* row_data = job_rows_[static_cast<std::size_t>(notes.first)].get();
-        const std::optional<RowState> state = row_data->analysis_status;
-        return row_index_of(row_data) && state != RowState::failed && state != RowState::partly_failed &&
-               !(state && finished_not_shown(*state));
-    }));
+    return static_cast<int>(
+        std::count_if(run_progress_.fallbacks.begin(), run_progress_.fallbacks.end(), [this](const auto& notes) {
+            const RowData* row_data = job_rows_[static_cast<std::size_t>(notes.first)].get();
+            const std::optional<RowState> state = row_data->analysis_status;
+            return row_index_of(row_data) && state != RowState::failed && state != RowState::partly_failed &&
+                   !(state && finished_not_shown(*state));
+        }));
 }
 
 void MainWindow::on_run_tick() {
     // Once a second during a run: the lines with new figures, then the
     // status line (the time it has taken).
-    for (const int index : std::exchange(job_lines_due_, {})) {
+    for (const int index : std::exchange(run_progress_.lines_due, {})) {
         render_job_progress(index);
     }
     update_run_status();
@@ -1216,8 +1164,8 @@ void MainWindow::on_run_tick() {
 
 void MainWindow::render_job_progress(int index) {
     // Draws a video's line from its tasks' latest state.
-    const auto tasks = job_task_progress_.find(index);
-    if (!job_line_text_.contains(index) || tasks == job_task_progress_.end() || tasks->second.empty()) {
+    const auto tasks = run_progress_.tasks.find(index);
+    if (!job_lines_.has(index) || tasks == run_progress_.tasks.end() || tasks->second.empty()) {
         return;
     }
     const MetricLine line = metric_line(tasks->second, run_hold_ == RunHold::paused, window_wording());
@@ -1225,13 +1173,13 @@ void MainWindow::render_job_progress(int index) {
     for (const std::string& part : line.parts) {
         parts.append(qt_text(part));
     }
-    job_line_parts_[index] = parts;  // the progress button's tooltip: its metric groups, one a line
+    run_progress_.line_parts[index] = parts;  // the progress button's tooltip: its metric groups, one a line
     if (!line.plans.empty()) {
         // A resolution test decodes only its source.
         const bool source_only = job_rows_[static_cast<std::size_t>(index)]->options.resample_test.has_value();
         parts.append(qt_text(decoder_text(line.plans, source_only, window_wording())));
     }
-    set_job_line(index, job_label(index) + " — " + parts.join("   ·   "), qt_text(line.tooltip));
+    job_lines_.set(index, job_label(index) + " — " + parts.join("   ·   "), qt_text(line.tooltip));
 }
 
 std::optional<int> MainWindow::row_index_of(const RowData* row_data) const {
@@ -1250,7 +1198,7 @@ void MainWindow::on_result_updated(int index, const ComparisonResult& result) {
     // finished while the rest runs on. Were it kept only once the whole video
     // was done, a Butteraugli score would wait hours for the video's VMAF,
     // and closing the app or a crash in between would lose it.
-    if (finished_jobs_.contains(index)) {
+    if (run_progress_.finished.contains(index)) {
         return;  // the video's own result has arrived: it is the one to show
     }
     on_job_finished(index, result, false);
@@ -1503,9 +1451,7 @@ void MainWindow::on_all_finished() {
     set_run_ui_active(false);
     pause_button_->setChecked(false);
     pause_button_->setText(app::tr("Pause"));
-    for (ElidedLabel* line : job_progress_labels_) {
-        line->setVisible(false);
-    }
+    job_lines_.hide_all();
     show_status(run_end_message());
     {
         const InEnglish english;  // the log is always in English
