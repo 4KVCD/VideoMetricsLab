@@ -1379,7 +1379,7 @@
   "HDR VMAF model:": "HDR VMAF-model:",
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "Model voor de kolom HDR VMAF (de HDR VMAF-modellen die Netflix meelevert). Automatisch kiest het 1080p-model op drie keer de schermhoogte, of het 4K-model op anderhalf keer voor 4K-vergelijkingen, net als VMAF v0.6.1. Alleen voor PQ-video's (HDR10).",
   "Y, U and V of the YUV metrics": "Y, U en V van de YUV-metrieken",
-  "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "Een kolom voor elk van de vlakken Y, U en V naast PSNR YUV, SSIM YUV, MS-SSIM YUV en PSNR-HVS-M, zonder extra kosten met hen berekend. Eerder gescoorde video's moeten opnieuw worden berekend om ze te vullen.",
+  "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV, PSNR-HVS-M and VMAF YUV, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "Een kolom voor elk van de vlakken Y, U en V naast PSNR YUV, SSIM YUV, MS-SSIM YUV, PSNR-HVS-M en VMAF YUV, zonder extra kosten met hen berekend. Eerder gescoorde video's moeten opnieuw worden berekend om ze te vullen.",
   "Calculated with {metric}.": "Berekend met {metric}.",
   "Done": "Klaar",
   "Ready": "Gereed",

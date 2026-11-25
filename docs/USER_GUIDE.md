@@ -579,8 +579,8 @@ and CIEDE2000 read the chroma, so turning one on makes the decoders hand over
 whole pictures, as the 6:1:1 metrics do.
 
 **Y, U and V of the YUV metrics**, in Add/remove metrics' Specialized section, adds
-a column for each plane (Y, U, V) beside PSNR YUV, SSIM YUV, MS-SSIM YUV and
-PSNR-HVS-M, for the ones shown. The planes are calculated in their metric's
+a column for each plane (Y, U, V) beside PSNR YUV, SSIM YUV, MS-SSIM YUV,
+PSNR-HVS-M and VMAF YUV, for the ones shown. The planes are calculated in their metric's
 pass at no extra cost, whenever that metric is ticked; they have no tick box
 of their own. Videos scored before the switch was turned on show empty plane
 columns until they are calculated again. The planes are saved, exported and

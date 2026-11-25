@@ -67,8 +67,8 @@ const std::array<MetricDefinition, 34> registry{{
     // needs 11 samples for SSIM's window, so twice that for 4:2:0.
     {"psnr_yuv", "PSNR YUV (6:1:1)", "PSNR YUV", "PSNR YUV (dB)", "PSNR YUV (dB)", 2, " dB", frame,
      higher_is_better, arithmetic, std::nullopt, psnr_thresholds, bool_option("compute_psnr_yuv"), {}, 0},
-    // The planes of PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, each
-    // after its metric (shown with Add/remove metrics' "Y, U and V of the
+    // The planes of PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M (VMAF
+    // YUV's are further down, after it), each after its metric (shown with Add/remove metrics' "Y, U and V of the
     // YUV metrics"), scored in that metric's pass. No thresholds: a chroma
     // plane's PSNR runs far higher than the luma's.
     {"psnr_yuv_y", "PSNR YUV: Y", "PSNR Y", "Y", "PSNR Y (dB)", 2, " dB", frame, higher_is_better, arithmetic,

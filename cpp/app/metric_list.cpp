@@ -217,10 +217,11 @@ QWidget* MetricList::build_section(MetricSection section) {
         specialized_body_ = body;
         if (place_ == Place::panel) {
             // The planes of the YUV metrics: shown with their metric, so
-            // under the four that have them, with no tick of their own.
+            // under the five that have them, with no tick of their own.
             planes_box_ = new QCheckBox(app::tr("Y, U and V of the YUV metrics"));
             planes_box_->setToolTip(app::tr(
-                "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M, "
+                "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV, PSNR-HVS-M and "
+                "VMAF YUV, "
                 "calculated with them at no extra cost. Videos scored before need Calculate again to fill them."));
             connect(planes_box_, &QCheckBox::clicked, this, [this](bool shown) { emit planes_toggled(shown); });
             grid->addWidget(planes_box_, row, 0, 1, 2, Qt::AlignBottom);

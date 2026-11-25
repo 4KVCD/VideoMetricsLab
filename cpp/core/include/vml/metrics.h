@@ -66,7 +66,7 @@ struct MetricDefinition {
     // less; its library and Vship give a perfect score there).
     int smallest_side;
     // One plane of a metric of the three planes (PSNR YUV, SSIM YUV, MS-SSIM
-    // YUV, PSNR-HVS-M): that metric's key; empty for every other metric. A
+    // YUV, PSNR-HVS-M, VMAF YUV): that metric's key; empty for every other metric. A
     // plane is scored in its metric's pass, and is shown, saved and exported
     // as a metric of its own.
     std::string_view plane_of = {};
