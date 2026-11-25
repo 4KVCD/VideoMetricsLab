@@ -39,7 +39,7 @@ bool has(const std::vector<std::string>& keys, const std::string& key) {
 
 }  // namespace
 
-ExportPanel::ExportPanel(Settings& settings, QWidget* parent) : QFrame(parent, Qt::Popup), settings_(settings) {
+ExportPanel::ExportPanel(Settings& settings, QWidget* parent) : PopupPanel(parent), settings_(settings) {
     setObjectName("exportPanel");
     theme::set_role(this, "card");
     setFrameShape(QFrame::StyledPanel);
@@ -225,6 +225,7 @@ void ExportPanel::refresh() {
 }
 
 void ExportPanel::open_under(QWidget* anchor) {
+    set_anchor(anchor);
     refresh();
     adjustSize();
     QPoint at = anchor->mapToGlobal(QPoint(anchor->width() - width(), anchor->height() + 2));

@@ -6,7 +6,6 @@
 // and a link to the open tab's own one-click save, for the one-off.
 #pragma once
 
-#include <QFrame>
 #include <QString>
 
 #include <functional>
@@ -14,6 +13,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "popup_panel.h"
 
 class QCheckBox;
 class QComboBox;
@@ -29,7 +30,7 @@ namespace vml::app {
 
 class SaveButton;
 
-class ExportPanel : public QFrame {
+class ExportPanel : public PopupPanel {
     Q_OBJECT
 
 public:
@@ -68,6 +69,7 @@ public:
 
     // Shows the panel under `anchor`, its right edge at the anchor's, with
     // what it offers made again from the settings and the window as they are.
+    // A second click on `anchor` closes it (PopupPanel::set_anchor).
     void open_under(QWidget* anchor);
     // The same without showing it (the tests).
     void refresh();

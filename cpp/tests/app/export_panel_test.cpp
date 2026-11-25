@@ -3,15 +3,18 @@
 // before every video, and it says why it cannot export before the click.
 #include "export_panel.h"
 
+#include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QTest>
 
 #include <gtest/gtest.h>
 
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "vml/settings.h"
@@ -71,6 +74,34 @@ TEST(ExportPanel, ItsTicksAreSettingsExportsInclude) {
     EXPECT_FALSE(panel.export_button()->isEnabled());
     EXPECT_EQ(panel.export_button()->toolTip().toStdString(),
               "Export: nothing is ticked in Settings > Storage > Exports include");
+}
+
+// A second click on Export closes the panel, as Add/remove metrics' does
+// (PopupPanel): the press that closes it is not replayed to the button,
+// which would open it again at once. A press anywhere else (a tab) closes it
+// and is replayed, so the tab is switched to.
+TEST(ExportPanel, ASecondClickOnExportClosesThePanel) {
+    QWidget window;
+    window.resize(600, 300);
+    auto* button = new QPushButton("Export", &window);
+    button->setGeometry(480, 10, 100, 30);
+    auto* other = new QPushButton("Videos", &window);
+    other->setGeometry(20, 10, 100, 30);
+    window.show();
+    QApplication::processEvents();
+    Settings settings;
+    ExportPanel panel(settings, &window);
+    panel.videos = [] { return ExportPanel::Videos{{}, {}, "All scored videos (1)", {}}; };
+    // The panel's answer to a press on `target`: whether it closed, and
+    // whether the press may be replayed.
+    const auto press_on = [&](QWidget* target) {
+        panel.open_under(button);
+        QApplication::processEvents();
+        QTest::mousePress(&panel, Qt::LeftButton, {}, panel.mapFromGlobal(target->mapToGlobal(target->rect().center())));
+        return std::pair(!panel.isVisible(), !panel.testAttribute(Qt::WA_NoMouseReplay));
+    };
+    EXPECT_EQ(press_on(button), std::pair(true, false));
+    EXPECT_EQ(press_on(other), std::pair(true, true));
 }
 
 }  // namespace
