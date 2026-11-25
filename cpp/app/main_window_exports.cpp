@@ -122,9 +122,9 @@ std::vector<std::filesystem::path> bitrate_paths(const std::filesystem::path& re
 
 void MainWindow::build_tab_corner() {
     // The tab bar's right end, the same place in both interfaces: the
-    // indicator, then the Export button (the archive's panel). The title
-    // buttons join them there where the window has no title bar of its own
-    // (VML Classic's progress button; make_title_buttons).
+    // indicator, then the Export button (the archive's panel), last. The
+    // title buttons join them there, before them, where the window has no
+    // title bar of its own (VML Classic's progress button; make_title_buttons).
     if (tab_corner_ != nullptr) {
         return;
     }

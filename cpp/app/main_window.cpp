@@ -896,9 +896,10 @@ void MainWindow::make_title_buttons() {
     if (title_buttons_ == nullptr) {
         // No bar of the app's own (VML Classic, another system, high
         // contrast, or Modern chosen since the start): at the tab bar's
-        // right end, after what is there (build_tab_corner).
+        // right end, before the export indicator and Export, so that Export
+        // is last as it is under Modern's bar (build_tab_corner).
         title_buttons_ = new TitleButtons;
-        tab_corner_->layout()->addWidget(title_buttons_);
+        static_cast<QBoxLayout*>(tab_corner_->layout())->insertWidget(0, title_buttons_);
         tab_corner_->layout()->setAlignment(title_buttons_, Qt::AlignBottom);  // as the corner alone: on the tab pane
         title_buttons_->show();
     }

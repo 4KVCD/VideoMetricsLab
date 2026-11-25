@@ -235,8 +235,9 @@ icon opens the window menu). Three small buttons sit in it:
 
 On macOS and Linux, and on Windows in high-contrast mode or when VML Modern
 was chosen since the app started, the title bar stays the system's and the
-three buttons sit at the right end of the tab bar. VML Classic has the
-**Progress** button alone, at the right end of the tab bar.
+three buttons sit at the right end of the tab bar, just before **Export**. VML
+Classic has the **Progress** button alone, there too: **Export** is always the
+last button of the tab bar.
 
 While metrics are calculated, Settings stays open, but the ffmpeg folder, the
 saved results' folder and **Clear saved results** are locked until the run
