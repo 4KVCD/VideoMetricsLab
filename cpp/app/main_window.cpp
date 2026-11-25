@@ -1026,12 +1026,10 @@ QHBoxLayout* MainWindow::build_table_heading() {
         app::tr("Choose which metrics appear in the test-video table. A hidden metric is not calculated; scores "
                 "already saved for it come back when it is shown again. Also available by right-clicking the column "
                 "headers."));
-    connect(metrics_button_, &QPushButton::clicked, this,
-            [this] {
-                show_metrics_panel(metrics_button_->mapToGlobal(metrics_button_->rect().bottomLeft()),
-                                   metrics_button_->mapToGlobal(metrics_button_->rect().bottomRight()),
-                                   metrics_button_);
-            });
+    PopupPanel::open_on_press(metrics_button_, [this] {
+        show_metrics_panel(metrics_button_->mapToGlobal(metrics_button_->rect().bottomLeft()),
+                           metrics_button_->mapToGlobal(metrics_button_->rect().bottomRight()), metrics_button_);
+    });
     auto* table_heading = new QHBoxLayout;
     auto* title = new QLabel(app::tr("Test videos"));  // VML Modern's: the card's title
     theme::set_role(title, "title");

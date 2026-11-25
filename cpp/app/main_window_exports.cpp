@@ -156,7 +156,7 @@ void MainWindow::build_tab_corner() {
     tab_export_button_->setToolTip(app::tr("Export everything for these videos: results, per-frame scores, graphs, "
                                            "worst frames and weak segments, as Settings > Storage > Exports include "
                                            "says."));
-    connect(tab_export_button_, &QPushButton::clicked, this, [this] {
+    PopupPanel::open_on_press(tab_export_button_, [this] {
         build_export_panel();
         export_panel_->open_under(tab_export_button_);
     });

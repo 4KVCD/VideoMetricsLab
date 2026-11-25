@@ -6,6 +6,9 @@
 #include <QFrame>
 #include <QPointer>
 
+#include <functional>
+
+class QAbstractButton;
 class QKeyEvent;
 class QMouseEvent;
 
@@ -22,6 +25,14 @@ public:
     // open it again at once. A press anywhere else outside the panel closes
     // it and still reaches what it lands on (a tab clicked is switched to).
     void set_anchor(QWidget* anchor) { anchor_ = anchor; }
+
+    // Opens a panel (`open`) on `button`'s press, as Qt opens a button's
+    // menu, not on its click: a click's release comes a whole press later
+    // (80-150 ms as people click), which reads as lag. The button is drawn
+    // up again at once, as the popup takes the release. `pressed` alone, for
+    // a click() (UI Automation's Invoke) and Space emit it too: each opens
+    // the panel once.
+    static void open_on_press(QAbstractButton* button, std::function<void()> open);
 
 protected:
     void keyPressEvent(QKeyEvent* event) override;

@@ -201,6 +201,48 @@ protected:
 
 MainWindow* MetricsPanelInWindow::window_ = nullptr;
 
+// Add/remove metrics and Export open their panels on the press, as a
+// button's menu opens, not a whole press later on the release; the button
+// is drawn up again. A click() (UI Automation's Invoke) or Space opens one
+// panel.
+TEST_F(MetricsPanelInWindow, APressOpensThePanelAtOnce) {
+    QPushButton* metrics = nullptr;
+    for (QPushButton* button : window_->findChildren<QPushButton*>()) {
+        metrics = button->text() == "Add/remove metrics" ? button : metrics;
+    }
+    auto* exports = window_->findChild<QPushButton*>("tabExportButton");
+    ASSERT_NE(metrics, nullptr);
+    ASSERT_NE(exports, nullptr);
+    const auto open_panels = [] {
+        int open = 0;
+        for (const PopupPanel* panel : window_->findChildren<PopupPanel*>()) {
+            open += panel->isVisible() ? 1 : 0;
+        }
+        return open;
+    };
+    for (QPushButton* button : {metrics, exports}) {
+        QTest::mousePress(button, Qt::LeftButton, {}, button->rect().center());  // no release
+        EXPECT_EQ(open_panels(), 1) << button->text().toStdString();
+        EXPECT_FALSE(button->isDown());
+        for (PopupPanel* panel : window_->findChildren<PopupPanel*>()) {
+            panel->close();
+        }
+        QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        button->click();
+        EXPECT_EQ(open_panels(), 1) << button->text().toStdString();
+        for (PopupPanel* panel : window_->findChildren<PopupPanel*>()) {
+            panel->close();
+        }
+        QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QTest::keyClick(button, Qt::Key_Space);  // the keyboard's press and release
+        EXPECT_EQ(open_panels(), 1) << button->text().toStdString();
+        for (PopupPanel* panel : window_->findChildren<PopupPanel*>()) {
+            panel->close();
+        }
+        QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    }
+}
+
 TEST_F(MetricsPanelInWindow, ShowingAMetricLeavesWhatRowsCalculate) {
     auto* table = window_->findChild<FillColumnTable*>();
     auto* header = window_->findChild<CheckableHeaderView*>();

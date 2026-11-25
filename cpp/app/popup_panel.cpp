@@ -1,11 +1,19 @@
 #include "popup_panel.h"
 
+#include <QAbstractButton>
 #include <QKeyEvent>
 #include <QMouseEvent>
 
 namespace vml::app {
 
 PopupPanel::PopupPanel(QWidget* parent) : QFrame(parent, Qt::Popup) {}
+
+void PopupPanel::open_on_press(QAbstractButton* button, std::function<void()> open) {
+    QObject::connect(button, &QAbstractButton::pressed, button, [button, open = std::move(open)] {
+        button->setDown(false);
+        open();
+    });
+}
 
 void PopupPanel::mousePressEvent(QMouseEvent* event) {
     // A popup receives every press while it is open. One outside it closes
