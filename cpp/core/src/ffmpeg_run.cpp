@@ -326,8 +326,9 @@ const char* const xpsnr_refusal =
 // FFmpeg's filters: the 6:1:1 metrics (PSNR YUV, SSIM YUV: FFmpeg's filters
 // have no SSIM of the chroma planes), and MS-SSIM, MS-SSIM YUV, PSNR-HVS-M,
 // CAMBI and CIEDE2000; and the planes of those that have them.
-constexpr std::array<std::string_view, 7> app_scored_metrics{"psnr_yuv", "ssim_yuv", "ms_ssim", "ms_ssim_yuv",
-                                                             "psnr_hvs", "cambi", "ciede2000"};
+constexpr std::array<std::string_view, 8> app_scored_metrics{"psnr_yuv", "psnr_yuv_mse", "ssim_yuv",
+                                                             "ms_ssim",  "ms_ssim_yuv",  "psnr_hvs",
+                                                             "cambi",    "ciede2000"};
 
 bool app_scored(std::string_view key) {
     const std::string_view metric = scored_by(key);
@@ -355,7 +356,8 @@ std::map<std::string, std::string> app_only_metrics(const VmafOptions& options, 
     for (const MetricDefinition& metric : metrics()) {
         const std::string_view key = metric.key;
         if (app_scored(key) && options.metric_enabled(key)) {
-            const bool yuv = scored_by(key) == "psnr_yuv" || scored_by(key) == "ssim_yuv";
+            const bool yuv = scored_by(key) == "psnr_yuv" || scored_by(key) == "psnr_yuv_mse" ||
+                             scored_by(key) == "ssim_yuv";
             refused[std::string(key)] =
                 std::string(metric_definition(key).label) +
                 " is calculated by the app alone, which cannot calculate it for this comparison (" +

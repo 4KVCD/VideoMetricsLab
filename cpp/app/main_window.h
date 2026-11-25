@@ -117,6 +117,7 @@ enum Column : int {
     col_vmaf_v1,
     col_vmaf_hdr,
     col_psnr_yuv,
+    col_psnr_yuv_mse,
     col_ssim_yuv,
     col_ms_ssim,
     col_ms_ssim_yuv,

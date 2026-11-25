@@ -33,6 +33,8 @@
   "PSNR weighted by how visible errors are": "PSNR с весом по заметности ошибок",
   "PSNR weighted by the eye, as Xiph reports it": "PSNR с весами по зрению, как у Xiph",
   "PSNR with color, as JVET weighs it": "PSNR с цветом, с весами как у JVET",
+  "PSNR with color, as MSU reports it": "PSNR с цветом, как у MSU",
+  "PSNR of the three planes' squared errors weighted (6 x Y + Cb + Cr) / 8 and averaged over the frames before turning into dB, as MSU's codec comparisons report YUV-PSNR (avg. MSE). A little below PSNR YUV, more so where a few frames or one plane are much worse. In dB, higher is better.": "PSNR квадратов ошибок трёх плоскостей с весами (6 × Y + Cb + Cr) / 8, усреднённых по кадрам до перевода в dB, как сравнения кодеков MSU приводят YUV-PSNR (avg. MSE). Немного ниже PSNR YUV, тем больше, чем сильнее хуже несколько кадров или одна плоскость. В dB, чем выше, тем лучше.",
   "Peak signal-to-noise ratio of the luma (Y) plane: the pixels' mean squared error, in dB. Higher is better.": "Пиковое отношение сигнал/шум яркостной плоскости (Y): среднеквадратичная ошибка пикселей, в dB. Чем выше, тем лучше.",
   "SSIM at five scales, as MSU reports it": "SSIM на пяти масштабах, как у MSU",
   "SSIM of the luma (Y) plane at five scales (Wang et al. 2003), as MSU's codec comparisons report it. Up to 1, higher is better.": "SSIM яркостной плоскости (Y) на пяти масштабах (Wang et al. 2003), как его приводят сравнения кодеков MSU. До 1, чем выше, тем лучше.",

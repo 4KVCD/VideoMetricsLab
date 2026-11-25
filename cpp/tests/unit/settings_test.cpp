@@ -243,12 +243,12 @@ TEST(Settings, MetricsAddedSinceTheSaveAreHiddenAtFirst) {
     };
     using Keys = std::vector<std::string>;
     Settings settings = load(R"({"hidden_metrics": ["xpsnr"], "default_compute_cambi": false})");
-    EXPECT_EQ(settings.hidden_metrics, (Keys{"xpsnr", "psnr_yuv", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs",
-                                             "cambi", "ciede2000"}));
+    EXPECT_EQ(settings.hidden_metrics, (Keys{"xpsnr", "psnr_yuv", "psnr_yuv_mse", "ssim_yuv", "ms_ssim", "ms_ssim_yuv",
+                                             "psnr_hvs", "cambi", "ciede2000"}));
     EXPECT_TRUE(settings.default_compute_cambi);
     settings = load(R"({"hidden_metrics": [], "listed_metrics": ["vmaf", "cambi"], "default_compute_cambi": false})");
     EXPECT_EQ(settings.hidden_metrics,
-              (Keys{"psnr_yuv", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "ciede2000"}));
+              (Keys{"psnr_yuv", "psnr_yuv_mse", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "ciede2000"}));
     EXPECT_FALSE(settings.default_compute_cambi);
     // Saved, every metric is listed: shown ones stay shown when read again.
     settings.hidden_metrics.clear();
@@ -261,7 +261,8 @@ TEST(Settings, MetricsAddedSinceTheSaveAreHiddenAtFirst) {
 // ticked but hidden, so showing one is enough to calculate it, and HDR VMAF
 // shown but unticked (General purpose: ticked, every SDR video would fail
 // it); settings saved before PSNR YUV and SSIM YUV were ticked keep them as
-// saved: shown and unticked.
+// saved: shown and unticked, and hide PSNR YUV avg. MSE, which they did not
+// list yet.
 TEST(Settings, SpecializedMetricsStartTickedButHiddenInNewSettingsOnly) {
     using Keys = std::vector<std::string>;
     const Settings fresh;
@@ -281,7 +282,7 @@ TEST(Settings, SpecializedMetricsStartTickedButHiddenInNewSettingsOnly) {
     EXPECT_FALSE(saved.default_compute_psnr_yuv);
     EXPECT_FALSE(saved.default_compute_ssim_yuv);
     EXPECT_FALSE(saved.default_compute_vmaf_hdr);
-    EXPECT_EQ(saved.hidden_metrics, (Keys{"ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000"}));
+    EXPECT_EQ(saved.hidden_metrics, (Keys{"ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000", "psnr_yuv_mse"}));
 }
 
 // The settings read are saved as the Python app saves them, to the byte:

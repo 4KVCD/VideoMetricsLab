@@ -124,6 +124,8 @@ struct VmafOptions {
     // scored by the app's own libvmaf-fast only (its SSIM of the chroma is
     // not upstream libvmaf's, which FFmpeg's filter runs).
     bool compute_psnr_yuv = false;
+    // MSU's YUV-PSNR avg. MSE 6:1:1, from PSNR YUV's planes (metrics.cpp).
+    bool compute_psnr_yuv_mse = false;
     bool compute_ssim_yuv = false;
     // MS-SSIM, MS-SSIM YUV, PSNR-HVS-M, CAMBI and CIEDE2000: also scored by
     // the app's own libvmaf-fast only (libvmaf_cpu.h).

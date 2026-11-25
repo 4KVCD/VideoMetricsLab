@@ -35,11 +35,12 @@ constexpr std::string_view cambi_default_feature = "Cambi_feature_cambi_score";
 // A plane of a metric of the three planes (MetricDefinition::plane_of) is
 // the feature its metric's extractor gives for that plane, read in the same
 // pass (extractors_for starts the extractor for its metric).
-constexpr std::array<CpuFeature, 22> cpu_features{{
+constexpr std::array<CpuFeature, 23> cpu_features{{
     {"psnr", "psnr", "psnr_y", 6},
     {"ssim", "float_ssim", "float_ssim", 6},
     {"xpsnr", "xpsnr", "xpsnr_y", 4},
     {"psnr_yuv", "psnr", "psnr_y", 6, true, Value::planes_611, "psnr_cb", "psnr_cr"},
+    {"psnr_yuv_mse", "psnr", "psnr_y", 6, true, Value::planes_611_mse, "psnr_cb", "psnr_cr"},
     {"psnr_yuv_y", "psnr", "psnr_y", 6, true},
     {"psnr_yuv_u", "psnr", "psnr_cb", 6, true},
     {"psnr_yuv_v", "psnr", "psnr_cr", 6, true},
@@ -60,6 +61,16 @@ constexpr std::array<CpuFeature, 22> cpu_features{{
     {"psnr_hvs_v", "psnr_hvs", "psnr_hvs_cr", 6, true},
     {"ciede2000", "ciede", "ciede2000", 6, true, Value::delta_e},
 }};
+
+// The PSNR of the planes' squared errors weighted (6 Y + Cb + Cr) / 8, from
+// the planes' PSNR in dB. 10^(-PSNR / 10) is a plane's MSE / peak^2, and the
+// three planes share one peak, so it cancels. A plane at libvmaf's ceiling
+// (6 x bits + 12 dB) counts as the ceiling's error: the result never exceeds
+// it.
+double psnr_of_weighted_mse(double y, double cb, double cr) {
+    const auto error = [](double psnr) { return std::pow(10.0, -psnr / 10.0); };
+    return -10.0 * std::log10((6 * error(y) + error(cb) + error(cr)) / 8);
+}
 
 // The limits cpu_metrics_unfit checks, from libvmaf's extractors.
 constexpr int ms_ssim_smallest_plane = 176;  // float_ms_ssim: 11 x 2^4, its window at the 5th scale
@@ -159,7 +170,7 @@ std::vector<Extractor> extractors_for(const std::vector<std::string>& requested,
         }
         metrics.emplace_back(scored_by(metric));
     }
-    const bool psnr_yuv = has(metrics, "psnr_yuv");
+    const bool psnr_yuv = has(metrics, "psnr_yuv") || has(metrics, "psnr_yuv_mse");  // the planes' PSNR
     const bool ssim_yuv = has(metrics, "ssim_yuv");
     const bool psnr = psnr_yuv || has(metrics, "psnr");
     const bool xpsnr = has(metrics, "xpsnr");
@@ -619,6 +630,8 @@ PairScores CpuScorer::finish() {
             // at full precision, then rounded once
             if (feature.value == Value::planes_611) {
                 value = (6 * value + read(feature.cb, frame) + read(feature.cr, frame)) / 8;
+            } else if (feature.value == Value::planes_611_mse) {
+                value = psnr_of_weighted_mse(value, read(feature.cb, frame), read(feature.cr, frame));
             } else if (feature.value == Value::delta_e) {
                 value = std::pow(10.0, (45.0 - value) / 20.0);  // +infinity (identical) gives 0
             }

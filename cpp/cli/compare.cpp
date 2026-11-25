@@ -614,6 +614,7 @@ std::vector<std::string> default_metrics(const Settings& settings) {
     options.extra_features = settings.default_extra_features();
     options.compute_xpsnr = settings.default_compute_xpsnr;
     options.compute_psnr_yuv = settings.default_compute_psnr_yuv;
+    options.compute_psnr_yuv_mse = settings.default_compute_psnr_yuv_mse;
     options.compute_ssim_yuv = settings.default_compute_ssim_yuv;
     options.compute_ms_ssim = settings.default_compute_ms_ssim;
     options.compute_ms_ssim_yuv = settings.default_compute_ms_ssim_yuv;

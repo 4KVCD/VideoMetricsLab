@@ -140,7 +140,8 @@ const std::vector<double>& scores_of(const PairScores& scores, const std::string
     return found->second;
 }
 
-// PSNR YUV is (6 Y + Cb + Cr) / 8 of the three planes' PSNRs, each worked out
+// PSNR YUV is (6 Y + Cb + Cr) / 8 of the three planes' PSNRs, and PSNR YUV
+// avg. MSE the PSNR of (6 Y + Cb + Cr) / 8 of their MSEs, each worked out
 // here from the samples: the chroma's whole samples only (32 x 19 of the 33 x
 // 20 an odd 65 x 39 frame has), at the 10-bit peak of 1023.
 TEST(Libvmaf, PsnrYuvWeighsTheLumaSixTimesTheChroma) {
@@ -148,13 +149,14 @@ TEST(Libvmaf, PsnrYuvWeighsTheLumaSixTimesTheChroma) {
         GTEST_SKIP() << "the app ships no libvmaf-fast for this system yet";
     }
     const PackedFrame packed(yuv_width, yuv_height, 10);
-    const PairScores scores = score_yuv_pairs({"psnr_yuv"}, false);
-    const std::vector<double>& yuv = scores_of(scores, "psnr_yuv");
+    const PairScores scores = score_yuv_pairs({"psnr_yuv", "psnr_yuv_mse"}, false);
+    const std::vector<double>&yuv = scores_of(scores, "psnr_yuv"), &yuv_mse = scores_of(scores, "psnr_yuv_mse");
     ASSERT_EQ(yuv.size(), 2U);
+    ASSERT_EQ(yuv_mse.size(), 2U);
     for (int index = 0; index < 2; ++index) {
         const auto [reference, test] = yuv_pair(index, false);
         const FramePlanes reference_planes = packed.planes(reference.data()), test_planes = packed.planes(test.data());
-        const auto plane_psnr = [&](int plane, int columns, int rows) {
+        const auto plane_mse = [&](int plane, int columns, int rows) {
             double sse = 0;
             for (int row = 0; row < rows; ++row) {
                 const auto* a = reinterpret_cast<const std::uint16_t*>(reference_planes[plane].data +
@@ -166,24 +168,28 @@ TEST(Libvmaf, PsnrYuvWeighsTheLumaSixTimesTheChroma) {
                     sse += difference * difference;
                 }
             }
-            return 10.0 * std::log10(1023.0 * 1023.0 / (sse / (columns * rows)));
+            return sse / (columns * rows);
         };
-        const double expected = (6 * plane_psnr(0, yuv_width, yuv_height) +
-                                 plane_psnr(1, yuv_width / 2, yuv_height / 2) +
-                                 plane_psnr(2, yuv_width / 2, yuv_height / 2)) / 8;
-        EXPECT_NEAR(yuv[static_cast<std::size_t>(index)], expected, 1e-6) << "frame " << index;
+        const auto psnr = [](double mse) { return 10.0 * std::log10(1023.0 * 1023.0 / mse); };
+        const double y = plane_mse(0, yuv_width, yuv_height), cb = plane_mse(1, yuv_width / 2, yuv_height / 2),
+                     cr = plane_mse(2, yuv_width / 2, yuv_height / 2);
+        const auto frame = static_cast<std::size_t>(index);
+        EXPECT_NEAR(yuv[frame], (6 * psnr(y) + psnr(cb) + psnr(cr)) / 8, 1e-6) << "frame " << index;
+        EXPECT_NEAR(yuv_mse[frame], psnr((6 * y + cb + cr) / 8), 1e-6) << "frame " << index;
+        EXPECT_LT(yuv_mse[frame], yuv[frame]) << "frame " << index;
     }
 }
 
 // The 6:1:1 metrics leave PSNR and SSIM as they were (XPSNR's own PSNR
 // takes PSNR's place with XPSNR on), and chroma that matches counts as SSIM 1
-// and as PSNR's 72 dB ceiling at 10 bits.
+// and as PSNR's 72 dB ceiling at 10 bits, in PSNR YUV avg. MSE as that
+// ceiling's error.
 TEST(Libvmaf, YuvMetricsLeaveTheLumaScoresAsTheyWere) {
     if (!std::filesystem::exists(libvmaf_folder() / platform::shared_library_name("libvmaf"))) {
         GTEST_SKIP() << "the app ships no libvmaf-fast for this system yet";
     }
     const PairScores luma = score_yuv_pairs({"psnr", "ssim"}, true);
-    const PairScores all = score_yuv_pairs({"psnr", "ssim", "xpsnr", "psnr_yuv", "ssim_yuv"}, true);
+    const PairScores all = score_yuv_pairs({"psnr", "ssim", "xpsnr", "psnr_yuv", "psnr_yuv_mse", "ssim_yuv"}, true);
     EXPECT_EQ(scores_of(all, "psnr"), scores_of(luma, "psnr"));
     EXPECT_EQ(scores_of(all, "ssim"), scores_of(luma, "ssim"));
     const std::vector<double>&psnr = scores_of(luma, "psnr"), &ssim = scores_of(luma, "ssim");
@@ -191,6 +197,9 @@ TEST(Libvmaf, YuvMetricsLeaveTheLumaScoresAsTheyWere) {
     ASSERT_EQ(psnr_yuv.size(), psnr.size());
     for (std::size_t i = 0; i < psnr.size(); ++i) {
         EXPECT_NEAR(psnr_yuv[i], (6 * psnr[i] + 2 * 72.0) / 8, 1e-6);
+        const auto error = [](double db) { return std::pow(10.0, -db / 10); };
+        EXPECT_NEAR(scores_of(all, "psnr_yuv_mse")[i], -10 * std::log10((6 * error(psnr[i]) + 2 * error(72.0)) / 8),
+                    1e-6);
         EXPECT_NEAR(ssim_yuv[i], (6 * ssim[i] + 2.0) / 8, 1e-6);
     }
 }

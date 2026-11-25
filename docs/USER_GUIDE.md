@@ -492,14 +492,14 @@ which way is better, and its broad ranges where they have a source (the
 app's own bands, or the metric's authors' scale). *General purpose* (VMAF
 v0.6.1, VMAF NEG, VMAF v1, HDR VMAF, PSNR, SSIM, XPSNR, SSIMULACRA2,
 Butteraugli and CVVDP) is what a new install shows, HDR VMAF unticked.
-*Specialized* (PSNR YUV, SSIM YUV, MS-SSIM, MS-SSIM YUV, PSNR-HVS-M, CAMBI
-and CIEDE2000) is folded away
+*Specialized* (PSNR YUV, PSNR YUV avg. MSE, SSIM YUV, MS-SSIM, MS-SSIM YUV,
+PSNR-HVS-M, CAMBI and CIEDE2000) is folded away
 until one of them is shown. A tick there shows or hides a metric's column,
 nothing more; the tick in a column says whether that row calculates it, and a
 run calculates what is ticked and shown. The Specialized metrics start
 ticked but hidden, so showing one is enough to calculate it (settings already
 saved keep the ticks they have). Settings > Metrics' **Default
-metrics**, what new videos start with ticked, lists the same 17 in the same
+metrics**, what new videos start with ticked, lists the same 18 in the same
 two sections, side by side.
 
 PSNR, SSIM and XPSNR are of the luma (Y) plane alone: PSNR is what an
@@ -523,6 +523,17 @@ planes infinity. Videos in other chroma formats are compared as 4:2:0, as
 for every metric here, so a 4:4:4 video's chroma scores are those of its
 4:2:0 form. Turning either on makes the decoders hand over whole pictures
 rather than their luma alone, which costs some speed and memory.
+
+PSNR YUV avg. MSE (6:1:1) is the YUV-PSNR MSU's codec comparisons report
+(their "YUV-PSNR avg. MSE 6:1:1"): each frame's PSNR of its planes' squared
+errors weighted (6 x Y + Cb + Cr) / 8, and the score the PSNR of the frames'
+mean error, as MSU's VQMT averages a video's PSNR. PSNR YUV averages the dB
+instead, of the planes and of the frames, so this one is a little lower,
+more so where a few frames or one plane are much worse. It is calculated from
+the same planes' PSNR as PSNR YUV, in the same pass: beside PSNR YUV it costs
+nothing more, alone it costs what PSNR YUV does. A plane at libvmaf's ceiling
+counts as the ceiling (MSU gives an identical frame 100 dB), so near-lossless
+frames score a little lower than MSU's.
 
 MS-SSIM, MS-SSIM YUV (6:1:1), PSNR-HVS-M, CAMBI and CIEDE2000 are the other
 metrics codec comparisons such as MSU's and Xiph's report. Only the app

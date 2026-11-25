@@ -121,8 +121,8 @@ std::string metric_labels(const std::vector<std::string>& keys, std::string_view
 // ticked but hidden (Settings::hidden_metrics), so showing one is enough to
 // calculate it. HDR VMAF is General purpose, shown but unticked at first
 // (Settings::default_compute_vmaf_hdr).
-inline constexpr std::array<std::string_view, 7> metrics_hidden_at_first{
-    "psnr_yuv", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000"};
+inline constexpr std::array<std::string_view, 8> metrics_hidden_at_first{
+    "psnr_yuv", "psnr_yuv_mse", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000"};
 
 // The two sections Add/remove metrics and Settings > Metrics list the
 // metrics in.

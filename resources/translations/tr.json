@@ -33,6 +33,8 @@
   "PSNR weighted by how visible errors are": "hataların görünürlüğüne göre ağırlıklı PSNR",
   "PSNR weighted by the eye, as Xiph reports it": "göze göre ağırlıklı PSNR, Xiph'in bildirdiği gibi",
   "PSNR with color, as JVET weighs it": "renkli PSNR, JVET'in ağırlıklandırdığı gibi",
+  "PSNR with color, as MSU reports it": "renkli PSNR, MSU'nun bildirdiği gibi",
+  "PSNR of the three planes' squared errors weighted (6 x Y + Cb + Cr) / 8 and averaged over the frames before turning into dB, as MSU's codec comparisons report YUV-PSNR (avg. MSE). A little below PSNR YUV, more so where a few frames or one plane are much worse. In dB, higher is better.": "Üç düzlemin karesel hatalarının (6 × Y + Cb + Cr) / 8 ağırlıklandırılıp dB'ye çevrilmeden önce kareler üzerinden ortalamasının PSNR'si; MSU'nun kodek karşılaştırmalarının YUV-PSNR (avg. MSE) bildirdiği gibi. PSNR YUV'nin biraz altında, birkaç kare veya bir düzlem çok daha kötüyse daha da altında. dB cinsinden, yüksek daha iyi.",
   "Peak signal-to-noise ratio of the luma (Y) plane: the pixels' mean squared error, in dB. Higher is better.": "Parlaklık (Y) düzleminin tepe sinyal-gürültü oranı: piksellerin ortalama karesel hatası, dB cinsinden. Yüksek daha iyi.",
   "SSIM at five scales, as MSU reports it": "beş ölçekte SSIM, MSU'nun bildirdiği gibi",
   "SSIM of the luma (Y) plane at five scales (Wang et al. 2003), as MSU's codec comparisons report it. Up to 1, higher is better.": "Parlaklık (Y) düzleminin beş ölçekte SSIM'i (Wang et al. 2003); MSU'nun codec karşılaştırmalarında bildirildiği gibi. En fazla 1, yüksek daha iyi.",

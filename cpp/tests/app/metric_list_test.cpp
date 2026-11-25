@@ -35,7 +35,8 @@ using Keys = std::set<std::string>;
 // that was.
 TEST(MetricList, AllAndNoneTickASectionKeepingOneInThePanel) {
     EXPECT_EQ(section_ticks({"vmaf"}, MetricSection::specialized, true, 1),
-              (Keys{"vmaf", "psnr_yuv", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000"}));
+              (Keys{"vmaf", "psnr_yuv", "psnr_yuv_mse", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi",
+                    "ciede2000"}));
     EXPECT_EQ(section_ticks({"vmaf", "psnr", "cambi"}, MetricSection::general_purpose, false, 1), Keys{"cambi"});
     EXPECT_EQ(section_ticks({"psnr", "ssim", "cvvdp"}, MetricSection::general_purpose, false, 1), Keys{"psnr"});
     EXPECT_EQ(section_ticks({"psnr", "ssim"}, MetricSection::general_purpose, false, 0), Keys{});
@@ -64,9 +65,9 @@ TEST(MetricList, PanelCountsTheMetricsShownAndKeepsThePlanesApart) {
         }
         return false;
     };
-    EXPECT_TRUE(label_with("10 of 17 shown"));
+    EXPECT_TRUE(label_with("10 of 18 shown"));
     EXPECT_TRUE(label_with("General purpose (10)"));
-    EXPECT_TRUE(label_with("Specialized (7) · 0 shown"));
+    EXPECT_TRUE(label_with("Specialized (8) · 0 shown"));
     ASSERT_NE(list.box("cambi"), nullptr);
     EXPECT_EQ(list.box("psnr_yuv_y"), nullptr);  // a plane is no metric of the list
     EXPECT_TRUE(list.box("cambi")->toolTip().contains("24 is the most"));
@@ -77,12 +78,12 @@ TEST(MetricList, PanelCountsTheMetricsShownAndKeepsThePlanesApart) {
     list.box("cambi")->click();
     EXPECT_EQ(ticks.count(), 1);
     EXPECT_TRUE(list.ticked().contains("cambi"));
-    EXPECT_TRUE(label_with("11 of 17 shown"));
+    EXPECT_TRUE(label_with("11 of 18 shown"));
     ASSERT_NE(list.planes_box(), nullptr);
     list.planes_box()->click();
     EXPECT_EQ(planes.count(), 1);
     EXPECT_EQ(ticks.count(), 1);  // the switch is no metric: the ticks and the count stay
-    EXPECT_TRUE(label_with("11 of 17 shown"));
+    EXPECT_TRUE(label_with("11 of 18 shown"));
 
     list.set_ticked(Keys{"ssim"});
     EXPECT_FALSE(list.box("ssim")->isEnabled());  // the last shown stays

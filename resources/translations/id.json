@@ -33,6 +33,8 @@
   "PSNR weighted by how visible errors are": "PSNR yang dibobot menurut seberapa terlihat galatnya",
   "PSNR weighted by the eye, as Xiph reports it": "PSNR yang dibobot menurut mata, seperti laporan Xiph",
   "PSNR with color, as JVET weighs it": "PSNR dengan warna, seperti bobot JVET",
+  "PSNR with color, as MSU reports it": "PSNR dengan warna, seperti laporan MSU",
+  "PSNR of the three planes' squared errors weighted (6 x Y + Cb + Cr) / 8 and averaged over the frames before turning into dB, as MSU's codec comparisons report YUV-PSNR (avg. MSE). A little below PSNR YUV, more so where a few frames or one plane are much worse. In dB, higher is better.": "PSNR dari galat kuadrat ketiga bidang yang diberi bobot (6 × Y + Cb + Cr) / 8 dan dirata-rata atas bingkai sebelum diubah ke dB, seperti perbandingan codec MSU melaporkan YUV-PSNR (avg. MSE). Sedikit di bawah PSNR YUV, lebih lagi bila beberapa bingkai atau satu bidang jauh lebih buruk. Dalam dB, makin tinggi makin baik.",
   "Peak signal-to-noise ratio of the luma (Y) plane: the pixels' mean squared error, in dB. Higher is better.": "Rasio sinyal puncak terhadap derau dari bidang luma (Y): galat kuadrat rata-rata piksel, dalam dB. Makin tinggi makin baik.",
   "SSIM at five scales, as MSU reports it": "SSIM pada lima skala, seperti laporan MSU",
   "SSIM of the luma (Y) plane at five scales (Wang et al. 2003), as MSU's codec comparisons report it. Up to 1, higher is better.": "SSIM bidang luma (Y) pada lima skala (Wang et al. 2003), seperti yang dilaporkan perbandingan codec MSU. Paling tinggi 1, makin tinggi makin baik.",

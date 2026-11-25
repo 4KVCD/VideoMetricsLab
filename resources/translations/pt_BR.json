@@ -33,6 +33,8 @@
   "PSNR weighted by how visible errors are": "PSNR ponderado por quão visíveis são os erros",
   "PSNR weighted by the eye, as Xiph reports it": "PSNR ponderado pelo olho, como a Xiph o reporta",
   "PSNR with color, as JVET weighs it": "PSNR com cor, como o JVET o pondera",
+  "PSNR with color, as MSU reports it": "PSNR com cor, como o MSU o reporta",
+  "PSNR of the three planes' squared errors weighted (6 x Y + Cb + Cr) / 8 and averaged over the frames before turning into dB, as MSU's codec comparisons report YUV-PSNR (avg. MSE). A little below PSNR YUV, more so where a few frames or one plane are much worse. In dB, higher is better.": "PSNR dos erros quadráticos dos três planos ponderados (6 × Y + Cb + Cr) / 8 e com média sobre os quadros antes de passar para dB, como as comparações de codecs do MSU reportam o YUV-PSNR (avg. MSE). Um pouco abaixo do PSNR YUV, mais onde alguns quadros ou um plano são muito piores. Em dB, maior é melhor.",
   "Peak signal-to-noise ratio of the luma (Y) plane: the pixels' mean squared error, in dB. Higher is better.": "Relação sinal-ruído de pico do plano de luma (Y): o erro quadrático médio dos pixels, em dB. Maior é melhor.",
   "SSIM at five scales, as MSU reports it": "SSIM em cinco escalas, como o MSU o reporta",
   "SSIM of the luma (Y) plane at five scales (Wang et al. 2003), as MSU's codec comparisons report it. Up to 1, higher is better.": "SSIM do plano de luma (Y) em cinco escalas (Wang et al. 2003), como as comparações de codecs do MSU o reportam. Até 1, maior é melhor.",

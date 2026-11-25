@@ -42,7 +42,7 @@ using enum MetricAggregation;
 // In the order the app shows them. Key "vmaf" is the v0.6.1 family (its
 // standard and 4K models), as it always was: saved scores, settings and
 // exports keep the key; only the label names the version.
-const std::array<MetricDefinition, 29> registry{{
+const std::array<MetricDefinition, 30> registry{{
     {"vmaf", "VMAF v0.6.1", "VMAF v0.6.1", "VMAF v0.6.1", "VMAF v0.6.1", 2, "", frame, higher_is_better,
      arithmetic, 100.0, vmaf_thresholds, bool_option("compute_vmaf"), {}, vmaf_smallest_side},
     {"vmaf_neg", "VMAF NEG", "VMAF NEG", "VMAF NEG", "VMAF NEG", 2, "", frame, higher_is_better, arithmetic,
@@ -77,6 +77,14 @@ const std::array<MetricDefinition, 29> registry{{
      std::nullopt, {}, bool_option("compute_psnr_yuv_u"), {}, 0, "psnr_yuv"},
     {"psnr_yuv_v", "PSNR YUV: V", "PSNR V", "V", "PSNR V (dB)", 2, " dB", frame, higher_is_better, arithmetic,
      std::nullopt, {}, bool_option("compute_psnr_yuv_v"), {}, 0, "psnr_yuv"},
+    // MSU's YUV-PSNR "avg. MSE" 6:1:1: the three planes' mean squared errors
+    // weighted (6 Y + Cb + Cr) / 8 in each frame's value, and averaged over
+    // the frames as errors too (MSU's VQMT averages a video's PSNR as its
+    // frames' MSE), where PSNR YUV averages the dB of planes and frames. From
+    // the planes PSNR YUV reads, in its pass.
+    {"psnr_yuv_mse", "PSNR YUV avg. MSE (6:1:1)", "PSNR YUV MSE", "PSNR YUV MSE (dB)", "PSNR YUV MSE (dB)", 2,
+     " dB", frame, higher_is_better, mean_error_db, std::nullopt, psnr_thresholds,
+     bool_option("compute_psnr_yuv_mse"), {}, 0},
     {"ssim_yuv", "SSIM YUV (6:1:1)", "SSIM YUV", "SSIM YUV", "SSIM YUV", 4, "", frame, higher_is_better,
      arithmetic, std::nullopt, ssim_thresholds, bool_option("compute_ssim_yuv"), {}, 22},
     {"ssim_yuv_y", "SSIM YUV: Y", "SSIM Y", "Y", "SSIM Y", 4, "", frame, higher_is_better, arithmetic,
@@ -240,7 +248,7 @@ struct KeyedGuide {
     std::string_view key;
     MetricGuide guide;
 };
-const std::array<KeyedGuide, 17> guides{{
+const std::array<KeyedGuide, 18> guides{{
     {"vmaf",
      {N_("Netflix's score, trained on viewers"),
       N_("Netflix's VMAF: how viewers would rate the test video against the reference, by a model trained on their ratings. 0 to 100, higher is better."),
@@ -268,6 +276,10 @@ const std::array<KeyedGuide, 17> guides{{
     {"psnr_yuv",
      {N_("PSNR with color, as JVET weighs it"),
       N_("(6 x Y + Cb + Cr) / 8 of the three planes' PSNR, as JVET's common test conditions weigh it. In dB, higher is better."),
+      psnr_ranges, "the app's PSNR bands, psnr_thresholds above"}},
+    {"psnr_yuv_mse",
+     {N_("PSNR with color, as MSU reports it"),
+      N_("PSNR of the three planes' squared errors weighted (6 x Y + Cb + Cr) / 8 and averaged over the frames before turning into dB, as MSU's codec comparisons report YUV-PSNR (avg. MSE). A little below PSNR YUV, more so where a few frames or one plane are much worse. In dB, higher is better."),
       psnr_ranges, "the app's PSNR bands, psnr_thresholds above"}},
     {"ssim_yuv",
      {N_("SSIM with color, as MSU weighs it"),

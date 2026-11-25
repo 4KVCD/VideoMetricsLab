@@ -82,6 +82,7 @@ struct Settings {
     // below) are ticked, but hidden at first: calculated once shown in
     // Add/remove metrics. Settings saved before keep their ticks.
     bool default_compute_psnr_yuv = true;
+    bool default_compute_psnr_yuv_mse = true;
     bool default_compute_ssim_yuv = true;
     bool default_compute_ms_ssim = true;
     bool default_compute_ms_ssim_yuv = true;

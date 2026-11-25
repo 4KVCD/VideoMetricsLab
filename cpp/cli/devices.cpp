@@ -101,7 +101,8 @@ nlohmann::ordered_json devices_json(const DeviceFindings& found, const std::vect
         metrics[key] = where("cpu", std::nullopt, cpu_detail);
     }
     // The app's own metrics: FFmpeg's filters do not score them.
-    for (const char* key : {"psnr_yuv", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi", "ciede2000"}) {
+    for (const char* key : {"psnr_yuv", "psnr_yuv_mse", "ssim_yuv", "ms_ssim", "ms_ssim_yuv", "psnr_hvs", "cambi",
+                             "ciede2000"}) {
         metrics[key] = found.cpu_metrics_in_app ? where("cpu", std::nullopt, cpu_detail)
                                                 : where(nullptr, std::nullopt, "not available: needs the app's libvmaf");
     }

@@ -33,6 +33,8 @@
   "PSNR weighted by how visible errors are": "依誤差可見程度加權的 PSNR",
   "PSNR weighted by the eye, as Xiph reports it": "依人眼加權的 PSNR，與 Xiph 的報告方式相同",
   "PSNR with color, as JVET weighs it": "含色彩的 PSNR，依 JVET 的方式加權",
+  "PSNR with color, as MSU reports it": "含色彩的 PSNR，與 MSU 的報告方式相同",
+  "PSNR of the three planes' squared errors weighted (6 x Y + Cb + Cr) / 8 and averaged over the frames before turning into dB, as MSU's codec comparisons report YUV-PSNR (avg. MSE). A little below PSNR YUV, more so where a few frames or one plane are much worse. In dB, higher is better.": "三個平面的平方誤差按 (6 × Y + Cb + Cr) / 8 加權、在各影格上取平均後再換算為 dB 的 PSNR，與 MSU 編解碼器比較報告的 YUV-PSNR (avg. MSE) 相同。略低於 PSNR YUV，少數影格或某一平面差得多時更低。單位 dB，越高越好。",
   "Peak signal-to-noise ratio of the luma (Y) plane: the pixels' mean squared error, in dB. Higher is better.": "亮度（Y）平面的峰值訊噪比：像素的均方誤差，單位 dB。越高越好。",
   "SSIM at five scales, as MSU reports it": "五個尺度上的 SSIM，與 MSU 的報告方式相同",
   "SSIM of the luma (Y) plane at five scales (Wang et al. 2003), as MSU's codec comparisons report it. Up to 1, higher is better.": "亮度（Y）平面在五個尺度上的 SSIM（Wang et al. 2003），與 MSU 編解碼器比較的報告方式相同。最高為 1，越高越好。",

@@ -212,10 +212,10 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   -m, --metrics LIST    comma-separated: vmaf, vmaf_neg, vmaf_v1, vmaf_hdr,
-                        psnr, ssim, psnr_yuv, ssim_yuv, xpsnr, ms_ssim,
-                        ms_ssim_yuv, psnr_hvs, cambi, ciede2000, ssimulacra2,
-                        butteraugli, cvvdp; a plane of psnr_yuv, ssim_yuv,
-                        ms_ssim_yuv or psnr_hvs with _y, _u or _v
+                        psnr, ssim, psnr_yuv, psnr_yuv_mse, ssim_yuv, xpsnr,
+                        ms_ssim, ms_ssim_yuv, psnr_hvs, cambi, ciede2000,
+                        ssimulacra2, butteraugli, cvvdp; a plane of psnr_yuv,
+                        ssim_yuv, ms_ssim_yuv or psnr_hvs with _y, _u or _v
                         (psnr_yuv_u); or all (every one but vmaf_hdr, which
                         scores PQ (HDR10) videos only, and the planes)
                         (default: the app's)
@@ -658,9 +658,9 @@ options:
                    metrics' scores), compare's --json, or run files
                    (.metrics.json); repeat it, or give a pattern, for more
   --metric KEY     the metric: vmaf, vmaf_neg, vmaf_v1, vmaf_hdr, psnr,
-                   ssim, psnr_yuv, ssim_yuv, xpsnr, ms_ssim, ms_ssim_yuv,
-                   psnr_hvs, cambi, ciede2000, ssimulacra2, butteraugli,
-                   cvvdp
+                   ssim, psnr_yuv, psnr_yuv_mse, ssim_yuv, xpsnr, ms_ssim,
+                   ms_ssim_yuv, psnr_hvs, cambi, ciede2000, ssimulacra2,
+                   butteraugli, cvvdp
   --value N        the score to reach
   --by COLUMN      kbps (default), or a CSV file's column of numbers, such
                    as crf from compare --batch's extra columns
@@ -725,12 +725,12 @@ options:
   --test FILE         the test encoder's encodes, in either form; sequences
                       are paired by name
   -m, --metrics LIST  comma-separated: vmaf, vmaf_neg, vmaf_v1, vmaf_hdr,
-                      psnr, ssim, psnr_yuv, ssim_yuv, xpsnr, ms_ssim,
-                      ms_ssim_yuv, psnr_hvs, cambi, ciede2000, ssimulacra2,
-                      butteraugli, cvvdp; a plane of psnr_yuv, ssim_yuv,
-                      ms_ssim_yuv or psnr_hvs with _y, _u or _v (psnr_yuv_u);
-                      or all but vmaf_hdr and the planes (default: those the
-                      files have columns for)
+                      psnr, ssim, psnr_yuv, psnr_yuv_mse, ssim_yuv, xpsnr,
+                      ms_ssim, ms_ssim_yuv, psnr_hvs, cambi, ciede2000,
+                      ssimulacra2, butteraugli, cvvdp; a plane of psnr_yuv,
+                      ssim_yuv, ms_ssim_yuv or psnr_hvs with _y, _u or _v
+                      (psnr_yuv_u); or all but vmaf_hdr and the planes
+                      (default: those the files have columns for)
   --group-by COLUMN   a column of the anchor's file, such as class: a mean and
                       median for each of its values as well
   --json FILE         also write the results as JSON to FILE; - prints the

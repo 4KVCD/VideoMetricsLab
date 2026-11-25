@@ -45,6 +45,7 @@ const std::unordered_map<std::string, Field>& fields() {
         {"default_compute_ssim", &Settings::default_compute_ssim},
         {"default_compute_xpsnr", &Settings::default_compute_xpsnr},
         {"default_compute_psnr_yuv", &Settings::default_compute_psnr_yuv},
+        {"default_compute_psnr_yuv_mse", &Settings::default_compute_psnr_yuv_mse},
         {"default_compute_ssim_yuv", &Settings::default_compute_ssim_yuv},
         {"default_compute_ms_ssim", &Settings::default_compute_ms_ssim},
         {"default_compute_ms_ssim_yuv", &Settings::default_compute_ms_ssim_yuv},
@@ -294,7 +295,7 @@ void carry_over_result_formats(Settings& settings) {
 // The metrics hidden at first that the window did not have when these
 // settings were saved (not in listed_metrics): hidden, and ticked so that
 // showing one in Add/remove metrics calculates it. A file without
-// listed_metrics is v2.6's or older, which had none of the seven; one that
+// listed_metrics is v2.6's or older, which had none of them; one that
 // lists a metric keeps its ticks and what it shows.
 void hide_new_metrics(Settings& settings) {
     const auto has = [](const std::vector<std::string>& keys, std::string_view key) {
@@ -527,6 +528,7 @@ std::string Settings::text() const {
     data["default_compute_ssim"] = default_compute_ssim;
     data["default_compute_xpsnr"] = default_compute_xpsnr;
     data["default_compute_psnr_yuv"] = default_compute_psnr_yuv;
+    data["default_compute_psnr_yuv_mse"] = default_compute_psnr_yuv_mse;
     data["default_compute_ssim_yuv"] = default_compute_ssim_yuv;
     data["default_compute_ms_ssim"] = default_compute_ms_ssim;
     data["default_compute_ms_ssim_yuv"] = default_compute_ms_ssim_yuv;

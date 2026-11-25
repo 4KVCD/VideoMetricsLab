@@ -49,6 +49,9 @@ bool VmafOptions::*bool_option(std::string_view name) {
     if (name == "compute_psnr_yuv") {
         return &VmafOptions::compute_psnr_yuv;
     }
+    if (name == "compute_psnr_yuv_mse") {
+        return &VmafOptions::compute_psnr_yuv_mse;
+    }
     if (name == "compute_ssim_yuv") {
         return &VmafOptions::compute_ssim_yuv;
     }

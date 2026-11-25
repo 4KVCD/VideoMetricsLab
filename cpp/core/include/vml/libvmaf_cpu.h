@@ -38,14 +38,19 @@ class GpuMetricsScorer;  // gpu_cpu_metrics.h
 // reads; XPSNR is rounded as FFmpeg's xpsnr filter writes its stats file
 // ("%3.4f"). A 6:1:1 metric (PSNR YUV, SSIM YUV, MS-SSIM YUV) is
 // (6 Y + Cb + Cr) / 8 of its extractor's luma feature and its two chroma
-// features, rounded once. CIEDE2000 is shown as the mean colour difference
-// ΔE00 of the frame's pixels (0: identical), from libvmaf's
-// 45 - 20 log10(mean ΔE00), which is +infinity for identical frames.
+// features, rounded once; PSNR YUV avg. MSE weighs the planes' squared
+// errors 6:1:1 instead, from the same three PSNR features. CIEDE2000 is shown
+// as the mean colour difference ΔE00 of the frame's pixels (0: identical),
+// from libvmaf's 45 - 20 log10(mean ΔE00), which is +infinity for identical
+// frames.
 struct CpuFeature {
     enum class Value {
         feature,     // the feature as libvmaf gives it
         planes_611,  // (6 feature + cb + cr) / 8
-        delta_e,     // 10^((45 - feature) / 20)
+        // The PSNR of (6 MSE_Y + MSE_Cb + MSE_Cr) / 8, from the planes'
+        // PSNR (feature, cb and cr): the planes share one peak.
+        planes_611_mse,
+        delta_e,  // 10^((45 - feature) / 20)
     };
     std::string_view key;  // the app's metric key: "psnr", "ssim", "cambi", "ciede2000", ...
     std::string_view extractor;

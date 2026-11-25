@@ -144,6 +144,7 @@ const std::vector<MetricColumn>& metric_columns() {
         {col_psnr_yuv_y, "psnr_yuv_y"},
         {col_psnr_yuv_u, "psnr_yuv_u"},
         {col_psnr_yuv_v, "psnr_yuv_v"},
+        {col_psnr_yuv_mse, "psnr_yuv_mse"},
         {col_ssim_yuv, "ssim_yuv"},
         {col_ssim_yuv_y, "ssim_yuv_y"},
         {col_ssim_yuv_u, "ssim_yuv_u"},
@@ -1051,9 +1052,10 @@ void MainWindow::build_test_table() {
         "", app::tr("File name"), app::tr("Media info"), app::tr("Black bars"), app::tr("Scaling"),
         app::tr("Approx. bitrate"), header_of("psnr"), header_of("ssim"), header_of("vmaf"), header_of("xpsnr"),
         header_of("vmaf_neg"), header_of("ssimulacra2"), header_of("butteraugli"), header_of("cvvdp"),
-        header_of("vmaf_v1"), header_of("vmaf_hdr"), header_of("psnr_yuv"), header_of("ssim_yuv"),
-        header_of("ms_ssim"), header_of("ms_ssim_yuv"), header_of("psnr_hvs"), header_of("cambi"),
-        header_of("ciede2000"), header_of("psnr_yuv_y"), header_of("psnr_yuv_u"), header_of("psnr_yuv_v"),
+        header_of("vmaf_v1"), header_of("vmaf_hdr"), header_of("psnr_yuv"), header_of("psnr_yuv_mse"),
+        header_of("ssim_yuv"), header_of("ms_ssim"), header_of("ms_ssim_yuv"), header_of("psnr_hvs"),
+        header_of("cambi"), header_of("ciede2000"), header_of("psnr_yuv_y"), header_of("psnr_yuv_u"),
+        header_of("psnr_yuv_v"),
         header_of("ssim_yuv_y"), header_of("ssim_yuv_u"), header_of("ssim_yuv_v"), header_of("ms_ssim_yuv_y"),
         header_of("ms_ssim_yuv_u"), header_of("ms_ssim_yuv_v"), header_of("psnr_hvs_y"), header_of("psnr_hvs_u"),
         header_of("psnr_hvs_v"),
@@ -1123,6 +1125,7 @@ void MainWindow::fit_table_columns() {
     };
     for (const MetricColumn& item : metric_columns()) {
         const bool wide = item.column == col_psnr || item.column == col_xpsnr || item.column == col_psnr_yuv ||
+                          item.column == col_psnr_yuv_mse ||
                           item.column == col_psnr_hvs || item.column == col_ciede2000 ||
                           item.column == col_ssimulacra2 || item.column == col_butteraugli;
         starting_widths[item.column] = wide ? 110 : 78;
@@ -1277,6 +1280,7 @@ VmafOptions MainWindow::options_from_settings() const {
     options.extra_features = settings_.default_extra_features();
     options.compute_xpsnr = settings_.default_compute_xpsnr;
     options.compute_psnr_yuv = settings_.default_compute_psnr_yuv;
+    options.compute_psnr_yuv_mse = settings_.default_compute_psnr_yuv_mse;
     options.compute_ssim_yuv = settings_.default_compute_ssim_yuv;
     options.compute_ms_ssim = settings_.default_compute_ms_ssim;
     options.compute_ms_ssim_yuv = settings_.default_compute_ms_ssim_yuv;
