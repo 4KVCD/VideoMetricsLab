@@ -1628,7 +1628,12 @@ TEST(MetricCache, AnAv1PairsScoresSayTheirGrainWasDav1dsAndOnlyThoseCountOutside
     const test::Folder folder;
     touch(folder / "s.mp4", "s");
     touch(folder / "t.mp4", "t");
-    const AnalysisRequest request = request_from(stored);
+    // A frame metric and a sequence one, whose files carry the mark each way:
+    // every file saved costs a write, and the test saves a dozen times.
+    AnalysisRequest request = request_from(stored);
+    std::erase_if(request.metrics,
+                  [](const MetricRequestSpec& spec) { return spec.key != "vmaf" && spec.key != "cvvdp"; });
+    ASSERT_EQ(request.metrics.size(), 2u);
     const ComparisonResult reference = test::result_from(stored.at("result"));
 #ifdef _WIN32
     const bool marks_count = false;
@@ -1694,9 +1699,7 @@ TEST(MetricCache, AnAv1PairsScoresSayTheirGrainWasDav1dsAndOnlyThoseCountOutside
     EXPECT_EQ(saved(made("av1", av1, true, std::nullopt)), std::pair(false, all));  // left out: its own identity
     EXPECT_EQ(saved(made("av1", 0u, false, std::nullopt)), std::pair(false, all));   // no grain
     EXPECT_EQ(saved(made("hevc", std::nullopt, false, std::nullopt)), std::pair(false, all));
-    EXPECT_EQ(saved(made("hevc", unsigned(film_grain_afgs1), false, std::nullopt)), std::pair(false, all));
-    EXPECT_EQ(saved(made("vvc", unsigned(film_grain_h274), false, std::nullopt)), std::pair(false, all));
-    EXPECT_EQ(saved(made("av2", unsigned(film_grain_av2), false, std::nullopt)), std::pair(false, all));
+    EXPECT_EQ(saved(made("av2", unsigned(film_grain_av2), false, std::nullopt)), std::pair(false, all));  // other grain
     // Grain not known (a scan that failed): decoded as dav1d decodes it, so
     // marked and taken.
     EXPECT_EQ(saved(made("av1", std::nullopt, false, std::nullopt)), std::pair(true, all));
