@@ -32,7 +32,7 @@ TEST(OptionsPanel, TheGpuDecoderChoiceIsTheSystemsOwn) {
     VmafOptions nvidia;
     nvidia.gpu_vendor = GpuVendor::nvidia;
     panel.show_options(nvidia, {nvidia});
-    const VmafOptions read = panel.read_options({}, true, true, true, false, true);
+    const VmafOptions read = panel.read_options();
 #ifdef __APPLE__
     ASSERT_EQ(panel.gpu_vendor_combo->count(), 1);
     EXPECT_EQ(panel.gpu_vendor_combo->itemText(0), QStringLiteral("Apple (VideoToolbox)"));
@@ -66,10 +66,10 @@ TEST(OptionsPanel, ARangeOfFramesIsShownAndReadInFrames) {
     EXPECT_EQ(panel.range_last_spin->value(), 219);
     EXPECT_TRUE(panel.range_frames_note->isVisibleTo(&panel));
     EXPECT_FALSE(panel.range_start_edit->isVisibleTo(&panel));
-    VmafOptions read = panel.read_options({}, true, true, true, false, true);
+    VmafOptions read = panel.read_options();
     EXPECT_EQ(read.compared_range(), frames.compared_range());
     panel.range_last_spin->setValue(-1);  // End
-    read = panel.read_options({}, true, true, true, false, true);
+    read = panel.read_options();
     EXPECT_EQ(read.compared_range(), (ComparedRange{100, 0, true}));
 
     VmafOptions seconds;
@@ -79,7 +79,7 @@ TEST(OptionsPanel, ARangeOfFramesIsShownAndReadInFrames) {
     EXPECT_EQ(panel.range_unit_combo->currentIndex(), 0);
     EXPECT_FALSE(panel.range_frames_note->isVisibleTo(&panel));
     EXPECT_TRUE(panel.range_start_edit->isVisibleTo(&panel));
-    EXPECT_EQ(panel.read_options({}, true, true, true, false, true).compared_range(), seconds.compared_range());
+    EXPECT_EQ(panel.read_options().compared_range(), seconds.compared_range());
 }
 
 // A range of time is shown and read to the millisecond (hh:mm:ss.zzz): whole
@@ -95,14 +95,14 @@ TEST(OptionsPanel, ARangeOfTimeIsShownAndReadToTheMillisecond) {
     EXPECT_EQ(panel.range_start_edit->time(), QTime(0, 1, 2, 500));
     EXPECT_EQ(panel.range_end_edit->time(), QTime(1, 32, 56, 279));
     EXPECT_TRUE(panel.range_frames_note->isVisibleTo(&panel));
-    VmafOptions read = panel.read_options({}, true, true, true, false, true);
+    VmafOptions read = panel.read_options();
     EXPECT_EQ(read.compared_range(), (ComparedRange{62500, 5576279, false, true}));
 
     // Typed back to whole seconds: a range of seconds again, without the note.
     panel.range_start_edit->setTime(QTime(0, 1, 2));
     panel.range_end_edit->setTime(QTime(0, 1, 30));
     EXPECT_FALSE(panel.range_frames_note->isVisibleTo(&panel));
-    read = panel.read_options({}, true, true, true, false, true);
+    read = panel.read_options();
     EXPECT_EQ(read.compared_range(), (ComparedRange{62, 90, false}));
 }
 
@@ -116,14 +116,14 @@ TEST(OptionsPanel, ManualCropsAreShownAndReadBack) {
     panel.show_options(manual, {manual});
     EXPECT_TRUE(panel.manual_crop_box->isVisibleTo(&panel));
     EXPECT_EQ(panel.source_crop_spins[0]->value(), 22);
-    VmafOptions read = panel.read_options({}, true, true, true, false, true);
+    VmafOptions read = panel.read_options();
     EXPECT_EQ(read.crop_mode, CropMode::manual);
     EXPECT_EQ(read.manual_source_crop, (CropEdges{22, 22, 0, 0}));
     EXPECT_EQ(read.manual_test_crop, CropEdges{});
     QString edited;
     QObject::connect(&panel, &OptionsPanel::field_edited, [&edited](const QString& field) { edited = field; });
     panel.test_crop_spins[2]->setValue(3);  // left
-    read = panel.read_options({}, true, true, true, false, true);
+    read = panel.read_options();
     EXPECT_EQ(read.manual_test_crop, (CropEdges{0, 0, 4, 0}));
     // The box names itself: with several rows selected, only that edge is
     // copied to each, whatever their other crops.

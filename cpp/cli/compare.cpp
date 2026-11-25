@@ -611,21 +611,7 @@ std::optional<std::string> sdr_display_note(const CompareArguments& arguments, c
 // of those that have them where the window shows them (show_yuv_planes).
 std::vector<std::string> default_metrics(const Settings& settings) {
     VmafOptions options;
-    options.extra_features = settings.default_extra_features();
-    options.compute_xpsnr = settings.default_compute_xpsnr;
-    options.compute_psnr_yuv = settings.default_compute_psnr_yuv;
-    options.compute_psnr_yuv_mse = settings.default_compute_psnr_yuv_mse;
-    options.compute_vmaf_yuv = settings.default_compute_vmaf_yuv;
-    options.compute_ssim_yuv = settings.default_compute_ssim_yuv;
-    options.compute_ms_ssim = settings.default_compute_ms_ssim;
-    options.compute_ms_ssim_yuv = settings.default_compute_ms_ssim_yuv;
-    options.compute_psnr_hvs = settings.default_compute_psnr_hvs;
-    options.compute_cambi = settings.default_compute_cambi;
-    options.compute_ciede2000 = settings.default_compute_ciede2000;
-    options.compute_vmaf = settings.default_compute_vmaf;
-    options.compute_vmaf_neg = settings.default_compute_vmaf_neg;
-    options.compute_vmaf_v1 = settings.default_compute_vmaf_v1;
-    options.compute_vmaf_hdr = settings.default_compute_vmaf_hdr;
+    settings.take_default_metrics(options);
     const std::vector<std::string> requested = options.requested_metrics();
     std::set<std::string, std::less<>> chosen(requested.begin(), requested.end());
     const std::pair<const char*, bool> perceptual[] = {{"ssimulacra2", settings.default_compute_ssimulacra2},

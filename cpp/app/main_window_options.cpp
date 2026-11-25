@@ -150,33 +150,20 @@ void MainWindow::show_panel_film_grain() {
 }
 
 VmafOptions MainWindow::read_panel_options() const {
-    // The options the panel shows, with the metrics ticked in the table's
-    // column headings.
-    std::vector<std::string> extra_features;
+    // The options the panel shows, with FFmpeg's metrics ticked in the
+    // table's column headings (PSNR and SSIM, libvmaf features, in the
+    // registry's order). The planes come with their metric's tick.
+    VmafOptions options = options_panel_->read_options();
     for (const MetricDefinition& metric : metrics()) {
-        if (metric.kind != MetricKind::frame || !metric.ffmpeg_binding ||
-            metric.ffmpeg_binding->libvmaf_feature.empty()) {
+        if (!metric.ffmpeg_binding || metric.is_plane()) {
             continue;
         }
         for (const MetricColumn& column : metric_columns()) {
-            if (column.key == metric.key && metric_header_->is_checked(column.column)) {
-                extra_features.emplace_back(metric.ffmpeg_binding->libvmaf_feature);
+            if (column.key == metric.key) {
+                options.set_metric_enabled(metric.key, metric_header_->is_checked(column.column));
             }
         }
     }
-    VmafOptions options = options_panel_->read_options(
-        extra_features, metric_header_->is_checked(col_vmaf), metric_header_->is_checked(col_vmaf_neg),
-        metric_header_->is_checked(col_vmaf_v1), metric_header_->is_checked(col_vmaf_hdr),
-        metric_header_->is_checked(col_xpsnr));
-    options.compute_psnr_yuv = metric_header_->is_checked(col_psnr_yuv);
-    options.compute_psnr_yuv_mse = metric_header_->is_checked(col_psnr_yuv_mse);
-    options.compute_vmaf_yuv = metric_header_->is_checked(col_vmaf_yuv);
-    options.compute_ssim_yuv = metric_header_->is_checked(col_ssim_yuv);
-    options.compute_ms_ssim = metric_header_->is_checked(col_ms_ssim);
-    options.compute_ms_ssim_yuv = metric_header_->is_checked(col_ms_ssim_yuv);
-    options.compute_psnr_hvs = metric_header_->is_checked(col_psnr_hvs);
-    options.compute_cambi = metric_header_->is_checked(col_cambi);
-    options.compute_ciede2000 = metric_header_->is_checked(col_ciede2000);
     return options;
 }
 
@@ -773,20 +760,9 @@ void MainWindow::add_cvvdp_display_rows(const std::vector<int>& rows, const Cvvd
             display_row.cvvdp_automatic = false;
             display_row.cvvdp_display_of = parent;
             VmafOptions& options = display_row.options;
-            options.compute_vmaf = false;
-            options.compute_vmaf_neg = false;
-            options.compute_vmaf_v1 = false;
-            options.compute_vmaf_hdr = false;
-            options.compute_xpsnr = false;
-            options.compute_psnr_yuv = false;
-            options.compute_psnr_yuv_mse = false;
-            options.compute_vmaf_yuv = false;
-            options.compute_ssim_yuv = false;
-            options.compute_ms_ssim = false;
-            options.compute_ms_ssim_yuv = false;
-            options.compute_psnr_hvs = false;
-            options.compute_cambi = false;
-            options.compute_ciede2000 = false;
+            for (const std::string_view key : switched_metrics()) {
+                options.set_metric_enabled(key, false);
+            }
             options.extra_features.clear();
             display_row.extra_metric_keys = {"cvvdp"};
         });

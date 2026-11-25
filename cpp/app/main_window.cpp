@@ -1281,21 +1281,7 @@ VmafOptions MainWindow::options_from_settings() const {
     options.gpu_decode = settings_.default_gpu_decode;
     options.vmaf_on_gpu = settings_.default_vmaf_on_gpu;
     options.vship_build = default_vship_build(settings_.default_vship_build);
-    options.extra_features = settings_.default_extra_features();
-    options.compute_xpsnr = settings_.default_compute_xpsnr;
-    options.compute_psnr_yuv = settings_.default_compute_psnr_yuv;
-    options.compute_psnr_yuv_mse = settings_.default_compute_psnr_yuv_mse;
-    options.compute_vmaf_yuv = settings_.default_compute_vmaf_yuv;
-    options.compute_ssim_yuv = settings_.default_compute_ssim_yuv;
-    options.compute_ms_ssim = settings_.default_compute_ms_ssim;
-    options.compute_ms_ssim_yuv = settings_.default_compute_ms_ssim_yuv;
-    options.compute_psnr_hvs = settings_.default_compute_psnr_hvs;
-    options.compute_cambi = settings_.default_compute_cambi;
-    options.compute_ciede2000 = settings_.default_compute_ciede2000;
-    options.compute_vmaf = settings_.default_compute_vmaf;
-    options.compute_vmaf_neg = settings_.default_compute_vmaf_neg;
-    options.compute_vmaf_v1 = settings_.default_compute_vmaf_v1;
-    options.compute_vmaf_hdr = settings_.default_compute_vmaf_hdr;
+    settings_.take_default_metrics(options);
     return options;
 }
 

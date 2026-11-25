@@ -45,7 +45,9 @@ QString run_file_filter() {
 // The metric columns follow the row's options: they are set from the
 // scores the run holds, or its PSNR, SSIM and XPSNR would show N/A.
 void take_run_options(VmafOptions& options, const ComparisonResult& result) {
-    const auto has = [&result](const char* key) { return result.metric_results.frame(key) != nullptr; };
+    const auto has = [&result](std::string_view key) {
+        return result.metric_results.frame(std::string(key)) != nullptr;
+    };
     options.extra_features.clear();
     if (has("psnr")) {
         options.extra_features.emplace_back("name=psnr");
@@ -53,23 +55,12 @@ void take_run_options(VmafOptions& options, const ComparisonResult& result) {
     if (has("ssim")) {
         options.extra_features.emplace_back("name=float_ssim");
     }
-    options.compute_xpsnr = has("xpsnr");
-    options.compute_psnr_yuv = has("psnr_yuv");
-    options.compute_psnr_yuv_mse = has("psnr_yuv_mse");
-    options.compute_vmaf_yuv = has("vmaf_yuv");
-    options.compute_ssim_yuv = has("ssim_yuv");
-    options.compute_ms_ssim = has("ms_ssim");
-    options.compute_ms_ssim_yuv = has("ms_ssim_yuv");
-    options.compute_psnr_hvs = has("psnr_hvs");
-    options.compute_cambi = has("cambi");
-    options.compute_ciede2000 = has("ciede2000");
-    options.compute_vmaf = has("vmaf");
-    options.compute_vmaf_neg = has("vmaf_neg");
-    options.compute_vmaf_v1 = has("vmaf_v1");
+    for (const std::string_view key : switched_metrics()) {
+        options.set_metric_enabled(key, has(key));
+    }
     if (result.model_choice_v1 && !result.model_choice_v1->empty()) {
         options.model_choice_v1 = *result.model_choice_v1;
     }
-    options.compute_vmaf_hdr = has("vmaf_hdr");
     if (result.model_choice_hdr && !result.model_choice_hdr->empty()) {
         options.model_choice_hdr = *result.model_choice_hdr;
     }

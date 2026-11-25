@@ -12,8 +12,24 @@ namespace vml {
 
 namespace {
 
-// The planes' options (MetricDefinition::plane_of), by their names.
-constexpr std::array<std::pair<std::string_view, bool VmafOptions::*>, 15> plane_options{{
+// The options that switch an on/off metric on, by the names the registry
+// gives them (FfmpegMetricBinding::bool_option): the metrics' (as
+// switched_metrics), then the planes' (MetricDefinition::plane_of).
+constexpr std::array<std::pair<std::string_view, bool VmafOptions::*>, 29> bool_options{{
+    {"compute_vmaf", &VmafOptions::compute_vmaf},
+    {"compute_vmaf_neg", &VmafOptions::compute_vmaf_neg},
+    {"compute_vmaf_v1", &VmafOptions::compute_vmaf_v1},
+    {"compute_vmaf_hdr", &VmafOptions::compute_vmaf_hdr},
+    {"compute_xpsnr", &VmafOptions::compute_xpsnr},
+    {"compute_psnr_yuv", &VmafOptions::compute_psnr_yuv},
+    {"compute_psnr_yuv_mse", &VmafOptions::compute_psnr_yuv_mse},
+    {"compute_ssim_yuv", &VmafOptions::compute_ssim_yuv},
+    {"compute_ms_ssim", &VmafOptions::compute_ms_ssim},
+    {"compute_ms_ssim_yuv", &VmafOptions::compute_ms_ssim_yuv},
+    {"compute_psnr_hvs", &VmafOptions::compute_psnr_hvs},
+    {"compute_cambi", &VmafOptions::compute_cambi},
+    {"compute_ciede2000", &VmafOptions::compute_ciede2000},
+    {"compute_vmaf_yuv", &VmafOptions::compute_vmaf_yuv},
     {"compute_psnr_yuv_y", &VmafOptions::compute_psnr_yuv_y},
     {"compute_psnr_yuv_u", &VmafOptions::compute_psnr_yuv_u},
     {"compute_psnr_yuv_v", &VmafOptions::compute_psnr_yuv_v},
@@ -31,55 +47,12 @@ constexpr std::array<std::pair<std::string_view, bool VmafOptions::*>, 15> plane
     {"compute_vmaf_yuv_v", &VmafOptions::compute_vmaf_yuv_v},
 }};
 
-// The option that switches an on/off metric on, by its name in the Python
-// app's VmafOptions (the registry's bool_option).
+// The option that switches an on/off metric on, by its name (bool_options).
 bool VmafOptions::*bool_option(std::string_view name) {
-    if (name == "compute_vmaf") {
-        return &VmafOptions::compute_vmaf;
-    }
-    if (name == "compute_vmaf_neg") {
-        return &VmafOptions::compute_vmaf_neg;
-    }
-    if (name == "compute_vmaf_v1") {
-        return &VmafOptions::compute_vmaf_v1;
-    }
-    if (name == "compute_vmaf_hdr") {
-        return &VmafOptions::compute_vmaf_hdr;
-    }
-    if (name == "compute_xpsnr") {
-        return &VmafOptions::compute_xpsnr;
-    }
-    if (name == "compute_psnr_yuv") {
-        return &VmafOptions::compute_psnr_yuv;
-    }
-    if (name == "compute_psnr_yuv_mse") {
-        return &VmafOptions::compute_psnr_yuv_mse;
-    }
-    if (name == "compute_ssim_yuv") {
-        return &VmafOptions::compute_ssim_yuv;
-    }
-    if (name == "compute_ms_ssim") {
-        return &VmafOptions::compute_ms_ssim;
-    }
-    if (name == "compute_ms_ssim_yuv") {
-        return &VmafOptions::compute_ms_ssim_yuv;
-    }
-    if (name == "compute_psnr_hvs") {
-        return &VmafOptions::compute_psnr_hvs;
-    }
-    for (const auto& [plane, option] : plane_options) {
-        if (name == plane) {
+    for (const auto& [option_name, option] : bool_options) {
+        if (name == option_name) {
             return option;
         }
-    }
-    if (name == "compute_cambi") {
-        return &VmafOptions::compute_cambi;
-    }
-    if (name == "compute_ciede2000") {
-        return &VmafOptions::compute_ciede2000;
-    }
-    if (name == "compute_vmaf_yuv") {
-        return &VmafOptions::compute_vmaf_yuv;
     }
     throw std::logic_error("no option called " + std::string(name));
 }
@@ -240,6 +213,19 @@ void VmafOptions::set_metric_enabled(std::string_view key, bool enabled) {
     } else if (std::find(extra_features.begin(), extra_features.end(), feature) == extra_features.end()) {
         extra_features.push_back(feature);
     }
+}
+
+const std::vector<std::string_view>& switched_metrics() {
+    static const std::vector<std::string_view> keys = [] {
+        std::vector<std::string_view> found;
+        for (const MetricDefinition& metric : metrics()) {
+            if (metric.ffmpeg_binding && !metric.ffmpeg_binding->bool_option.empty() && !metric.is_plane()) {
+                found.push_back(metric.key);
+            }
+        }
+        return found;
+    }();
+    return keys;
 }
 
 }  // namespace vml

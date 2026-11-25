@@ -25,6 +25,7 @@ const std::vector<std::string>& export_item_keys();
 const std::vector<std::string>& export_format_keys();
 
 struct Settings;
+struct VmafOptions;
 // What an export saves files of: Settings::export_items, less all but the
 // graphs while no format is ticked.
 std::vector<std::string> exported_items(const Settings& settings);
@@ -329,6 +330,11 @@ struct Settings {
     std::optional<std::filesystem::path> cache_dir_path() const;
     // The libvmaf features these defaults ask for: PSNR and SSIM.
     std::vector<std::string> default_extra_features() const;
+    // These defaults' FFmpeg metrics into `options`, which new videos start
+    // with: the features (default_extra_features) and each metric switched
+    // on by an option of its own (switched_metrics). Not the perceptual
+    // metrics, which are not VmafOptions'.
+    void take_default_metrics(VmafOptions& options) const;
     // Whether new videos have a metric ("vmaf", "psnr", ...) ticked: its
     // default_compute_<key> setting, or nullptr for a key with none.
     bool* default_compute(std::string_view key);

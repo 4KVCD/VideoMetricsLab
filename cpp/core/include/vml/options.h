@@ -233,4 +233,10 @@ struct VmafOptions {
     bool operator==(const VmafOptions&) const = default;
 };
 
+// The metrics switched on by a compute_<key> field of their own (VMAF, VMAF
+// NEG, XPSNR, CAMBI ...), in the registry's order: not PSNR and SSIM (libvmaf
+// features, in extra_features), and not the planes, which come with their
+// metric's tick (MetricDefinition::plane_of).
+const std::vector<std::string_view>& switched_metrics();
+
 }  // namespace vml

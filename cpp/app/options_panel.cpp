@@ -797,26 +797,18 @@ void OptionsPanel::show_cvvdp(const std::vector<CvvdpSettings>& selected, const 
                                                                    : Qt::Unchecked);
 }
 
-VmafOptions OptionsPanel::read_options(const std::vector<std::string>& extra_features, bool compute_vmaf,
-                                       bool compute_vmaf_neg, bool compute_vmaf_v1, bool compute_vmaf_hdr,
-                                       bool compute_xpsnr) const {
+VmafOptions OptionsPanel::read_options() const {
     VmafOptions options;
     options.model.clear();  // worked out for each video as a run starts (resolve_model), once its size is known
     options.model_choice = model_choices()[static_cast<std::size_t>(model_combo->currentIndex())].choice;
     options.model_choice_v1 = v1_model_choices()[static_cast<std::size_t>(model_v1_combo->currentIndex())].choice;
-    options.compute_vmaf_v1 = compute_vmaf_v1;
     options.model_choice_hdr = hdr_model_choices()[static_cast<std::size_t>(model_hdr_combo->currentIndex())].choice;
-    options.compute_vmaf_hdr = compute_vmaf_hdr;
     options.custom_model_path = custom_model_path;
-    options.extra_features = extra_features;
     options.n_threads = threads_spin->value();
     options.n_subsample = subsample_spin->value();
     options.scale_algorithm = scale_algo_combo->currentText().toStdString();
     options.scale_direction = scale_direction_combo->currentIndex() == 1 ? ScaleDirection::distorted_to_source
                                                                          : ScaleDirection::source_to_distorted;
-    options.compute_xpsnr = compute_xpsnr;
-    options.compute_vmaf = compute_vmaf;
-    options.compute_vmaf_neg = compute_vmaf_neg;
     if (range_unit_combo->currentIndex() == 1) {
         options.range_in_frames = true;
         options.range_in_milliseconds = false;

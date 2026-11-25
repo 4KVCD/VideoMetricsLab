@@ -13,6 +13,7 @@
 
 #include "vml/app_log.h"
 #include "vml/metrics.h"
+#include "vml/options.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
 
@@ -690,6 +691,15 @@ std::vector<std::string> Settings::default_extra_features() const {
         features.emplace_back("name=float_ssim");
     }
     return features;
+}
+
+void Settings::take_default_metrics(VmafOptions& options) const {
+    options.extra_features = default_extra_features();
+    for (const std::string_view key : switched_metrics()) {
+        if (const bool* ticked = default_compute(key)) {
+            options.set_metric_enabled(key, *ticked);
+        }
+    }
 }
 
 }  // namespace vml
