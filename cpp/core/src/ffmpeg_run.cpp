@@ -1883,9 +1883,11 @@ MetricProvenance run_provenance(const std::string& key, const std::string& model
         // within 4e-5), made on the GPU by the bundled build: by its
         // CUDA code or the Vulkan port of it, and VMAF v1 with Vulkan on
         // every GPU, as HDR VMAF's features (its pictures converted by libvmaf on the CPU), CIEDE2000 and
-        // CAMBI (VMAF v1's engine without VMAF's features).
+        // CAMBI (VMAF v1's engine without VMAF's features); VMAF YUV's U and V
+        // on VMAF's Vulkan engine, beside VMAF there (ChromaVmaf).
         const bool v1_engine = key == "vmaf_v1" || key == "vmaf_hdr" || key == "ciede2000" || key == "cambi";
-        const std::string backend = v1_engine ? "vulkan" : gpu_backend;
+        const bool chroma_vmaf = key == "vmaf_yuv_u" || key == "vmaf_yuv_v";
+        const std::string backend = v1_engine || chroma_vmaf ? "vulkan" : gpu_backend;
         provenance.implementation = "libvmaf/" + backend;
         provenance.compute_backend = "gpu";
         provenance.implementation_version = v1_engine               ? v1_library_build()
@@ -1927,11 +1929,12 @@ void insert_keys(std::set<std::string, std::less<>>& keys, const GpuPlan& plan) 
     }
 }
 
-// Files the CPU metrics the GPU calculated (CIEDE2000 and CAMBI, CpuScorer's features_on_gpu) under the GPU.
+// Files the CPU metrics the GPU calculated (CIEDE2000, CAMBI and VMAF YUV's U and V, CpuScorer's features_on_gpu)
+// under the GPU.
 void file_gpu_metrics(RunScores& scores) {
     for (const ParsedScores& part : scores.parts) {
         for (const std::string& key : part.features_on_gpu) {
-            if (key == "ciede2000" || key == "cambi") {
+            if (key == "ciede2000" || key == "cambi" || key == "vmaf_yuv_u" || key == "vmaf_yuv_v") {
                 scores.cpu_keys.erase(key);
                 scores.gpu_keys.insert(key);
             }
