@@ -30,6 +30,11 @@ struct ChromaFromDecoders {
     int device = 0;
 };
 
+// Whether the Vulkan engine can score the U and V planes of 4:2:0 pictures `width` x `height` at `bit_depth`
+// with `model` (the run's model= value): one of its two built-in models, 10 bits at most, and even-sized chroma
+// planes. Otherwise ChromaVmaf scores them with libvmaf on the CPU.
+bool chroma_vmaf_fits_gpu(int width, int height, int bit_depth, const std::string& model);
+
 // Scores the U and V planes (or one of them) of the libvmaf pictures given,
 // 4:2:0 at `width` x `height`, whose chroma planes are half the size rounded
 // down. On the GPU (Vulkan's number `gpu`, -1 for the one Vulkan picks) with

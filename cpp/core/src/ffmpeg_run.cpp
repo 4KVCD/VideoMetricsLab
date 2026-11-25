@@ -1671,9 +1671,11 @@ void validate_display_geometry(const VideoInfo& source, const VideoInfo& distort
 }
 
 FrameRange run_range(const VmafOptions& options, const VideoInfo& source) {
-    // VMAF's motion (HDR VMAF's too) and XPSNR look at the frames around the one they score.
+    // VMAF's motion (HDR VMAF's and VMAF U and V's too) and XPSNR look at the frames around the one they
+    // score. U and V can be in a pass without VMAF (plan_tasks puts them in one of their own on the CPU).
     const bool looks_around = options.compute_vmaf || options.compute_vmaf_neg || options.compute_vmaf_v1 ||
-                              options.compute_vmaf_hdr || options.compute_xpsnr;
+                              options.compute_vmaf_hdr || options.compute_vmaf_yuv_u ||
+                              options.compute_vmaf_yuv_v || options.compute_xpsnr;
     return frame_range(options.compared_range(), source.fps, options.n_subsample, looks_around);
 }
 

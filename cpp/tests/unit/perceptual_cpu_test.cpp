@@ -387,6 +387,37 @@ TEST(PerceptualRouting, WithoutAGpuCvvdpFailsAndTheOthersRunOnTheCpu) {
     }
 }
 
+// On the CPU, SSIMULACRA2 and Butteraugli are each scored in a pass of their
+// own (each heavy in CPU time and memory there), the task's progress running
+// over both, each pass shown as it starts and the first's scores as soon as
+// they are done.
+TEST(PerceptualRouting, OnTheCpuEachMetricIsScoredInAPassOfItsOwn) {
+    Routed routed;
+    std::vector<std::vector<std::string>> calls;
+    PerceptualRoutes routes = stand_in_routes(
+        routed, std::nullopt, [](const auto&, const auto&) -> PerceptualTaskOutput { throw std::logic_error("GPU"); },
+        [&calls](const std::vector<std::string>& keys, const ProgressCallback& on_progress) {
+            calls.push_back(keys);
+            on_progress(10, 10, 5.0);
+            return scored(keys.front(), 80.0f, "cpu");
+        });
+    PerceptualHooks hooks = recording_hooks(routed);
+    std::vector<std::string> passes;
+    hooks.on_pass = [&passes](int number, int count, const std::vector<std::string>& keys) {
+        passes.push_back(std::to_string(number) + "/" + std::to_string(count) + " " + keys.front());
+    };
+    std::vector<std::string> shown;
+    hooks.on_pass_done = [&shown](const PerceptualTaskOutput& output) { shown = output.metrics.keys(); };
+    const PerceptualTaskOutput output =
+        run_perceptual_task(routed_request(), {"ssimulacra2", "butteraugli"}, false, hooks, CancelToken(), routes);
+    EXPECT_EQ(calls, (std::vector<std::vector<std::string>>{{"ssimulacra2"}, {"butteraugli"}}));
+    EXPECT_EQ(output.metrics.keys(), (std::vector<std::string>{"ssimulacra2", "butteraugli"}));
+    EXPECT_EQ(output.compared_frame_count, 1);
+    EXPECT_EQ(passes, (std::vector<std::string>{"1/2 ssimulacra2", "2/2 butteraugli"}));
+    EXPECT_EQ(shown, std::vector<std::string>{"ssimulacra2"});
+    EXPECT_EQ(routed.events, (std::vector<std::string>{"cpu: ssimulacra2, butteraugli", "10/20 at 5", "20/20 at 5"}));
+}
+
 // The GPU is asked for under the run's own token, so that the run's Cancel
 // ends a check of the GPU asked for again inside the run (a copy of a token
 // shares its Cancel).

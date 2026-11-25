@@ -229,6 +229,7 @@ public:
     std::size_t index() const { return index_; }
     std::size_t task_count() const { return tasks_.size(); }
     Pool pool_of(std::size_t task) const { return job_.tasks[task].on_gpu() ? gpu_pool : cpu_pool; }
+    bool heavy_cpu(std::size_t task) const { return job_.tasks[task].heavy_cpu; }
 
     // The video's name in the log: "Video 2 'label'".
     std::string name() const { return "Video " + std::to_string(index_ + 1) + " '" + job_.label + "'"; }
@@ -310,6 +311,12 @@ private:
     // A task's metrics as the log and the run line show them: those scored in
     // its own place, and those the CPU scores beside them.
     std::pair<std::vector<std::string>, std::vector<std::string>> shown_keys(std::size_t task) const;
+    // Whether the task's run may put VMAF's family (CAMBI, CIEDE2000, VMAF U and V, HDR VMAF's features) on
+    // the GPU: the run's choice, except in a CPU task the planner gave VMAF, NEG or v1 (plan_tasks), or one
+    // split from it (vmaf_on_cpu), which stays on the CPU. The run's own placement (models_on_gpu), seeing
+    // only this task's metrics, might otherwise move them to the GPU. A CPU task without them keeps the
+    // choice: HDR VMAF's features go to the GPU with it (hdr_plan).
+    bool vmaf_family_on_gpu(std::size_t task) const;
     // Whether the video's frames may have been paired out of step
     // (frame_pairing.h), as it ends: seen from its result at no cost, and
     // counted (RunEvents::count_frames, which may read whole files) without
@@ -467,6 +474,8 @@ private:
     std::array<std::deque<Picked>, 2> queues_;
     std::array<int, 2> busy_{0, 0};
     std::set<std::size_t> in_flight_;
+    // The videos running a heavy_cpu task (MetricTask): each runs one at a time, in either queue.
+    std::set<std::size_t> heavy_running_;
     // What ended a lane, to be thrown by run(). The other lanes then start
     // no more tasks: the videos that lane left unfinished would hold their
     // places in progress for good.
@@ -508,9 +517,18 @@ std::pair<std::vector<std::string>, std::vector<std::string>> JobRun::shown_keys
     return {std::move(own), std::move(beside)};
 }
 
+bool JobRun::vmaf_family_on_gpu(std::size_t task) const {
+    const MetricTask& planned = job_.tasks[task];
+    const std::vector<std::string>& keys = planned.metric_keys;
+    const bool kept_on_cpu = planned.backend != gpu_vmaf_task &&
+                             (planned.vmaf_on_cpu || contains(keys, "vmaf") || contains(keys, "vmaf_neg") ||
+                              contains(keys, "vmaf_v1"));
+    return job_.options.vmaf_on_gpu && !kept_on_cpu;
+}
+
 std::string JobRun::task_name(std::size_t task) const {
     const auto [own, beside] = shown_keys(task);
-    const bool gpu_offered = job_.options.vmaf_on_gpu;
+    const bool gpu_offered = vmaf_family_on_gpu(task);
     const bool on_cpu = pool_of(task) != gpu_pool;
     std::string name = std::string(on_cpu ? "CPU" : "GPU") + " metrics (" +
                        (on_cpu ? cpu_metrics_text(own, gpu_offered) : metric_labels(own)) + ")";
@@ -639,16 +657,7 @@ ComparisonResult JobRun::execute_task(std::size_t task) {
             options.set_metric_enabled(key, true);  // VMAF YUV's U and V, which plan_tasks put in its place
         }
     }
-    // The CPU's task keeps what the planner gave it: VMAF, NEG or v1 placed
-    // there with the whole family (plan_tasks) stay on the CPU, which the
-    // run's own placement (models_on_gpu), seeing only this task's, might
-    // otherwise move to the GPU. A CPU task without them keeps the choice:
-    // HDR VMAF's features go to the GPU with it (hdr_plan).
-    const std::vector<std::string>& keys = job_.tasks[task].metric_keys;
-    if (job_.tasks[task].backend != gpu_vmaf_task &&
-        (contains(keys, "vmaf") || contains(keys, "vmaf_neg") || contains(keys, "vmaf_v1"))) {
-        options.vmaf_on_gpu = false;
-    }
+    options.vmaf_on_gpu = vmaf_family_on_gpu(task);
     ComparisonResult result = scheduler_.runner(
         job_, options,
         [this, task](long long current, long long total, double fps) { report_progress(task, current, total, fps); },
@@ -1286,16 +1295,15 @@ bool JobRun::saved_scores_fit() const {
 }
 
 std::optional<ComparisonResult> JobRun::merged() const {
-    const ComparisonResult* ffmpeg = nullptr;
-    const ComparisonResult* gpu = nullptr;
-    for (std::size_t task = 0; task < tasks_.size(); ++task) {
-        if (tasks_[task].result) {
-            (job_.tasks[task].backend == gpu_vmaf_task ? gpu : ffmpeg) = &*tasks_[task].result;
+    // The tasks' results in the plan's order: the base is the first (FFmpeg's, with the CPU-only metrics, where
+    // it has one: plan_tasks), and the others' scores are added to it.
+    std::vector<const ComparisonResult*> parts;
+    for (const TaskState& state : tasks_) {
+        if (state.result) {
+            parts.push_back(&*state.result);
         }
     }
-    if (ffmpeg == nullptr) {
-        std::swap(ffmpeg, gpu);
-    }
+    const ComparisonResult* ffmpeg = parts.empty() ? nullptr : parts.front();
     // The saved scores the run keeps, if it keeps any.
     const bool cached = job_.cached_result && !job_.cached_metrics.empty() && saved_scores_fit();
     std::optional<ComparisonResult> result;
@@ -1311,16 +1319,21 @@ std::optional<ComparisonResult> JobRun::merged() const {
         take_film_grain(result->source_info, job_.source_info);
         take_film_grain(result->distorted_info, job_.distorted_info);
     }
-    if (ffmpeg != nullptr && gpu != nullptr) {
-        result->metric_results.add_all(gpu->metric_results);
+    for (std::size_t part = 1; part < parts.size(); ++part) {
+        const ComparisonResult& other = *parts[part];
+        result->metric_results.add_all(other.metric_results);
         // Each VMAF's model comes from the task that calculated it: VMAF with
         // a custom model file is FFmpeg's.
-        if (gpu->has_metric("vmaf")) {
-            result->model = gpu->model;
+        if (other.has_metric("vmaf")) {
+            result->model = other.model;
         }
-        if (gpu->has_metric("vmaf_v1")) {
-            result->model_v1 = gpu->model_v1;
-            result->model_choice_v1 = gpu->model_choice_v1;
+        if (other.has_metric("vmaf_v1")) {
+            result->model_v1 = other.model_v1;
+            result->model_choice_v1 = other.model_choice_v1;
+        }
+        if (other.has_metric("vmaf_hdr")) {
+            result->model_hdr = other.model_hdr;
+            result->model_choice_hdr = other.model_choice_hdr;
         }
     }
     if (const std::optional<PerceptualTaskOutput> perceptual = perceptual_so_far()) {
@@ -1422,8 +1435,21 @@ void Scheduler::run() {
         logger.info("Every task of this run is on the GPU, one video at a time: CPU metrics for several videos at "
                     "once do not apply");
     }
-    // The GPU has one lane. The last lane runs on this thread.
-    const int cpu_lanes = std::min(max_parallel_jobs, static_cast<int>(queues_[cpu_pool].size()));
+    // The GPU has one lane. The last lane runs on this thread. CPU lanes for
+    // the CPU tasks that may run at once: a video's heavy_cpu tasks count as
+    // one, which then has every core (share_cores).
+    int cpu_tasks_at_once = 0;
+    for (const std::unique_ptr<JobRun>& run : runs_) {
+        bool heavy = false;
+        for (std::size_t task = 0; task < run->task_count(); ++task) {
+            if (run->pool_of(task) == cpu_pool) {
+                const bool counted = !run->heavy_cpu(task) || !heavy;
+                heavy = heavy || run->heavy_cpu(task);
+                cpu_tasks_at_once += counted ? 1 : 0;
+            }
+        }
+    }
+    const int cpu_lanes = std::min(max_parallel_jobs, cpu_tasks_at_once);
     lane_count_ = std::max(1, cpu_lanes);
     std::vector<Pool> lanes(static_cast<std::size_t>(cpu_lanes), cpu_pool);
     if (!queues_[gpu_pool].empty()) {
@@ -1487,14 +1513,22 @@ std::optional<Scheduler::Picked> Scheduler::take_next(Pool pool) {
     // The first task whose video is in progress, or that may start a new
     // one. A later video's task passes an earlier one's only when the
     // earlier video cannot start yet, so the videos in progress can always
-    // finish.
+    // finish. A heavy_cpu task waits while its video runs another (plan_tasks
+    // split them so that their CPU time and memory do not add up).
     std::deque<Picked>& queue = queues_[pool];
     for (auto entry = queue.begin(); entry != queue.end(); ++entry) {
         JobRun* run = entry->first;
+        const bool heavy = run->heavy_cpu(entry->second);
+        if (heavy && heavy_running_.contains(run->index())) {
+            continue;
+        }
         if (run->started || in_flight_.size() < max_videos_in_flight) {
             const Picked picked = *entry;
             queue.erase(entry);
             ++busy_[pool];
+            if (heavy) {
+                heavy_running_.insert(run->index());
+            }
             run->admitted[picked.second] = true;
             if (!run->started) {
                 run->started = true;
@@ -1523,6 +1557,9 @@ void Scheduler::drain_queue(Pool pool) {
         }
         const std::lock_guard lock(mutex_);
         --busy_[pool];
+        if (run->heavy_cpu(task)) {
+            heavy_running_.erase(run->index());
+        }
         if (complete) {
             in_flight_.erase(run->index());
         }
@@ -1536,7 +1573,110 @@ void Scheduler::drain_queue(Pool pool) {
     }
 }
 
+// The size frames are compared at, where it is known before the run: with
+// black bars kept, or cut as entered by hand. Pictures with their black bars
+// cut are always even-sized.
+std::optional<std::pair<int, int>> planned_size(const VideoInfo& source, const VideoInfo& test,
+                                                const VmafOptions& options) {
+    if (options.crop_mode == CropMode::none) {
+        return analysis_dimensions(source, test, options);
+    }
+    if (options.crop_mode == CropMode::manual && !options.resample_test) {
+        try {
+            return analysis_dimensions(source, test, options,
+                                       box_from_edges(options.manual_source_crop, source, "the source"),
+                                       box_from_edges(options.manual_test_crop, test, "the test video"));
+        } catch (const CropEntryError&) {
+            // Not known: the run says why it cannot cut the crop.
+        }
+    }
+    return std::nullopt;
+}
+
+// The metric `key` is part of when it is one that has a GPU route but runs on
+// the CPU, or "" for any other. Those are heavy in CPU time and memory there:
+// alone at 4K on the Core Ultra 9 285K, VMAF took 5,603 MB on the CPU, CAMBI
+// 2,233 MB and CIEDE2000 1,250 MB, the CPU-only metrics 92 to 1,684 MB. VMAF YUV's U
+// and V make one metric. `on_vulkan`: the task's CAMBI, CIEDE2000, U and V
+// and HDR VMAF's features go to the Vulkan engine (VMAF's place for the task
+// is the GPU and the engine scores VMAF here: cpu_metrics_plan, cpu_plan,
+// hdr_plan); `chroma_on_gpu`: the engine takes the U and V too.
+std::string heavy_cpu_unit(const std::string& key, bool on_vulkan, bool chroma_on_gpu) {
+    if (key == "vmaf" || key == "vmaf_neg" || key == "vmaf_v1") {
+        return key;  // in a CPU task's keys only: the GPU's task scores them on the GPU
+    }
+    if (key == "cambi" || key == "ciede2000" || key == "vmaf_hdr") {
+        return on_vulkan ? "" : key;
+    }
+    if (key == vmaf_u_key || key == vmaf_v_key) {
+        return on_vulkan && chroma_on_gpu ? "" : "vmaf_yuv";
+    }
+    return "";
+}
+
+// `keys` (in the registry's order) with the heavy metrics (heavy_cpu_unit)
+// after the first taken out: the keys left, whether they hold one, and the
+// keys of each other one.
+struct HeavySplit {
+    std::vector<std::string> kept;
+    bool kept_heavy = false;
+    std::vector<std::vector<std::string>> apart;
+};
+
+HeavySplit split_heavy_units(const std::vector<std::string>& keys, bool on_vulkan, bool chroma_on_gpu) {
+    HeavySplit split;
+    std::vector<std::string> units;  // in the order they first come
+    for (const std::string& key : keys) {
+        const std::string unit = heavy_cpu_unit(key, on_vulkan, chroma_on_gpu);
+        if (unit.empty()) {
+            split.kept.push_back(key);
+            continue;
+        }
+        auto at = std::find(units.begin(), units.end(), unit);
+        if (at == units.end()) {
+            units.push_back(unit);
+            at = units.end() - 1;
+            if (units.size() > 1) {
+                split.apart.emplace_back();
+            }
+        }
+        if (at == units.begin()) {
+            split.kept.push_back(key);
+            split.kept_heavy = true;
+        } else {
+            split.apart[static_cast<std::size_t>(at - units.begin()) - 1].push_back(key);
+        }
+    }
+    return split;
+}
+
 }  // namespace
+
+bool plan_asks_vulkan_engine(const VmafOptions& options, const std::vector<std::string>& metric_keys) {
+    return options.vmaf_on_gpu &&
+           std::any_of(metric_keys.begin(), metric_keys.end(), [](const std::string& key) {
+               return key == "cambi" || key == "ciede2000" || key == "vmaf_yuv" || key == vmaf_u_key ||
+                      key == vmaf_v_key || key == "vmaf_hdr";
+           });
+}
+
+GpuAnswers plan_gpu_answers(const VmafOptions& options, const std::vector<std::string>& metric_keys,
+                            const PerceptualBackends& perceptual_backends) {
+    GpuAnswers answers;
+    if (plan_asks_vulkan_engine(options, metric_keys)) {
+        answers.vulkan_engine = gpu_vmaf_backend(gpu_probes_token()).backend == "vulkan";
+    }
+    // SSIMULACRA2 and Butteraugli set to the GPU ("gpu" where not given) run on the CPU without one.
+    const bool vship_asked = std::any_of(metric_keys.begin(), metric_keys.end(), [&](const std::string& key) {
+        const auto chosen = perceptual_backends.find(key);
+        return (key == "ssimulacra2" || key == "butteraugli") &&
+               (chosen == perceptual_backends.end() || chosen->second != "cpu");
+    });
+    if (vship_asked) {
+        answers.vship = detect_vship_device(options.vship_build, gpu_probes_token()).first.has_value();
+    }
+    return answers;
+}
 
 std::vector<std::string> fallback_notes(const std::vector<std::pair<std::string, std::string>>& failures,
                                         const std::vector<std::string>& calculated) {
@@ -1561,7 +1701,7 @@ std::vector<std::string> fallback_notes(const std::vector<std::pair<std::string,
 std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& test, const VmafOptions& options,
                                    const std::vector<std::string>& metric_keys,
                                    const PerceptualBackends& perceptual_backends, const MetricResultSet& saved,
-                                   bool share_decode) {
+                                   bool share_decode, const GpuAnswers& gpu_answers) {
     // Each metric with a saved score is left out (the run's result takes the
     // saved one). Where the others are calculated is decided from every
     // metric asked for, saved or not, so that one calculated alone is
@@ -1586,30 +1726,18 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
     const bool neg = contains(metric_keys, "vmaf_neg");
     const bool v1 = contains(metric_keys, "vmaf_v1");
     const bool vmaf_family_left = contains(keys, "vmaf") || contains(keys, "vmaf_neg") || contains(keys, "vmaf_v1");
+    const bool chroma_left = contains(keys, vmaf_u_key) || contains(keys, vmaf_v_key);
+    const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt, test.pix_fmt}));
+    const std::optional<std::pair<int, int>> size =
+        vmaf_family_left || chroma_left ? planned_size(source, test, options) : std::nullopt;
     GpuModels on_gpu;
     std::vector<std::pair<std::string, std::string>> check_failures;  // (key, why) of scores_on_gpu
     if (vmaf_family_left) {
-        // The size frames are compared at, where it is known before the run:
-        // with black bars kept, or cut as entered by hand. Pictures with their
-        // black bars cut are always even-sized.
-        std::optional<std::pair<int, int>> size;
-        if (options.crop_mode == CropMode::none) {
-            size = analysis_dimensions(source, test, options);
-        } else if (options.crop_mode == CropMode::manual && !options.resample_test) {
-            try {
-                size = analysis_dimensions(source, test, options,
-                                           box_from_edges(options.manual_source_crop, source, "the source"),
-                                           box_from_edges(options.manual_test_crop, test, "the test video"));
-            } catch (const CropEntryError&) {
-                // Not known: the run says why it cannot cut the crop.
-            }
-        }
         // Planned before the run, whose checks of the GPU have answered (the
         // window waits for them, the command line asks as it starts): none
         // of the run's to cancel.
-        on_gpu = scores_on_gpu(vmaf, neg, options.model, options.vmaf_on_gpu,
-                               bit_depth(analysis_pix_fmt({source.pix_fmt, test.pix_fmt})), size, gpu_probes_token(),
-                               v1, options.model_v1, &check_failures);
+        on_gpu = scores_on_gpu(vmaf, neg, options.model, options.vmaf_on_gpu, depth, size, gpu_probes_token(), v1,
+                               options.model_v1, &check_failures);
     }
     MetricTask ffmpeg{"ffmpeg", {}};
     ffmpeg.fallbacks = fallback_notes(check_failures, keys);
@@ -1648,12 +1776,53 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
             }
         }
     }
-    std::vector<MetricTask> tasks;
-    for (MetricTask* task : {&ffmpeg, &gpu, &vship, &perceptual_cpu}) {
-        if (!task->metric_keys.empty()) {
-            tasks.push_back(std::move(*task));
+    // At most one metric that has a GPU route but runs on the CPU in a task (heavy_cpu_unit): FFmpeg's task keeps
+    // the first with the CPU-only metrics, the GPU's task the first beside VMAF, and each other one is calculated
+    // in a task of FFmpeg's own. The CPU's task with VMAF, NEG or v1 keeps the metrics that follow VMAF's place on
+    // the CPU (JobRun::execute_task), and so do the tasks split from it. A size not known before the run is taken
+    // for one whose U and V the engine takes (the black bars cut leave an even size).
+    const bool vmaf_on_cpu = contains(ffmpeg.metric_keys, "vmaf") || contains(ffmpeg.metric_keys, "vmaf_neg") ||
+                             contains(ffmpeg.metric_keys, "vmaf_v1");
+    const bool engine = options.vmaf_on_gpu && gpu_answers.vulkan_engine;
+    const bool chroma_on_gpu = !size || chroma_vmaf_fits_gpu(size->first, size->second, depth, options.model);
+    std::vector<MetricTask> split_off;
+    const auto split = [&](std::vector<std::string>& task_keys, bool on_vulkan, bool vmaf_cpu) {
+        HeavySplit parts = split_heavy_units(task_keys, on_vulkan, chroma_on_gpu);
+        task_keys = std::move(parts.kept);
+        for (std::vector<std::string>& part : parts.apart) {
+            MetricTask task{"ffmpeg", std::move(part)};
+            task.vmaf_on_cpu = vmaf_cpu;
+            task.heavy_cpu = true;
+            split_off.push_back(std::move(task));
+        }
+        return parts.kept_heavy;
+    };
+    ffmpeg.vmaf_on_cpu = vmaf_on_cpu;
+    ffmpeg.heavy_cpu = split(ffmpeg.metric_keys, engine && !vmaf_on_cpu, vmaf_on_cpu);
+    const std::size_t from_ffmpeg = split_off.size();
+    gpu.heavy_cpu = split(gpu.cpu_beside, engine, false);
+    for (std::size_t task = from_ffmpeg; task < split_off.size(); ++task) {
+        for (const std::string& key : split_off[task].metric_keys) {
+            std::erase(gpu.metric_keys, key);  // no longer beside VMAF
         }
     }
+    // SSIMULACRA2 and Butteraugli on the CPU, set there or by Vship finding no GPU: one at a time in their task
+    // (MetricRouting::run_on_cpu).
+    perceptual_cpu.heavy_cpu = true;
+    vship.heavy_cpu = !gpu_answers.vship && (contains(vship.metric_keys, "ssimulacra2") ||
+                                             contains(vship.metric_keys, "butteraugli"));
+    std::vector<MetricTask> tasks;
+    const auto add = [&tasks](MetricTask& task) {
+        if (!task.metric_keys.empty()) {
+            tasks.push_back(std::move(task));
+        }
+    };
+    add(ffmpeg);
+    std::for_each(split_off.begin(), split_off.begin() + static_cast<std::ptrdiff_t>(from_ffmpeg), add);
+    add(gpu);
+    std::for_each(split_off.begin() + static_cast<std::ptrdiff_t>(from_ffmpeg), split_off.end(), add);
+    add(vship);
+    add(perceptual_cpu);
     return tasks;
 }
 
@@ -1700,7 +1869,7 @@ void calculate_saved_scores_of_other_bars(std::vector<VmafJob>& jobs, const std:
         std::vector<MetricTask> tasks;
         try {
             tasks = plan_tasks(job.source_info, job.distorted_info, options, job.metric_keys, job.perceptual_backends,
-                               MetricResultSet(), job.share_decode);
+                               MetricResultSet(), job.share_decode, job.gpu_answers);
         } catch (const std::exception&) {
             continue;  // as planned, its saved scores left out of the result (JobRun::saved_scores_fit)
         }

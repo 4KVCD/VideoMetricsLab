@@ -2326,6 +2326,7 @@ public:
         const CropPair crops = routes_.find_crops(request_, hooks_.on_status, cancel_);
         refuse_too_small(request_, keys_, crops);  // before any GPU work; CPU metrics too
         PerceptualTaskOutput gpu_output;
+        gpu_started_ = true;
         try {
             gpu_output = routes_.run_gpu(request_, gpu_, *device_, crops, together_, hooks_, cancel_);
         } catch (const Cancelled&) {
@@ -2353,8 +2354,49 @@ public:
 private:
     // ------------------------------------------------------------ the CPU
 
+    // Calculates `keys` on the CPU, each in a pass of its own: there SSIMULACRA2 and Butteraugli are each heavy in
+    // CPU time and memory (2,345 and 2,478 MB at 4K on the Core Ultra 9 285K), and PCs without a GPU tend to have
+    // little memory (plan_tasks keeps such metrics apart for the same reason). The task's progress runs over the
+    // passes, the window is told of each where no GPU pass came before, and each pass's scores before the last
+    // are shown as soon as they are done.
     PerceptualTaskOutput run_on_cpu(const std::vector<std::string>& keys, const std::optional<CropPair>& crops) {
-        return routes_.run_cpu(request_, keys, crops, hooks_.on_progress, hooks_.on_status, cancel_);
+        if (keys.size() <= 1) {
+            return routes_.run_cpu(request_, keys, crops, hooks_.on_progress, hooks_.on_status, cancel_);
+        }
+        PerceptualTaskOutput all;
+        const int count = static_cast<int>(keys.size());
+        long long done = 0;  // the passes before's progress units
+        for (int number = 0; number < count; ++number) {
+            const std::vector<std::string> pass{keys[static_cast<std::size_t>(number)]};
+            if (hooks_.on_pass && !gpu_started_) {
+                hooks_.on_pass(number + 1, count, pass);
+            }
+            std::atomic<long long> reached{0};
+            ProgressCallback progress;
+            if (hooks_.on_progress) {
+                // The passes left, this one included, score as many frames as it does.
+                progress = [this, done, left = count - number, &reached](long long current, long long total,
+                                                                          double fps) {
+                    reached = current;
+                    hooks_.on_progress(done + current, done + left * total, fps);
+                };
+            }
+            PerceptualTaskOutput output = routes_.run_cpu(request_, pass, crops, progress, hooks_.on_status, cancel_);
+            done += reached;
+            if (number == 0) {
+                all.source_crop = output.source_crop;
+                all.distorted_crop = output.distorted_crop;
+                all.compared_frame_count = output.compared_frame_count;
+            }
+            all.metrics.add_all(output.metrics);
+            for (const auto& [key, reason] : output.failures) {
+                set_failure(all.failures, key, reason);
+            }
+            if (hooks_.on_pass_done && number + 1 < count && !output.metrics.empty()) {
+                hooks_.on_pass_done(output);
+            }
+        }
+        return all;
     }
 
     // Reports the metrics the CPU is about to calculate (on_cpu).
@@ -2683,6 +2725,7 @@ private:
     std::vector<std::string> gpu_only_;   // the GPU's metrics that run on no CPU (CVVDP)
     std::vector<std::string> retryable_;  // the metrics the CPU can take over
     std::set<std::string> refused_;       // refused for the film grain: tried nowhere else
+    bool gpu_started_ = false;            // whether Vship's GPU passes began (the window was told of them)
 };
 
 }  // namespace

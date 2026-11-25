@@ -61,6 +61,12 @@ struct MetricTask {
     // (plan_tasks's share_decode), and shown as the CPU's metrics; HDR VMAF,
     // whose features the GPU calculates there, as the GPU's.
     std::vector<std::string> cpu_beside{};
+    // Of a CPU task: its VMAF, NEG or v1 runs on the CPU, so the metrics that follow VMAF's place (CAMBI,
+    // CIEDE2000, VMAF YUV's U and V, HDR VMAF's features) do too, also in the tasks split from it (plan_tasks).
+    bool vmaf_on_cpu = false;
+    // Whether it calculates a metric that has a GPU route on the CPU (heavy_cpu_unit in job_runner.cpp): a
+    // video runs one such task at a time, in either queue (Scheduler::take_next).
+    bool heavy_cpu = false;
 
     // Whether it waits in the GPU's queue rather than the CPU's.
     bool on_gpu() const { return backend == gpu_vmaf_task || backend == perceptual_task; }
@@ -72,6 +78,24 @@ struct MetricTask {
 // Where SSIMULACRA2 and Butteraugli are each set to run, "gpu" or "cpu"
 // ("gpu" where not given).
 using PerceptualBackends = std::map<std::string, std::string, std::less<>>;
+
+// What this PC's GPU checks answered, for the plan of a video's tasks: whether the Vulkan engine scores VMAF
+// (gpu_vmaf_backend), which CAMBI, CIEDE2000, VMAF YUV's U and V and HDR VMAF's features run on when VMAF is set
+// to the GPU, and whether the video's Vship build has a GPU (detect_vship_device), without which SSIMULACRA2 and
+// Butteraugli set to the GPU run on the CPU. An answer not asked for (plan_gpu_answers) stays true.
+struct GpuAnswers {
+    bool vulkan_engine = true;
+    bool vship = true;
+};
+
+// Whether a plan of `metric_keys` asks gpu_vmaf_backend: VMAF set to the GPU, with a metric that follows its
+// engine (the window checks the GPU first, so that planning never waits for a probe).
+bool plan_asks_vulkan_engine(const VmafOptions& options, const std::vector<std::string>& metric_keys);
+
+// The GPU answers a plan of `metric_keys` needs, asked under gpu_probes_token() (kept answers: probing only the
+// first time), the others left true.
+GpuAnswers plan_gpu_answers(const VmafOptions& options, const std::vector<std::string>& metric_keys,
+                            const PerceptualBackends& perceptual_backends);
 
 // The tasks a video's metrics (`metric_keys`) are calculated in (the Python
 // app's JobRun._by_place), each in one place: FFmpeg's metrics in one task
@@ -92,10 +116,16 @@ using PerceptualBackends = std::map<std::string, std::string, std::less<>>;
 // left to run on the CPU beside VMAF on the GPU join the GPU's task
 // (MetricTask::cpu_beside), which scores both from one decode of each video
 // rather than the CPU decoding a video once for each task.
+//
+// A metric that has a GPU route but runs on the CPU (heavy_cpu_unit in job_runner.cpp: set to the CPU, or
+// `gpu` says the GPU cannot take it) is heavy in CPU time and memory there: no task calculates two of them. The
+// CPU's task keeps the first with the CPU-only metrics (PSNR, SSIM, ...), and each other one gets a task of its
+// own; the GPU's task keeps at most one beside VMAF. Such tasks are heavy_cpu, which a video runs one at a time.
 std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& test, const VmafOptions& options,
                                    const std::vector<std::string>& metric_keys,
                                    const PerceptualBackends& perceptual_backends = {},
-                                   const MetricResultSet& saved = MetricResultSet(), bool share_decode = false);
+                                   const MetricResultSet& saved = MetricResultSet(), bool share_decode = false,
+                                   const GpuAnswers& gpu = {});
 
 // What the CPU's task says of the metrics a failed check of the GPU sent it
 // (`failures`, each metric's key and why): a note for each reason, with its
@@ -128,6 +158,8 @@ struct VmafJob {
     // Whether its tasks share one decode of each video (plan_tasks's
     // share_decode), for a plan made anew (calculate_saved_scores_of_other_bars).
     bool share_decode = false;
+    // The GPU answers its tasks were planned with (plan_tasks's `gpu`), for a plan made anew.
+    GpuAnswers gpu_answers;
 };
 
 // Before a run: each job that keeps saved scores beside those it calculates

@@ -348,6 +348,7 @@ std::variant<VmafJob, QString> MainWindow::job_for(const RowData& row_data) cons
     MetricResultSet kept = reusable_results(row_data);
     std::vector<MetricTask> tasks;
     bool share_decode = false;
+    GpuAnswers gpu_answers;
     try {
         if (!options.resample_test) {
             validate_video_pair(*source_info_, info, options);
@@ -366,14 +367,16 @@ std::variant<VmafJob, QString> MainWindow::job_for(const RowData& row_data) cons
                                                       ? DecodingCapabilities::remembered(tools_status_.ffmpeg.path)
                                                       : DecodingCapabilities{};
         share_decode = shares_decode(*source_info_, info, options, capabilities);
-        tasks = plan_tasks(*source_info_, info, options, metric_keys, backends, kept, share_decode);
+        // Answered before the run (wait_for_gpu_checks): no probe waited for here.
+        gpu_answers = plan_gpu_answers(options, metric_keys, backends);
+        tasks = plan_tasks(*source_info_, info, options, metric_keys, backends, kept, share_decode, gpu_answers);
     } catch (const std::exception& error) {
         return QString::fromStdString(error.what());
     }
     return VmafJob{*source_info_, info, std::move(options), row_data.path, metric_keys, std::move(tasks),
                    backends, row_data.cvvdp,
                    row_data.completed_run ? std::optional(row_data.completed_run->result) : std::nullopt,
-                   std::move(kept), platform::path_text(row_data.path.stem()), share_decode};
+                   std::move(kept), platform::path_text(row_data.path.stem()), share_decode, gpu_answers};
 }
 
 // The run's state, made anew for the `checked` rows, of which `job_rows`
@@ -481,8 +484,9 @@ bool MainWindow::confirm_skipping(const std::vector<std::pair<std::shared_ptr<Ro
 
 bool MainWindow::wait_for_gpu_checks(const std::vector<int>& checked) {
     // The GPU checks the run's plan reads (which metrics the GPU takes: the
-    // rows' Vship builds', and VMAF's and VMAF v1's when a row has them on
-    // the GPU), waited for off the window's thread. The app's default build's
+    // rows' Vship builds', and VMAF's and VMAF v1's when a row has them, or a
+    // metric that follows VMAF's engine (plan_asks_vulkan_engine), on the
+    // GPU), waited for off the window's thread. The app's default build's
     // and VMAF's start with the app, but take seconds, and waited for on it, a
     // run asked for before they were done would hold the window still until
     // they were. A failure of VMAF's check a minute old is checked again
@@ -495,7 +499,8 @@ bool MainWindow::wait_for_gpu_checks(const std::vector<int>& checked) {
         const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
         const std::vector<std::string> metrics = requested_metrics(row_data);
         const bool on_gpu = row_data.options.vmaf_on_gpu;
-        vmaf_gpu = vmaf_gpu || (on_gpu && (contains(metrics, "vmaf") || contains(metrics, "vmaf_neg")));
+        vmaf_gpu = vmaf_gpu || (on_gpu && (contains(metrics, "vmaf") || contains(metrics, "vmaf_neg"))) ||
+                   plan_asks_vulkan_engine(row_data.options, metrics);
         v1 = v1 || (on_gpu && contains(metrics, "vmaf_v1"));
         builds.insert(row_data.options.vship_build);
     }

@@ -1116,15 +1116,16 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
         video.facts = std::move(facts);
         return std::nullopt;
     }
+    const GpuAnswers gpu_answers = plan_gpu_answers(options, video.metrics, backends);
     std::vector<MetricTask> tasks =
-        plan_tasks(source, *video.info, options, video.metrics, backends, kept, share_decode);
+        plan_tasks(source, *video.info, options, video.metrics, backends, kept, share_decode, gpu_answers);
     std::optional<std::string> missing = gpu_not_yet(tasks);
     if (kept.empty()) {
         saved.reset();
     }
     jobs.push_back(VmafJob{source, *video.info, std::move(options), video.path, video.metrics, std::move(tasks), backends,
                            cvvdp, std::move(saved), std::move(kept), platform::path_text(video.path.stem()),
-                           share_decode});
+                           share_decode, gpu_answers});
     return missing;
 }
 

@@ -840,7 +840,8 @@ TEST(JobRunner, SavedScoresAreNotCalculatedAgain) {
     EXPECT_EQ(planned[0].metric_keys, std::vector<std::string>{"vmaf_neg"});
 }
 
-// VMAF YUV is planned as VMAF's U and V beside VMAF, and made from the three:
+// VMAF YUV is planned as VMAF's U and V, on the CPU in a task of their own
+// beside VMAF's (each heavy there: plan_tasks), and made from the three:
 // (6 VMAF + U + V) / 8 of each frame, its Y VMAF's score. The U and V asked
 // for it alone are not kept, and a failure of theirs is VMAF YUV's.
 TEST(JobRunner, VmafYuvIsMadeFromVmafAndItsChromaPlanes) {
@@ -862,33 +863,43 @@ TEST(JobRunner, VmafYuvIsMadeFromVmafAndItsChromaPlanes) {
     EXPECT_EQ(plan_tasks(source, test, job.options, job.metric_keys, {}, saved_scores({"vmaf_yuv"}))[0].metric_keys,
               (std::vector<std::string>{"vmaf", "psnr"}));
     job.tasks = plan_tasks(source, test, job.options, job.metric_keys);
-    ASSERT_EQ(job.tasks.size(), 1u);
-    EXPECT_EQ(job.tasks[0].metric_keys, (std::vector<std::string>{"vmaf", "psnr", "vmaf_yuv_u", "vmaf_yuv_v"}));
+    ASSERT_EQ(job.tasks.size(), 2u);
+    EXPECT_EQ(job.tasks[0].metric_keys, (std::vector<std::string>{"vmaf", "psnr"}));
+    EXPECT_EQ(job.tasks[1].metric_keys, (std::vector<std::string>{"vmaf_yuv_u", "vmaf_yuv_v"}));
+    EXPECT_TRUE(job.tasks[1].vmaf_on_cpu);
 
     const auto scores = [](const std::string& key, std::vector<float> values) {
         return FrameMetricResult{key, {0, 1}, {0.0, 1 / 24.0}, std::move(values), {}};
     };
-    std::vector<std::vector<std::string>> asked;
+    const std::map<std::string, std::vector<float>> scored{
+        {"vmaf", {80, 90}}, {"psnr", {40, 41}}, {"vmaf_yuv_u", {60, 70}}, {"vmaf_yuv_v", {40, 50}}};
+    VmafJob second = job;
+    second.label = "second";
+    std::mutex mutex;
+    std::set<std::vector<std::string>> asked;
     Reported reported;
     run_jobs(
-        {job, job}, 1, reported.events(),
-        [&](const VmafJob&, const VmafOptions& options, const ProgressCallback&, const StatusCallback&,
+        {job, second}, 1, reported.events(),
+        [&](const VmafJob& video, const VmafOptions& options, const ProgressCallback&, const StatusCallback&,
             const CancelToken&) {
-            asked.push_back(options.requested_metrics());
-            ComparisonResult result;
-            for (FrameMetricResult metric : {scores("vmaf", {80, 90}), scores("psnr", {40, 41}),
-                                             scores("vmaf_yuv_u", {60, 70}), scores("vmaf_yuv_v", {40, 50})}) {
-                result.metric_results.add(std::move(metric));
+            const std::vector<std::string> keys = options.requested_metrics();
+            {
+                const std::lock_guard lock(mutex);
+                asked.insert(keys);
             }
-            if (asked.size() == 2) {  // the second video's V cannot be scored
-                result.metric_results.remove("vmaf_yuv_v");
-                result.metric_failures["vmaf_yuv_v"] = "its chroma is too small";
+            ComparisonResult result;
+            for (const std::string& key : keys) {
+                if (key == "vmaf_yuv_v" && video.label == "second") {  // its V cannot be scored
+                    result.metric_failures[key] = "its chroma is too small";
+                } else {
+                    result.metric_results.add(scores(key, scored.at(key)));
+                }
             }
             return result;
         },
         24, CancelToken());
 
-    EXPECT_EQ(asked[0], (std::vector<std::string>{"vmaf", "psnr", "vmaf_yuv_u", "vmaf_yuv_v"}));
+    EXPECT_EQ(asked, (std::set<std::vector<std::string>>{{"vmaf", "psnr"}, {"vmaf_yuv_u", "vmaf_yuv_v"}}));
     ASSERT_EQ(reported.finished.size(), 1u);
     const MetricResultSet& made = reported.finished.at(0).metric_results;
     ASSERT_NE(made.frame("vmaf_yuv"), nullptr);
@@ -901,6 +912,109 @@ TEST(JobRunner, VmafYuvIsMadeFromVmafAndItsChromaPlanes) {
     EXPECT_FALSE(failed.result.has_metric("vmaf_yuv_u"));
     EXPECT_EQ(failed.failures, (MetricFailures{{"vmaf_yuv", "its chroma is too small"}}));
     EXPECT_EQ(failed.message, "VMAF YUV (6:1:1) failed: its chroma is too small");
+}
+
+// A metric that has a GPU route but runs on the CPU (set there, or the GPU
+// checks found no GPU for it) is alone in its task: the first keeps the
+// CPU-only metrics, each other one has a task of its own, and SSIMULACRA2
+// and Butteraugli share their task, scored one at a time in it. Where the GPU
+// takes them, the plan is one task, as before.
+TEST(JobRunner, AMetricWithAGpuRouteOnTheCpuIsAloneInItsTask) {
+    VideoInfo source;
+    source.path = "reference.mkv";
+    source.width = 1920;
+    source.height = 1080;
+    source.pix_fmt = "yuv420p";
+    VideoInfo test = source;
+    test.path = "encode.mkv";
+    using Keys = std::vector<std::string>;
+    const auto shape = [](const std::vector<MetricTask>& tasks) {
+        std::vector<std::tuple<std::string, Keys, bool, bool>> made;
+        for (const MetricTask& task : tasks) {
+            made.emplace_back(task.backend, task.metric_keys, task.heavy_cpu, task.vmaf_on_cpu);
+        }
+        return made;
+    };
+    const std::string ffmpeg = "ffmpeg";
+    const std::string vship(perceptual_task);
+    const std::string vship_cpu(perceptual_cpu_task);
+
+    // Set to the CPU: VMAF takes CAMBI, CIEDE2000 and VMAF YUV's U and V there with it.
+    VmafOptions options;
+    options.vmaf_on_gpu = false;
+    EXPECT_EQ(shape(plan_tasks(source, test, options,
+                               {"vmaf", "psnr", "ssim", "cambi", "ciede2000", "vmaf_yuv", "ssimulacra2", "butteraugli"},
+                               {{"ssimulacra2", "cpu"}, {"butteraugli", "cpu"}})),
+              (std::vector<std::tuple<std::string, Keys, bool, bool>>{
+                  {ffmpeg, {"vmaf", "psnr", "ssim"}, true, true},
+                  {ffmpeg, {"cambi"}, true, true},
+                  {ffmpeg, {"ciede2000"}, true, true},
+                  {ffmpeg, {"vmaf_yuv_u", "vmaf_yuv_v"}, true, true},
+                  {vship_cpu, {"ssimulacra2", "butteraugli"}, true, false}}));
+
+    // Set to the GPU on a PC whose checks found no Vulkan engine and no GPU for Vship.
+    options.vmaf_on_gpu = true;
+    const Keys asked{"psnr", "cambi", "ciede2000", "vmaf_yuv", "ssimulacra2", "butteraugli"};
+    EXPECT_EQ(shape(plan_tasks(source, test, options, asked, {}, {}, false, GpuAnswers{false, false})),
+              (std::vector<std::tuple<std::string, Keys, bool, bool>>{
+                  {ffmpeg, {"psnr", "cambi"}, true, false},
+                  {ffmpeg, {"ciede2000"}, true, false},
+                  {ffmpeg, {"vmaf_yuv_u", "vmaf_yuv_v"}, true, false},
+                  {vship, {"ssimulacra2", "butteraugli"}, true, false}}));
+    // The GPU takes them: one task each, as before.
+    EXPECT_EQ(shape(plan_tasks(source, test, options, asked)),
+              (std::vector<std::tuple<std::string, Keys, bool, bool>>{
+                  {ffmpeg, {"psnr", "cambi", "ciede2000", "vmaf_yuv_u", "vmaf_yuv_v"}, false, false},
+                  {vship, {"ssimulacra2", "butteraugli"}, false, false}}));
+    // VMAF sent to the CPU by a model file, VMAF on the GPU still set: CAMBI goes with it.
+    options.model = "model_path=C\\:/models/own.json";
+    EXPECT_EQ(shape(plan_tasks(source, test, options, {"vmaf", "psnr", "cambi"})),
+              (std::vector<std::tuple<std::string, Keys, bool, bool>>{{ffmpeg, {"vmaf", "psnr"}, true, true},
+                                                                       {ffmpeg, {"cambi"}, true, true}}));
+}
+
+// A video's tasks with a metric that has a GPU route on the CPU (heavy_cpu)
+// run one at a time, whatever the parallel jobs; a light one runs beside
+// them. With two CPU lanes, the second takes the light task rather than the
+// second heavy one, so the first heavy task meets the light one.
+TEST(JobRunner, AVideosHeavyTasksRunOneAtATime) {
+    std::vector<MetricTask> tasks{{"ffmpeg", {"vmaf"}}, {"ffmpeg", {"cambi"}}, {"ffmpeg", {"psnr"}}};
+    tasks[0].heavy_cpu = true;
+    tasks[1].heavy_cpu = true;
+    const VmafJob job = job_of(tasks);
+    Meeting heavy_and_light(2);
+    std::mutex mutex;
+    int heavy_running = 0;
+    int most_heavy = 0;
+    bool met = true;
+    std::vector<int> threads;
+    Reported reported;
+    run_jobs(
+        {job}, 2, reported.events(),
+        [&](const VmafJob&, const VmafOptions& options, const ProgressCallback&, const StatusCallback&,
+            const CancelToken&) {
+            const std::vector<std::string> keys = options.requested_metrics();
+            const bool heavy = keys.front() != "psnr";
+            {
+                const std::lock_guard lock(mutex);
+                heavy_running += heavy ? 1 : 0;
+                most_heavy = std::max(most_heavy, heavy_running);
+                threads.push_back(options.n_threads);
+            }
+            const bool first = keys.front() == "vmaf";
+            const bool together = (!first && heavy) || heavy_and_light.arrive_and_wait();
+            const std::lock_guard lock(mutex);
+            met = met && together;
+            heavy_running -= heavy ? 1 : 0;
+            return result_with({{keys.front(), {0}}});
+        },
+        24, CancelToken());
+
+    EXPECT_TRUE(met);
+    EXPECT_EQ(most_heavy, 1);
+    EXPECT_EQ(threads, (std::vector<int>{12, 12, 12}));  // two lanes: the light task and one heavy at a time
+    ASSERT_EQ(reported.finished.size(), 1u);
+    EXPECT_EQ(reported.finished.at(0).metric_results.keys(), (std::vector<std::string>{"vmaf", "cambi", "psnr"}));
 }
 
 // The CPU's task says why a failed check of the GPU sent metrics to it, of

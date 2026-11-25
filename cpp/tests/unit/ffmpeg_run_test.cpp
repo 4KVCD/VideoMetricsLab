@@ -183,6 +183,23 @@ TEST(FfmpegRun, ARangesFramesAreKeptAtTheHeadOfBothChains) {
     EXPECT_EQ(std::count(command.begin(), command.end(), "-t"), 0);
 }
 
+// VMAF U and V's motion looks around like VMAF's, also in a pass of their own
+// without VMAF (plan_tasks makes one on the CPU): the run decodes the frames
+// before the range and the one after it, as a pass with VMAF does.
+TEST(FfmpegRun, VmafUAndVAloneDecodeTheFramesTheirMotionLooksAt) {
+    const VideoInfo source = pair_named("4k against 1080p").first;
+    VmafOptions options;
+    options.compute_vmaf = false;
+    options.compute_vmaf_yuv_u = true;
+    options.compute_vmaf_yuv_v = true;
+    options.range_start = 5;
+    options.range_end = 6;
+    EXPECT_EQ(run_range(options, source), (FrameRange{600, 720, 480, 721}));
+    options.compute_vmaf_yuv_u = options.compute_vmaf_yuv_v = false;
+    options.compute_cambi = true;  // looks at its own frame only
+    EXPECT_EQ(run_range(options, source), (FrameRange{600, 720, 600, 720}));
+}
+
 // A resolution test's test video has no file of its own: FFmpeg's chain of the
 // source's video makes it, scaled down and back up after the analysis format
 // and before the frames are numbered, as build_resample_filtergraph does.

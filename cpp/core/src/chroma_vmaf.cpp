@@ -134,6 +134,14 @@ struct ChromaVmaf::Plane {
     }
 };
 
+bool chroma_vmaf_fits_gpu(int width, int height, int bit_depth, const std::string& model) {
+    const int chroma_width = width / 2;  // as libvmaf's 4:2:0 pictures hold them
+    const int chroma_height = height / 2;
+    // The engine's two built-in models (none for a model file), at the depths and sizes it scores VMAF at.
+    return !gpu_models(true, false, model).empty() && bit_depth <= 10 && chroma_width % 2 == 0 &&
+           chroma_height % 2 == 0;
+}
+
 ChromaVmaf::ChromaVmaf(int width, int height, int bit_depth, const std::string& model,
                        const std::vector<std::string>& keys, int n_subsample, int threads, std::optional<int> gpu,
                        std::optional<ChromaFromDecoders> from_decoders) {
@@ -141,10 +149,8 @@ ChromaVmaf::ChromaVmaf(int width, int height, int bit_depth, const std::string& 
     const int chroma_width = width / 2;  // as libvmaf's 4:2:0 pictures hold them
     const int chroma_height = height / 2;
     const unsigned step = static_cast<unsigned>(std::max(1, n_subsample));
-    // The engine's two built-in models (none for a model file), at the depths and sizes it scores VMAF at.
     const GpuModels built_in = gpu_models(true, false, model);
-    const bool gpu_fits = gpu && !built_in.empty() && bit_depth <= 10 && chroma_width % 2 == 0 &&
-                          chroma_height % 2 == 0;
+    const bool gpu_fits = gpu && chroma_vmaf_fits_gpu(width, height, bit_depth, model);
     const int cpu_threads = keys.empty() ? 0 : (std::max(0, threads) + static_cast<int>(keys.size()) - 1) /
                                                    static_cast<int>(keys.size());
     const auto models_of = [&](const std::string& key) {
