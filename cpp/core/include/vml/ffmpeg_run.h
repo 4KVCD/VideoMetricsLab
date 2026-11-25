@@ -125,7 +125,9 @@ RunStatus decoding_status(const std::string& brief, const HardwareDecoding& deco
 // Why the plan just made with GPU decoding on (`plan`) leaves each video it
 // does in software, from the videos as the run scores them: a size change
 // marked, which the run's process notes for others only once the task ends.
-RunStatus decoding_why_status(const HardwareDecoding& plan, const VideoInfo& source, const VideoInfo& distorted);
+// `mac` is the plan's (plan_hardware_decoding).
+RunStatus decoding_why_status(const HardwareDecoding& plan, const VideoInfo& source, const VideoInfo& distorted,
+                              MacGpuDecoding mac);
 
 // A status as a process of its own sends it to the run (isolated.h), and
 // back.

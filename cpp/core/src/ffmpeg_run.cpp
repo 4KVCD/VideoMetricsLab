@@ -1510,9 +1510,10 @@ RunStatus decoding_status(const std::string& brief, const HardwareDecoding& deco
     return {brief + " (GPU decode: " + decoding.describe() + ")" + std::string(ending), kind, brief, decoding};
 }
 
-RunStatus decoding_why_status(const HardwareDecoding& plan, const VideoInfo& source, const VideoInfo& distorted) {
+RunStatus decoding_why_status(const HardwareDecoding& plan, const VideoInfo& source, const VideoInfo& distorted,
+                              MacGpuDecoding mac) {
     RunStatus status{"", StatusKind::decoding_why};
-    status.decoding_why = software_decoding_why(plan, source, distorted, true, std::nullopt);
+    status.decoding_why = software_decoding_why(plan, source, distorted, true, std::nullopt, mac);
     return status;
 }
 
@@ -2562,10 +2563,14 @@ ComparisonResult score_pair(const RunEnvironment& environment, const VideoInfo& 
 // Logs why each video the plan leaves off the GPU is decoded in software, as
 // the run's status line says only that it is ("cpu"). Not VVC: the plan never
 // takes it, as VVdeC or vvdec-vulkan decodes it, and they log that themselves.
-void log_software_decoding(const HardwareDecoding& decoding, const VideoInfo& source, const VideoInfo& distorted) {
-    const auto log_video = [](const std::optional<std::string>& hwaccel, const VideoInfo& video, const char* label) {
+// `mac` is the plan's.
+void log_software_decoding(const HardwareDecoding& decoding, const VideoInfo& source, const VideoInfo& distorted,
+                           MacGpuDecoding mac) {
+    const auto log_video = [mac](const std::optional<std::string>& hwaccel, const VideoInfo& video,
+                                 const char* label) {
         if (!hwaccel && ascii_lower(video.codec_name) != "vvc") {
-            logger.info(std::string(label) + " is decoded in software: " + software_decoding_reason(video, true));
+            logger.info(std::string(label) + " is decoded in software: " +
+                        software_decoding_reason(video, true, mac));
         }
     };
     log_video(decoding.source, source, "The source");
@@ -2613,10 +2618,12 @@ ComparisonResult run_vmaf_once(const RunEnvironment& environment, const VideoInf
     // decodes the way the run will.
     HardwareDecoding decoding;
     if (options.gpu_decode) {
-        decoding = plan_hardware_decoding(environment.decoding, options.gpu_vendor, source, distorted);
-        log_software_decoding(decoding, source, distorted);
+        // A Mac decodes only video deeper than 8 bits on its GPU here (MacGpuDecoding)
+        constexpr MacGpuDecoding mac = MacGpuDecoding::deep;
+        decoding = plan_hardware_decoding(environment.decoding, options.gpu_vendor, source, distorted, mac);
+        log_software_decoding(decoding, source, distorted, mac);
         if (on_status) {
-            on_status(decoding_why_status(decoding, source, distorted));
+            on_status(decoding_why_status(decoding, source, distorted, mac));
         }
     }
     const auto [source_crop, distorted_crop] = run_crops(environment, source, distorted, options, decoding, on_status, cancel);

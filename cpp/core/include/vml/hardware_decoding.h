@@ -169,12 +169,15 @@ std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities,
 bool grain_needs_software_decoding(const VideoInfo& video, const std::string& hwaccel);
 
 // Why `info` is decoded in software, for the log: GPU decoding is off (not
-// `gpu_decode`), or what pick_decode refuses in it.
-std::string software_decoding_reason(const VideoInfo& info, bool gpu_decode);
+// `gpu_decode`), or what pick_decode refuses in it, given the caller's `mac`
+// (a Mac's 8-bit video under deep).
+std::string software_decoding_reason(const VideoInfo& info, bool gpu_decode,
+                                     MacGpuDecoding mac = MacGpuDecoding::on);
 
 // The same, where one of those rules is why; nothing where they let a GPU
 // decode it (and only this PC's decoders, or a failure, can say why not).
-std::optional<std::string> software_decoding_rule(const VideoInfo& info, bool gpu_decode);
+std::optional<std::string> software_decoding_rule(const VideoInfo& info, bool gpu_decode,
+                                                  MacGpuDecoding mac = MacGpuDecoding::on);
 
 // Why each video of a pass was decoded on the CPU, for the results JSON;
 // empty for a video decoded on the GPU.
@@ -190,7 +193,8 @@ struct SoftwareDecodingWhy {
 // gpu_decoding_distrusted), else no decoder here for its codec.
 SoftwareDecodingWhy software_decoding_why(const std::optional<HardwareDecoding>& plan, const VideoInfo& source,
                                           const VideoInfo& distorted, bool gpu_decode,
-                                          const std::optional<std::string>& gpu_decoding_failure);
+                                          const std::optional<std::string>& gpu_decoding_failure,
+                                          MacGpuDecoding mac = MacGpuDecoding::on);
 
 // The plan for a comparison of two videos (pick_decode for each): software
 // decoding for a video whose size changes (VideoInfo::scaled_to).

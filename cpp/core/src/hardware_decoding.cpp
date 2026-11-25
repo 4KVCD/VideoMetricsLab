@@ -496,7 +496,7 @@ std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities,
     return hwaccel;
 }
 
-std::optional<std::string> software_decoding_rule(const VideoInfo& info, bool gpu_decode) {
+std::optional<std::string> software_decoding_rule(const VideoInfo& info, bool gpu_decode, MacGpuDecoding mac) {
     if (!gpu_decode) {
         return "GPU decoding is off";
     }
@@ -542,17 +542,23 @@ std::optional<std::string> software_decoding_rule(const VideoInfo& info, bool gp
     if (ascii_lower(info.codec_name) == "av1" && !info.film_grain) {
         return "its film grain is not known, and Apple's decoder may leave it out";
     }
+    if (mac == MacGpuDecoding::deep && bit_depth(info.pix_fmt) <= 8) {
+        return "8-bit video decodes faster on the CPU than through the Mac's GPU decoder";
+    }
+#else
+    (void)mac;
 #endif
     return std::nullopt;
 }
 
-std::string software_decoding_reason(const VideoInfo& info, bool gpu_decode) {
-    return software_decoding_rule(info, gpu_decode).value_or("no GPU decoder here for " + info.codec_name);
+std::string software_decoding_reason(const VideoInfo& info, bool gpu_decode, MacGpuDecoding mac) {
+    return software_decoding_rule(info, gpu_decode, mac).value_or("no GPU decoder here for " + info.codec_name);
 }
 
 SoftwareDecodingWhy software_decoding_why(const std::optional<HardwareDecoding>& plan, const VideoInfo& source,
                                           const VideoInfo& distorted, bool gpu_decode,
-                                          const std::optional<std::string>& gpu_decoding_failure) {
+                                          const std::optional<std::string>& gpu_decoding_failure,
+                                          MacGpuDecoding mac) {
     const auto why = [&](const std::optional<std::string>& decoder, const VideoInfo& video) -> std::string {
         if (decoder) {
             return {};
@@ -561,7 +567,7 @@ SoftwareDecodingWhy software_decoding_why(const std::optional<HardwareDecoding>&
         if (ascii_lower(video.codec_name) == "vvc") {
             return "VVdeC decodes it on the CPU";
         }
-        if (std::optional<std::string> rule = software_decoding_rule(video, gpu_decode)) {
+        if (std::optional<std::string> rule = software_decoding_rule(video, gpu_decode, mac)) {
             return *rule;
         }
         if (gpu_decoding_failure) {
