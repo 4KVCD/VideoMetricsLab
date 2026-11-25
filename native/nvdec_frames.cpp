@@ -46,6 +46,7 @@
 
 #include "ffnvcodec/dynlink_cuda.h"
 #include "ffnvcodec/dynlink_nvcuvid.h"
+#include "frame_queue.h"
 #include "gpu_frames.h"
 #include "scale/scale_filter.h"
 
@@ -557,12 +558,7 @@ constexpr unsigned kOutputEventFlags = CU_EVENT_BLOCKING_SYNC | CU_EVENT_DISABLE
 
 // ----------------------------------------------------------------- decoder
 
-struct Ready {
-    int slot;
-    long long pts;
-};
-
-struct Decoder {
+struct Decoder : FrameQueue {
     Params params{};
     Info info{};
     std::vector<unsigned char> extradata;
@@ -604,19 +600,7 @@ struct Decoder {
     int bytes_per_sample = 1;
     int surface_height = 0;
 
-    std::mutex mutex;
-    std::condition_variable changed;
     std::deque<int> free_slots;
-    std::deque<Ready> ready;
-    bool ended = false, aborted = false, failed = false;
-    std::string error;
-
-    void fail(const std::string &text) {
-        std::lock_guard<std::mutex> guard(mutex);
-        if (!failed) error = text;
-        failed = true;
-        changed.notify_all();
-    }
 
     bool check(CUresult result, const char *what) {
         if (result == CUDA_SUCCESS) return true;
@@ -628,11 +612,6 @@ struct Decoder {
     // so far, the caller's copy, with an event of its own. The decoder's
     // context is current.
     bool wait_for_output(CUstream stream, const char *what);
-
-    bool stopped() {
-        std::lock_guard<std::mutex> guard(mutex);
-        return failed || aborted;
-    }
 };
 
 // Pushes the decoder's context on the calling thread for one scope.
@@ -1223,21 +1202,7 @@ NVF_API int nvf_finish(void *handle) {
 // The next picture: NVF_FRAME with its slot and timestamp, NVF_END,
 // NVF_ERROR, NVF_ABORTED, or NVF_TIMEOUT after `timeout_ms` (< 0: no limit).
 NVF_API int nvf_pop(void *handle, int timeout_ms, int *slot, long long *pts) {
-    Decoder *d = static_cast<Decoder *>(handle);
-    std::unique_lock<std::mutex> guard(d->mutex);
-    auto settled = [d] { return !d->ready.empty() || d->ended || d->aborted || d->failed; };
-    if (timeout_ms < 0) {
-        d->changed.wait(guard, settled);
-    } else if (!d->changed.wait_for(guard, std::chrono::milliseconds(timeout_ms), settled)) {
-        return NVF_TIMEOUT;
-    }
-    if (d->aborted) return NVF_ABORTED;
-    if (d->failed) return NVF_ERROR;
-    if (d->ready.empty()) return NVF_END;
-    *slot = d->ready.front().slot;
-    *pts = d->ready.front().pts;
-    d->ready.pop_front();
-    return NVF_FRAME;
+    return static_cast<Decoder *>(handle)->pop(timeout_ms, slot, pts);
 }
 
 bool Decoder::wait_for_output(CUstream stream, const char *what) {
@@ -1450,12 +1415,7 @@ NVF_API void nvf_release(void *handle, int slot) {
 }
 
 // Ends every wait, now and later: nvf_push and nvf_pop return NVF_ABORTED.
-NVF_API void nvf_abort(void *handle) {
-    Decoder *d = static_cast<Decoder *>(handle);
-    std::lock_guard<std::mutex> guard(d->mutex);
-    d->aborted = true;
-    d->changed.notify_all();
-}
+NVF_API void nvf_abort(void *handle) { static_cast<Decoder *>(handle)->abort(); }
 
 // Only once no other thread is in a call on this decoder.
 NVF_API void nvf_close(void *handle) {
@@ -1463,10 +1423,7 @@ NVF_API void nvf_close(void *handle) {
 }
 
 NVF_API int nvf_error(void *handle, char *out, int size) {
-    Decoder *d = static_cast<Decoder *>(handle);
-    std::lock_guard<std::mutex> guard(d->mutex);
-    copy_text(out, size, d->error);
-    return static_cast<int>(d->error.size());
+    return static_cast<Decoder *>(handle)->error_text(out, size);
 }
 
 NVF_API void nvf_info(void *handle, Info *out) {

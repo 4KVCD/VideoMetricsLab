@@ -41,6 +41,7 @@
 
 #include "amd_device.h"
 #include "amf_handover.h"
+#include "frame_queue.h"
 #include "gpu_frames.h"
 
 namespace {
@@ -79,12 +80,7 @@ template <class T> void release(T *&p) {
     p = nullptr;
 }
 
-struct Ready {
-    int slot;
-    long long pts;
-};
-
-struct Decoder {
+struct Decoder : FrameQueue {
     Params params{};
     Info info{};
     std::vector<unsigned char> extradata;  // AV1's sequence header: before the first packet
@@ -165,25 +161,8 @@ struct Decoder {
     Shown shown;
     bool delivered = false;
 
-    std::mutex mutex;
-    std::condition_variable changed;
     std::vector<IMFSample *> slots;
     std::deque<int> free_slots;
-    std::deque<Ready> ready;
-    bool ended = false, aborted = false, failed = false;
-    std::string error;
-
-    void fail(const std::string &text) {
-        std::lock_guard<std::mutex> guard(mutex);
-        if (!failed) error = text;
-        failed = true;
-        changed.notify_all();
-    }
-
-    bool stopped() {
-        std::lock_guard<std::mutex> guard(mutex);
-        return failed || aborted;
-    }
 };
 
 // Whether the hand-over's timeline reaches `value` within `ns` nanoseconds
@@ -849,21 +828,7 @@ NVF_API int nvf_finish(void *handle) {
 }
 
 NVF_API int nvf_pop(void *handle, int timeout_ms, int *slot, long long *pts) {
-    Decoder *d = static_cast<Decoder *>(handle);
-    std::unique_lock<std::mutex> guard(d->mutex);
-    auto settled = [d] { return !d->ready.empty() || d->ended || d->aborted || d->failed; };
-    if (timeout_ms < 0) {
-        d->changed.wait(guard, settled);
-    } else if (!d->changed.wait_for(guard, std::chrono::milliseconds(timeout_ms), settled)) {
-        return NVF_TIMEOUT;
-    }
-    if (d->aborted) return NVF_ABORTED;
-    if (d->failed) return NVF_ERROR;
-    if (d->ready.empty()) return NVF_END;
-    *slot = d->ready.front().slot;
-    *pts = d->ready.front().pts;
-    d->ready.pop_front();
-    return NVF_FRAME;
+    return static_cast<Decoder *>(handle)->pop(timeout_ms, slot, pts);
 }
 
 NVF_API int nvf_download(void *handle, int slot, void *host) {
@@ -976,22 +941,14 @@ NVF_API void nvf_release(void *handle, int slot) {
     if (sample) sample->Release();
 }
 
-NVF_API void nvf_abort(void *handle) {
-    Decoder *d = static_cast<Decoder *>(handle);
-    std::lock_guard<std::mutex> guard(d->mutex);
-    d->aborted = true;
-    d->changed.notify_all();
-}
+NVF_API void nvf_abort(void *handle) { static_cast<Decoder *>(handle)->abort(); }
 
 NVF_API void nvf_close(void *handle) {
     if (handle) destroy(static_cast<Decoder *>(handle));
 }
 
 NVF_API int nvf_error(void *handle, char *out, int size) {
-    Decoder *d = static_cast<Decoder *>(handle);
-    std::lock_guard<std::mutex> guard(d->mutex);
-    copy_text(out, size, d->error);
-    return static_cast<int>(d->error.size());
+    return static_cast<Decoder *>(handle)->error_text(out, size);
 }
 
 NVF_API void nvf_info(void *handle, Info *out) {

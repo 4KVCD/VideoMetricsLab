@@ -15,6 +15,7 @@
 // may not be read (vvdec.h's hand-over). The decoder's calls (decode, copy, give back) run one at a time, under the
 // decoder's mutex.
 
+#include "frame_queue.h"
 #include "gpu_frames.h"
 
 #include <windows.h>
@@ -33,11 +34,6 @@
 
 namespace {
 
-struct Ready {
-    int slot;
-    long long pts;
-};
-
 // An imported buffer: what nvf_import_vulkan hands back is base (an address of its own, high bits only) plus an
 // offset into it.
 struct Import {
@@ -54,7 +50,7 @@ struct Pinned {
     void *buffer;
 };
 
-struct Decoder {
+struct Decoder : FrameQueue {
     Params params{};
     Info info{};
     vvdecDecoder *dec = nullptr;
@@ -64,26 +60,11 @@ struct Decoder {
     // NT handle only once, so every caller of nvf_timeline gets a duplicate of this one.
     HANDLE timeline = nullptr;
 
-    std::mutex mutex;  // what follows
-    std::condition_variable changed;
+    // Under FrameQueue's mutex:
     std::vector<vvdecFrame *> slots;  // the pictures held (null: free)
-    std::deque<Ready> ready;
     std::vector<Import> imports;
     std::vector<Pinned> pinned;
     unsigned long long next_import = 1;
-    bool ended = false, aborted = false, failed = false;
-    std::string error;
-
-    void fail(const std::string &text) {
-        std::lock_guard<std::mutex> guard(mutex);
-        if (!failed) error = text;
-        failed = true;
-        changed.notify_all();
-    }
-    bool stopped() {
-        std::lock_guard<std::mutex> guard(mutex);
-        return failed || aborted;
-    }
 };
 
 // The process's vvdec-vulkan settings, before its first decoder, each unless already set: the GPU's parse
@@ -253,21 +234,7 @@ NVF_API int nvf_finish(void *handle) {
 }
 
 NVF_API int nvf_pop(void *handle, int timeout_ms, int *slot, long long *pts) {
-    Decoder *d = static_cast<Decoder *>(handle);
-    std::unique_lock<std::mutex> guard(d->mutex);
-    auto settled = [d] { return !d->ready.empty() || d->ended || d->aborted || d->failed; };
-    if (timeout_ms < 0) {
-        d->changed.wait(guard, settled);
-    } else if (!d->changed.wait_for(guard, std::chrono::milliseconds(timeout_ms), settled)) {
-        return NVF_TIMEOUT;
-    }
-    if (d->aborted) return NVF_ABORTED;
-    if (d->failed) return NVF_ERROR;
-    if (d->ready.empty()) return NVF_END;
-    *slot = d->ready.front().slot;
-    *pts = d->ready.front().pts;
-    d->ready.pop_front();
-    return NVF_FRAME;
+    return static_cast<Decoder *>(handle)->pop(timeout_ms, slot, pts);
 }
 
 namespace {
@@ -550,12 +517,7 @@ NVF_API void nvf_release(void *handle, int slot) {
     }
 }
 
-NVF_API void nvf_abort(void *handle) {
-    Decoder *d = static_cast<Decoder *>(handle);
-    std::lock_guard<std::mutex> guard(d->mutex);
-    d->aborted = true;
-    d->changed.notify_all();
-}
+NVF_API void nvf_abort(void *handle) { static_cast<Decoder *>(handle)->abort(); }
 
 // Only once no other thread is in a call on this decoder.
 NVF_API void nvf_close(void *handle) {
@@ -563,10 +525,7 @@ NVF_API void nvf_close(void *handle) {
 }
 
 NVF_API int nvf_error(void *handle, char *out, int size) {
-    Decoder *d = static_cast<Decoder *>(handle);
-    std::lock_guard<std::mutex> guard(d->mutex);
-    copy_text(out, size, d->error);
-    return static_cast<int>(d->error.size());
+    return static_cast<Decoder *>(handle)->error_text(out, size);
 }
 
 NVF_API void nvf_info(void *handle, Info *out) {

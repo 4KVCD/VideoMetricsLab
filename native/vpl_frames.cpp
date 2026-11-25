@@ -43,6 +43,7 @@
 #include <vector>
 
 #include "d3d11_scale.h"
+#include "frame_queue.h"
 #include "gpu_frames.h"
 #include "onevpl/vpl/mfxdispatcher.h"
 #include "onevpl/vpl/mfxvideo.h"
@@ -218,12 +219,7 @@ bool open_session(mfxU32 codec, mfxSession *session, std::string &error) {
 // ones: moved well above zero, negative ones are safe too.
 constexpr long long kPtsOffset = 1LL << 48;
 
-struct Ready {
-    int slot;
-    long long pts;
-};
-
-struct Decoder {
+struct Decoder : FrameQueue {
     Params params{};
     Info info{};
     std::vector<unsigned char> extradata;
@@ -244,26 +240,9 @@ struct Decoder {
     // Pictures decoded and not yet waited for, oldest first (feeding thread only).
     std::deque<mfxFrameSurface1 *> in_flight;
 
-    std::mutex mutex;
-    std::condition_variable changed;
     std::vector<mfxFrameSurface1 *> slots;  // slot -> mapped picture, or null
     std::deque<int> free_slots;
     std::deque<int> returned;  // released by the caller; given back to oneVPL by the feeding thread
-    std::deque<Ready> ready;
-    bool ended = false, aborted = false, failed = false;
-    std::string error;
-
-    void fail(const std::string &text) {
-        std::lock_guard<std::mutex> guard(mutex);
-        if (!failed) error = text;
-        failed = true;
-        changed.notify_all();
-    }
-
-    bool stopped() {
-        std::lock_guard<std::mutex> guard(mutex);
-        return failed || aborted;
-    }
 };
 
 void give_back(mfxFrameSurface1 *surface) {
@@ -648,21 +627,7 @@ NVF_API int nvf_finish(void *handle) {
 }
 
 NVF_API int nvf_pop(void *handle, int timeout_ms, int *slot, long long *pts) {
-    Decoder *d = static_cast<Decoder *>(handle);
-    std::unique_lock<std::mutex> guard(d->mutex);
-    auto settled = [d] { return !d->ready.empty() || d->ended || d->aborted || d->failed; };
-    if (timeout_ms < 0) {
-        d->changed.wait(guard, settled);
-    } else if (!d->changed.wait_for(guard, std::chrono::milliseconds(timeout_ms), settled)) {
-        return NVF_TIMEOUT;
-    }
-    if (d->aborted) return NVF_ABORTED;
-    if (d->failed) return NVF_ERROR;
-    if (d->ready.empty()) return NVF_END;
-    *slot = d->ready.front().slot;
-    *pts = d->ready.front().pts;
-    d->ready.pop_front();
-    return NVF_FRAME;
+    return static_cast<Decoder *>(handle)->pop(timeout_ms, slot, pts);
 }
 
 // Copies the slot's picture, cropped (and scaled) and planes packed, into `host`.
@@ -704,22 +669,14 @@ NVF_API void nvf_release(void *handle, int slot) {
     d->changed.notify_all();
 }
 
-NVF_API void nvf_abort(void *handle) {
-    Decoder *d = static_cast<Decoder *>(handle);
-    std::lock_guard<std::mutex> guard(d->mutex);
-    d->aborted = true;
-    d->changed.notify_all();
-}
+NVF_API void nvf_abort(void *handle) { static_cast<Decoder *>(handle)->abort(); }
 
 NVF_API void nvf_close(void *handle) {
     if (handle) destroy(static_cast<Decoder *>(handle));
 }
 
 NVF_API int nvf_error(void *handle, char *out, int size) {
-    Decoder *d = static_cast<Decoder *>(handle);
-    std::lock_guard<std::mutex> guard(d->mutex);
-    copy_text(out, size, d->error);
-    return static_cast<int>(d->error.size());
+    return static_cast<Decoder *>(handle)->error_text(out, size);
 }
 
 NVF_API void nvf_info(void *handle, Info *out) {
