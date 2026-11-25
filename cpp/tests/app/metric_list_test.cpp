@@ -6,6 +6,7 @@
 #include <QCheckBox>
 #include <QLabel>
 #include <QPointer>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QTableWidget>
@@ -245,6 +246,59 @@ TEST_F(MetricsPanelInWindow, APressOpensThePanelAtOnce) {
         EXPECT_TRUE(button->isDown()) << name << ", Space";
         close_panels();
         EXPECT_FALSE(button->isDown()) << name << ", closed";
+    }
+}
+
+// The press on a panel's button that closes the panel, replayed to the
+// button with its own time, opens nothing: once any popup had been closed
+// with Esc, Qt replayed it whatever Qt::WA_NoMouseReplay said, and the second
+// click reopened the panel. A new press, of its own time, still opens it.
+TEST_F(MetricsPanelInWindow, TheClosingPressReplayedToTheButtonOpensNothing) {
+    QPushButton* metrics = nullptr;
+    for (QPushButton* button : window_->findChildren<QPushButton*>()) {
+        metrics = button->text() == "Add/remove metrics" ? button : metrics;
+    }
+    auto* exports = window_->findChild<QPushButton*>("tabExportButton");
+    ASSERT_NE(metrics, nullptr);
+    ASSERT_NE(exports, nullptr);
+    const auto open_panel = [] {
+        for (PopupPanel* panel : window_->findChildren<PopupPanel*>()) {
+            if (panel->isVisible()) {
+                return panel;
+            }
+        }
+        return static_cast<PopupPanel*>(nullptr);
+    };
+    const auto press = [](QWidget* target, const QPoint& global, quint64 time) {
+        QMouseEvent event(QEvent::MouseButtonPress, target->mapFromGlobal(global), global, Qt::LeftButton,
+                          Qt::LeftButton, Qt::NoModifier);
+        event.setTimestamp(time);
+        QApplication::sendEvent(target, &event);
+    };
+    const auto release = [](QWidget* target) {
+        QTest::mouseRelease(target, Qt::LeftButton, {}, target->rect().center());
+    };
+    quint64 time = 1'000'000;
+    for (QPushButton* button : {metrics, exports}) {
+        const std::string name = button->text().toStdString();
+        const QPoint on_button = button->mapToGlobal(button->rect().center());
+        press(button, on_button, ++time);  // opens
+        PopupPanel* panel = open_panel();
+        ASSERT_NE(panel, nullptr) << name;
+        press(panel, on_button, ++time);  // closes
+        QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        EXPECT_EQ(open_panel(), nullptr) << name;
+        press(button, on_button, time);  // that press, replayed
+        EXPECT_EQ(open_panel(), nullptr) << name << ": reopened by the replayed press";
+        EXPECT_FALSE(button->isDown()) << name;
+        release(button);
+        press(button, on_button, ++time);  // a new press
+        EXPECT_NE(open_panel(), nullptr) << name << ": a new press opened nothing";
+        if (PopupPanel* again = open_panel()) {
+            again->close();
+        }
+        QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        release(button);
     }
 }
 

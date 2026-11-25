@@ -6,6 +6,34 @@
 
 namespace vml::app {
 
+namespace {
+
+// The time of the press on a panel's button that closed the panel, kept on
+// the button: that press replayed to it must not open the panel again.
+constexpr char closing_press[] = "vmlClosingPress";
+
+// Takes from a panel's button the press that has just closed its panel,
+// known by its time (a replay keeps the press's time; a new press has its
+// own).
+class ClosingPressFilter : public QObject {
+public:
+    using QObject::QObject;
+
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (event->type() != QEvent::MouseButtonPress && event->type() != QEvent::MouseButtonDblClick) {
+            return false;
+        }
+        const QVariant closing = watched->property(closing_press);
+        if (!closing.isValid() || closing.toULongLong() != static_cast<QMouseEvent*>(event)->timestamp()) {
+            return false;
+        }
+        watched->setProperty(closing_press, QVariant());
+        return true;
+    }
+};
+
+}  // namespace
+
 PopupPanel::PopupPanel(QWidget* parent) : QFrame(parent, Qt::Popup) {}
 
 PopupPanel::~PopupPanel() {
@@ -35,6 +63,7 @@ void PopupPanel::hold_anchor_down(bool down) {
 }
 
 void PopupPanel::open_on_press(QAbstractButton* button, std::function<void()> open) {
+    button->installEventFilter(new ClosingPressFilter(button));
     QObject::connect(button, &QAbstractButton::pressed, button, [open = std::move(open)] { open(); });
 }
 
@@ -53,9 +82,17 @@ void PopupPanel::mousePressEvent(QMouseEvent* event) {
     // it (QWidget's own handling), and Qt then replays the press to the
     // widget under the pointer; on the anchor button that is a click that
     // opens the panel again, so the button would never close it.
+    // Qt::WA_NoMouseReplay asks Qt not to, but once any popup of the window
+    // has been closed with Esc, Qt replays the press anyway, later and with
+    // the press's own time (Qt 6.12, Windows): the button's filter takes it
+    // (open_on_press, ClosingPressFilter).
     if (anchor_ != nullptr && !rect().contains(event->position().toPoint())) {
         const QPoint at = anchor_->mapFromGlobal(event->globalPosition().toPoint());
-        setAttribute(Qt::WA_NoMouseReplay, anchor_->isVisible() && anchor_->rect().contains(at));
+        const bool on_anchor = anchor_->isVisible() && anchor_->rect().contains(at);
+        setAttribute(Qt::WA_NoMouseReplay, on_anchor);
+        if (on_anchor) {
+            anchor_->setProperty(closing_press, QVariant::fromValue<qulonglong>(event->timestamp()));
+        }
     }
     QFrame::mousePressEvent(event);
 }

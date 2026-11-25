@@ -276,10 +276,12 @@ button). A panel is a `PopupPanel` (`app/popup_panel.h`; Add/remove metrics'
   press instead, the button flashed pressed for as long as the panel took to
   build.
 - **It closes on a second press on its button, a press outside it, or Esc.**
-  The second press closes it without reaching the button
-  (`Qt::WA_NoMouseReplay`, `set_anchor` again), whose click would open it at
-  once; a press anywhere else closes it and still lands (a tab clicked is
-  switched to).
+  The second press closes it without reaching the button, which would open it
+  again at once: the panel asks Qt not to replay it (`Qt::WA_NoMouseReplay`,
+  `set_anchor` again), and since Qt replays it anyway once any popup has been
+  closed with Esc, later and with the press's own time, the button's filter
+  from `open_on_press` drops a press of that time. A press anywhere else
+  closes it and still lands (a tab clicked is switched to).
 
 A new button that opens a panel takes all three: a `PopupPanel` given its
 button with `set_anchor`, opened with `open_on_press`. Not a `QDialog`, not a
