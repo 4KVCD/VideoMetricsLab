@@ -2,6 +2,7 @@
 // so that the app's CSV and JSON files and its tables read as they did.
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 namespace vml {
@@ -22,5 +23,15 @@ double python_round(double value, int decimals);
 // trailing zeros, exponent form below 0.0001 and from 1e6 ("1e+06"); with
 // `digits`, as "{:.12g}" (12) does, exponent form from 1e12.
 std::string format_general(double value, int digits = 6);
+
+// A file size as the app shows it, 1,024 bytes to a KB: whole KB, at least
+// 1, under 1 MB ("12 KB"); else MB to one decimal ("3.4 MB").
+struct ShownSize {
+    double value;
+    bool megabytes;
+};
+ShownSize shown_size(std::uintmax_t bytes);
+// shown_size as text, for the command line (the window translates its own).
+std::string file_size_text(std::uintmax_t bytes);
 
 }  // namespace vml

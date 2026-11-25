@@ -568,8 +568,9 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  --filter TEXT         list: only those whose test video's or reference's
-                        file name has TEXT in it
+  --filter TEXT         list: only those whose label, test video's or
+                        reference's path has TEXT in it (as the Saved
+                        Results tab's Filter)
   --json FILE           also write the results as JSON to FILE (compare's,
                         format 2); - prints the JSON instead of the tables
   --csv FOLDER          write each video's per-frame scores to FOLDER as

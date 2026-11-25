@@ -45,6 +45,7 @@
 #include "vml/metric_cache.h"
 #include "vml/metrics.h"
 #include "vml/model_select.h"
+#include "vml/number_format.h"
 #include "vml/results_summary.h"
 #include "vml/segment_presets.h"
 #include "vml/segment_profiles.h"
@@ -105,8 +106,9 @@ QString time_text(std::chrono::system_clock::time_point when) {
 
 QString size_text(std::uintmax_t bytes) {
     // A comparison's scores are often under a megabyte.
-    return bytes < 1048576 ? app::tr("{size:.0f} KB", {{"size", std::max(1.0, static_cast<double>(bytes) / 1024.0)}})
-                           : app::tr("{size:.1f} MB", {{"size", static_cast<double>(bytes) / 1048576.0}});
+    const ShownSize size = shown_size(bytes);
+    return size.megabytes ? app::tr("{size:.1f} MB", {{"size", size.value}})
+                          : app::tr("{size:.0f} KB", {{"size", size.value}});
 }
 
 // A saved score's one number for the whole video, at its metric's
@@ -487,9 +489,10 @@ void SavedResultsPanel::apply_filter() {
         // not found has a sentence there ("Not found there: ...").
         const int place = table_->item(row, col_test)->data(Qt::UserRole).toInt();
         const SavedComparison& saved = list_[static_cast<std::size_t>(place)];
-        const bool shown = wanted.isEmpty() || qt_text(saved.label).contains(wanted, Qt::CaseInsensitive) ||
-                           text_of(saved.distorted).contains(wanted, Qt::CaseInsensitive) ||
-                           text_of(saved.source).contains(wanted, Qt::CaseInsensitive);
+        bool shown = wanted.isEmpty();
+        for (const std::string& text : saved.filter_texts()) {
+            shown = shown || qt_text(text).contains(wanted, Qt::CaseInsensitive);
+        }
         table_->setRowHidden(row, !shown);
     }
     // A row hidden is no longer selected: what is chosen is what is seen, and

@@ -186,7 +186,7 @@ struct DevicesArguments {
 struct SavedArguments {
     std::string action;  // "list", "show" or "delete"; "report" for the report command
     std::vector<std::string> items;
-    std::optional<std::string> filter;  // list --filter: part of a test video's or reference's name
+    std::optional<std::string> filter;  // list --filter: part of a label, test video's or reference's path
     CompareArguments output;
     ProfileArguments profile;  // --settings, --no-settings; saved's --cache-dir
 };

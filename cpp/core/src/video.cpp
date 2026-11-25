@@ -61,6 +61,8 @@ std::string_view vendor_label(GpuVendor vendor) {
     }
 }
 
+std::string_view maker_name(GpuVendor vendor) { return vendor == GpuVendor::intel ? "Intel" : vendor_label(vendor); }
+
 std::string CropBox::as_filter() const {
     return "crop=" + std::to_string(w) + ":" + std::to_string(h) + ":" + std::to_string(x) + ":" + std::to_string(y);
 }

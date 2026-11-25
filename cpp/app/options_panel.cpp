@@ -519,7 +519,9 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
 #ifdef __APPLE__
     gpu_vendor_combo->addItem(app::tr("Apple (VideoToolbox)"));
 #else
-    gpu_vendor_combo->addItems({app::tr("Auto-detect"), "NVIDIA", "Intel", "AMD"});
+    for (const GpuVendor vendor : gpu_vendor_entries) {
+        gpu_vendor_combo->addItem(vendor == GpuVendor::automatic ? app::tr("Auto-detect") : qt_text(maker_name(vendor)));
+    }
 #endif
     connect(gpu_checkbox, &QCheckBox::toggled, gpu_vendor_combo, &QWidget::setEnabled);
     connect(gpu_checkbox, &QCheckBox::toggled, this, [this] { emit field_edited("gpu"); });

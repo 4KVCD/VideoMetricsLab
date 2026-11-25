@@ -894,7 +894,7 @@ command line) can be listed, read and deleted without their videos, which may
 be gone:
 
 ```powershell
-# Every saved comparison, newest first, with its ID; --filter narrows them by file name
+# Every saved comparison, newest first, with its ID; --filter narrows them by name or folder
 .\VideoMetricsLab-cli.exe saved list --filter encode
 
 # One comparison's scores, by the first 6 or more hex digits of its ID, as compare gives them
@@ -1155,7 +1155,7 @@ took. [The results file](RESULTS_JSON.md) describes every key.
 **Saved Results** lists every comparison whose scores the app has saved (its
 results cache, Settings > Storage > Saved results), newest first, with its
 test video, reference, when it was saved, its metrics and its size; **Filter**
-narrows it by file name. Select one or more to use them without adding the
+narrows it by name or folder. Select one or more to use them without adding the
 videos again:
 
 - **Open in Metric Graphs** (or double-click, or the first entry of the

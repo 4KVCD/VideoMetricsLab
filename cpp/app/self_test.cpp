@@ -150,14 +150,14 @@ void check_qt(SelfTestReport& report, const QApplication& app) {
 // (scripts/build_software_frames_macos.sh on macOS).
 void check_frame_decoders(SelfTestReport& report) {
 #ifdef _WIN32
-    for (const auto& [backend, maker] :
-         {std::pair(nvidia_decoder, "NVIDIA"), std::pair(intel_decoder, "Intel"), std::pair(amd_decoder, "AMD")}) {
+    for (const std::string_view backend : {nvidia_decoder, intel_decoder, amd_decoder}) {
+        const std::string maker(maker_name(gpu_decoder(backend).vendor));
         const std::string name = platform::shared_library_name(std::string(gpu_decoder(backend).library));
         if (const std::optional<std::string> why = decoder_unavailable_reason(backend)) {
-            report.warn(std::string(maker) + " frame decoder unavailable (" + *why +
+            report.warn(maker + " frame decoder unavailable (" + *why +
                         "); FFmpeg decodes the GPU metrics' videos");
         } else {
-            report.ok(std::string(maker) + " frame decoder for the GPU metrics (" + name + ")");
+            report.ok(maker + " frame decoder for the GPU metrics (" + name + ")");
         }
     }
     // vvdec-vulkan, VVC's decoder on the GPU (Settings' "VVC decoder: GPU"), Windows' only.

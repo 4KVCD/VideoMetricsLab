@@ -1,5 +1,6 @@
 #include "vml/number_format.h"
 
+#include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <cstdlib>
@@ -130,6 +131,17 @@ std::string format_general(double value, int digits) {
         throw std::runtime_error("a number could not be written as text");
     }
     return std::string(buffer, end);
+}
+
+ShownSize shown_size(std::uintmax_t bytes) {
+    constexpr std::uintmax_t megabyte = 1048576;
+    const double size = static_cast<double>(bytes);
+    return bytes < megabyte ? ShownSize{std::max(1.0, size / 1024.0), false} : ShownSize{size / megabyte, true};
+}
+
+std::string file_size_text(std::uintmax_t bytes) {
+    const ShownSize size = shown_size(bytes);
+    return size.megabytes ? format_fixed(size.value, 1) + " MB" : format_fixed(size.value, 0) + " KB";
 }
 
 }  // namespace vml

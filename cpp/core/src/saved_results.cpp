@@ -40,6 +40,10 @@ std::vector<std::string> SavedComparison::keys() const {
     return found;
 }
 
+std::vector<std::string> SavedComparison::filter_texts() const {
+    return {label, platform::path_text(distorted), platform::path_text(source)};
+}
+
 std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path& base,
                                                     const std::function<bool()>& stopped) {
     std::vector<SavedComparison> list;

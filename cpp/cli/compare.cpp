@@ -404,11 +404,6 @@ GpuVendor gpu_maker(const std::optional<std::string>& word) {
     return word ? gpu_vendor_named(*word).value_or(GpuVendor::automatic) : GpuVendor::automatic;
 }
 
-// A GPU maker's name, as the window's GPU decode dropdown has it.
-std::string maker_name(GpuVendor vendor) {
-    return vendor == GpuVendor::nvidia ? "NVIDIA" : vendor == GpuVendor::intel ? "Intel" : "AMD";
-}
-
 }  // namespace
 
 std::optional<std::string> missing_gpu_maker(const std::optional<std::string>& gpu_decode,
@@ -419,9 +414,9 @@ std::optional<std::string> missing_gpu_maker(const std::optional<std::string>& g
     }
     std::string have;
     for (const GpuVendor vendor : found) {
-        have += (have.empty() ? "" : ", ") + maker_name(vendor);
+        have += (have.empty() ? "" : ", ") + std::string(maker_name(vendor));
     }
-    return "--gpu-decode " + *gpu_decode + ": this PC has no " + maker_name(maker) + " GPU" +
+    return "--gpu-decode " + *gpu_decode + ": this PC has no " + std::string(maker_name(maker)) + " GPU" +
            (have.empty() ? "." : " (it has " + have + ").");
 }
 

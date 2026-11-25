@@ -44,6 +44,9 @@ struct SavedComparison {
 
     // Its metrics, each once, in the app's order.
     std::vector<std::string> keys() const;
+    // What the Saved Results filter (the tab's, and the command line's
+    // `saved list --filter`) looks in: its label and its two files' paths.
+    std::vector<std::string> filter_texts() const;
 };
 
 // Every comparison saved under `base` (its v2 folder), newest first; a

@@ -21,6 +21,7 @@
 #include "vml/platform/console.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
+#include "vml/python_text.h"
 #include "vml/results_summary.h"
 #include "vml/run_file.h"
 #include "vml/settings.h"
@@ -197,13 +198,6 @@ bool report_groups(SavedArguments arguments, const Settings& settings, std::vect
     return written;
 }
 
-// A size as the Saved Results tab gives it: KB (at least 1) under 1 MB, else MB, of 1,024.
-std::string size_text(std::uintmax_t bytes) {
-    const double size = static_cast<double>(bytes);
-    return bytes < 1048576 ? format_fixed(std::max(1.0, size / 1024.0), 0) + " KB"
-                           : format_fixed(size / 1048576.0, 1) + " MB";
-}
-
 std::string metrics_text(const SavedComparison& comparison) {
     // A metric this build doesn't know (a score saved by a newer version
     // sharing the folder) by its key, as the Saved Results tab lists it.
@@ -301,7 +295,7 @@ std::string saved_list_text(const std::vector<const SavedComparison*>& saved) {
     for (const SavedComparison* comparison : saved) {
         rows.push_back({saved_id(*comparison).substr(0, 12), utc_text(comparison->saved), name_of(comparison->distorted),
                         name_of(comparison->source) + (comparison->reference_found ? "" : " (not found)"),
-                        size_text(comparison->bytes), metrics_text(*comparison)});
+                        file_size_text(comparison->bytes), metrics_text(*comparison)});
     }
     std::vector<std::string> lines;
     add_table(lines, rows, true);
@@ -335,12 +329,15 @@ int saved(const SavedArguments& arguments, const Settings& settings) {
     const std::vector<SavedComparison> all = list_saved_comparisons(folder);
     if (arguments.action == "list") {
         std::vector<const SavedComparison*> shown;
-        const std::string filter = arguments.filter ? platform::name_as_compared(*arguments.filter) : std::string();
+        // As the Saved Results tab's Filter: surrounding spaces ignored, case
+        // as the file system compares names.
+        const std::string filter =
+            arguments.filter ? platform::name_as_compared(python_strip(*arguments.filter)) : std::string();
         for (const SavedComparison& comparison : all) {
-            // As the Saved Results tab's Filter: by the files' names
-            const std::string names = platform::name_as_compared(name_of(comparison.distorted) + "\n" +
-                                                                 name_of(comparison.source));
-            if (filter.empty() || names.find(filter) != std::string::npos) {
+            const std::vector<std::string> texts = comparison.filter_texts();
+            if (filter.empty() || std::any_of(texts.begin(), texts.end(), [&filter](const std::string& text) {
+                    return platform::name_as_compared(text).find(filter) != std::string::npos;
+                })) {
                 shown.push_back(&comparison);
             }
         }
