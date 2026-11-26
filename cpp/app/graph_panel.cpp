@@ -660,7 +660,7 @@ void MetricPage::fit_hover_label() {
     // lines now: fixed, it cut off long names; sized at each hover, it laid
     // the tab out again each time.
     refresh_readout_layout();
-    breaks_ = readout_breaks();
+    rows_ = readout_rows();
     const QFontMetrics metrics(readout_font_);
     const std::vector<QString> labels = visible_labels();
     QStringList lines{app::tr("Time: {time}", {{"time", QStringLiteral("0:00:00.00")}})};
@@ -790,40 +790,52 @@ QString MetricPage::readout_row(const QString& prefix, std::optional<double> val
     return trimmed_right(prefix + pad_right(main, main_width_) + readout_bar + fields.join(QStringLiteral("  ")));
 }
 
-std::vector<std::size_t> MetricPage::readout_breaks() const {
+MetricPage::ReadoutRows MetricPage::readout_rows() const {
     // Where a line's other metrics go on to a row of their own, for the
     // room the page gives the readout now (Metric Graphs' 20-odd metrics
-    // ran past its right edge). The same breaks for every line, so that the
+    // ran past its right edge). The same rows for every line, so that the
     // columns still line up: every row is laid out from the widest prefix.
-    const int char_width = std::max(1, QFontMetrics(readout_font_).horizontalAdvance(QLatin1Char('x')));
+    // The room is counted in the font's own advance, not one rounded to
+    // whole pixels: Menlo's 7.22 px taken as 7 let rows run 20 px past the
+    // edge on macOS.
+    const qreal char_width = std::max<qreal>(1.0, QFontMetricsF(readout_font_).horizontalAdvance(QLatin1Char('x')));
     const QMargins margins = layout() != nullptr ? layout()->contentsMargins() : QMargins();
-    const int room = (width() - margins.left() - margins.right() - readout_padding) / char_width;
+    const int room = static_cast<int>(
+        std::floor((width() - margins.left() - margins.right() - readout_padding) / char_width));
     int start = 0;
     for (const QString& label : visible_labels()) {
         start = std::max(start, length_of(readout_prefix(label, 8'888'888, 0.0)));
     }
     start += main_width_ + length_of(readout_bar);
-    std::vector<std::size_t> breaks{0};
+    // The rows after the first start under the first's fields, or further
+    // left where long names leave no room there for the widest field.
+    int widest = 0;
+    for (const auto& [metric, width] : columns_) {
+        widest = std::max(widest, width);
+    }
+    ReadoutRows rows{.breaks = {0}, .indent = std::clamp(room - widest, 0, start)};
     int used = start;
     for (std::size_t column = 0; column < columns_.size(); ++column) {
         const int width = columns_[column].second;
-        const bool row_start = column == breaks.back();
+        const bool row_start = column == rows.breaks.back();
         if (!row_start && used + 2 + width > room) {
-            breaks.push_back(column);
-            used = start + width;
+            rows.breaks.push_back(column);
+            used = rows.indent + width;
         } else {
             used += (row_start ? 0 : 2) + width;
         }
     }
-    return breaks;
+    return rows;
 }
 
 QString MetricPage::wrapped(const QString& text) const {
-    // `text`'s lines with their other metrics in rows at breaks_, the rows
-    // after the first indented to where its fields start. A row with no
-    // field filled (a metric this line lacks) is left out; lines with no
-    // fields (the time, Δ, a frame not in a run) are as they were.
-    if (breaks_.size() <= 1) {
+    // `text`'s lines with their other metrics in rows at rows_.breaks, the
+    // rows after the first indented to where its fields start, at most
+    // rows_.indent. A row with no field filled (a metric this line lacks) is
+    // left out; lines with no fields (the time, Δ, a frame not in a run) are
+    // as they were.
+    const std::vector<std::size_t>& breaks = rows_.breaks;
+    if (breaks.size() <= 1) {
         return text;
     }
     QStringList rows;
@@ -842,10 +854,10 @@ QString MetricPage::wrapped(const QString& text) const {
             fields.append(line.mid(at, width));
             at += width + 2;
         }
-        const QString indent(length_of(line.left(first)), QLatin1Char(' '));
-        for (std::size_t row = 0; row < breaks_.size(); ++row) {
-            const auto begin = static_cast<qsizetype>(breaks_[row]);
-            const auto end = row + 1 < breaks_.size() ? static_cast<qsizetype>(breaks_[row + 1]) : fields.size();
+        const QString indent(std::min(length_of(line.left(first)), rows_.indent), QLatin1Char(' '));
+        for (std::size_t row = 0; row < breaks.size(); ++row) {
+            const auto begin = static_cast<qsizetype>(breaks[row]);
+            const auto end = row + 1 < breaks.size() ? static_cast<qsizetype>(breaks[row + 1]) : fields.size();
             const QString row_fields = trimmed_right(fields.mid(begin, end - begin).join(QStringLiteral("  ")));
             if (row == 0) {
                 rows.append(trimmed_right(line.left(first) + row_fields));
@@ -861,7 +873,7 @@ void MetricPage::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
     // Wider or narrower, the other metrics may fit on fewer rows or need
     // more: the readout sized and written again for them.
-    if (readout_breaks() != breaks_) {
+    if (readout_rows() != rows_) {
         fit_hover_label();
         if (showing_readout_) {
             hover_label_->set_text(wrapped(hover_text_));

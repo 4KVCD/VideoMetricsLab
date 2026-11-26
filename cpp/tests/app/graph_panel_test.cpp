@@ -12,6 +12,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCoreApplication>
+#include <QFontMetrics>
 #include <QImage>
 #include <QLabel>
 #include <QLayout>
@@ -653,7 +654,12 @@ TEST_F(GraphPanelTest, TheReadoutTellsALineAddedOrRescored) {
 
 // The other metrics go on to more rows where they do not fit the page's
 // width, the same columns on every video's rows: with Metric Graphs' 20-odd
-// metrics, one row ran past the readout's right edge and was cut.
+// metrics, one row ran past the readout's right edge and was cut. The page
+// is sized in the readout font's characters: its width in pixels differs by
+// platform, and the room was once counted in an advance rounded to whole
+// pixels (macOS's Menlo, 7.22 px taken as 7, ran 20 px past the edge). On a
+// page narrower than the names and frame before the fields, the rows after
+// the first start further left, still in the same columns.
 TEST_F(GraphPanelTest, TheReadoutWrapsTheOtherMetricsInColumns) {
     const std::vector<std::string> others{"psnr", "ssim", "xpsnr", "psnr_yuv", "ssim_yuv", "ms_ssim",
                                           "psnr_hvs", "ciede2000", "vmaf_neg", "vmaf_v1", "ssimulacra2", "butteraugli"};
@@ -669,37 +675,48 @@ TEST_F(GraphPanelTest, TheReadoutWrapsTheOtherMetricsInColumns) {
     GraphPanel panel(&colors);
     panel.add_runs(runs);
     MetricPage& vmaf = page(panel, "vmaf");
-    constexpr int page_width = 600;
-    vmaf.resize(page_width, 400);
-    QResizeEvent resized(vmaf.size(), QSize());  // resize() sends none to a hidden widget
-    QCoreApplication::sendEvent(&vmaf, &resized);
-    vmaf.show_frame(1, entries(panel));
+    const QFontMetricsF metrics(readout_font(vmaf));
+    const QMargins margins = vmaf.layout()->contentsMargins();
+    // 100 characters: the fields wrap after the names and frame (about 60);
+    // 45: fewer than those, but more than the widest field.
+    for (const int characters : {100, 45}) {
+        const bool narrow = characters < 60;
+        const int room = static_cast<int>(std::ceil(characters * metrics.horizontalAdvance(QLatin1Char('x'))));
+        vmaf.resize(room + 28 + margins.left() + margins.right(), 400);
+        QResizeEvent resized(vmaf.size(), QSize());  // resize() sends none to a hidden widget
+        QCoreApplication::sendEvent(&vmaf, &resized);
+        vmaf.show_frame(1, entries(panel));
 
-    const QStringList rows = shown_readout(vmaf).split(QLatin1Char('\n'));
-    EXPECT_GT(rows.size(), readout(vmaf).count(QLatin1Char('\n')) + 1) << shown_readout(vmaf).toStdString();
-    const QFontMetrics metrics(readout_font(vmaf));
-    // Each field's row among its video's rows, and its column, by video.
-    std::map<QString, std::map<QString, std::pair<int, qsizetype>>> places;
-    QString video;
-    int row_in_video = 0;
-    for (const QString& row : rows) {
-        EXPECT_LE(metrics.horizontalAdvance(row), page_width - 28) << row.toStdString();
-        if (row.startsWith(QStringLiteral("[a]")) || row.startsWith(QStringLiteral("[b]"))) {
-            video = row.left(3);
-            row_in_video = 0;
-        } else {
-            ++row_in_video;
-        }
-        for (const std::string& key : others) {
-            const std::string_view label = metric_definition(key).label;
-            const QString field = " " + QString::fromUtf8(label.data(), static_cast<qsizetype>(label.size())) + "=";
-            if (const qsizetype column = row.indexOf(field); column >= 0 && !video.isEmpty()) {
-                places[video][field] = {row_in_video, column};
+        const QString shown = shown_readout(vmaf);
+        const QStringList rows = shown.split(QLatin1Char('\n'));
+        EXPECT_GT(rows.size(), readout(vmaf).count(QLatin1Char('\n')) + 1) << shown.toStdString();
+        // Each field's row among its video's rows, and its column, by video.
+        std::map<QString, std::map<QString, std::pair<int, qsizetype>>> places;
+        QString video;
+        int row_in_video = 0;
+        for (const QString& row : rows) {
+            if (row.startsWith(QStringLiteral("[a]")) || row.startsWith(QStringLiteral("[b]"))) {
+                video = row.left(3);
+                row_in_video = 0;
+            } else {
+                ++row_in_video;
+            }
+            // On the narrow page a video's first row, its name and frame
+            // already wider than the room, is cut at the edge.
+            if (!narrow || row_in_video > 0) {
+                EXPECT_LE(metrics.horizontalAdvance(row), room) << characters << ": " << row.toStdString();
+            }
+            for (const std::string& key : others) {
+                const std::string_view label = metric_definition(key).label;
+                const QString field = " " + QString::fromUtf8(label.data(), static_cast<qsizetype>(label.size())) + "=";
+                if (const qsizetype column = row.indexOf(field); column >= 0 && !video.isEmpty()) {
+                    places[video][field] = {row_in_video, column};
+                }
             }
         }
+        ASSERT_EQ(places["[a]"].size(), others.size()) << characters << ":\n" << shown.toStdString();
+        EXPECT_EQ(places["[a]"], places["[b]"]) << characters << ":\n" << shown.toStdString();
     }
-    ASSERT_EQ(places["[a]"].size(), others.size()) << shown_readout(vmaf).toStdString();
-    EXPECT_EQ(places["[a]"], places["[b]"]) << shown_readout(vmaf).toStdString();
 }
 
 // A readout over a long-named video: its line is cut at the edge, not made

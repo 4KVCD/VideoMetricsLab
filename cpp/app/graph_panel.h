@@ -200,7 +200,14 @@ private:
     QString readout_prefix(const QString& label, int frame, double time) const;
     std::vector<const MetricDefinition*> extra_columns() const;
     void refresh_readout_layout();
-    std::vector<std::size_t> readout_breaks() const;
+    // Where a line's other metrics go on to rows of their own, and how far
+    // those rows are indented.
+    struct ReadoutRows {
+        std::vector<std::size_t> breaks{0};  // the first of columns_ on each row: {0} while they fit on one
+        int indent = 0;                      // the most, in characters, for every line
+        bool operator==(const ReadoutRows&) const = default;
+    };
+    ReadoutRows readout_rows() const;
     QString wrapped(const QString& text) const;
     QString readout_row(const QString& prefix, std::optional<double> value,
                         const std::map<std::string, std::optional<double>>& others) const;
@@ -258,9 +265,8 @@ private:
     int series_width_ = 0;
     int main_width_ = 0;
     std::vector<std::pair<const MetricDefinition*, int>> columns_;
-    // The first of columns_ on each of a line's rows (readout_breaks): {0}
-    // while they fit on one.
-    std::vector<std::size_t> breaks_{0};
+    // The rows of a line's other metrics now (readout_rows).
+    ReadoutRows rows_;
     ChartWidget* chart_ = nullptr;
     QLabel* no_data_label_ = nullptr;
     ReadoutLabel* hover_label_ = nullptr;
