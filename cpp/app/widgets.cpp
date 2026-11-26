@@ -328,6 +328,8 @@ FillColumnTable::FillColumnTable(int rows, int columns, int fill_column, std::ve
                                  QWidget* parent)
     : QTableWidget(rows, columns, parent), fill_column_(fill_column), other_columns_(std::move(other_columns)) {
     connect(horizontalHeader(), &QHeaderView::sectionResized, this, &FillColumnTable::on_section_resized);
+    // Tab leaves the table for the next control; the arrows move between its cells.
+    setTabKeyNavigation(false);
 }
 
 void FillColumnTable::select_row_if_none_is(int row) {

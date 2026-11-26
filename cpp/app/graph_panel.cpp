@@ -1415,6 +1415,8 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     hint_row->addWidget(stats_save_, 0, Qt::AlignTop);
     top_layout->addLayout(hint_row);
     stats_table_ = new QTableWidget;
+    // Tab leaves the table for the next control; the arrows move between its cells.
+    stats_table_->setTabKeyNavigation(false);
     auto* swatches = new ColorSwatchDelegate(stats_table_);
     connect(swatches, &ColorSwatchDelegate::clicked, this, [this](int row) { choose_video_color(row); });
     stats_table_->setItemDelegateForColumn(0, swatches);

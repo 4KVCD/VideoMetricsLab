@@ -119,6 +119,8 @@ double key_of(const std::optional<double>& value) { return value.value_or(std::n
 // for a long video's segments, on the window's thread.
 QTableWidget* make_table(bool measured = true) {
     auto* table = new QTableWidget;
+    // Tab leaves the table for the next control; the arrows move between its cells.
+    table->setTabKeyNavigation(false);
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
     table->setSelectionMode(QAbstractItemView::SingleSelection);
