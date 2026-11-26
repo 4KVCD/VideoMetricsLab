@@ -2281,8 +2281,7 @@ GraphPanel::export_table() {
     return {std::move(headers), std::move(rows)};
 }
 
-QPixmap GraphPanel::render_export_image() {
-    // The chart with its title, and the lines' statistics keyed by colour.
+QString GraphPanel::export_title() const {
     const MetricDefinition& metric = current_metric();
     QString title = app::tr("{label} vs time", {{"label", qt_text(metric.label)}});
     if (metric.can_be_infinite()) {
@@ -2291,7 +2290,13 @@ QPixmap GraphPanel::render_export_image() {
     if (const std::optional<std::pair<int, int>> frames = selected_frames()) {
         title += app::tr(" — frames {first} to {last}", {{"first", frames->first}, {"last", frames->second}});
     }
-    return export_image(pages_.at(std::string(metric.key))->chart(), title, export_table(), font(),
+    return title;
+}
+
+QPixmap GraphPanel::render_export_image(const QString& title) {
+    // The chart with its title, and the lines' statistics keyed by colour.
+    return export_image(pages_.at(std::string(current_metric().key))->chart(),
+                        title.isEmpty() ? export_title() : title, export_table(), font(),
                         export_colours ? export_colours() : theme::chart_colours(false));
 }
 
@@ -2495,9 +2500,13 @@ void GraphPanel::save_graph() {
 }
 
 void GraphPanel::on_export_png() {
+    const std::optional<QString> title = ask_graph_title(dialogs, app::tr("Export graph"), export_title());
+    if (!title) {
+        return;
+    }
     const QString path = dialogs.save_file(app::tr("Export graph"), png_name(), app::tr("PNG image (*.png)"));
-    report_to(export_report, save_as(path, [this](const QString& out) {
-        return render_export_image().save(out) ? QString() : could_not_write(out);
+    report_to(export_report, save_as(path, [this, &title](const QString& out) {
+        return render_export_image(*title).save(out) ? QString() : could_not_write(out);
     }));
 }
 

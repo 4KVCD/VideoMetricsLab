@@ -1,5 +1,6 @@
 {
  "strings": {
+  "Title on the graph:": "圖表標題：",
   "Show frame {frame} in Video Compare": "在影片比較中顯示第 {frame} 格",
   "Show frame in Video Compare": "在影片比較中顯示此格",
   "{video}: frame {frame}": "{video}：第 {frame} 格",

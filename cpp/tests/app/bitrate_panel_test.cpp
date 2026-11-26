@@ -157,6 +157,9 @@ TEST_F(BitratePanelTest, AFileReadFillsItsRowAndEachGraph) {
         suggested = name;
         return QString::fromStdString(platform::path_text(png));
     };
+    panel->dialogs.ask_text = [](const QString&, const QString&, const QString& text) {
+        return std::optional<QString>(text);
+    };
     QMenu menu;
     panel->graph_save->save_as(menu);
     menu.actions().front()->trigger();

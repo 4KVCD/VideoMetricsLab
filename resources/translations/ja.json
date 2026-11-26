@@ -1,5 +1,6 @@
 {
  "strings": {
+  "Title on the graph:": "グラフのタイトル：",
   "Show frame {frame} in Video Compare": "フレーム {frame} を動画比較で表示",
   "Show frame in Video Compare": "このフレームを動画比較で表示",
   "{video}: frame {frame}": "{video}: フレーム {frame}",

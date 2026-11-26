@@ -896,11 +896,33 @@ TEST_F(GraphPanelTest, TheExportedPngIsTheGraphWithItsKeyedTable) {
         suggested = name;
         return out_text;
     };
+    // The title is asked first (issue #259), starting at the graph's own.
+    QString asked;
+    std::optional<QString> typed;
+    panel.dialogs.ask_text = [&asked, &typed](const QString&, const QString&, const QString& text) {
+        asked = text;
+        return typed ? typed : std::optional<QString>(text);
+    };
     export_png(panel);
+    EXPECT_EQ(asked.toStdString(), "VMAF v0.6.1 vs time");
     // Named after the one line's test video, and its metric.
     EXPECT_EQ(suggested.toStdString(), "encode-a_vmaf.png");
     const QImage image(out_text);
     ASSERT_FALSE(image.isNull());
+    // A title of the user's own is drawn instead; left blank, the graph's own.
+    typed = QStringLiteral("x265 slow, CRF 20 against CRF 24");
+    export_png(panel);
+    EXPECT_NE(QImage(out_text), image);
+    typed = QStringLiteral(" ");
+    EXPECT_EQ(ask_graph_title(panel.dialogs, {}, QStringLiteral("own")), QStringLiteral("own"));
+    // Cancel exports nothing: no save dialog.
+    suggested.clear();
+    panel.dialogs.ask_text = [](const QString&, const QString&, const QString&) { return std::optional<QString>(); };
+    export_png(panel);
+    EXPECT_TRUE(suggested.isEmpty());
+    panel.dialogs.ask_text = [](const QString&, const QString&, const QString& text) {
+        return std::optional<QString>(text);
+    };
     // The square: a block of the line's colour, which no line is thick
     // enough to make.
     constexpr int block = 8;

@@ -179,6 +179,7 @@ TEST(WorstFramesTab, ListsTheDipsAndTheSegmentsAndOpensThemInVideoCompare) {
         suggested.append(name);
         return QString();  // Cancel
     };
+    dialogs.ask_text = [](const QString&, const QString&, const QString& text) { return std::optional<QString>(text); };
     Bench exporting(settings, dialogs);
     exporting.tab.set_videos({{"row:a", "a", vmaf_result("a.mkv", values)}});
     QStringList labels;

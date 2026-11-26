@@ -1,5 +1,6 @@
 {
  "strings": {
+  "Title on the graph:": "Tytuł na wykresie:",
   "Show frame {frame} in Video Compare": "Pokaż klatkę {frame} w Porównaniu wideo",
   "Show frame in Video Compare": "Pokaż klatkę w Porównaniu wideo",
   "{video}: frame {frame}": "{video}: klatka {frame}",

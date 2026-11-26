@@ -1,5 +1,6 @@
 {
  "strings": {
+  "Title on the graph:": "Judul pada grafik:",
   "Show frame {frame} in Video Compare": "Tampilkan bingkai {frame} di Bandingkan video",
   "Show frame in Video Compare": "Tampilkan bingkai di Bandingkan video",
   "{video}: frame {frame}": "{video}: bingkai {frame}",

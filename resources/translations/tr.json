@@ -1,5 +1,6 @@
 {
  "strings": {
+  "Title on the graph:": "Grafikteki başlık:",
   "Show frame {frame} in Video Compare": "Kare {frame} Video karşılaştırmada göster",
   "Show frame in Video Compare": "Kareyi Video karşılaştırmada göster",
   "{video}: frame {frame}": "{video}: kare {frame}",

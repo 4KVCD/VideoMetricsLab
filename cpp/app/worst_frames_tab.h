@@ -207,7 +207,9 @@ private:
     bool worst_shown() const;
     bool segments_shown() const;
     QString graph_name() const;
-    QPixmap graph_image();
+    // The exported graph's own title, and the graph titled `title` (empty: that one).
+    QString graph_title() const;
+    QPixmap graph_image(const QString& title = {});
     QString worst_stem() const;
     std::string worst_text(const std::string& format) const;
     QString segments_stem() const;

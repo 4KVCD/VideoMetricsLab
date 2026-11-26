@@ -1,5 +1,6 @@
 {
  "strings": {
+  "Title on the graph:": "Cím a grafikonon:",
   "Show frame {frame} in Video Compare": "A(z) {frame}. képkocka megjelenítése a Videó-összehasonlításban",
   "Show frame in Video Compare": "A képkocka megjelenítése a Videó-összehasonlításban",
   "{video}: frame {frame}": "{video}: {frame}. képkocka",

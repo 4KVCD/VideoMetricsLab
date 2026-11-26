@@ -145,7 +145,8 @@ public:
     // What Export graph as PNG saves: the graph with its title (the graph chosen, the
     // frame range, the frame types' colours while marked) and a table of
     // the lines drawn, keyed by their colours, with the table's figures.
-    QPixmap render_export_image();
+    // Titled `title`, or export_title() where it is empty.
+    QPixmap render_export_image(const QString& title = {});
     // render_export_image with the chart drawn at `size`; its own size is put back.
     QPixmap render_export_image(QSize size);
 

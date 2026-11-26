@@ -182,4 +182,12 @@ Dialogs standard_dialogs(QWidget* parent, std::function<std::string()> export_di
     return dialogs;
 }
 
+std::optional<QString> ask_graph_title(const Dialogs& dialogs, const QString& caption, const QString& standard) {
+    const std::optional<QString> title = dialogs.ask_text(caption, app::tr("Title on the graph:"), standard);
+    if (title && title->trimmed().isEmpty()) {
+        return standard;
+    }
+    return title;
+}
+
 }  // namespace vml::app

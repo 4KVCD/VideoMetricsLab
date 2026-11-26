@@ -1418,7 +1418,7 @@ ExportTable BitratePanel::export_table() const {
     return exported;
 }
 
-QPixmap BitratePanel::render_export_image() {
+QPixmap BitratePanel::render_export_image(const QString& title) {
     // As Metric Graphs' image: the bare chart's lines say nothing once the
     // file leaves the app. The frame types' dots are keyed after the title,
     // as beside their box: the table keys only the lines.
@@ -1429,7 +1429,7 @@ QPixmap BitratePanel::render_export_image() {
                 {QStringLiteral("P"), colors[frame_type_p]},
                 {QStringLiteral("B"), colors[frame_type_b]}};
     }
-    return export_image(*chart, export_title(), export_table(), font(),
+    return export_image(*chart, title.isEmpty() ? export_title() : title, export_table(), font(),
                         export_colours ? export_colours() : theme::chart_colours(false), keys);
 }
 
@@ -1547,9 +1547,13 @@ void BitratePanel::on_export_png() {
     if (!chart->has_data()) {
         return;  // its items are offered only with a graph drawn
     }
-    const QString path =dialogs.save_file(app::tr("Export bitrate plot"), png_name(), app::tr("PNG image (*.png)"));
-    report_to(export_report, save_as(path, [this](const QString& out) {
-                  return render_export_image().save(out) ? QString() : could_not_write(out);
+    const std::optional<QString> title = ask_graph_title(dialogs, app::tr("Export bitrate plot"), export_title());
+    if (!title) {
+        return;
+    }
+    const QString path = dialogs.save_file(app::tr("Export bitrate plot"), png_name(), app::tr("PNG image (*.png)"));
+    report_to(export_report, save_as(path, [this, &title](const QString& out) {
+                  return render_export_image(*title).save(out) ? QString() : could_not_write(out);
               }));
 }
 

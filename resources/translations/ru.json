@@ -1,5 +1,6 @@
 {
  "strings": {
+  "Title on the graph:": "Заголовок на графике:",
   "Show frame {frame} in Video Compare": "Показать кадр {frame} в Сравнении видео",
   "Show frame in Video Compare": "Показать кадр в Сравнении видео",
   "{video}: frame {frame}": "{video}: кадр {frame}",

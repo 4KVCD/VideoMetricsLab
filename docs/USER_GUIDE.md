@@ -66,7 +66,10 @@ calculated in resolution tests.
    row the graph as PNG (see [Saving and exporting](#saving-and-exporting)).
    Right-click either for **Statistics as JSON...** or **as CSV...**, or
    **Graph as PNG...**, with the Save dialog; right-click the statistics for
-   a row's video's export too.
+   a row's video's export too. **Graph as PNG...** (here, in Worst Frames
+   and in the Bitrate Viewer) first asks for the title written on the image,
+   starting with the graph's own: type your own where the file names say
+   little, such as crf20_01.mkv. The save icon keeps the graph's own.
    With two videos shown, **Difference** draws the first minus the second,
    frame by frame, in a band under the graph with its own scale. With it on,
    the graph's save icon saves it with the PNG, and the right-click menus

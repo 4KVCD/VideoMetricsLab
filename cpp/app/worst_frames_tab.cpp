@@ -1689,15 +1689,19 @@ QString WorstFramesTab::graph_name() const {
     return suggested_file_name(chosen_video()->label + "_" + qt_text(metric_->key), ".png");
 }
 
-QPixmap WorstFramesTab::graph_image() {
-    // The graph as shown (the weak segments shaded, the worst frames
-    // dotted), titled as Metric Graphs titles its own, with the video's name.
+QString WorstFramesTab::graph_title() const {
+    // As Metric Graphs titles its own, with the video's name.
     QString title = app::tr("{label} vs time", {{"label", qt_text(metric_->label)}}) + QStringLiteral(" — ") +
                     chosen_video()->label;
     if (range_) {
         title += app::tr(" — frames {first} to {last}", {{"first", range_->first}, {"last", range_->second}});
     }
-    return export_image(*chart_, title, ExportTable{}, font(),
+    return title;
+}
+
+QPixmap WorstFramesTab::graph_image(const QString& title) {
+    // The graph as shown: the weak segments shaded, the worst frames dotted.
+    return export_image(*chart_, title.isEmpty() ? graph_title() : title, ExportTable{}, font(),
                         export_colours ? export_colours() : theme::chart_colours(false));
 }
 
@@ -1735,11 +1739,15 @@ void WorstFramesTab::export_graph() {
     if (!graph_shown()) {
         return;
     }
+    const std::optional<QString> title = ask_graph_title(dialogs_, app::tr("Export graph"), graph_title());
+    if (!title) {
+        return;
+    }
     const QString path = dialogs_.save_file(app::tr("Export graph"), graph_name(), app::tr("PNG image (*.png)"));
     if (path.isEmpty()) {
         return;
     }
-    const QPixmap image = graph_image();
+    const QPixmap image = graph_image(*title);
     report_to(export_report, save_as(path, [&image](const QString& out) {
                   return image.save(out) ? QString() : could_not_write(out);
               }));

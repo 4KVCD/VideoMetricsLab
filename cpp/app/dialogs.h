@@ -81,6 +81,12 @@ struct Dialogs {
 // working folder: the program's own (issue #19).
 QString save_dialog_start(const QString& suggested, const QString& folder);
 
+// The title a graph exported as PNG carries (issue #259: a test video's file
+// name says little on it), asked in `dialogs.ask_text` under `caption`,
+// starting at `standard`, the graph's own: nothing for Cancel, `standard`
+// where it is left blank.
+std::optional<QString> ask_graph_title(const Dialogs& dialogs, const QString& caption, const QString& standard);
+
 // The real dialogs, over `parent`. `export_dir` gives Settings' Export
 // folder, read at each export (none, or blank: Documents).
 Dialogs standard_dialogs(QWidget* parent, std::function<std::string()> export_dir = {});

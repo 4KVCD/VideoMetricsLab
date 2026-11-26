@@ -333,8 +333,9 @@ public:
     bool wait_until_file_writes_idle(std::chrono::milliseconds timeout);
 
     // The chart of the metric shown, with a title, a legend keyed by the
-    // lines' colours and the statistics: what an exported PNG holds.
-    QPixmap render_export_image();
+    // lines' colours and the statistics: what an exported PNG holds. Titled
+    // `title`, or export_title() where it is empty.
+    QPixmap render_export_image(const QString& title = {});
     // render_export_image of metric `key`'s page, with only the lines whose
     // identities are `identities` drawn (all of them when empty), the chart
     // drawn at `size`. The page shown, the lines shown and the chart's size
@@ -486,6 +487,8 @@ private:
     // Whether the page shown draws a graph, and its PNG's name.
     bool shown_graph() const;
     QString png_name() const;
+    // The exported image's own title: the metric shown, with its notes.
+    QString export_title() const;
     // The difference of the lines `pair`: its file's name, and its writing
     // to `path`, said with the files `with` once written.
     QString difference_name(const std::pair<int, int>& pair) const;

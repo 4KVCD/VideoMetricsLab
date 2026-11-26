@@ -1,5 +1,6 @@
 {
  "strings": {
+  "Title on the graph:": "Titel op de grafiek:",
   "Show frame {frame} in Video Compare": "Frame {frame} tonen in Video vergelijken",
   "Show frame in Video Compare": "Frame tonen in Video vergelijken",
   "{video}: frame {frame}": "{video}: frame {frame}",

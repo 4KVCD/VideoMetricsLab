@@ -1,5 +1,6 @@
 {
  "strings": {
+  "Title on the graph:": "그래프 제목:",
   "Show frame {frame} in Video Compare": "프레임 {frame}을(를) 영상 비교에서 보기",
   "Show frame in Video Compare": "이 프레임을 영상 비교에서 보기",
   "{video}: frame {frame}": "{video}: 프레임 {frame}",
