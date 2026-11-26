@@ -211,6 +211,10 @@ private:
     int frozen_count_ = 0;
     // The header's sort arrow as frozen_ last drew it: (shown, column, order).
     std::tuple<bool, int, Qt::SortOrder> frozen_sort_{false, -1, Qt::AscendingOrder};
+    // Redraws frozen_header_ if the header's sort arrow is not what it drew.
+    void follow_sort_arrow();
+    // follow_sort_arrow as `header`'s arrow changes.
+    void watch_sort_arrow(QHeaderView* header);
     bool keeps_a_row_ = false;      // keep_a_row_selected
     int last_selected_row_ = 0;     // the row selected last, for keep_a_row_selected
     bool reselect_pending_ = false; // keep_a_row_selected will select one

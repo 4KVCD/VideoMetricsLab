@@ -366,6 +366,28 @@ TEST(TableSelection, FrozenColumnsLetTheTableScrollWithoutRepaintingIt) {
     EXPECT_EQ(heading->size(), QSize(frozen->width(), header->height()));
 }
 
+// The frozen heading draws the sort arrow the table's header has now. A
+// heading sorted the other way on a frozen column was redrawn only on the
+// table's header (under the frozen heading, so not painted at all), and the
+// frozen one went on showing the order before: ▼ on File name sorted A to Z.
+TEST(TableSelection, TheFrozenHeadingRedrawsTheSortArrowAsItTurns) {
+    FillColumnTable table(4, frozen_test_columns, 1, all_but_the_file_name());
+    set_up_like_the_videos_table(table, QSize(500, 200));
+    ASSERT_TRUE(QTest::qWaitForWindowExposed(&table));
+    auto* frozen = table.findChild<QHeaderView*>(QStringLiteral("frozenHeader"));
+    ASSERT_NE(frozen, nullptr);
+    QHeaderView* header = table.horizontalHeader();
+    header->setSortIndicatorShown(true);
+    header->setSortIndicator(1, Qt::AscendingOrder);
+    paint_now(table);
+    for (const Qt::SortOrder order : {Qt::DescendingOrder, Qt::AscendingOrder}) {
+        PaintedArea painted(*frozen->viewport());
+        header->setSortIndicator(1, order);  // the same column, the other way
+        paint_now(table);
+        EXPECT_GT(painted.area, 0) << (order == Qt::AscendingOrder ? "ascending" : "descending");
+    }
+}
+
 // The Videos tab's headings, in a window made once (about 150 ms).
 // The window goes before the videos' folder: it may still be reading them.
 class VideosHeading : public ::testing::Test {

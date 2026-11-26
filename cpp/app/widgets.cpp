@@ -361,8 +361,8 @@ void FillColumnTable::setHorizontalHeader(QHeaderView* header) {
     QTableWidget::setHorizontalHeader(header);
     connect(header, &QHeaderView::sectionResized, this, &FillColumnTable::on_section_resized);
     if (frozen_ != nullptr) {
-        header->viewport()->installEventFilter(this);  // eventFilter: the sort arrow
-        frozen_header_->raise();                       // over the new header too
+        watch_sort_arrow(header);
+        frozen_header_->raise();  // over the new header too
         place_frozen_view();
     }
 }
@@ -658,9 +658,7 @@ void FillColumnTable::freeze_leading_columns(int count) {
             [this] { frozen_->verticalScrollBar()->setValue(verticalScrollBar()->value()); });
     connect(verticalHeader(), &QHeaderView::sectionResized, this,
             [this](int row, int, int size) { frozen_->setRowHeight(row, size); });
-    // The sort arrow, which frozen_header_ copies, is checked as the
-    // table's header paints (eventFilter).
-    header->viewport()->installEventFilter(this);
+    watch_sort_arrow(header);
 
     setHorizontalScrollMode(ScrollPerPixel);  // a column slides under frozen_, not jumps
     view->show();
@@ -768,15 +766,30 @@ void FillColumnTable::scrollTo(const QModelIndex& index, ScrollHint hint) {
     }
 }
 
+void FillColumnTable::watch_sort_arrow(QHeaderView* header) {
+    // The sort arrow, which frozen_header_ copies, is checked as it turns or
+    // moves (sortIndicatorChanged), and as the table's header paints
+    // (eventFilter), for its showing or hiding, which has no signal. The
+    // paint alone missed a frozen column's arrow turning: that changes only
+    // the header's section under frozen_header_, which is not painted, and
+    // the frozen heading went on showing the order before.
+    connect(header, &QHeaderView::sortIndicatorChanged, this, [this] { follow_sort_arrow(); });
+    header->viewport()->installEventFilter(this);
+}
+
+void FillColumnTable::follow_sort_arrow() {
+    const QHeaderView* header = horizontalHeader();
+    const std::tuple sort{header->isSortIndicatorShown(), header->sortIndicatorSection(),
+                          header->sortIndicatorOrder()};
+    if (sort != frozen_sort_) {
+        frozen_sort_ = sort;
+        frozen_header_->viewport()->update();
+    }
+}
+
 bool FillColumnTable::eventFilter(QObject* watched, QEvent* event) {
     if (frozen_ != nullptr && event->type() == QEvent::Paint && watched == horizontalHeader()->viewport()) {
-        const QHeaderView* header = horizontalHeader();
-        const std::tuple sort{header->isSortIndicatorShown(), header->sortIndicatorSection(),
-                              header->sortIndicatorOrder()};
-        if (sort != frozen_sort_) {
-            frozen_sort_ = sort;
-            frozen_header_->viewport()->update();
-        }
+        follow_sort_arrow();
     }
     return QTableWidget::eventFilter(watched, event);
 }
