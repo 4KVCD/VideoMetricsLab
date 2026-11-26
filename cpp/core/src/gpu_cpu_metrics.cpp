@@ -46,6 +46,9 @@ std::vector<std::string> gpu_metrics_of(const std::vector<std::string>& metrics,
     if (has(metrics, "cambi") && cambi_gpu_values(cambi_options)) {
         on_gpu.emplace_back("cambi");
     }
+    if (!ms_ssim_on_gpu) {
+        return on_gpu;
+    }
     // MS-SSIM YUV's chroma as CIEDE2000's. Where it stays on the CPU, libvmaf
     // calculates MS-SSIM's luma in the same pass, so MS-SSIM stays with it.
     const bool ms_ssim_yuv = std::any_of(metrics.begin(), metrics.end(), of_ms_ssim_yuv);
@@ -59,8 +62,8 @@ std::vector<std::string> gpu_metrics_of(const std::vector<std::string>& metrics,
 }
 
 bool engine_takes_cpu_metric(std::string_view key) {
-    return key == "ciede2000" || key == "cambi" || key == "ms_ssim" || key == "ms_ssim_yuv" ||
-           key == "ms_ssim_yuv_y" || key == "ms_ssim_yuv_u" || key == "ms_ssim_yuv_v";
+    // MS-SSIM, MS-SSIM YUV and its planes
+    return key == "ciede2000" || key == "cambi" || (ms_ssim_on_gpu && key.starts_with("ms_ssim"));
 }
 
 std::vector<std::string> may_run_on_gpu(const std::vector<std::string>& keys, bool extra_gpu_offered,
