@@ -139,10 +139,6 @@ void MainWindow::show_metrics_panel(const QPoint& top_left, std::optional<QPoint
     }
     list->set_ticked(shown);
     list->set_planes_shown(settings_.show_yuv_planes);
-    // Folded unless one of its metrics is shown, whose tick is then in sight.
-    list->set_specialized_open(std::any_of(shown.begin(), shown.end(), [](const std::string& key) {
-        return section_of(key) == MetricSection::specialized;
-    }));
     connect(list, &MetricList::ticks_changed, this, [this, list] { on_metrics_shown_changed(list->ticked()); });
     connect(list, &MetricList::planes_toggled, this, [this](bool shown_planes) { on_yuv_planes_toggled(shown_planes); });
     panel->show_at(top_left, top_right);
