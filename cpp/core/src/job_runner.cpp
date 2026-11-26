@@ -1149,8 +1149,12 @@ void JobRun::close_pass(std::size_t task, const std::string& end, std::optional<
     PassTiming pass;
     pass.task = job_.tasks[task].backend;
     pass.metric_keys = state.pass_keys;
-    // Where its scores came from: the CPU once the GPU's VMAF fell back
-    pass.on = pool_of(task) == gpu_pool && state.cpu_keys.empty() ? "gpu" : "cpu";
+    // Where its scores came from: the CPU once the GPU's VMAF fell back; the GPU for a CPU task whose metrics the
+    // GPU calculated all (MS-SSIM, CAMBI or CIEDE2000 without VMAF: gpu_keys)
+    const bool all_on_gpu = !state.pass_keys.empty() &&
+                            std::all_of(state.pass_keys.begin(), state.pass_keys.end(),
+                                        [&state](const std::string& key) { return contains(state.gpu_keys, key); });
+    pass.on = (pool_of(task) == gpu_pool && state.cpu_keys.empty()) || all_on_gpu ? "gpu" : "cpu";
     pass.seconds = scheduler_.cancel.now() - state.pass_began;
     pass.paused_seconds = scheduler_.cancel.paused_seconds() - state.pass_paused_before;
     pass.frames = frames.value_or(

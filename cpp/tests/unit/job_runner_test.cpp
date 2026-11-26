@@ -18,6 +18,7 @@
 #include <utility>
 #include <vector>
 
+#include "vml/ffmpeg_run.h"
 #include "vml/film_grain_detect.h"
 #include "vml/gpu_cpu_metrics.h"
 #include "vml/gpu_decoders.h"
@@ -447,6 +448,34 @@ TEST(JobRunner, AVideosFactsSayHowItsMetricsCameOutAndHowLongItsPassesTook) {
                                   [](const PassTiming& pass) { return pass.task != "ffmpeg"; });
     EXPECT_EQ(gpu->on, "gpu");
     EXPECT_EQ(gpu->end, "failed");
+}
+
+// An FFmpeg pass whose metrics the GPU calculated all (MS-SSIM without VMAF)
+// is a GPU pass; one with a metric on the CPU beside them stays a CPU pass.
+TEST(JobRunner, AnFfmpegPassIsOnTheGpuWhereTheGpuCalculatedAllItsMetrics) {
+    for (const auto& [keys, on] : {std::pair{std::vector<std::string>{"ms_ssim"}, "gpu"},
+                                   std::pair{std::vector<std::string>{"psnr", "ms_ssim"}, "cpu"}}) {
+        std::vector<RunFacts> facts;
+        Reported reported;
+        RunEvents events = reported.events();
+        events.job_facts = [&facts](std::size_t, const RunFacts& sent) { facts.push_back(sent); };
+        CancelToken cancel;
+        run_jobs(
+            {job_of({{"ffmpeg", keys}})}, 1, events,
+            [&keys](const VmafJob&, const VmafOptions&, const ProgressCallback&, const StatusCallback& status,
+                    const CancelToken&) {
+                status({metrics_on_gpu_text(keys, {"ms_ssim"}), StatusKind::metrics_on_gpu});
+                std::vector<std::pair<std::string, std::vector<int>>> scores;
+                for (const std::string& key : keys) {
+                    scores.emplace_back(key, std::vector<int>{0, 1});
+                }
+                return result_with(scores);
+            },
+            24, cancel);
+        ASSERT_EQ(facts.size(), 1u);
+        ASSERT_EQ(facts[0].passes.size(), 1u);
+        EXPECT_EQ(facts[0].passes[0].on, on) << keys.size();
+    }
 }
 
 TEST(JobRunner, VideosShareTheCpusTwoLanesAndTheGpusOne) {

@@ -217,8 +217,10 @@ frames were judged.
 
 Each pass of a video's tasks: `task` (`vmaf_gpu`, `ffmpeg`, `perceptual`,
 `cvvdp`...), its `metrics`, `together` (several metrics in one pass), `on`
-(`gpu` or `cpu`: where the task ran; a GPU VMAF pass can calculate PSNR, SSIM
-and XPSNR on the CPU beside it, and each metric's `computed_on` says so),
+(`gpu` or `cpu`: where the task ran, or `gpu` where the GPU calculated all of
+its metrics; a GPU VMAF pass can calculate PSNR, SSIM and XPSNR on the CPU
+beside it, an FFmpeg pass MS-SSIM on the GPU beside PSNR, and each metric's
+`computed_on` says so),
 `seconds` (pauses included), `paused_seconds`, `setup_seconds` (from its start
 to its first frame: waiting for black-bar detection, starting its programs,
 waiting for the GPU), `frames`, `fps` (frames per second from its first frame

@@ -30,7 +30,9 @@ namespace vml {
 struct PassTiming {
     std::string task;  // the task's backend (MetricTask::backend)
     std::vector<std::string> metric_keys;
-    std::string on;        // "gpu" or "cpu": the CPU when the GPU's VMAF fell back to it
+    // "gpu" or "cpu": the task's, the CPU when the GPU's VMAF fell back to it, the GPU when it calculated all
+    // the pass's metrics
+    std::string on;
     double seconds = 0.0;  // start to end, pauses included
     double paused_seconds = 0.0;
     // From its start to its first frame: black-bar detection it waited for,
