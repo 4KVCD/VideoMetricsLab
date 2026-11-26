@@ -187,6 +187,8 @@ private:
     // conditions on them.
     void choose_video(int index);
     void choose_metric(const std::string& key);
+    void fill_metric_bar();
+    void reorder_metrics();
     // Everything that follows the rules: the videos' counts, the graph, the
     // two lists, the notes.
     void refresh();

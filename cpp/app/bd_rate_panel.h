@@ -117,6 +117,8 @@ private:
     void add_options_row(QVBoxLayout* root);
     void add_results(QVBoxLayout* root);
     void add_chart(QVBoxLayout* root);
+    void label_metric_columns();
+    void fill_metric_combo();
 
     void on_add_videos(Side& side);
     // bring_videos_up_to_date for a side: whether anything changed, and the

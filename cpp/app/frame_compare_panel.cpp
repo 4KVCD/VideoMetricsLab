@@ -30,6 +30,7 @@
 
 #include "i18n.h"
 #include "key_guide.h"
+#include "metric_order.h"
 #include "theme.h"
 #include "video_compare_view.h"
 #ifdef VML_NATIVE_PLAYBACK
@@ -420,6 +421,8 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
                                      int decoded_videos, QWidget* parent)
     : QWidget(parent), ffmpeg_(std::move(ffmpeg)), decoded_videos_(std::max(1, decoded_videos)), color_mode_(color_mode) {
     qRegisterMetaType<DetectedCrops>();
+    // The frame line's scores in the metrics' new order (score_text).
+    connect(&metric_order_signal(), &MetricOrderSignal::changed, this, [this] { update_frame_line(); });
     auto* root = new QVBoxLayout(this);
 
     // The rows above the view, a toolbar of their own in VML Modern; the
@@ -1484,7 +1487,8 @@ QString FrameComparePanel::score_text(const FrameComparisonEntry& entry) const {
         return app::tr("No metric results loaded");
     }
     QStringList values;
-    for (const MetricDefinition& metric : metrics()) {
+    for (const MetricDefinition* shown : shown_metrics()) {
+        const MetricDefinition& metric = *shown;
         if (metric.kind != MetricKind::frame) {
             continue;
         }

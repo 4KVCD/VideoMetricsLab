@@ -3,6 +3,7 @@
 // the notes its cells carry.
 #include "main_window.h"
 
+#include <QPushButton>
 #include <QTableWidgetItem>
 
 #include <algorithm>
@@ -12,6 +13,7 @@
 #include "formatting.h"
 #include "i18n.h"
 #include "metric_list.h"
+#include "metric_order.h"
 #include "settings_panel.h"
 #include "vml/metric_cache.h"
 #include "vml/metrics.h"
@@ -141,6 +143,15 @@ void MainWindow::show_metrics_panel(const QPoint& top_left, std::optional<QPoint
     list->set_planes_shown(settings_.show_yuv_planes);
     connect(list, &MetricList::ticks_changed, this, [this, list] { on_metrics_shown_changed(list->ticked()); });
     connect(list, &MetricList::planes_toggled, this, [this](bool shown_planes) { on_yuv_planes_toggled(shown_planes); });
+    QPushButton* default_order = panel->default_order_button();
+    default_order->setEnabled(!settings_.metric_order.empty());
+    // A column dragged while the panel is open
+    connect(&metric_order_signal(), &MetricOrderSignal::changed, default_order,
+            [this, default_order] { default_order->setEnabled(!settings_.metric_order.empty()); });
+    connect(default_order, &QPushButton::clicked, this, [this, default_order] {
+        apply_metric_order({});
+        default_order->setEnabled(false);
+    });
     panel->show_at(top_left, top_right);
 }
 

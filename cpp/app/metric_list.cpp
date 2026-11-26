@@ -5,6 +5,7 @@
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
 #include <QScreen>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -378,12 +379,26 @@ MetricsPanel::MetricsPanel(QWidget* parent) : PopupPanel(parent) {
     list_->setAutoFillBackground(false);
     list_->installEventFilter(this);  // its layout changed (Specialized folded): the panel sized again
     layout->addWidget(scroll_);
+    // The order every list shows the metrics in: changed by dragging a
+    // metric's heading in the Videos table, put back here.
+    order_row_ = new QWidget;
+    auto* order = new QHBoxLayout(order_row_);
+    order->setContentsMargins(0, 0, 0, 0);
+    auto* how = new QLabel(app::tr("Drag a heading in the Videos table to move its metric in every list."));
+    how->setWordWrap(true);
+    theme::set_role(how, "hint");
+    order->addWidget(how, 1);
+    default_order_ = new QPushButton(app::tr("Default order"));
+    default_order_->setToolTip(app::tr("The metrics in the order this list shows them, in every list."));
+    order->addWidget(default_order_, 0, Qt::AlignVCenter);
+    layout->addWidget(order_row_);
 }
 
 void MetricsPanel::fit_height(int height) {
     // The list's room: the panel's less its margins and frame.
     const QMargins margins = layout()->contentsMargins();
-    room_ = height > 0 ? std::max(1, height - margins.top() - margins.bottom() - 2 * frameWidth()) : 0;
+    const int below = order_row_->sizeHint().height() + layout()->spacing();  // the order's row under the list
+    room_ = height > 0 ? std::max(1, height - margins.top() - margins.bottom() - 2 * frameWidth() - below) : 0;
     scroll_->updateGeometry();
     adjustSize();
 }

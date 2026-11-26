@@ -38,6 +38,9 @@ public:
     // Shows `rules` (their conditions on `keys`, the others left out),
     // without changed().
     void set_rules(const SegmentRules& rules);
+    // The metrics conditions can be on, in a new order (the user moved a
+    // metric): the conditions shown kept, without changed().
+    void set_keys(std::vector<std::string> keys);
     // The rules shown, without a range.
     SegmentRules rules() const;
     // The conditions a metric picked for a condition starts from (its

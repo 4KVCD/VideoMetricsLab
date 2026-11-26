@@ -34,6 +34,7 @@
 #include "popup_panel.h"
 #include "export_image.h"
 #include "i18n.h"
+#include "metric_order.h"
 #include "theme.h"
 #include "widgets.h"
 #include "window_helpers.h"
@@ -150,12 +151,13 @@ QStringList aligned(const std::vector<std::pair<QString, QString>>& rows) {
     return lines;
 }
 
-// The metrics `result` has scores of that the tab lists, in the app's order.
+// The metrics `result` has scores of that the tab lists, in the order shown
+// (shown_metrics).
 std::vector<std::string> metric_keys(const ComparisonResult& result) {
     std::vector<std::string> keys;
-    for (const MetricDefinition& definition : metrics()) {
-        if (score_samples(result.metric_results, std::string(definition.key))) {
-            keys.emplace_back(definition.key);
+    for (const MetricDefinition* definition : shown_metrics()) {
+        if (score_samples(result.metric_results, std::string(definition->key))) {
+            keys.emplace_back(definition->key);
         }
     }
     return keys;
@@ -214,6 +216,7 @@ std::optional<double> worst_score(const ScoreSamples& samples, MetricDirection d
 // ------------------------------------------------------------------ building
 
 WorstFramesTab::WorstFramesTab(Dialogs dialogs, QWidget* parent) : QWidget(parent), dialogs_(std::move(dialogs)) {
+    connect(&metric_order_signal(), &MetricOrderSignal::changed, this, [this] { reorder_metrics(); });
     auto* root = new QHBoxLayout(this);
 
     // The videos, each with its weak segments and its worst score.
@@ -809,20 +812,7 @@ void WorstFramesTab::choose_video(int index) {
     const std::string key =
         std::find(keys_.begin(), keys_.end(), previous) != keys_.end() ? previous : keys_.empty() ? "" : keys_.front();
     metric_ = key.empty() ? nullptr : &metric_definition(key);
-    {
-        const QSignalBlocker blocker(metric_bar_);
-        while (metric_bar_->count() > 0) {
-            metric_bar_->removeTab(0);
-        }
-        for (const std::string& k : keys_) {
-            const int tab = metric_bar_->addTab(qt_text(metric_definition(k).short_label));
-            metric_bar_->setTabData(tab, qt_text(k));
-            if (k == key) {
-                metric_bar_->setCurrentIndex(tab);
-            }
-        }
-    }
-    metric_pills_->rebuild();  // the bar's signals were blocked
+    fill_metric_bar();
     // The conditions edited here, on this video's metrics; those shown stay
     // where they are on its metrics too.
     const SegmentRules shown = editor_ != nullptr ? editor_->rules() : SegmentRules{};
@@ -869,6 +859,37 @@ void WorstFramesTab::choose_video(int index) {
     } else {
         start_from_profile();
     }
+    refresh();
+}
+
+// The metric bar's tabs and pills: keys_, in order, metric_ chosen.
+void WorstFramesTab::fill_metric_bar() {
+    {
+        const QSignalBlocker blocker(metric_bar_);
+        while (metric_bar_->count() > 0) {
+            metric_bar_->removeTab(0);
+        }
+        for (const std::string& key : keys_) {
+            const int tab = metric_bar_->addTab(qt_text(metric_definition(key).short_label));
+            metric_bar_->setTabData(tab, qt_text(key));
+            if (metric_ != nullptr && key == metric_->key) {
+                metric_bar_->setCurrentIndex(tab);
+            }
+        }
+    }
+    metric_pills_->rebuild();  // the bar's signals were blocked
+}
+
+// The chosen video's metrics in their new order: the same metrics, so the
+// metric and the conditions shown stay as the user left them.
+void WorstFramesTab::reorder_metrics() {
+    const WeakFramesVideo* video = chosen_video();
+    if (video == nullptr || editor_ == nullptr) {
+        return;
+    }
+    keys_ = metric_keys(*video->result);
+    fill_metric_bar();
+    editor_->set_keys(keys_);  // emits no changed
     refresh();
 }
 
@@ -1099,9 +1120,9 @@ void WorstFramesTab::fill_worst() {
     // segments. Every metric's score at the frame is in the row's tooltip.
     std::vector<std::pair<const MetricDefinition*, ScoreSamples>> columns{{metric_, *samples}};
     std::vector<std::pair<const MetricDefinition*, ScoreSamples>> all;
-    for (const MetricDefinition& other : metrics()) {
-        if (const std::optional<ScoreSamples> found = score_samples(results, std::string(other.key))) {
-            all.emplace_back(&other, *found);
+    for (const MetricDefinition* other : shown_metrics()) {
+        if (const std::optional<ScoreSamples> found = score_samples(results, std::string(other->key))) {
+            all.emplace_back(other, *found);
         }
     }
     if (editor_ != nullptr) {

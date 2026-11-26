@@ -24,6 +24,7 @@
 class QCheckBox;
 class QGridLayout;
 class QLabel;
+class QPushButton;
 class QToolButton;
 
 class QEvent;
@@ -119,6 +120,9 @@ public:
     // The panel at most `height` high, the list scrolled within it where it
     // is taller (show_at: its screen's available height; 0: no bound).
     void fit_height(int height);
+    // Under the list: the metrics put back in the registry's order, after
+    // the user dragged the Videos table's columns (Settings::metric_order).
+    QPushButton* default_order_button() const { return default_order_; }
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -126,6 +130,8 @@ protected:
 private:
     MetricList* list_;
     QScrollArea* scroll_ = nullptr;
+    QWidget* order_row_ = nullptr;  // how to order the metrics, and default_order_
+    QPushButton* default_order_ = nullptr;
     int room_ = 0;  // the most height the list may take on its screen (show_at); 0: no bound
 };
 

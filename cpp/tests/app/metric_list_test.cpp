@@ -27,6 +27,7 @@
 
 #include "main_window.h"
 #include "metric_list.h"
+#include "metric_order.h"
 #include "vml/metrics.h"
 #include "vml/settings.h"
 #include "widgets.h"
@@ -256,6 +257,7 @@ protected:
         window_ = nullptr;
     }
     static MetricList* open_panel() {
+        QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);  // panels closed before: gone
         for (QPushButton* button : window_->findChildren<QPushButton*>()) {
             if (button->text() == "Add/remove metrics") {
                 button->click();
@@ -417,6 +419,76 @@ TEST_F(MetricsPanelInWindow, AVideosRemoveMarkStartsItsRow) {
         EXPECT_FALSE(frozen->horizontalHeader()->isSectionHidden(column)) << column;  // frozen
     }
     EXPECT_TRUE(frozen->horizontalHeader()->isSectionHidden(col_info));
+}
+
+// A metric's column dragged to another place puts the metric there in every
+// list (shown_metrics) and saves the order; dropped among the video's
+// columns, it comes first. A plane's column or a video's column goes back
+// to its place. Default order, in Add/remove metrics, puts the registry's
+// back.
+TEST_F(MetricsPanelInWindow, ADraggedMetricColumnSetsTheOrderShown) {
+    auto* table = window_->findChild<FillColumnTable*>();
+    ASSERT_NE(table, nullptr);
+    QHeaderView* header = table->horizontalHeader();
+    const auto first_keys = [](std::size_t count) {
+        std::vector<std::string> keys;
+        for (const MetricDefinition* metric : shown_metrics()) {
+            if (!metric->is_plane() && keys.size() < count) {
+                keys.emplace_back(metric->key);
+            }
+        }
+        return keys;
+    };
+    const auto saved_order = [] { return Settings::load_from(app_data_folder() / "settings.json").metric_order; };
+    header->moveSection(header->visualIndex(col_cambi), header->visualIndex(col_psnr));
+    EXPECT_EQ(first_keys(6), (std::vector<std::string>{"vmaf", "vmaf_neg", "vmaf_v1", "vmaf_hdr", "cambi", "psnr"}));
+    EXPECT_EQ(header->visualIndex(col_cambi) + 1, header->visualIndex(col_psnr));
+    const std::vector<std::string> saved = saved_order();
+    ASSERT_GE(saved.size(), 6U);
+    EXPECT_EQ(std::vector<std::string>(saved.begin(), saved.begin() + 6), first_keys(6));
+    header->moveSection(header->visualIndex(col_ciede2000), header->visualIndex(col_info));
+    EXPECT_EQ(first_keys(2), (std::vector<std::string>{"ciede2000", "vmaf"}));
+    EXPECT_EQ(header->logicalIndex(4), col_info);  // the video's columns back in place
+    const std::vector<std::string> before = saved_order();
+    const int plane_at = header->visualIndex(col_psnr_yuv_y);
+    header->moveSection(plane_at, header->visualIndex(col_vmaf));
+    EXPECT_EQ(header->visualIndex(col_psnr_yuv_y), plane_at);
+    EXPECT_EQ(header->visualIndex(col_psnr_yuv_y), header->visualIndex(col_psnr_yuv) + 1);  // after its metric
+    header->moveSection(header->visualIndex(col_scaling), header->visualIndex(col_vmaf));
+    EXPECT_EQ(header->logicalIndex(6), col_scaling);
+    EXPECT_EQ(saved_order(), before);
+    // With the mouse, the header's own drag: the columns put back from inside
+    // its release. The metric after the first, dropped on the video's info
+    // column, goes first; the info column stays where it was.
+    const int dragged = header->logicalIndex(header->visualIndex(col_ciede2000) + 1);
+    ASSERT_FALSE(header->isSectionHidden(dragged));
+    ASSERT_FALSE(header->isSectionHidden(col_info));
+    const auto centre = [header](int logical) {
+        return QPointF(header->sectionViewportPosition(logical) + header->sectionSize(logical) / 2.0,
+                       header->height() / 2.0);
+    };
+    const auto mouse = [header](QEvent::Type type, QPointF at, Qt::MouseButtons held) {
+        QMouseEvent event(type, at, header->viewport()->mapToGlobal(at), Qt::LeftButton, held, Qt::NoModifier);
+        QApplication::sendEvent(header->viewport(), &event);
+    };
+    mouse(QEvent::MouseButtonPress, centre(dragged), Qt::LeftButton);
+    mouse(QEvent::MouseMove, centre(dragged) - QPointF(20, 0), Qt::LeftButton);
+    mouse(QEvent::MouseMove, centre(col_info), Qt::LeftButton);
+    mouse(QEvent::MouseButtonRelease, centre(col_info), Qt::NoButton);
+    EXPECT_EQ(header->visualIndex(dragged) + 1, header->visualIndex(col_ciede2000));
+    EXPECT_EQ(header->logicalIndex(4), col_info);
+    EXPECT_EQ(saved_order().front(), first_keys(1).front());
+    EXPECT_EQ(first_keys(2).back(), "ciede2000");
+    MetricList* list = open_panel();
+    ASSERT_NE(list, nullptr);
+    auto* panel = qobject_cast<MetricsPanel*>(list->window());  // this one: an earlier test's may be left closed
+    ASSERT_NE(panel, nullptr);
+    ASSERT_TRUE(panel->default_order_button()->isEnabled());
+    panel->default_order_button()->click();
+    EXPECT_TRUE(saved_order().empty());
+    EXPECT_EQ(shown_metrics(), ordered_metrics({}));
+    EXPECT_FALSE(panel->default_order_button()->isEnabled());
+    panel->close();
 }
 
 }  // namespace

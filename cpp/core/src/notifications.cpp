@@ -188,9 +188,11 @@ std::string_view text_or(std::string_view text, std::string_view fallback) {
 
 }  // namespace
 
-std::vector<std::pair<std::string, ScoreStats>> notified_metrics(const ComparisonResult& result) {
+std::vector<std::pair<std::string, ScoreStats>> notified_metrics(const ComparisonResult& result,
+                                                                 const std::vector<std::string>& order) {
     std::vector<std::pair<std::string, ScoreStats>> metrics;
-    for (const MetricDefinition& metric : vml::metrics()) {
+    for (const MetricDefinition* ordered : ordered_metrics(order)) {
+        const MetricDefinition& metric = *ordered;
         const std::string key(metric.key);
         if (const FrameMetricResult* frames = result.metric_results.frame(key)) {
             const std::vector<double> values(frames->values.begin(), frames->values.end());

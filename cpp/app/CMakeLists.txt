@@ -49,6 +49,7 @@ add_library(vml_app STATIC
     main_window_saved_scores.cpp
     main_window_source.cpp
     metric_list.cpp
+    metric_order.cpp
     popup_panel.cpp
     graph_legend.cpp
     options_panel.cpp

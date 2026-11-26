@@ -267,6 +267,8 @@ private:
                                                    ScoreReads* reads = nullptr) const;
     // The details panel's rows for `saved`, a score file each.
     std::vector<SavedScoreRow> detail_rows(const SavedComparison& saved) const;
+    static QString metrics_text(const SavedComparison& saved);
+    void reorder_metrics();
     // A card's height, the same for every card.
     int tile_height() const;
     // The ⓘ button's icon, drawn in the text's colour.

@@ -39,7 +39,10 @@ using enum MetricKind;
 using enum MetricDirection;
 using enum MetricAggregation;
 
-// In the order the app shows them. Key "vmaf" is the v0.6.1 family (its
+// In the order the app shows them until the user drags a column of the
+// Videos table to another place (ordered_metrics, Settings::metric_order):
+// Add/remove metrics' General purpose metrics, then its Specialized ones
+// (metrics_hidden_at_first), each section in this order. Key "vmaf" is the v0.6.1 family (its
 // standard and 4K models), as it always was: saved scores, settings and
 // exports keep the key; only the label names the version.
 const std::array<MetricDefinition, 34> registry{{
@@ -61,12 +64,17 @@ const std::array<MetricDefinition, 34> registry{{
     {"ssim", "SSIM", "SSIM", "SSIM", "SSIM", 4, "", frame, higher_is_better, arithmetic, std::nullopt,
      ssim_thresholds, libvmaf_feature("name=float_ssim"), {}, 11},
     // XPSNR is the one metric that reports infinity (an identical frame),
-    // and is averaged its own way (stats.h). Here, after PSNR and SSIM, as
-    // the Videos table shows it (main_window.cpp's metric_columns), so that
-    // every list of metrics (Metric Graphs' tabs, readouts, Video Compare)
-    // is in the table's order.
+    // and is averaged its own way (stats.h).
     {"xpsnr", "XPSNR", "XPSNR", "XPSNR (dB)", "XPSNR (dB)", 2, " dB", frame, higher_is_better,
      square_mean_root_db, std::nullopt, xpsnr_thresholds, bool_option("compute_xpsnr"), {}, 0},
+    {"ssimulacra2", "SSIMULACRA2", "SSIMULACRA2", "SSIMULACRA2", "SSIMULACRA2", 2, "", frame, higher_is_better,
+     arithmetic, 100.0, ssimulacra2_thresholds, std::nullopt, "perceptual", 8},
+    {"butteraugli", "Butteraugli", "Butteraugli", "Butteraugli", "Butteraugli", 4, "", frame, lower_is_better,
+     arithmetic, std::nullopt, {}, std::nullopt, "perceptual", 8},
+    // ColorVideoVDP: one score per video in JOD (just-objectionable
+    // differences; 10 = no visible difference). GPU only.
+    {"cvvdp", "CVVDP", "CVVDP", "CVVDP", "CVVDP (JOD)", 3, "", sequence, higher_is_better, arithmetic, 10.0, {},
+     std::nullopt, "perceptual", 0},
     // PSNR and SSIM of the three planes weighted 6:1:1 ((6 Y + Cb + Cr) / 8),
     // as JVET's common test conditions weigh PSNR and MSU's codec comparisons
     // weigh YUV-SSIM. Scored by the app's own
@@ -149,14 +157,6 @@ const std::array<MetricDefinition, 34> registry{{
      bool_option("compute_vmaf_yuv_u"), {}, 0, "vmaf_yuv"},
     {"vmaf_yuv_v", "VMAF V", "VMAF V", "V", "VMAF V", 2, "", frame, higher_is_better, arithmetic, 100.0, {},
      bool_option("compute_vmaf_yuv_v"), {}, 0, "vmaf_yuv"},
-    {"ssimulacra2", "SSIMULACRA2", "SSIMULACRA2", "SSIMULACRA2", "SSIMULACRA2", 2, "", frame, higher_is_better,
-     arithmetic, 100.0, ssimulacra2_thresholds, std::nullopt, "perceptual", 8},
-    {"butteraugli", "Butteraugli", "Butteraugli", "Butteraugli", "Butteraugli", 4, "", frame, lower_is_better,
-     arithmetic, std::nullopt, {}, std::nullopt, "perceptual", 8},
-    // ColorVideoVDP: one score per video in JOD (just-objectionable
-    // differences; 10 = no visible difference). GPU only.
-    {"cvvdp", "CVVDP", "CVVDP", "CVVDP", "CVVDP (JOD)", 3, "", sequence, higher_is_better, arithmetic, 10.0, {},
-     std::nullopt, "perceptual", 0},
 }};
 
 }  // namespace
@@ -208,6 +208,33 @@ std::vector<ScoreMark> MetricDefinition::best_and_worst(const std::vector<std::o
 }
 
 std::span<const MetricDefinition> metrics() { return registry; }
+
+std::vector<const MetricDefinition*> ordered_metrics(const std::vector<std::string>& order) {
+    std::vector<const MetricDefinition*> leading;  // the metrics that are not planes, in the user's order
+    for (const std::string& key : order) {
+        const MetricDefinition* metric = find_metric(key);
+        if (metric != nullptr && !metric->is_plane() &&
+            std::find(leading.begin(), leading.end(), metric) == leading.end()) {
+            leading.push_back(metric);
+        }
+    }
+    for (const MetricDefinition& metric : registry) {
+        if (!metric.is_plane() && std::find(leading.begin(), leading.end(), &metric) == leading.end()) {
+            leading.push_back(&metric);
+        }
+    }
+    std::vector<const MetricDefinition*> ordered;
+    ordered.reserve(registry.size());
+    for (const MetricDefinition* metric : leading) {
+        ordered.push_back(metric);
+        for (const MetricDefinition& plane : registry) {
+            if (plane.plane_of == metric->key) {
+                ordered.push_back(&plane);
+            }
+        }
+    }
+    return ordered;
+}
 
 const MetricDefinition* find_metric(std::string_view key) {
     for (const MetricDefinition& metric : registry) {

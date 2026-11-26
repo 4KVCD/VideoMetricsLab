@@ -225,6 +225,10 @@ struct Settings {
     // Every metric the window had when the settings were saved: one added
     // since, if hidden at first, is hidden when they are read (load_from).
     std::vector<std::string> listed_metrics;
+    // The metrics' order, as the user dragged the Videos table's columns
+    // (ordered_metrics: keys of metrics that are not planes); empty, the
+    // registry's order, Add/remove metrics' (metrics()).
+    std::vector<std::string> metric_order;
     // The CVVDP presets the user saved, as JSON text of their list
     // ([{"name": ..., "settings": ...}]), and the preset new videos start
     // with: "", or a name no preset has, is Automatic (automatic_cvvdp_preset:

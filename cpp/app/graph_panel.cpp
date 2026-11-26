@@ -31,6 +31,7 @@
 #include "file_writes.h"
 #include "frame_controls.h"
 #include "i18n.h"
+#include "metric_order.h"
 #include "results_export.h"
 #include "series_colors.h"
 #include "theme.h"
@@ -98,12 +99,12 @@ QString trimmed_right(QString text) {
     return text;
 }
 
-// The frame metrics, in the app's order.
+// The frame metrics, in the order shown (shown_metrics).
 std::vector<const MetricDefinition*> frame_metrics() {
     std::vector<const MetricDefinition*> found;
-    for (const MetricDefinition& metric : metrics()) {
-        if (metric.kind == MetricKind::frame) {
-            found.push_back(&metric);
+    for (const MetricDefinition* metric : shown_metrics()) {
+        if (metric->kind == MetricKind::frame) {
+            found.push_back(metric);
         }
     }
     return found;
@@ -348,6 +349,8 @@ std::vector<float> difference_of(const MetricCurve& first, const MetricCurve& se
 
 MetricPage::MetricPage(const MetricDefinition& metric, QWidget* parent)
     : QWidget(parent), metric_(&metric), sign_(worst_is_high(metric) ? -1.0F : 1.0F) {
+    // The readout's other metrics in their new order (extra_columns).
+    connect(&metric_order_signal(), &MetricOrderSignal::changed, this, [this] { refresh_readout_layout(); });
     placeholder_ = worst_is_high(metric)
                        ? app::tr("Hover to inspect a point (locks onto the worst nearby score at or below your cursor, "
                                  "so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select "
@@ -1283,6 +1286,13 @@ std::pair<int, int> MetricPage::frame_range() const {
 
 GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), colors_(colors) {
     dialogs = standard_dialogs(this);
+    // The tabs and the statistics' means in the metrics' new order.
+    connect(&metric_order_signal(), &MetricOrderSignal::changed, this, [this] {
+        if (!entries_.empty()) {
+            select_available_metric();
+            refresh_stats_table();
+        }
+    });
     connect(colors_, &VideoColors::changed, this,
             [this](const QString& key, const QColor& color) { on_video_color_changed(key, color); });
     // Made first: the pages, built before the bar it sits in, take its range.
@@ -2300,8 +2310,8 @@ QPixmap GraphPanel::render_export_image(const std::string& key, const std::vecto
 
 std::vector<std::string> GraphPanel::scored_metrics() const {
     std::vector<std::string> keys;
-    for (const MetricDefinition& metric : metrics()) {
-        const std::string key(metric.key);
+    for (const MetricDefinition* metric : shown_metrics()) {
+        const std::string key(metric->key);
         if (std::any_of(entries_.begin(), entries_.end(),
                         [&key](const auto& item) { return item.second.result->has_metric(key); })) {
             keys.push_back(key);

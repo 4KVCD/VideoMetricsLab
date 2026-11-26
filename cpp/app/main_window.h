@@ -104,7 +104,7 @@ class VideoColors;
 // The test-video table's columns, by their stable physical index (the
 // Python app's COL_* numbers): a new column goes last, so that every other
 // keeps its index. The order they are shown in comes from metric_columns(),
-// which puts VMAF v1 after VMAF NEG.
+// the order every list of metrics is in (shown_metrics, metric_order.h).
 enum Column : int {
     col_check,
     col_path,
@@ -328,6 +328,18 @@ private:
     void add_reference_row(QBoxLayout* layout);
     QHBoxLayout* build_table_heading();
     void build_test_table();
+    // The test-video table's columns in their places: the marks, the tick
+    // box, File name and the video's columns first, then the metrics in the
+    // order shown (metric_columns), each plane after its metric.
+    void lay_out_metric_columns();
+    // A heading dragged to another place (QHeaderView::sectionMoved): a
+    // metric's moves it in every list (Settings::metric_order); any other
+    // column, or a plane, goes back to its place.
+    void on_column_moved(int column);
+    // The metrics in `order` (keys of metrics that are not planes) in every
+    // list, saved; the registry's order saved as none.
+    void apply_metric_order(std::vector<std::string> order);
+    bool laying_out_columns_ = false;  // lay_out_metric_columns' own moves are not the user's
     std::vector<QWidget*> add_file_buttons(QBoxLayout* buttons);
     QWidget* build_run_panel();
     void theme_changed();

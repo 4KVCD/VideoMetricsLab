@@ -51,10 +51,12 @@ inline constexpr std::string_view standard_notification_title = "{app}: {outcome
 inline constexpr std::string_view standard_notification_message = "{reference}\n{duration}\n\n{videos}";
 inline constexpr std::string_view standard_notification_video_line = "{name}\n{scores}";
 
-// Each metric's statistics, in the app's order, from a video's result: a
-// frame metric's of its frames; a whole-video score's (CVVDP) mean is the
-// score, the rest from its timeline where it has one.
-std::vector<std::pair<std::string, ScoreStats>> notified_metrics(const ComparisonResult& result);
+// Each metric's statistics, in the order `order` gives (ordered_metrics:
+// Settings::metric_order, empty for the standard order), from a video's
+// result: a frame metric's of its frames; a whole-video score's (CVVDP) mean
+// is the score, the rest from its timeline where it has one.
+std::vector<std::pair<std::string, ScoreStats>> notified_metrics(const ComparisonResult& result,
+                                                                 const std::vector<std::string>& order = {});
 
 // The statistics fields have after a metric's key ("{vmaf.min}"); the key
 // alone ("{vmaf}") is the mean.

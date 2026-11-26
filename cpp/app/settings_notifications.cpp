@@ -27,6 +27,7 @@
 #include <string>
 
 #include "i18n.h"
+#include "metric_order.h"
 #include "notifier.h"
 #include "settings_panel.h"
 #include "theme.h"
@@ -426,15 +427,24 @@ QGroupBox* SettingsPanel::build_message_box() {
         const QString field = statistic == "mean" ? QString("{scores}") : QString("{scores.%1}").arg(statistic);
         video_fields->addAction(field, this, [this, field] { insert_notification_field(field); });
     }
-    for (const MetricDefinition& metric : metrics()) {
-        QMenu* metric_fields = video_fields->addMenu(text_of(std::string(metric.label)));
-        for (const std::string_view statistic : notification_statistics()) {
-            const QString key = text_of(std::string(metric.key));
-            const QString field =
-                statistic == "mean" ? QString("{%1}").arg(key) : QString("{%1.%2}").arg(key).arg(statistic);
-            metric_fields->addAction(field, this, [this, field] { insert_notification_field(field); });
+    // A menu per metric, in the order shown; made again when the user moves
+    // a metric (the menus are video_fields' only child menus).
+    const auto add_metric_fields = [this, video_fields] {
+        for (const MetricDefinition* metric : shown_metrics()) {
+            QMenu* metric_fields = video_fields->addMenu(text_of(std::string(metric->label)));
+            for (const std::string_view statistic : notification_statistics()) {
+                const QString key = text_of(std::string(metric->key));
+                const QString field =
+                    statistic == "mean" ? QString("{%1}").arg(key) : QString("{%1.%2}").arg(key).arg(statistic);
+                metric_fields->addAction(field, this, [this, field] { insert_notification_field(field); });
+            }
         }
-    }
+    };
+    add_metric_fields();
+    connect(&metric_order_signal(), &MetricOrderSignal::changed, video_fields, [video_fields, add_metric_fields] {
+        qDeleteAll(video_fields->findChildren<QMenu*>(Qt::FindDirectChildrenOnly));
+        add_metric_fields();
+    });
     insert_field->setMenu(fields);
     auto* buttons = new QHBoxLayout;
     buttons->addWidget(notify_presets);
