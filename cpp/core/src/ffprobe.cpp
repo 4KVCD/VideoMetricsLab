@@ -786,7 +786,38 @@ std::string format_and_streams(const std::filesystem::path& path, const std::str
     return run_ffprobe(command, path, std::chrono::seconds(60), cancel);
 }
 
+// A Matroska video's lead_in (matroska_lead_in) where its first stored
+// picture is not its first shown one. FFmpeg's start_time for Matroska is
+// the first stored packet's time, but a stream that opens with leading
+// pictures, as libvvenc's do, stores its key picture (at 0.958 s in a 24 fps
+// VVenC encode) before pictures shown from 0: the lead_in would drop 23 of
+// its frames from its length. The earliest of its first packets' times is
+// its first shown picture's; the lead_in stays where they cannot be read.
+double first_shown_lead_in(const VideoInfo& info, const std::string& ffprobe, const CancelToken& cancel) {
+    std::vector<std::string> command = ffprobe_command_start(ffprobe);
+    command.insert(command.end(), {"-select_streams", "v:0", "-read_intervals", stamps_judged, "-show_entries",
+                                   "packet=pts_time", "-of", "csv=p=0", text(info.path)});
+    std::optional<double> earliest;
+    try {
+        earliest = earliest_listed_time(run_ffprobe(command, info.path, std::chrono::seconds(30), cancel));
+    } catch (const ProbeError&) {
+        return info.lead_in;
+    }
+    return earliest ? std::clamp(*earliest, 0.0, info.lead_in) : info.lead_in;
+}
+
 }  // namespace
+
+std::optional<double> earliest_listed_time(std::string_view listed) {
+    std::optional<double> earliest;
+    for (const std::string_view line : python_splitlines(listed)) {
+        const std::optional<double> time = python_float(python_strip(line));
+        if (time && std::isfinite(*time) && (!earliest || *time < *earliest)) {
+            earliest = time;
+        }
+    }
+    return earliest;
+}
 
 bool needs_rate_sample(const VideoInfo& info) {
     return (info.bit_rate_whole_file || info.bit_rate_estimated) && !info.is_raw_stream();
@@ -833,6 +864,9 @@ VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffpr
                          "stream copied into a container with no timestamps of its own), so its pictures cannot be "
                          "placed. Add the raw stream instead, or mux it with a tool that writes the pictures' "
                          "display times.");
+    }
+    if (info.lead_in > 0.0) {
+        info.lead_in = first_shown_lead_in(info, ffprobe, cancel);
     }
     info.coded_at_another_size = ascii_lower(info.codec_name) == "av1" && av1_coded_at_another_size(info, ffprobe, cancel);
     return info;

@@ -42,6 +42,12 @@ bool listed_sizes_differ(std::string_view listed, int width, int height);
 // when a line has none (N/A) or no number.
 std::optional<std::vector<long long>> listed_timestamps(std::string_view listed);
 
+// The earliest of the times in ffprobe's listing of packets (packet=pts_time,
+// csv=p=0, one a line): with a stream's first packets listed, the time its
+// first shown picture has. Lines with none (N/A) are passed over; nothing
+// when no line has one.
+std::optional<double> earliest_listed_time(std::string_view listed);
+
 // Whether a file's packets, as stored, look stamped in the order they are
 // decoded rather than shown: in a video whose pictures are reordered, stamps
 // that only ever rise. A file stamped right stores a reordered picture's

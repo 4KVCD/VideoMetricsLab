@@ -128,6 +128,14 @@ TEST(Ffprobe, AMatroskaVideosFramesStartAtItsFirstFrame) {
     EXPECT_EQ(video_with_tag("00:00:09.999000000").estimated_frame_count(), 240);
 }
 
+// A libvvenc encode stores its key picture (0.958 s) before the leading
+// pictures shown from 0: the first shown picture is the earliest packet's.
+TEST(Ffprobe, TheFirstShownPictureIsTheEarliestPackets) {
+    EXPECT_EQ(earliest_listed_time("0.958000\n0.625000\nN/A\n0.292000\n0.000000\n0.083000\n"), 0.0);
+    EXPECT_EQ(earliest_listed_time("0.125000\r\n0.208000\r\n"), 0.125);
+    EXPECT_EQ(earliest_listed_time("N/A\n"), std::nullopt);
+}
+
 // Matroska's statistics tags tell a stream's rate, unless FFmpeg wrote the
 // file: then they are its input's, even through a re-encode.
 TEST(Ffprobe, StatisticsTagsCountUnlessFfmpegCopiedThem) {
