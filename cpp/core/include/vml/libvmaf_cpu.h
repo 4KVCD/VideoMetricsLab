@@ -193,6 +193,9 @@ private:
     void give_back(VmafPicture& reference, VmafPicture& distorted);
     void score(VmafPicture& reference, VmafPicture& distorted);
     void download(VmafPicture& picture, GpuFrameStream& stream, int slot, std::size_t which);
+    // Whether nothing but the GPU's CAMBI reads a pair, which reads only the
+    // test picture: add_decoded then downloads the test picture alone.
+    bool reads_only_test_picture() const;
     // Both pictures of a pair, at the same time where add_decoded says.
     void download_both(VmafPicture& reference_picture, GpuFrameStream& reference, int reference_slot,
                        VmafPicture& distorted_picture, GpuFrameStream& test, int test_slot);

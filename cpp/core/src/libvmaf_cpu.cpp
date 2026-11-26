@@ -585,7 +585,13 @@ void CpuScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFr
         throw;
     }
     try {
-        download_both(reference_picture, reference, reference_slot, distorted_picture, test, test_slot);
+        if (!also && reads_only_test_picture()) {
+            // At 4K the source's download was about half of the time this
+            // thread spent on a pair, for a picture nothing reads.
+            download(distorted_picture, test, test_slot, 1);
+        } else {
+            download_both(reference_picture, reference, reference_slot, distorted_picture, test, test_slot);
+        }
         if (also) {
             const auto plane = [](const VmafPicture& picture) {
                 return Plane{static_cast<const std::uint8_t*>(picture.data[0]),
@@ -598,6 +604,13 @@ void CpuScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFr
         throw;
     }
     score(reference_picture, distorted_picture);
+}
+
+bool CpuScorer::reads_only_test_picture() const {
+    // VMAF YUV's chroma scorer reads the source's planes from the picture
+    // unless it took them from the decoders itself.
+    const bool chroma_vmaf_reads = chroma_vmaf_ && !chroma_vmaf_->takes_decoded();
+    return gpu_ && !gpu_->reads_reference() && libvmaf_metrics_.empty() && !chroma_vmaf_reads;
 }
 
 void CpuScorer::download_both(VmafPicture& reference_picture, GpuFrameStream& reference, int reference_slot,

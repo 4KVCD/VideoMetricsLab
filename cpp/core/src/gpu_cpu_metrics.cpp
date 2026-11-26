@@ -145,6 +145,8 @@ GpuMetricsScorer::~GpuMetricsScorer() = default;
 
 const std::vector<std::string>& GpuMetricsScorer::metrics() const { return state_->metrics; }
 
+bool GpuMetricsScorer::reads_reference() const { return state_->ciede(); }
+
 void GpuMetricsScorer::add(const VmafPicture& reference, const VmafPicture& distorted) {
     State& s = *state_;
     const auto plane = [](const VmafPicture& picture, int index) {
@@ -159,7 +161,10 @@ void GpuMetricsScorer::add(const VmafPicture& reference, const VmafPicture& dist
                                                     distorted.stride[0], distorted.stride[1], distorted.stride[2]};
         code = s.engine.submit_v1(s.gpu, planes.data(), strides.data(), 1);
     } else {
-        code = s.engine.submit(s.gpu, plane(reference, 0), reference.stride[0], plane(distorted, 0),
+        // CAMBI alone, which reads only the test picture: the engine is given
+        // its luma for the reference's too, as the caller need not have
+        // filled the reference picture (reads_reference).
+        code = s.engine.submit(s.gpu, plane(distorted, 0), distorted.stride[0], plane(distorted, 0),
                                distorted.stride[0], 1);
     }
     s.check(code, "Scoring pair " + std::to_string(s.count));

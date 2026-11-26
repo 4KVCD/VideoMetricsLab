@@ -65,6 +65,11 @@ public:
     // The metrics it calculates.
     const std::vector<std::string>& metrics() const;
 
+    // Whether it reads the reference picture: only CIEDE2000 does, as CAMBI
+    // reads the test picture's luma alone. Without it, add takes any
+    // reference picture, as its planes are not read.
+    bool reads_reference() const;
+
     // Scores one more pair, libvmaf's pictures of it (4:2:0 where CIEDE2000
     // is calculated; CAMBI reads the test picture's luma). The planes are
     // copied before it returns.
