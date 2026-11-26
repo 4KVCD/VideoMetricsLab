@@ -21,6 +21,7 @@
 #include "vml/film_grain_detect.h"
 #include "vml/gpu_cpu_metrics.h"
 #include "vml/gpu_decoders.h"
+#include "vml/metrics.h"
 #include "vml/run_record.h"
 
 namespace vml {
@@ -962,16 +963,91 @@ TEST(JobRunner, AMetricWithAGpuRouteOnTheCpuIsAloneInItsTask) {
                   {ffmpeg, {"ciede2000"}, true, false},
                   {ffmpeg, {"vmaf_yuv_u", "vmaf_yuv_v"}, true, false},
                   {vship, {"ssimulacra2", "butteraugli"}, true, false}}));
-    // The GPU takes them: one task each, as before.
+    // The GPU takes them: CAMBI and CIEDE2000 in the engine's pass of their own (EnginesMetricsAreAGpuPassOfTheirOwn).
     EXPECT_EQ(shape(plan_tasks(source, test, options, asked)),
               (std::vector<std::tuple<std::string, Keys, bool, bool>>{
-                  {ffmpeg, {"psnr", "cambi", "ciede2000", "vmaf_yuv_u", "vmaf_yuv_v"}, false, false},
+                  {ffmpeg, {"psnr", "vmaf_yuv_u", "vmaf_yuv_v"}, false, false},
+                  {ffmpeg, {"cambi", "ciede2000"}, false, false},
                   {vship, {"ssimulacra2", "butteraugli"}, false, false}}));
     // VMAF sent to the CPU by a model file, VMAF on the GPU still set: CAMBI goes with it.
     options.model = "model_path=C\\:/models/own.json";
     EXPECT_EQ(shape(plan_tasks(source, test, options, {"vmaf", "psnr", "cambi"})),
               (std::vector<std::tuple<std::string, Keys, bool, bool>>{{ffmpeg, {"vmaf", "psnr"}, true, true},
                                                                        {ffmpeg, {"cambi"}, true, true}}));
+}
+
+// CIEDE2000, CAMBI, MS-SSIM and MS-SSIM YUV, where the Vulkan engine takes them, are a GPU pass of their own, in
+// the engine's lane: apart from the CPU-only metrics, and alone when asked alone. Without the engine they stay with
+// the CPU-only metrics, and so do those it cannot take at a size known before the run (odd: MS-SSIM YUV, with
+// MS-SSIM, and CIEDE2000).
+TEST(JobRunner, EnginesMetricsAreAGpuPassOfTheirOwn) {
+    VideoInfo source;
+    source.path = "reference.mkv";
+    source.width = 1920;
+    source.height = 1080;
+    source.pix_fmt = "yuv420p";
+    VideoInfo test = source;
+    test.path = "encode.mkv";
+    using Keys = std::vector<std::string>;
+    using Shape = std::vector<std::pair<Keys, bool>>;
+    const auto shape = [](const std::vector<MetricTask>& tasks) {
+        Shape made;
+        for (const MetricTask& task : tasks) {
+            EXPECT_EQ(task.backend, "ffmpeg");
+            EXPECT_FALSE(task.engine_lane && task.heavy_cpu);
+            made.emplace_back(task.metric_keys, task.engine_lane);
+        }
+        return made;
+    };
+    const auto in_registry_order = [](const Keys& keys) {
+        Keys ordered;
+        for (const MetricDefinition& metric : metrics()) {
+            if (std::find(keys.begin(), keys.end(), metric.key) != keys.end()) {
+                ordered.emplace_back(metric.key);
+            }
+        }
+        return ordered;
+    };
+    VmafOptions options;
+    options.vmaf_on_gpu = true;
+    options.crop_mode = CropMode::none;
+    const Keys asked{"psnr", "ms_ssim", "cambi", "ciede2000"};
+    EXPECT_EQ(shape(plan_tasks(source, test, options, asked)),
+              (Shape{{{"psnr"}, false}, {in_registry_order({"ms_ssim", "cambi", "ciede2000"}), true}}));
+    EXPECT_EQ(shape(plan_tasks(source, test, options, {"ms_ssim"})), (Shape{{{"ms_ssim"}, true}}));
+    // No engine: on the CPU, as before (AMetricWithAGpuRouteOnTheCpuIsAloneInItsTask).
+    for (const MetricTask& task : plan_tasks(source, test, options, asked, {}, {}, false, GpuAnswers{EnginePlace{}, true})) {
+        EXPECT_FALSE(task.engine_lane);
+    }
+    // An odd size: CAMBI alone goes.
+    source.width = test.width = 1919;
+    const Keys odd{"psnr", "ms_ssim", "ms_ssim_yuv", "cambi", "ciede2000"};
+    EXPECT_EQ(shape(plan_tasks(source, test, options, odd)),
+              (Shape{{in_registry_order({"psnr", "ms_ssim", "ms_ssim_yuv", "ciede2000"}), false}, {{"cambi"}, true}}));
+}
+
+// The engine's lane runs beside the CPU's and the GPU's: a video's three tasks meet, with one CPU lane.
+TEST(JobRunner, TheEnginesLaneRunsBesideTheCpusAndTheGpus) {
+    std::vector<MetricTask> tasks{{"ffmpeg", {"psnr"}}, {std::string(gpu_vmaf_task), {"vmaf"}}, {"ffmpeg", {"ms_ssim"}}};
+    tasks[2].engine_lane = true;
+    Meeting all_three(3);
+    std::mutex mutex;
+    bool met = true;
+    Reported reported;
+    run_jobs(
+        {job_of(tasks)}, 1, reported.events(),
+        [&](const VmafJob&, const VmafOptions& options, const ProgressCallback&, const StatusCallback&,
+            const CancelToken&) {
+            const bool together = all_three.arrive_and_wait();
+            const std::lock_guard lock(mutex);
+            met = met && together;
+            return result_with({{options.requested_metrics().front(), {0}}});
+        },
+        24, CancelToken());
+
+    EXPECT_TRUE(met);
+    ASSERT_EQ(reported.finished.size(), 1u);
+    EXPECT_EQ(reported.finished.at(0).metric_results.keys(), (std::vector<std::string>{"psnr", "vmaf", "ms_ssim"}));
 }
 
 // A video's tasks with a metric that has a GPU route on the CPU (heavy_cpu)
