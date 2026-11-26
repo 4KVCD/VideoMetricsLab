@@ -68,9 +68,12 @@ protected:
     void paintSection(QPainter* painter, const QRect& rect, int logical_index) const override;
     QSize sectionSizeFromContents(int logical_index) const override;
     void mousePressEvent(QMouseEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
 
 private:
     QRect indicator_rect(const QRect& rect) const;
+    // Toggles the checkbox at `position`, if there is one there.
+    bool toggle_at(const QPoint& position);
 
     QMap<int, bool> checked_;
 };
@@ -222,6 +225,10 @@ private:
     int frozen_count_ = 0;
     // The header's sort arrow as frozen_ last drew it: (shown, column, order).
     std::tuple<bool, int, Qt::SortOrder> frozen_sort_{false, -1, Qt::AscendingOrder};
+    // Redraws frozen_header_ if the header's sort arrow is not what it drew.
+    void follow_sort_arrow();
+    // follow_sort_arrow as `header`'s arrow changes.
+    void watch_sort_arrow(QHeaderView* header);
     bool keeps_a_row_ = false;      // keep_a_row_selected
     int last_selected_row_ = 0;     // the row selected last, for keep_a_row_selected
     bool reselect_pending_ = false; // keep_a_row_selected will select one

@@ -196,6 +196,17 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     for (int column = col_reference; column < column_count; ++column) {
         table_->setColumnHidden(column, std::find(hidden.begin(), hidden.end(), column_keys[column]) != hidden.end());
     }
+    // A quick second click comes as a double-click, which the heading takes
+    // for no click (Windows sends no second press), and Qt's sorting does
+    // not turn the arrow for it: turned here as Qt does for a click, the
+    // same column the other way, another ascending. The table sorts on the
+    // arrow's change. A double-click on a column's edge is
+    // sectionHandleDoubleClicked, which fits the column.
+    connect(header, &QHeaderView::sectionDoubleClicked, this, [header](int column) {
+        const bool reverse =
+            header->sortIndicatorSection() == column && header->sortIndicatorOrder() == Qt::AscendingOrder;
+        header->setSortIndicator(column, reverse ? Qt::DescendingOrder : Qt::AscendingOrder);
+    });
     header->viewport()->installEventFilter(this);
     table_->viewport()->installEventFilter(this);
     connect(header, &QHeaderView::sectionResized, this,
