@@ -21,6 +21,13 @@ namespace {
 
 const app_log::Logger logger("vml.libvmaf_cpu");
 
+// Copies `rows` rows of `row_bytes` from `from` to `to`, where they are written packed.
+void copy_strided_rows(Plane from, std::size_t row_bytes, std::size_t rows, std::uint8_t* to) {
+    for (std::size_t row = 0; row < rows; ++row) {
+        std::copy_n(from.data + row * from.stride, row_bytes, to + row * row_bytes);
+    }
+}
+
 using Value = CpuFeature::Value;
 
 // `scorer`'s `error` after it started, as GpuMetricsFailed: score_plan then
@@ -537,6 +544,18 @@ void CpuScorer::add_planes(const FramePlanes& reference, const FramePlanes& dist
     if (chroma_vmaf_ && chroma_vmaf_->takes_decoded()) {
         throw std::logic_error("VMAF YUV's planes are copied from the decoders: the pairs go to add_decoded");
     }
+    if (luma_to_gpu_alone()) {
+        // The engine copies the two luma planes from where they are, as it would from libvmaf's picture.
+        if (count_ % step_ == 0) {
+            try {
+                gpu_->add_luma(reference[0], distorted[0]);
+            } catch (const std::exception& error) {
+                throw gpu_failed(*gpu_, error);
+            }
+        }
+        ++count_;
+        return;
+    }
     VmafPicture reference_picture = take_picture();
     VmafPicture distorted_picture{};
     try {
@@ -575,6 +594,11 @@ void CpuScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFr
             return;
         }
     }
+    if (!also && luma_to_gpu_alone() && !gpu_decoder(reference.backend()).cuda_copies &&
+        !gpu_decoder(test.backend()).cuda_copies) {
+        add_decoded_luma(reference, reference_slot, test, test_slot);
+        return;
+    }
     VmafPicture reference_picture = take_picture();
     VmafPicture distorted_picture{};
     try {
@@ -605,6 +629,45 @@ void CpuScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFr
     score(reference_picture, distorted_picture);
 }
 
+bool CpuScorer::luma_to_gpu_alone() const {
+    return gpu_ && gpu_->takes_luma_alone() && libvmaf_metrics_.empty() && !chroma_vmaf_ && !chroma_;
+}
+
+void CpuScorer::add_decoded_luma(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test,
+                                 int test_slot) {
+    if (count_ % step_ != 0) {
+        ++count_;  // a pair not scored: nothing reads it
+        return;
+    }
+    try {
+        if (reference.gives_planes() && test.gives_planes()) {
+            // The engine copies both from where the software decoder holds them.
+            gpu_->add_luma(reference.slot_planes(reference_slot)[0], test.slot_planes(test_slot)[0]);
+        } else {
+            // Each luma plane written once, into the engine's memory, by the decoders in download_both's order.
+            const Plane packed = packed_.luma(nullptr);
+            const auto row_bytes = static_cast<std::size_t>(packed.stride);
+            const auto write = [&](GpuFrameStream& stream, int slot, std::uint8_t* plane) {
+                if (stream.gives_planes()) {
+                    copy_strided_rows(stream.slot_planes(slot)[0], row_bytes, decoded_bytes_ / row_bytes, plane);
+                } else {
+                    stream.download(slot, plane);
+                }
+            };
+            gpu_->add_decoded([&](std::uint8_t* reference_plane, std::uint8_t* test_plane) {
+                take_both(
+                    reference, test, [&] { write(reference, reference_slot, reference_plane); },
+                    [&] { write(test, test_slot, test_plane); });
+            });
+        }
+    } catch (const GpuDecodeFailedError&) {
+        throw;  // the decoder's, which the run answers as it does any (not a GPU metric's)
+    } catch (const std::exception& error) {
+        throw gpu_failed(*gpu_, error);
+    }
+    ++count_;
+}
+
 bool CpuScorer::reads_only_test_picture() const {
     // VMAF YUV's chroma scorer reads the source's planes from the picture
     // unless it took them from the decoders itself.
@@ -614,8 +677,13 @@ bool CpuScorer::reads_only_test_picture() const {
 
 void CpuScorer::download_both(VmafPicture& reference_picture, GpuFrameStream& reference, int reference_slot,
                               VmafPicture& distorted_picture, GpuFrameStream& test, int test_slot) {
-    const auto take_reference = [&] { download(reference_picture, reference, reference_slot, 0); };
-    const auto take_test = [&] { download(distorted_picture, test, test_slot, 1); };
+    take_both(
+        reference, test, [&] { download(reference_picture, reference, reference_slot, 0); },
+        [&] { download(distorted_picture, test, test_slot, 1); });
+}
+
+void CpuScorer::take_both(const GpuFrameStream& reference, const GpuFrameStream& test,
+                          const std::function<void()>& take_reference, const std::function<void()>& take_test) {
     if (downloads_at_once(reference.backend(), test.backend())) {
         // The two decoders write their pictures at the same time, the
         // source's on the side thread: one after the other they took about

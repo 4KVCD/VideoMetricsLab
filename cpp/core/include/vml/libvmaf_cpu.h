@@ -164,7 +164,10 @@ public:
     // U and V copied on the GPU from the decoders' memory (ChromaVmaf::
     // takes_decoded) are copied first; with nothing else to score (and no
     // `also` below), no picture is downloaded. Only these pairs may then be given (add and
-    // add_planes throw std::logic_error).
+    // add_planes throw std::logic_error). Where the GPU alone reads a pair, and only its two luma planes
+    // (luma_to_gpu_alone), and neither decoder is NVIDIA's, no picture is taken: the decoders write the luma planes
+    // straight into the engine's memory (the software decoder's copied from where it holds them), which halves the
+    // copies on this thread.
     void add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot);
 
     // add_decoded, giving `also` the pair's two luma planes (the source's,
@@ -199,6 +202,14 @@ private:
     // Both pictures of a pair, at the same time where add_decoded says.
     void download_both(VmafPicture& reference_picture, GpuFrameStream& reference, int reference_slot,
                        VmafPicture& distorted_picture, GpuFrameStream& test, int test_slot);
+    // Runs the two streams' takes, at the same time or one after the other, as add_decoded says.
+    void take_both(const GpuFrameStream& reference, const GpuFrameStream& test,
+                   const std::function<void()>& take_reference, const std::function<void()>& take_test);
+    // Whether the GPU alone reads a pair, from its two luma planes (MS-SSIM, with CAMBI or not): libvmaf's pictures
+    // are then skipped (add_planes gives it the planes, add_decoded_luma the decoders' downloads).
+    bool luma_to_gpu_alone() const;
+    // add_decoded where luma_to_gpu_alone: the luma planes go straight into the engine's memory.
+    void add_decoded_luma(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot);
     // Copies the planes the pictures hold into the picture.
     void fill(VmafPicture& picture, const FramePlanes& frame) const;
     // Whether the picture's planes lie as those of a packed frame, so that a

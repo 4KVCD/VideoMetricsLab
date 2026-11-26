@@ -109,8 +109,19 @@ struct GpuMetricsScorer::State {
     std::vector<std::string> metrics;
     int ms_ssim_planes = 0;  // 1: the luma (MS-SSIM), 3: Y, Cb and Cr (MS-SSIM YUV); 0: none
     unsigned count = 0;
+    // A luma plane written packed: its row's bytes and the whole plane's. Where the engine pads its rows, a decoder
+    // writes the plane into `packed` first (the source's, then the test video's), and it is copied from there.
+    std::size_t luma_row_bytes = 0;
+    std::size_t luma_bytes = 0;
+    std::array<std::vector<std::uint8_t>, 2> packed;
 
     void check(int error, const std::string& what) const { check_vulkan(engine, error, what); }
+    // A call for the pair being scored: the words for what failed are made only when it does, not on every pair.
+    void check_pair(int error) const {
+        if (error < 0) {
+            check(error, "Scoring pair " + std::to_string(count));
+        }
+    }
     // CIEDE2000 and MS-SSIM YUV read both pictures' chroma.
     bool reads_chroma() const { return has(metrics, "ciede2000") || ms_ssim_planes == 3; }
 
@@ -125,6 +136,8 @@ GpuMetricsScorer::GpuMetricsScorer(int width, int height, int bit_depth, int dev
                                    const std::vector<std::pair<std::string, std::string>>& cambi_options)
     : state_(std::make_unique<State>()) {
     State& s = *state_;
+    s.luma_row_bytes = static_cast<std::size_t>(width) * bytes_per_sample(bit_depth);
+    s.luma_bytes = s.luma_row_bytes * static_cast<std::size_t>(height);
     const VulkanEngine& engine = s.engine;
     if (engine.create_v1 == nullptr || engine.submit_v1 == nullptr) {
         throw VmafVulkanError("the bundled Vulkan engine has no VMAF v1 context");
@@ -204,9 +217,9 @@ void GpuMetricsScorer::add(const VmafPicture& reference, const VmafPicture& dist
         const std::array<std::ptrdiff_t, 6> strides{reference.stride[0], reference.stride[1], reference.stride[2],
                                                     distorted.stride[0], distorted.stride[1], distorted.stride[2]};
         code = s.engine.submit_v1(s.gpu, planes.data(), strides.data(), 1);
-    } else if (s.ms_ssim_planes != 0) {  // MS-SSIM's luma
-        code = s.engine.submit(s.gpu, plane(reference, 0), reference.stride[0], plane(distorted, 0),
-                               distorted.stride[0], 1);
+    } else if (takes_luma_alone()) {
+        add_luma(Plane{plane(reference, 0), reference.stride[0]}, Plane{plane(distorted, 0), distorted.stride[0]});
+        return;
     } else {
         // CAMBI alone, which reads only the test picture: the engine is given
         // its luma for the reference's too, as the caller need not have
@@ -214,7 +227,41 @@ void GpuMetricsScorer::add(const VmafPicture& reference, const VmafPicture& dist
         code = s.engine.submit(s.gpu, plane(distorted, 0), distorted.stride[0], plane(distorted, 0),
                                distorted.stride[0], 1);
     }
-    s.check(code, "Scoring pair " + std::to_string(s.count));
+    s.check_pair(code);
+    ++s.count;
+}
+
+bool GpuMetricsScorer::takes_luma_alone() const {
+    return !state_->reads_chroma() && state_->ms_ssim_planes != 0;
+}
+
+void GpuMetricsScorer::add_luma(Plane reference, Plane distorted) {
+    State& s = *state_;
+    s.check_pair(s.engine.submit(s.gpu, reference.data, reference.stride, distorted.data, distorted.stride, 1));
+    ++s.count;
+}
+
+void GpuMetricsScorer::add_decoded(const std::function<void(std::uint8_t*, std::uint8_t*)>& write) {
+    State& s = *state_;
+    std::uint8_t* reference_plane = nullptr;
+    std::uint8_t* distorted_plane = nullptr;
+    std::uint32_t stride = 0;
+    // The engine's next frame's memory, which its copy into the GPU reads once committed: the planes go straight
+    // there, rather than into libvmaf's picture and from there into this memory (add_luma).
+    s.check_pair(s.engine.staging(s.gpu, &reference_plane, &distorted_plane, &stride));
+    if (stride == s.luma_row_bytes) {
+        write(reference_plane, distorted_plane);
+    } else {
+        // A width whose rows the engine pads to four bytes: written packed, then copied row by row.
+        for (std::vector<std::uint8_t>& buffer : s.packed) {
+            buffer.resize(s.luma_bytes);
+        }
+        write(s.packed[0].data(), s.packed[1].data());
+        const std::size_t rows = s.luma_bytes / s.luma_row_bytes;
+        copy_packed_rows(s.packed[0].data(), s.luma_row_bytes, rows, reference_plane, stride);
+        copy_packed_rows(s.packed[1].data(), s.luma_row_bytes, rows, distorted_plane, stride);
+    }
+    s.check_pair(s.engine.commit(s.gpu, 1));
     ++s.count;
 }
 

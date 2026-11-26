@@ -5,6 +5,8 @@
 // 5.8 s with CAMBI against 3.7 s for VMAF alone.
 #pragma once
 
+#include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -13,6 +15,7 @@
 #include <vector>
 
 #include "vml/libvmaf.h"
+#include "vml/pair_scorer.h"
 
 namespace vml {
 
@@ -81,6 +84,22 @@ public:
     // or MS-SSIM YUV is calculated; CAMBI reads the test picture's luma). The planes are
     // copied before it returns.
     void add(const VmafPicture& reference, const VmafPicture& distorted);
+
+    // Whether it reads nothing but the two luma planes: MS-SSIM (with CAMBI
+    // or not) without MS-SSIM YUV or CIEDE2000. A caller whose pictures
+    // nothing else reads then gives it the planes alone (add_luma,
+    // add_decoded), skipping the copy into libvmaf's picture.
+    bool takes_luma_alone() const;
+
+    // Scores one more pair from its two luma planes (takes_luma_alone), which
+    // the engine copies before it returns.
+    void add_luma(Plane reference, Plane distorted);
+
+    // Scores one more pair (takes_luma_alone) whose luma planes `write` puts
+    // straight into the engine's memory: it is given where the source's and
+    // the test video's go, each to be written packed (width x sample bytes a
+    // row), as a decoder downloads it.
+    void add_decoded(const std::function<void(std::uint8_t* reference, std::uint8_t* distorted)>& write);
 
     // The values for the pairs given, in order, by libvmaf's feature names:
     // "ciede2000" as libvmaf's 45 - 20 log10(dE00) (+infinity for identical

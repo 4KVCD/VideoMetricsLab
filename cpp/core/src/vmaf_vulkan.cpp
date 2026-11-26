@@ -384,9 +384,7 @@ void VulkanScorer::add_decoded(const std::function<void(std::uint8_t*)>& referen
         packed_.resize(luma_bytes_);
         write(packed_.data());
         const auto row_bytes = static_cast<std::size_t>(luma_stride_);
-        for (std::size_t row = 0; row < luma_bytes_ / row_bytes; ++row) {
-            std::copy_n(packed_.data() + row * row_bytes, row_bytes, plane + row * stride);
-        }
+        copy_packed_rows(packed_.data(), row_bytes, luma_bytes_ / row_bytes, plane, stride);
     };
     fill(reference, reference_plane);
     if (score) {
@@ -428,6 +426,13 @@ std::function<std::uint64_t(std::uint64_t, std::int64_t)> luma_copy(const Vulkan
     };
 }
 
+void copy_packed_rows(const std::uint8_t* packed, std::size_t row_bytes, std::size_t rows, std::uint8_t* plane,
+                      std::ptrdiff_t stride) {
+    for (std::size_t row = 0; row < rows; ++row) {
+        std::copy_n(packed + row * row_bytes, row_bytes, plane + row * stride);
+    }
+}
+
 bool VulkanScorer::takes_host_planes() const { return shared_.has_value() && engine_.shared_host_plane != nullptr; }
 
 void VulkanScorer::add_shared_mixed(const std::function<void(std::uint8_t*)>& reference,
@@ -443,9 +448,7 @@ void VulkanScorer::add_shared_mixed(const std::function<void(std::uint8_t*)>& re
         packed_.resize(luma_bytes_);
         reference(packed_.data());
         const auto row_bytes = static_cast<std::size_t>(luma_stride_);
-        for (std::size_t row = 0; row < luma_bytes_ / row_bytes; ++row) {
-            std::copy_n(packed_.data() + row * row_bytes, row_bytes, plane + row * stride);
-        }
+        copy_packed_rows(packed_.data(), row_bytes, luma_bytes_ / row_bytes, plane, stride);
     }
     if (score) {
         if (const std::uint64_t copied = distorted(next.distorted, next.pitch); copied != 0) {
