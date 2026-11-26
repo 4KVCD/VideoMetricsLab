@@ -1227,8 +1227,12 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     // statistics, shared by every metric's page: the first column has each
     // line's colour, its tick box and its name. Four lines high at most,
     // scrolling beyond, so that a long list leaves room for the graph.
-    auto* top = new QGroupBox(app::tr("Series and statistics"));
+    // Its title on the hint's line, not above it, which took a line of its
+    // own and the card's room for a title.
+    auto* top = new QGroupBox;
     auto* top_layout = new QVBoxLayout(top);
+    auto* top_title = new QLabel(app::tr("Series and statistics"));
+    theme::set_role(top_title, "title");
     // Without it, nothing said the metric columns could be clicked, or that
     // the detail to their right was of the one clicked.
     stats_hint_ = new QLabel;
@@ -1252,7 +1256,9 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
         connect_menu(items);
     };
     auto* hint_row = new QHBoxLayout;
-    hint_row->addWidget(stats_hint_, 1);
+    hint_row->addWidget(top_title, 0, Qt::AlignTop);
+    hint_row->addSpacing(12);
+    hint_row->addWidget(stats_hint_, 1, Qt::AlignTop);
     hint_row->addWidget(stats_save_, 0, Qt::AlignTop);
     top_layout->addLayout(hint_row);
     stats_table_ = new QTableWidget;
