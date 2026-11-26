@@ -215,7 +215,7 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   -m, --metrics LIST    comma-separated: vmaf, vmaf_neg, vmaf_v1, vmaf_hdr,
-                        psnr, ssim, psnr_yuv, psnr_yuv_mse, ssim_yuv, xpsnr,
+                        psnr, ssim, xpsnr, psnr_yuv, psnr_yuv_mse, ssim_yuv,
                         ms_ssim, ms_ssim_yuv, psnr_hvs, cambi, ciede2000,
                         vmaf_yuv, ssimulacra2, butteraugli, cvvdp; a plane of
                         psnr_yuv, ssim_yuv, ms_ssim_yuv, psnr_hvs or vmaf_yuv
@@ -742,7 +742,7 @@ options:
   --test FILE         the test encoder's encodes, in either form; sequences
                       are paired by name
   -m, --metrics LIST  comma-separated: vmaf, vmaf_neg, vmaf_v1, vmaf_hdr,
-                      psnr, ssim, psnr_yuv, psnr_yuv_mse, ssim_yuv, xpsnr,
+                      psnr, ssim, xpsnr, psnr_yuv, psnr_yuv_mse, ssim_yuv,
                       ms_ssim, ms_ssim_yuv, psnr_hvs, cambi, ciede2000,
                       vmaf_yuv, ssimulacra2, butteraugli, cvvdp; a plane of
                       psnr_yuv, ssim_yuv, ms_ssim_yuv, psnr_hvs or vmaf_yuv

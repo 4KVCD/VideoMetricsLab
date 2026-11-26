@@ -60,6 +60,13 @@ const std::array<MetricDefinition, 34> registry{{
      std::nullopt, psnr_thresholds, libvmaf_feature("name=psnr"), {}, 0},
     {"ssim", "SSIM", "SSIM", "SSIM", "SSIM", 4, "", frame, higher_is_better, arithmetic, std::nullopt,
      ssim_thresholds, libvmaf_feature("name=float_ssim"), {}, 11},
+    // XPSNR is the one metric that reports infinity (an identical frame),
+    // and is averaged its own way (stats.h). Here, after PSNR and SSIM, as
+    // the Videos table shows it (main_window.cpp's metric_columns), so that
+    // every list of metrics (Metric Graphs' tabs, readouts, Video Compare)
+    // is in the table's order.
+    {"xpsnr", "XPSNR", "XPSNR", "XPSNR (dB)", "XPSNR (dB)", 2, " dB", frame, higher_is_better,
+     square_mean_root_db, std::nullopt, xpsnr_thresholds, bool_option("compute_xpsnr"), {}, 0},
     // PSNR and SSIM of the three planes weighted 6:1:1 ((6 Y + Cb + Cr) / 8),
     // as JVET's common test conditions weigh PSNR and MSU's codec comparisons
     // weigh YUV-SSIM. Scored by the app's own
@@ -93,10 +100,6 @@ const std::array<MetricDefinition, 34> registry{{
      std::nullopt, {}, bool_option("compute_ssim_yuv_u"), {}, 22, "ssim_yuv"},
     {"ssim_yuv_v", "SSIM V", "SSIM V", "V", "SSIM V", 4, "", frame, higher_is_better, arithmetic,
      std::nullopt, {}, bool_option("compute_ssim_yuv_v"), {}, 22, "ssim_yuv"},
-    // XPSNR is the one metric that reports infinity (an identical frame),
-    // and is averaged its own way (stats.h).
-    {"xpsnr", "XPSNR", "XPSNR", "XPSNR (dB)", "XPSNR (dB)", 2, " dB", frame, higher_is_better,
-     square_mean_root_db, std::nullopt, xpsnr_thresholds, bool_option("compute_xpsnr"), {}, 0},
     // Calculated by the app's own libvmaf-fast only (libvmaf_cpu.h), off by
     // default. Their size and bit-depth limits fail the metric alone
     // (cpu_metrics_unfit), not the run, so their smallest side is 0 here.

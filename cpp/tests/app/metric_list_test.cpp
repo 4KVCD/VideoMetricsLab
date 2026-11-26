@@ -19,6 +19,7 @@
 #include <QScrollBar>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <memory>
 #include <set>
 #include <string>
@@ -209,6 +210,24 @@ TEST(MetricList, SettingsListsAllSeventeenOpen) {
     EXPECT_TRUE(list.box("psnr")->isEnabled());
     list.box("psnr")->click();
     EXPECT_TRUE(list.ticked().empty());
+}
+
+// The Videos table's metric columns are in the registry's order, the one
+// Metric Graphs, Video Compare and BD-rate list the metrics in: Metric
+// Graphs' tabs had XPSNR after the YUV planes, the table after SSIM.
+TEST(MetricList, TheTablesColumnsAreInTheRegistrysOrder) {
+    std::vector<std::string> registry;
+    for (const MetricDefinition& metric : metrics()) {
+        if (std::any_of(metric_columns().begin(), metric_columns().end(),
+                        [&metric](const MetricColumn& item) { return metric.key == item.key; })) {
+            registry.emplace_back(metric.key);
+        }
+    }
+    std::vector<std::string> table;
+    for (const MetricColumn& item : metric_columns()) {
+        table.emplace_back(item.key);
+    }
+    EXPECT_EQ(table, registry);
 }
 
 // A plane's tooltip says whose plane it is, then its metric's text, without
