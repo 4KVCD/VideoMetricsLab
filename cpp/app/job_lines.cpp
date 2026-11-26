@@ -4,19 +4,19 @@
 
 namespace vml::app {
 
-void JobLines::add_label(ElidedLabel* label) { labels_.push_back(label); }
+void JobLines::add_label(WrappingLabel* label) { labels_.push_back(label); }
 
 void JobLines::clear() {
     slot_.clear();
     text_.clear();
-    for (ElidedLabel* label : labels_) {
+    for (WrappingLabel* label : labels_) {
         label->setVisible(false);
         label->clear_text();
     }
 }
 
 void JobLines::hide_all() {
-    for (ElidedLabel* label : labels_) {
+    for (WrappingLabel* label : labels_) {
         label->setVisible(false);
     }
 }
@@ -63,7 +63,7 @@ void JobLines::arrange() {
     }
     slot_.clear();
     for (std::size_t slot = 0; slot < labels_.size(); ++slot) {
-        ElidedLabel* label = labels_[slot];
+        WrappingLabel* label = labels_[slot];
         if (slot < order.size()) {
             slot_[order[slot]] = static_cast<int>(slot);
             const auto& [text, tooltip] = text_.at(order[slot]);

@@ -1180,7 +1180,10 @@ void MainWindow::render_job_progress(int index) {
         const bool source_only = job_rows_[static_cast<std::size_t>(index)]->options.resample_test.has_value();
         parts.append(qt_text(decoder_text(line.plans, source_only, window_wording())));
     }
-    job_lines_.set(index, job_label(index) + " — " + parts.join("   ·   "), qt_text(line.tooltip));
+    // Metric names are not broken at their hyphens (MS-SSIM); the video's
+    // name may be, a long one needing it.
+    job_lines_.set(index, job_label(index) + " — " + WrappingLabel::unhyphenated(parts.join("   ·   ")),
+                   qt_text(line.tooltip));
 }
 
 std::optional<int> MainWindow::row_index_of(const RowData* row_data) const {

@@ -160,6 +160,7 @@ if(TARGET vml_app)
         app/tool_tips_test.cpp
         app/video_names_test.cpp
         app/vship_names_test.cpp
+        app/wrapping_label_test.cpp
         unit/reference.cpp
         unit/test_videos.cpp
     )

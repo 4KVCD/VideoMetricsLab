@@ -263,6 +263,44 @@ private:
 // its place). A plain QLabel asks for its text's full width, so one long
 // line would set the window's minimum width; this one asks for no width at
 // all.
+// A line of text that goes on to more lines where it does not fit, never
+// cut: Video Compare's frame line and the Videos tab's run lines, which list
+// every metric. Its height is the lines its text needs at its width; it grows
+// when a text needs more and stays while texts need fewer, so a line rewritten
+// at each frame or progress tick does not move what is below it each time it
+// changes. A new width, or clear_text(), fits it to its text again. It takes
+// the width it is given (never widens the window).
+class WrappingLabel : public QLabel {
+    Q_OBJECT
+
+public:
+    explicit WrappingLabel(QWidget* parent = nullptr);
+
+    // Sets the text, and a tooltip to show with it.
+    void set_text(const QString& text, const QString& tooltip = QString());
+    // `text` kept on one line where the label wraps: no-break spaces, and
+    // a word joiner after each hyphen ("PSNR-HVS-M" is not broken at them).
+    static QString unbroken(QString text);
+    // `text` that may wrap at its spaces but not at its hyphens.
+    static QString unhyphenated(QString text);
+    // The text as given, without what unbroken() put in.
+    QString full_text() const;
+    // Clears the text and the tooltip, the height back to one line.
+    void clear_text();
+
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+    void showEvent(QShowEvent* event) override;
+    void changeEvent(QEvent* event) override;
+
+private:
+    // The height for the text at this width: grown to it, or set to it
+    // when `may_shrink`.
+    void fit_height(bool may_shrink);
+
+    int fitted_width_ = -1;
+};
+
 class ElidedLabel : public QLabel {
     Q_OBJECT
 

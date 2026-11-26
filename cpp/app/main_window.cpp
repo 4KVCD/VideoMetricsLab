@@ -1505,7 +1505,7 @@ QWidget* MainWindow::build_run_panel() {
     // One line of text per running video, built once and hidden: lines
     // appearing and disappearing mid-run would shift everything below them.
     for (int i = 0; i < max_videos_in_flight; ++i) {
-        auto* line = new ElidedLabel;
+        auto* line = new WrappingLabel;
         theme::style(line, "color: {run_line};");
         line->setVisible(false);
         layout->addWidget(line);

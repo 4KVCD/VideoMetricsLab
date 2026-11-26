@@ -844,6 +844,81 @@ void BandSlider::paintEvent(QPaintEvent* event) {
     style()->drawComplexControl(QStyle::CC_Slider, &option, &painter, this);
 }
 
+WrappingLabel::WrappingLabel(QWidget* parent) : QLabel(parent) {
+    setTextFormat(Qt::PlainText);
+    setWordWrap(true);
+    setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    fit_height(true);
+}
+
+void WrappingLabel::set_text(const QString& text, const QString& tooltip) {
+    if (text != QLabel::text()) {
+        QLabel::setText(text);
+        fit_height(false);
+    }
+    setToolTip(tooltip);
+}
+
+namespace {
+constexpr char16_t no_break_space = 0x00A0;
+constexpr char16_t word_joiner = 0x2060;  // invisible; no line break on either side
+}  // namespace
+
+QString WrappingLabel::unbroken(QString text) {
+    return unhyphenated(text.replace(QLatin1Char(' '), QChar(no_break_space)));
+}
+
+QString WrappingLabel::unhyphenated(QString text) {
+    return text.replace(QLatin1Char('-'), QString(QLatin1Char('-')) + QChar(word_joiner));
+}
+
+QString WrappingLabel::full_text() const {
+    return QLabel::text().replace(QChar(no_break_space), QLatin1Char(' ')).remove(QChar(word_joiner));
+}
+
+void WrappingLabel::clear_text() {
+    QLabel::clear();
+    setToolTip(QString());
+    fit_height(true);
+}
+
+void WrappingLabel::resizeEvent(QResizeEvent* event) {
+    QLabel::resizeEvent(event);
+    if (width() != fitted_width_) {  // not for the height it set itself
+        fit_height(true);
+    }
+}
+
+void WrappingLabel::showEvent(QShowEvent* event) {
+    QLabel::showEvent(event);
+    fit_height(true);
+}
+
+void WrappingLabel::changeEvent(QEvent* event) {
+    QLabel::changeEvent(event);
+    if (event->type() == QEvent::FontChange || event->type() == QEvent::StyleChange) {
+        fit_height(true);
+    }
+}
+
+void WrappingLabel::fit_height(bool may_shrink) {
+    // Measured as QLabel draws a word-wrapped plain text (QStyle::drawItemText
+    // with Qt::TextWordWrap). Before it is laid out the width is a
+    // placeholder: one line, until a real width comes.
+    fitted_width_ = width();
+    const int frame = height() - contentsRect().height();
+    const int room = contentsRect().width();
+    const int one_line = fontMetrics().height();
+    const int text_height =
+        isVisible() && room > 0 && !text().isEmpty()
+            ? fontMetrics().boundingRect(QRect(0, 0, room, 1 << 20), int(alignment()) | Qt::TextWordWrap, text()).height()
+            : one_line;
+    const int wanted = std::max(one_line, text_height) + frame;
+    if (wanted > height() || (may_shrink && wanted != height())) {
+        setFixedHeight(wanted);
+    }
+}
+
 ElidedLabel::ElidedLabel(QWidget* parent) : QLabel(parent) {
     setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 }

@@ -54,6 +54,7 @@ namespace vml::app {
 
 class BandSlider;
 class ElidedLabel;
+class WrappingLabel;
 class KeyGuide;
 class PlayPauseButton;
 
@@ -337,7 +338,7 @@ public:
     // Previous / Next worst and where the list is: shown while the list's
     // video is (update_worst_row).
     QWidget* worst_row_ = nullptr;
-    ElidedLabel* detail_label = nullptr;
+    WrappingLabel* detail_label = nullptr;
     QLabel* guide_label = nullptr;
     // The playback view, made when a pair first plays.
     VideoCompareView* video_view = nullptr;

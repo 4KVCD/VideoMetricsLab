@@ -86,6 +86,11 @@ QString pad_right(const QString& text, int width) {
     return missing > 0 ? text + QString(missing, ' ') : text;
 }
 
+// The readout's room around its text: its 6 px margins each side, and some.
+constexpr int readout_padding = 28;
+// Between "VMAF=93.21" and the other metrics' fields.
+const QString readout_bar = QStringLiteral("  |  ");
+
 QString trimmed_right(QString text) {
     while (!text.isEmpty() && text.back().isSpace()) {
         text.chop(1);
@@ -652,6 +657,7 @@ void MetricPage::fit_hover_label() {
     // lines now: fixed, it cut off long names; sized at each hover, it laid
     // the tab out again each time.
     refresh_readout_layout();
+    breaks_ = readout_breaks();
     const QFontMetrics metrics(readout_font_);
     const std::vector<QString> labels = visible_labels();
     QStringList lines{app::tr("Time: {time}", {{"time", QStringLiteral("0:00:00.00")}})};
@@ -669,9 +675,11 @@ void MetricPage::fit_hover_label() {
     // pointer first comes over the chart, then the readout, never resized
     // between them: sized to the readout alone, a short name left the
     // placeholder cut off.
+    // Its rows as shown: wrapped where the other metrics do not fit.
+    lines = wrapped(lines.join(QLatin1Char('\n'))).split(QLatin1Char('\n'));
     const QStringList placeholder_lines = placeholder_.split('\n');
     const QFontMetrics hint(font());
-    constexpr int padding = 28;  // the margins' 6 px each side, and some room
+    constexpr int padding = readout_padding;
     int width = 0;
     for (const QString& line : lines) {
         width = std::max(width, metrics.horizontalAdvance(line));
@@ -776,7 +784,86 @@ QString MetricPage::readout_row(const QString& prefix, std::optional<double> val
                                  : qt_text(metric->label) + "=" + qt_text(metric->format_value(*found->second));
         fields.append(pad_right(text, width));
     }
-    return trimmed_right(prefix + pad_right(main, main_width_) + "  |  " + fields.join(QStringLiteral("  ")));
+    return trimmed_right(prefix + pad_right(main, main_width_) + readout_bar + fields.join(QStringLiteral("  ")));
+}
+
+std::vector<std::size_t> MetricPage::readout_breaks() const {
+    // Where a line's other metrics go on to a row of their own, for the
+    // room the page gives the readout now (Metric Graphs' 20-odd metrics
+    // ran past its right edge). The same breaks for every line, so that the
+    // columns still line up: every row is laid out from the widest prefix.
+    const int char_width = std::max(1, QFontMetrics(readout_font_).horizontalAdvance(QLatin1Char('x')));
+    const QMargins margins = layout() != nullptr ? layout()->contentsMargins() : QMargins();
+    const int room = (width() - margins.left() - margins.right() - readout_padding) / char_width;
+    int start = 0;
+    for (const QString& label : visible_labels()) {
+        start = std::max(start, length_of(readout_prefix(label, 8'888'888, 0.0)));
+    }
+    start += main_width_ + length_of(readout_bar);
+    std::vector<std::size_t> breaks{0};
+    int used = start;
+    for (std::size_t column = 0; column < columns_.size(); ++column) {
+        const int width = columns_[column].second;
+        const bool row_start = column == breaks.back();
+        if (!row_start && used + 2 + width > room) {
+            breaks.push_back(column);
+            used = start + width;
+        } else {
+            used += (row_start ? 0 : 2) + width;
+        }
+    }
+    return breaks;
+}
+
+QString MetricPage::wrapped(const QString& text) const {
+    // `text`'s lines with their other metrics in rows at breaks_, the rows
+    // after the first indented to where its fields start. A row with no
+    // field filled (a metric this line lacks) is left out; lines with no
+    // fields (the time, Δ, a frame not in a run) are as they were.
+    if (breaks_.size() <= 1) {
+        return text;
+    }
+    QStringList rows;
+    for (const QString& line : text.split(QLatin1Char('\n'))) {
+        // The bracketed name before it is padded to series_width_: the bar
+        // is looked for after it, in case a name has one.
+        const qsizetype bar = line.indexOf(readout_bar, std::min<qsizetype>(series_width_, line.size()));
+        if (bar < 0) {
+            rows.append(line);
+            continue;
+        }
+        const qsizetype first = bar + readout_bar.size();
+        QStringList fields;
+        qsizetype at = first;
+        for (const auto& [metric, width] : columns_) {
+            fields.append(line.mid(at, width));
+            at += width + 2;
+        }
+        const QString indent(length_of(line.left(first)), QLatin1Char(' '));
+        for (std::size_t row = 0; row < breaks_.size(); ++row) {
+            const auto begin = static_cast<qsizetype>(breaks_[row]);
+            const auto end = row + 1 < breaks_.size() ? static_cast<qsizetype>(breaks_[row + 1]) : fields.size();
+            const QString row_fields = trimmed_right(fields.mid(begin, end - begin).join(QStringLiteral("  ")));
+            if (row == 0) {
+                rows.append(trimmed_right(line.left(first) + row_fields));
+            } else if (!row_fields.isEmpty()) {
+                rows.append(indent + row_fields);
+            }
+        }
+    }
+    return rows.join(QLatin1Char('\n'));
+}
+
+void MetricPage::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    // Wider or narrower, the other metrics may fit on fewer rows or need
+    // more: the readout sized and written again for them.
+    if (readout_breaks() != breaks_) {
+        fit_hover_label();
+        if (showing_readout_) {
+            hover_label_->set_text(wrapped(hover_text_));
+        }
+    }
 }
 
 std::map<std::string, std::optional<double>> MetricPage::other_values(const MetricCurve& curve, int frame,
@@ -811,7 +898,7 @@ void MetricPage::set_hover_text(const QString& text) {
             hover_label_->setFont(readout_font_);
             fit_readout_margins();
         }
-        hover_label_->set_text(text);
+        hover_label_->set_text(wrapped(text));
     }
 }
 

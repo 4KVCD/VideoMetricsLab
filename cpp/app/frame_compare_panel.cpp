@@ -641,7 +641,7 @@ void FrameComparePanel::add_seek_rows(QBoxLayout* root) {
 void FrameComparePanel::add_labels(QVBoxLayout* root) {
     // Elided, so that the text's width is not the page's (see
     // QuietTabWidget).
-    detail_label = new ElidedLabel;
+    detail_label = new WrappingLabel;
     detail_label->setAlignment(Qt::AlignCenter);
     detail_label->set_text(app::tr("No frame selected."));
     root->addWidget(detail_label);
@@ -1500,8 +1500,9 @@ QString FrameComparePanel::score_text(const FrameComparisonEntry& entry) const {
         if (std::isnan(value)) {
             continue;
         }
-        values.append(qt_text(std::string(metric.label) + " " + metric.format_value(value) +
-                              std::string(metric.value_suffix)));
+        // Where the line wraps, a metric's name and score stay together.
+        values.append(WrappingLabel::unbroken(qt_text(std::string(metric.label) + " " +
+                                                      metric.format_value(value) + std::string(metric.value_suffix))));
     }
     if (!values.isEmpty()) {
         return values.join(QString::fromUtf8(" \xC2\xB7 "));
