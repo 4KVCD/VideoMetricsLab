@@ -486,8 +486,11 @@ TEST_F(FramePanelTest, AdvancedInfoIsAPanelToSelectAndCopy) {
 
     playback_status(*panel, "Playing" + dot + "Direct3D 11");  // changed while open
     EXPECT_TRUE(info->text().startsWith("Playing\n")) << info->text().toStdString();
+    const QString kept = QApplication::clipboard()->text();  // the developer's, put back after
     info->copy_button()->click();
-    EXPECT_EQ(QApplication::clipboard()->text(), info->text());
+    const QString copied = QApplication::clipboard()->text();
+    QApplication::clipboard()->setText(kept);
+    EXPECT_EQ(copied, info->text());
     info->close();
 }
 
