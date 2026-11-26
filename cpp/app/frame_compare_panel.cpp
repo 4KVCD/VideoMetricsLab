@@ -19,7 +19,6 @@
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QTimer>
-#include <QToolTip>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -31,6 +30,7 @@
 #include "i18n.h"
 #include "key_guide.h"
 #include "metric_order.h"
+#include "text_panel.h"
 #include "theme.h"
 #include "video_compare_view.h"
 #ifdef VML_NATIVE_PLAYBACK
@@ -541,7 +541,9 @@ void FrameComparePanel::add_colour_row(QBoxLayout* root) {
     color_row->addWidget(color_status_label, 1);
     color_row->addWidget(theme::separator(0));
     advanced_info_button = new QPushButton(app::tr("Advanced info"));
-    advanced_info_button->setToolTip(app::tr("Playback details will appear here when a video is loaded."));
+    advanced_info_button->setToolTip(app::tr("Playback's details: how each video is decoded and shown, and its "
+                                             "sound. Selectable and copyable."));
+    PopupPanel::open_on_press(advanced_info_button, [this] { open_advanced_info(); });
     color_row->addWidget(advanced_info_button);
     // The frame pair's save icon, at the top card's right end (issue #224):
     // this frame of the reference and of the test video, as PNG.
@@ -989,11 +991,6 @@ void FrameComparePanel::hideEvent(QHideEvent* event) {
 bool FrameComparePanel::eventFilter(QObject* watched, QEvent* event) {
     // The tab's keys anywhere in the window (S, Space, Left and Right), and
     // the window's moves between displays.
-    if (watched == advanced_info_button && event->type() == QEvent::ToolTip) {
-        QToolTip::showText(advanced_info_button->mapToGlobal(advanced_info_button->rect().bottomLeft()),
-                           advanced_info_button->toolTip(), advanced_info_button, advanced_info_button->rect(), 30000);
-        return true;
-    }
     if (!isVisible()) {
         return QWidget::eventFilter(watched, event);
     }
@@ -1197,13 +1194,12 @@ void FrameComparePanel::on_video_playing_changed(bool playing) {
 void FrameComparePanel::on_video_status_changed(const QString& message) {
     // Playback's status: in full in Advanced info, short in the frame line.
     video_status_ = message;
-    QStringList lines;
+    advanced_info_lines_.clear();
     for (const QString& part : QString(message).replace("distorted", "test").split(QString::fromUtf8(" \xC2\xB7 "))) {
-        lines.append(tr_message(part).toHtmlEscaped());
+        advanced_info_lines_.append(tr_message(part));
     }
-    const QString tooltip = "<p>" + lines.join("<br>") + "</p>";
-    if (advanced_info_button->toolTip() != tooltip) {
-        advanced_info_button->setToolTip(tooltip);
+    if (advanced_info_panel_ != nullptr) {
+        advanced_info_panel_->set_text(advanced_info_text());  // open: it follows playback
     }
     if (is_video_mode()) {
         update_color_status();
@@ -1211,6 +1207,19 @@ void FrameComparePanel::on_video_status_changed(const QString& message) {
         // before: "Playing" at the end, the last test video's decoder.
         update_frame_line();
     }
+}
+
+QString FrameComparePanel::advanced_info_text() const {
+    return advanced_info_lines_.isEmpty() ? app::tr("Playback details will appear here when a video is loaded.")
+                                          : advanced_info_lines_.join(QLatin1Char('\n'));
+}
+
+void FrameComparePanel::open_advanced_info() {
+    if (advanced_info_panel_ == nullptr) {
+        advanced_info_panel_ = new TextPanel(app::tr("Advanced info"), this);
+    }
+    advanced_info_panel_->set_text(advanced_info_text());
+    advanced_info_panel_->open_under(advanced_info_button);
 }
 
 QString FrameComparePanel::concise_playback_status() const {

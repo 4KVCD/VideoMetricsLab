@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Copied": "已複製",
+  "Copy": "複製",
+  "Copy all of it": "全部複製",
+  "Playback's details: how each video is decoded and shown, and its sound. Selectable and copyable.": "播放細節：每部影片如何解碼和顯示，以及其音訊。可選取和複製。",
   "A dot: the worst frame of a dip, as Worst frames lists them.": "圓點：每次低谷的最差影格，與最差影格清單一致。",
   "A line across: the frame selected in Worst frames, or the one under the pointer.": "貫穿線：在最差影格中選取的影格，或指標下的影格。",
   "Graph legend": "圖表圖例",

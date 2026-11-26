@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Copied": "복사됨",
+  "Copy": "복사",
+  "Copy all of it": "모두 복사",
+  "Playback's details: how each video is decoded and shown, and its sound. Selectable and copyable.": "재생 세부 정보: 각 영상을 디코딩하고 표시하는 방식과 오디오. 선택하고 복사할 수 있습니다.",
   "A dot: the worst frame of a dip, as Worst frames lists them.": "점: 가장 나쁜 프레임 목록에 나오는, 급락의 가장 나쁜 프레임.",
   "A line across: the frame selected in Worst frames, or the one under the pointer.": "가로지르는 선: 가장 나쁜 프레임에서 선택한 프레임, 또는 포인터 아래의 프레임.",
   "Graph legend": "그래프 범례",

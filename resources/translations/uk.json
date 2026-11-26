@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Copied": "Скопійовано",
+  "Copy": "Копіювати",
+  "Copy all of it": "Копіювати все",
+  "Playback's details: how each video is decoded and shown, and its sound. Selectable and copyable.": "Подробиці відтворення: як кожне відео декодується й показується, і його звук. Можна виділити й скопіювати.",
   "A dot: the worst frame of a dip, as Worst frames lists them.": "Крапка: найгірший кадр провалу, як їх перелічує список «Найгірші кадри».",
   "A line across: the frame selected in Worst frames, or the one under the pointer.": "Лінія впоперек: кадр, вибраний у списку «Найгірші кадри», або кадр під вказівником.",
   "Graph legend": "Легенда графіка",

@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Copied": "Disalin",
+  "Copy": "Salin",
+  "Copy all of it": "Salin semuanya",
+  "Playback's details: how each video is decoded and shown, and its sound. Selectable and copyable.": "Detail pemutaran: cara tiap video didekode dan ditampilkan, serta audionya. Dapat dipilih dan disalin.",
   "A dot: the worst frame of a dip, as Worst frames lists them.": "Titik: bingkai terburuk dari sebuah penurunan, seperti yang didaftar Bingkai terburuk.",
   "A line across: the frame selected in Worst frames, or the one under the pointer.": "Garis melintang: bingkai yang dipilih di Bingkai terburuk, atau yang di bawah penunjuk.",
   "Graph legend": "Legenda grafik",

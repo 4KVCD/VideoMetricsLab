@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Copied": "Copiato",
+  "Copy": "Copia",
+  "Copy all of it": "Copia tutto",
+  "Playback's details: how each video is decoded and shown, and its sound. Selectable and copyable.": "Dettagli di riproduzione: come ogni video viene decodificato e mostrato, e il suo audio. Selezionabili e copiabili.",
   "A dot: the worst frame of a dip, as Worst frames lists them.": "Un punto: il fotogramma peggiore di un calo, come li elenca Fotogrammi peggiori.",
   "A line across: the frame selected in Worst frames, or the one under the pointer.": "Una linea trasversale: il fotogramma selezionato in Fotogrammi peggiori, o quello sotto il puntatore.",
   "Graph legend": "Legenda del grafico",

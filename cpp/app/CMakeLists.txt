@@ -52,6 +52,7 @@ add_library(vml_app STATIC
     metric_order.cpp
     popup_panel.cpp
     graph_legend.cpp
+    text_panel.cpp
     options_panel.cpp
     playback_worker.cpp
     probe_worker.cpp

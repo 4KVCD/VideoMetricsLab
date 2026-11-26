@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Copied": "Đã sao chép",
+  "Copy": "Sao chép",
+  "Copy all of it": "Sao chép tất cả",
+  "Playback's details: how each video is decoded and shown, and its sound. Selectable and copyable.": "Chi tiết phát: cách mỗi video được giải mã và hiển thị, cùng âm thanh của nó. Có thể chọn và sao chép.",
   "A dot: the worst frame of a dip, as Worst frames lists them.": "Dấu chấm: khung tệ nhất của một chỗ tụt, như Khung tệ nhất liệt kê.",
   "A line across: the frame selected in Worst frames, or the one under the pointer.": "Đường kẻ xuyên qua: khung được chọn trong Khung tệ nhất, hoặc khung dưới con trỏ.",
   "Graph legend": "Chú giải biểu đồ",

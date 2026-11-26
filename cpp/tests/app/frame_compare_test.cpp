@@ -6,6 +6,7 @@
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDeadlineTimer>
@@ -42,6 +43,7 @@
 #include <vector>
 
 #include "test_videos.h"
+#include "text_panel.h"
 #include "video_compare_view.h"
 #include "vml/ffprobe.h"
 #include "vml/platform/system.h"
@@ -463,6 +465,35 @@ TEST_F(FramePanelTest, TheLoopIsSetInSecondsOrFrames) {
     EXPECT_EQ(panel->loop_after_frames_spin->value(), 3);
 }
 
+// Advanced info is a panel, not a tooltip: opened on its button, its text
+// selectable, Copy putting all of it on the clipboard, and kept up to date
+// while it is open (playback's status changes as it plays).
+TEST_F(FramePanelTest, AdvancedInfoIsAPanelToSelectAndCopy) {
+    const auto panel = make_panel();
+    panel->set_runs({scored("encode")});
+    const QString dot = QString::fromUtf8(" \xC2\xB7 ");
+    playback_status(*panel, "Paused" + dot + "Direct3D 11" + dot + "test video: NVIDIA (NVDEC)");
+    panel->advanced_info_button->click();  // opened on its press
+    auto* info = panel->findChild<TextPanel*>();
+    ASSERT_NE(info, nullptr);
+    EXPECT_TRUE(info->isVisible());
+    EXPECT_EQ(info->text(), panel->advanced_info_text());
+    EXPECT_TRUE(info->text().contains("Direct3D 11\n")) << info->text().toStdString();  // a line each
+    const auto* text = info->findChild<QLabel*>(QStringLiteral("panelText"));
+    ASSERT_NE(text, nullptr);
+    EXPECT_TRUE(text->textInteractionFlags().testFlag(Qt::TextSelectableByMouse));
+    EXPECT_TRUE(text->textInteractionFlags().testFlag(Qt::TextSelectableByKeyboard));
+
+    playback_status(*panel, "Playing" + dot + "Direct3D 11");  // changed while open
+    EXPECT_TRUE(info->text().startsWith("Playing\n")) << info->text().toStdString();
+    const QString kept = QApplication::clipboard()->text();  // the developer's, put back after
+    info->copy_button()->click();
+    const QString copied = QApplication::clipboard()->text();
+    QApplication::clipboard()->setText(kept);
+    EXPECT_EQ(copied, info->text());
+    info->close();
+}
+
 // Issue #204: without a soundtrack, the status line says so, and why, while
 // Audio is ticked (it said so only in Advanced info, and the log not at all);
 // a missing soundtrack is not an error of the pictures', which would show
@@ -479,9 +510,8 @@ TEST_F(FramePanelTest, NoSoundIsSaidWithWhyWhileAudioIsTicked) {
               "Paused" + dot.toStdString() +
                   "No sound: the reference's audio could not be read: Invalid data found when processing input");
     // Advanced info has every part, the reason among them.
-    EXPECT_TRUE(panel->advanced_info_button->toolTip().contains("the reference&#x27;s audio could not be read") ||
-                panel->advanced_info_button->toolTip().contains("the reference's audio could not be read"))
-        << panel->advanced_info_button->toolTip().toStdString();
+    EXPECT_TRUE(panel->advanced_info_text().contains("the reference's audio could not be read"))
+        << panel->advanced_info_text().toStdString();
     panel->audio_checkbox->setChecked(false);
     EXPECT_EQ(playback_status(*panel, silent).toStdString(), "Paused");
     panel->audio_checkbox->setChecked(true);

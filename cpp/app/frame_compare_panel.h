@@ -9,6 +9,7 @@
 #include <QImage>
 #include <QMetaType>
 #include <QPixmap>
+#include <QPointer>
 #include <QString>
 #include <QThread>
 #include <QWidget>
@@ -57,6 +58,7 @@ class ElidedLabel;
 class WrappingLabel;
 class KeyGuide;
 class PlayPauseButton;
+class TextPanel;
 
 // One video pair to choose from. `scores` are its run's, if it has one:
 // the frames of a pair are worth comparing whether or not anyone has
@@ -301,6 +303,10 @@ public:
     // Stops what is pending or running, as the window closes.
     void cancel();
 
+    // Advanced info as it is now: playback's details, a line each, plain
+    // (what its panel shows and copies).
+    QString advanced_info_text() const;
+
     // The controls, for the window's tests.
     QPushButton* previous_video_button = nullptr;
     QComboBox* video_combo = nullptr;
@@ -468,6 +474,9 @@ private:
     void on_video_playing_changed(bool playing);
     void on_video_status_changed(const QString& message);
     QString concise_playback_status() const;
+    // Advanced info's panel (TextPanel), under its button; kept up to date
+    // while it is open.
+    void open_advanced_info();
 
     std::function<std::string()> ffmpeg_;
     int decoded_videos_;
@@ -520,6 +529,8 @@ private:
     bool syncing_video_position_ = false;
     // Playback's status as the view said it, in English.
     QString video_status_;
+    QStringList advanced_info_lines_;  // playback's details, translated (on_video_status_changed)
+    QPointer<TextPanel> advanced_info_panel_;
     // The Worst frames list handed over, and the stop shown last.
     std::optional<WorstFrameList> worst_list_;
     std::size_t worst_index_ = 0;

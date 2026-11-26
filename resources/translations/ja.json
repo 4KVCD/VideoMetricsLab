@@ -1,5 +1,9 @@
 {
  "strings": {
+  "Copied": "コピーしました",
+  "Copy": "コピー",
+  "Copy all of it": "すべてコピー",
+  "Playback's details: how each video is decoded and shown, and its sound. Selectable and copyable.": "再生の詳細：各動画のデコードと表示の方法、および音声。選択してコピーできます。",
   "A dot: the worst frame of a dip, as Worst frames lists them.": "点：落ち込みの最悪フレーム（最悪のフレームの一覧と同じ）。",
   "A line across: the frame selected in Worst frames, or the one under the pointer.": "横切る線：最悪のフレームで選択したフレーム、またはポインターの下のフレーム。",
   "Graph legend": "グラフの凡例",
