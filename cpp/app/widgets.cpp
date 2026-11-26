@@ -215,13 +215,13 @@ protected:
             }
             case QEvent::DragEnter: {
                 auto* drag = static_cast<QDragEnterEvent*>(event);
-                QDragEnterEvent moved(to_table(drag->position()), drag->possibleActions(), drag->mimeData(),
+                QDragEnterEvent moved(drag_to_table(drag), drag->possibleActions(), drag->mimeData(),
                                       drag->buttons(), drag->modifiers());
                 return pass_on_drop(drag, moved);
             }
             case QEvent::DragMove: {
                 auto* drag = static_cast<QDragMoveEvent*>(event);
-                QDragMoveEvent moved(to_table(drag->position()), drag->possibleActions(), drag->mimeData(),
+                QDragMoveEvent moved(drag_to_table(drag), drag->possibleActions(), drag->mimeData(),
                                      drag->buttons(), drag->modifiers());
                 return pass_on_drop(drag, moved);
             }
@@ -248,6 +248,16 @@ private:
     // A point on this view's viewport, on the table's.
     QPointF to_table(QPointF position) const { return position + viewport()->mapTo(table_.viewport(), QPoint()); }
     QPoint to_table(QPoint position) const { return position + viewport()->mapTo(table_.viewport(), QPoint()); }
+
+    // A drag's point, on the table's viewport. The drag events are made from
+    // a QPointF since Qt 6.12, which deprecates the QPoint they took before.
+    auto drag_to_table(const QDropEvent* drag) const {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 12, 0)
+        return to_table(drag->position());
+#else
+        return to_table(drag->position().toPoint());
+#endif
+    }
 
     // Sends `moved`, the table's copy of `event`, to the table's viewport,
     // and gives `event` its answer.
