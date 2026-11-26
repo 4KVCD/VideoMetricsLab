@@ -246,6 +246,12 @@ std::optional<GpuDriverFacts> gpu_driver_facts();
 // st_mtime_ns), or nothing when it cannot be read.
 std::optional<long long> modified_ns(const std::filesystem::path& file);
 
+// Whether `path` is on a network drive (a mapped drive or a share's
+// \\server\share path on Windows; a volume macOS does not call local):
+// SQLite's write-ahead log needs memory shared on one computer, and is not
+// used there (saved_index.cpp). False where it cannot be told.
+bool on_network_drive(const std::filesystem::path& path);
+
 // The whole of a file, in one read, as Python's read_bytes() reads it, or
 // nothing when it cannot be read. Read byte by byte through a stream, a 20 MB
 // picture of a 4K frame took 64 ms rather than 15.

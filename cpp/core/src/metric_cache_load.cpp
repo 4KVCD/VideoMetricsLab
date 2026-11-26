@@ -6,6 +6,7 @@
 #include "vml/metric_cache.h"
 
 #include "metric_cache_parts.h"
+#include "vml/saved_index.h"
 
 #include <algorithm>
 #include <cmath>
@@ -702,6 +703,7 @@ void record_saved_files(const std::filesystem::path& base, const std::filesystem
     std::error_code error;
     if (std::filesystem::exists(directory / "context.json", error)) {
         record_identity(directory, source, distorted, recipe, true);
+        saved_index::changed(directory);
     }
 }
 

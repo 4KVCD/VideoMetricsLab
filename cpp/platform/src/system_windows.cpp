@@ -661,6 +661,20 @@ std::optional<long long> modified_ns(const std::filesystem::path& file) {
     return (since_1601 - 116444736000000000LL) * 100;
 }
 
+bool on_network_drive(const std::filesystem::path& path) {
+    std::error_code error;
+    const std::filesystem::path whole = std::filesystem::absolute(path, error);
+    const std::wstring text = (error ? path : whole).wstring();
+    if (text.starts_with(LR"(\\)") && !text.starts_with(LR"(\\?\)") && !text.starts_with(LR"(\\.\)")) {
+        return true;  // \\server\share
+    }
+    std::wstring volume(MAX_PATH + 1, L'\0');
+    if (!GetVolumePathNameW(text.c_str(), volume.data(), static_cast<DWORD>(volume.size()))) {
+        return false;
+    }
+    return GetDriveTypeW(volume.c_str()) == DRIVE_REMOTE;
+}
+
 namespace {
 
 // Whether a crash ends this process at once (crash_quietly), once it is

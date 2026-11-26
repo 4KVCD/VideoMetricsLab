@@ -1,13 +1,16 @@
 #include "vml/saved_results.h"
 
 #include <algorithm>
+#include <map>
 #include <random>
 #include <system_error>
+#include <tuple>
 #include <variant>
 
 #include "vml/metric_cache.h"
 #include "vml/metrics.h"
 #include "vml/platform/system.h"
+#include "vml/saved_index.h"
 #include "vml/settings.h"
 
 namespace vml {
@@ -24,9 +27,16 @@ std::chrono::system_clock::time_point system_time(std::filesystem::file_time_typ
 
 // The metric's place in the app's order (unknown metrics last).
 std::size_t order_of(const std::string& key) {
-    const auto& all = metrics();
-    const auto found = std::find_if(all.begin(), all.end(), [&key](const MetricDefinition& d) { return d.key == key; });
-    return static_cast<std::size_t>(found - all.begin());
+    static const std::map<std::string, std::size_t> places = [] {
+        std::map<std::string, std::size_t> found;
+        const auto& all = metrics();
+        for (std::size_t i = 0; i < all.size(); ++i) {
+            found.emplace(all[i].key, i);
+        }
+        return found;
+    }();
+    const auto found = places.find(key);
+    return found == places.end() ? metrics().size() : found->second;
 }
 
 // A YUV metric's Y plane is saved in its plain metric's file (metric_path):
@@ -72,8 +82,67 @@ std::vector<std::string> SavedComparison::filter_texts() const {
     return {label, platform::path_text(distorted), platform::path_text(source)};
 }
 
+namespace {
+
+// The metric's scores in the app's order, each metric's newest first.
+void sort_scores(std::vector<SavedScoreFile>& scores) {
+    std::stable_sort(scores.begin(), scores.end(), [](const SavedScoreFile& a, const SavedScoreFile& b) {
+        const std::size_t x = order_of(a.key);
+        const std::size_t y = order_of(b.key);
+        return x != y ? x < y : a.key != b.key ? a.key < b.key : a.saved > b.saved;
+    });
+}
+
+// The comparisons as the index has them: their references checked once each
+// (most comparisons share a reference with others).
+std::vector<SavedComparison> from_index(const std::filesystem::path& base, std::vector<IndexedComparison> indexed) {
+    std::vector<SavedComparison> list;
+    list.reserve(indexed.size());
+    std::map<std::tuple<std::string, std::string, std::string>, bool> references;
+    const std::filesystem::path root = base / "v2";
+    for (IndexedComparison& comparison : indexed) {
+        if (!comparison.readable) {
+            continue;  // as the folders' listing leaves it out
+        }
+        SavedComparison saved;
+        saved.folder = root / platform::path_from_text(comparison.name);
+        saved.label = std::move(comparison.label);
+        saved.source = platform::path_from_text(comparison.source);
+        saved.distorted = platform::path_from_text(comparison.distorted);
+        saved.saved = comparison.saved;
+        saved.bytes = comparison.bytes;
+        const auto [found, added] = references.try_emplace(
+            {comparison.source, comparison.source_identity, comparison.source_sampled}, false);
+        if (added) {
+            found->second =
+                reference_still_there(saved.source, comparison.source_identity, comparison.source_sampled);
+        }
+        saved.reference_found = found->second;
+        saved.scores.reserve(comparison.scores.size());
+        for (const IndexedComparison::Score& score : comparison.scores) {
+            saved.scores.push_back({saved.folder / platform::path_from_text(score.file), score.key, score.saved,
+                                    score.bytes});
+        }
+        list_luma_planes(saved.scores);
+        sort_scores(saved.scores);
+        list.push_back(std::move(saved));
+    }
+    std::stable_sort(list.begin(), list.end(),
+                     [](const SavedComparison& a, const SavedComparison& b) { return a.saved > b.saved; });
+    return list;
+}
+
+}  // namespace
+
 std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path& base,
                                                     const std::function<bool()>& stopped) {
+    if (std::optional<std::vector<IndexedComparison>> indexed = saved_index::comparisons(base, stopped)) {
+        return from_index(base, std::move(*indexed));
+    }
+    if (stopped && stopped()) {
+        return {};  // a first reading of the index stopped: nobody waits for the list
+    }
+    // Without an index: every folder read.
     std::vector<SavedComparison> list;
     std::error_code error;
     std::filesystem::directory_iterator folder(base / "v2", error);
@@ -109,12 +178,7 @@ std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path&
             }
         }
         list_luma_planes(saved.scores);
-        std::stable_sort(saved.scores.begin(), saved.scores.end(),
-                         [](const SavedScoreFile& a, const SavedScoreFile& b) {
-                             const std::size_t x = order_of(a.key);
-                             const std::size_t y = order_of(b.key);
-                             return x != y ? x < y : a.key != b.key ? a.key < b.key : a.saved > b.saved;
-                         });
+        sort_scores(saved.scores);
         list.push_back(std::move(saved));
     }
     std::stable_sort(list.begin(), list.end(),
@@ -332,6 +396,7 @@ bool delete_saved_comparison(const std::filesystem::path& base, const SavedCompa
         return false;  // refused (one of its files in use): nothing of it deleted
     }
     saved_comparison_deleted(folder);  // gone from v2: the kept listing reads it again
+    saved_index::changed(folder);
     std::filesystem::remove_all(moved, ignored);
     return true;
 }

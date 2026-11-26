@@ -16,6 +16,8 @@
 #include <mach/mach.h>
 #include <pthread.h>
 #include <sys/sysctl.h>
+#include <sys/mount.h>
+#include <sys/param.h>
 #endif
 
 #include <algorithm>
@@ -289,6 +291,25 @@ std::optional<long long> modified_ns(const std::filesystem::path& file) {
     const timespec& written = status.st_mtim;
 #endif
     return static_cast<long long>(written.tv_sec) * 1'000'000'000LL + written.tv_nsec;
+}
+
+bool on_network_drive(const std::filesystem::path& path) {
+#ifdef __APPLE__
+    // The nearest part of the path that exists (a folder not made yet).
+    std::error_code error;
+    std::filesystem::path existing = std::filesystem::absolute(path, error);
+    while (!existing.empty() && !std::filesystem::exists(existing, error) && existing != existing.parent_path()) {
+        existing = existing.parent_path();
+    }
+    struct statfs volume {};
+    if (existing.empty() || statfs(existing.c_str(), &volume) != 0) {
+        return false;
+    }
+    return (volume.f_flags & MNT_LOCAL) == 0;
+#else
+    (void)path;
+    return false;
+#endif
 }
 
 void crash_quietly() {}  // a crash shows no dialog here
