@@ -1,16 +1,19 @@
 // The window from the keyboard: Tab moves from control to control and out of
-// every table, as on Windows.
+// every table and time box, as on Windows.
 #include <QAbstractItemView>
 #include <QApplication>
 #include <QHeaderView>
 #include <QPushButton>
 #include <QTableWidget>
 #include <QTest>
+#include <QTimeEdit>
 #include <QVBoxLayout>
 
 #include <gtest/gtest.h>
 
 #include "main_window.h"
+#include "options_panel.h"
+#include "vml/options.h"
 
 namespace vml::app {
 namespace {
@@ -77,6 +80,30 @@ TEST(Keyboard, TabFromATableWithRowsLeavesIt) {
     EXPECT_EQ(QApplication::focusWidget(), table);
     QTest::keyClick(table, Qt::Key_Right);
     EXPECT_EQ(table->currentColumn(), 1);  // the arrows still move between the cells
+}
+
+// The Range's time boxes: one Tab leaves each (Qt's went through its four
+// sections first); the arrows still move between the sections.
+TEST(Keyboard, TabLeavesATimeBoxAtOnce) {
+    OptionsPanel panel({});
+    VmafOptions options;
+    options.set_time_range(0, 1000);
+    panel.show_options(options, {options});
+    panel.show();
+    panel.activateWindow();
+    ASSERT_TRUE(QTest::qWaitForWindowActive(&panel));
+    QTimeEdit* start = panel.range_start_edit;
+    ASSERT_TRUE(start->isVisible());
+    start->setFocus(Qt::TabFocusReason);
+    start->setCurrentSection(QDateTimeEdit::HourSection);
+    QTest::keyClick(start, Qt::Key_Tab);
+    EXPECT_NE(QApplication::focusWidget(), start);
+    start->setFocus(Qt::TabFocusReason);
+    start->setCurrentSection(QDateTimeEdit::HourSection);
+    QTest::keyClick(start, Qt::Key_Right, Qt::NoModifier);
+    QTest::keyClick(start, Qt::Key_Right, Qt::NoModifier);
+    QTest::keyClick(start, Qt::Key_Right, Qt::NoModifier);
+    EXPECT_EQ(start->currentSection(), QDateTimeEdit::MinuteSection);  // past "00:" to the minutes
 }
 
 }  // namespace

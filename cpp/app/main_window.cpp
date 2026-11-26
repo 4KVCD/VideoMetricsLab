@@ -1017,6 +1017,11 @@ void MainWindow::build_ui() {
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
     build_tab_corner();
     make_title_buttons();
+    // The focus starts on the tabs, so Ctrl+Tab and the arrows switch them at
+    // once. Left to Qt, the window's first control took it, VML Modern's
+    // title bar progress button, outside the tabs: Ctrl+Tab did nothing
+    // until a Tab or a click moved it. Taken when the window is first shown.
+    tabs_->tabBar()->setFocus(Qt::OtherFocusReason);
 }
 
 SettingsPanel& MainWindow::settings_panel() {
