@@ -251,7 +251,14 @@ private:
 
     // A drag's point, on the table's viewport. The drag events are made from
     // a QPointF since Qt 6.12, which deprecates the QPoint they took before.
-    auto drag_to_table(const QDropEvent* drag) const {
+    // The return type is named: clang does not take a deduced one in
+    // viewportEvent, above its definition.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 12, 0)
+    using DragPoint = QPointF;
+#else
+    using DragPoint = QPoint;
+#endif
+    DragPoint drag_to_table(const QDropEvent* drag) const {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 12, 0)
         return to_table(drag->position());
 #else
