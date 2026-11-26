@@ -16,6 +16,7 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QSaveFile>
+#include <QSignalBlocker>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QVBoxLayout>
@@ -27,6 +28,7 @@
 
 #include "app_dialog.h"
 #include "i18n.h"
+#include "metric_order.h"
 #include "rate_curve_chart.h"
 #include "theme.h"
 #include "vml/append.h"
@@ -55,11 +57,11 @@ const char* const import_tooltip =
        "vmaf, psnr, ssim...), or from a JSON file: results as Export results or the command line's --json write "
        "them, or a run file (.metrics.json). The command line's bdrate reads the same files.");
 
-// The metric keys, in the registry's order: the results' columns.
+// The metric keys, in the order shown (shown_metrics): the results' columns.
 std::vector<std::string> all_metric_keys() {
     std::vector<std::string> keys;
-    for (const MetricDefinition& metric : metrics()) {
-        keys.emplace_back(metric.key);
+    for (const MetricDefinition* metric : shown_metrics()) {
+        keys.emplace_back(metric->key);
     }
     return keys;
 }
@@ -161,6 +163,13 @@ BdRatePanel::BdRatePanel(std::function<std::vector<GraphPanel::Run>()> runs, QWi
     add_results(root);
     add_chart(root);
     root->addStretch(1);
+    // The columns, the chart's metric list and the results in the metrics'
+    // new order, the chart keeping its metric.
+    connect(&metric_order_signal(), &MetricOrderSignal::changed, this, [this] {
+        label_metric_columns();
+        fill_metric_combo();
+        recalculate();
+    });
     recalculate();
 }
 
@@ -272,12 +281,7 @@ void BdRatePanel::add_results(QVBoxLayout* root) {
             menu.exec(results->viewport()->mapToGlobal(at));
         }
     });
-    QStringList labels{QString()};
-    for (const MetricDefinition& metric : metrics()) {
-        labels.append(qt_text(metric.short_label));
-    }
-    results->setHorizontalHeaderLabels(labels);
-    hide_unscored_planes();
+    label_metric_columns();
     results->setEditTriggers(QAbstractItemView::NoEditTriggers);
     results->setSelectionBehavior(QAbstractItemView::SelectRows);
     results->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -305,9 +309,7 @@ void BdRatePanel::add_chart(QVBoxLayout* root) {
     sequence_label->setFont(bold);
     row->addWidget(sequence_label);
     metric_combo = new QComboBox;
-    for (const MetricDefinition& metric : metrics()) {
-        metric_combo->addItem(qt_text(metric.short_label), qt_text(metric.key));
-    }
+    fill_metric_combo();
     connect(metric_combo, &QComboBox::currentIndexChanged, this, [this] { refresh_chart(); });
     row->addWidget(metric_combo);
     row->addStretch(1);
@@ -738,12 +740,34 @@ void BdRatePanel::fill_results() {
     filling_ = false;
 }
 
+// The metric columns' headings, in the order shown (all_metric_keys).
+void BdRatePanel::label_metric_columns() {
+    QStringList labels{QString()};
+    for (const MetricDefinition* metric : shown_metrics()) {
+        labels.append(qt_text(metric->short_label));
+    }
+    results->setHorizontalHeaderLabels(labels);
+    hide_unscored_planes();
+}
+
+// The chart's metrics in the order shown, the one chosen kept.
+void BdRatePanel::fill_metric_combo() {
+    const QString chosen = metric_combo->currentData().toString();
+    const QSignalBlocker quiet(metric_combo);  // refresh_chart once, by the caller
+    metric_combo->clear();
+    for (const MetricDefinition* metric : shown_metrics()) {
+        metric_combo->addItem(qt_text(metric->short_label), qt_text(metric->key));
+    }
+    metric_combo->setCurrentIndex(std::max(0, metric_combo->findData(chosen)));
+}
+
 void BdRatePanel::hide_unscored_planes() {
     // A plane's column (MetricDefinition::plane_of) only where a sequence has
     // its BD-rate: most results have no planes, and twelve empty columns
     // would crowd the rest.
-    for (std::size_t index = 0; index < metrics().size(); ++index) {
-        const MetricDefinition& metric = metrics()[index];
+    const std::vector<const MetricDefinition*>& shown = shown_metrics();
+    for (std::size_t index = 0; index < shown.size(); ++index) {
+        const MetricDefinition& metric = *shown[index];
         bool scored = false;
         if (report_ && metric.is_plane()) {
             const auto found = report_->all.mean.percent.find(std::string(metric.key));

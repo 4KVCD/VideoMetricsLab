@@ -19,7 +19,6 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMouseEvent>
-#include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
 #include <QRadioButton>
@@ -41,6 +40,7 @@
 #include <variant>
 
 #include "i18n.h"
+#include "metric_order.h"
 #include "results_export.h"
 #include "saved_deletion.h"
 #include "stay_open_menu.h"
@@ -123,6 +123,7 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     });
     connect(reading_, &QFutureWatcher<std::vector<SavedComparison>>::finished, this,
             [this] { show_list(reading_->result()); });
+    connect(&metric_order_signal(), &MetricOrderSignal::changed, this, [this] { reorder_metrics(); });
     auto* layout = new QVBoxLayout(this);
     auto* note = new QLabel(app::tr("Every comparison the app has saved scores of. Open them in Metric Graphs, or "
                                     "export their results, per-frame scores, graphs and weak segments, without the "
@@ -320,6 +321,31 @@ void SavedResultsPanel::refresh() {
     }));
 }
 
+// The Metrics column's text: the comparison's metrics in the order shown.
+QString SavedResultsPanel::metrics_text(const SavedComparison& saved) {
+    QStringList metrics;
+    for (const std::string& key : in_order_shown(saved.keys())) {
+        metrics.append(metric_label(key));
+    }
+    return metrics.join(", ");
+}
+
+// The Metrics column and the scores shown in the metrics' new order.
+void SavedResultsPanel::reorder_metrics() {
+    const QSignalBlocker blocker(table_);
+    const bool sorting = table_->isSortingEnabled();
+    table_->setSortingEnabled(false);  // a row sorted elsewhere as its text changed would be passed over
+    for (int row = 0; row < table_->rowCount(); ++row) {
+        QTableWidgetItem* test = table_->item(row, col_test);
+        QTableWidgetItem* metrics = table_->item(row, col_metrics);
+        if (test != nullptr && metrics != nullptr) {
+            metrics->setText(metrics_text(list_.at(test->data(Qt::UserRole).toUInt())));
+        }
+    }
+    table_->setSortingEnabled(sorting);
+    show_details();
+}
+
 void SavedResultsPanel::show_list(std::vector<SavedComparison> list) {
     list_ = std::move(list);
     details_read_ = {};  // its files may have changed since: read again
@@ -354,11 +380,7 @@ void SavedResultsPanel::show_list(std::vector<SavedComparison> list) {
         table_->setItem(row, col_saved,
                         new SortItem(time_text(saved.saved),
                                      static_cast<double>(saved.saved.time_since_epoch().count())));
-        QStringList metrics;
-        for (const std::string& key : saved.keys()) {
-            metrics.append(metric_label(key));
-        }
-        table_->setItem(row, col_metrics, new QTableWidgetItem(metrics.join(", ")));
+        table_->setItem(row, col_metrics, new QTableWidgetItem(metrics_text(saved)));
         table_->setItem(row, col_size, new SortItem(saved_size_text(saved.bytes), static_cast<double>(saved.bytes)));
     }
     table_->setSortingEnabled(true);
@@ -706,7 +728,7 @@ SavedResultsPanel::Made SavedResultsPanel::made_of(
 
 std::vector<SavedScoreRow> SavedResultsPanel::detail_rows(const SavedComparison& saved) const {
     std::vector<SavedScoreRow> rows;
-    for (const std::string& key : saved.keys()) {
+    for (const std::string& key : in_order_shown(saved.keys())) {
         const std::optional<std::filesystem::path> used = used_file(saved, key);
         const int versions = static_cast<int>(std::count_if(
             saved.scores.begin(), saved.scores.end(), [&key](const SavedScoreFile& file) { return file.key == key; }));
@@ -786,7 +808,7 @@ void SavedResultsPanel::show_scores(const SavedComparison& saved) {
     const bool tiles = showing_tiles();
     const bool each = settings_.saved_score_versions == "each";
     int placed = 0;
-    for (const std::string& key : saved.keys()) {
+    for (const std::string& key : in_order_shown(saved.keys())) {
         const std::optional<std::filesystem::path> used = used_file(saved, key);
         std::vector<const SavedScoreFile*> files;
         for (const SavedScoreFile& file : saved.scores) {
@@ -938,25 +960,8 @@ int SavedResultsPanel::scores_column_width() const {
 void SavedResultsPanel::scores_settings_changed() { show_details(); }
 
 void SavedResultsPanel::draw_details_icon() {
-    // A circled "i" in the text's colour (U+24D8 is not in every font).
-    const qreal ratio = devicePixelRatioF();
-    const int size = 16;
-    QPixmap pixmap(QSize(size, size) * ratio);
-    pixmap.setDevicePixelRatio(ratio);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing);
-    QPen pen(palette().color(QPalette::WindowText));
-    pen.setWidthF(1.3);
-    painter.setPen(pen);
-    painter.drawEllipse(QRectF(1, 1, size - 2, size - 2));
-    pen.setWidthF(1.6);
-    pen.setCapStyle(Qt::RoundCap);
-    painter.setPen(pen);
-    painter.drawLine(QPointF(size / 2.0, 7.0), QPointF(size / 2.0, 11.5));
-    painter.drawPoint(QPointF(size / 2.0, 4.6));
-    painter.end();
-    details_button_->setIcon(QIcon(pixmap));
+    // The ⓘ (info_icon, as Worst Frames' graph legend has it) in the text's colour.
+    details_button_->setIcon(info_icon(palette().color(QPalette::WindowText), devicePixelRatioF()));
 }
 
 void SavedResultsPanel::changeEvent(QEvent* event) {

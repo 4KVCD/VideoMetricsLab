@@ -141,7 +141,8 @@ Libvmaf::Libvmaf(const std::filesystem::path& path)
       model_load_from_path(library.function<decltype(model_load_from_path)>("vmaf_model_load_from_path")),
       use_features_from_model(library.function<decltype(use_features_from_model)>("vmaf_use_features_from_model")),
       write_output(library.function<decltype(write_output)>("vmaf_write_output")),
-      picture_alloc(library.function<decltype(picture_alloc)>("vmaf_picture_alloc")) {
+      picture_alloc(library.function<decltype(picture_alloc)>("vmaf_picture_alloc")),
+      set_helper_threads(library.function<decltype(set_helper_threads)>("vmaf_set_helper_threads")) {
     // VmafPicture gained its colour field with vmaf_picture_convert (Netflix/vmaf
     // 0497a0f2). A library without that function lays its pictures out
     // without the field, as the app's headers do not.

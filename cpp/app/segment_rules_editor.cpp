@@ -107,6 +107,12 @@ void SegmentRulesEditor::set_rules(const SegmentRules& rules) {
     none_->setVisible(conditions_.empty() && !at_least_one_);
 }
 
+void SegmentRulesEditor::set_keys(std::vector<std::string> keys) {
+    const SegmentRules shown = rules();
+    keys_ = std::move(keys);
+    set_rules(shown);
+}
+
 SegmentRules SegmentRulesEditor::rules() const {
     SegmentRules rules;
     for (const ConditionRow& row : conditions_) {

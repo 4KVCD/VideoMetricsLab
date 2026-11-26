@@ -1134,7 +1134,7 @@ TEST(JobRunner, AVideoCancelledBeforeAnyScoreIsCancelledWhateverIsSaved) {
     EXPECT_EQ(reported.cancelled, 1);
 }
 
-// What a run calculates names CIEDE2000, CAMBI and VMAF YUV's U and V as the
+// What a run calculates names CIEDE2000, CAMBI, MS-SSIM and VMAF YUV's U and V as the
 // GPU's where it may take them (VMAF's place the GPU), not as CPU metrics the
 // line then calls GPU metrics; with VMAF on the CPU they are the CPU's. Once
 // VMAF's backend is known, U and V only on the Vulkan engine's.
@@ -1144,10 +1144,15 @@ TEST(JobRunner, CpuMetricsTheGpuMayTakeAreNamedSo) {
     EXPECT_EQ(cpu_metrics_text({"ciede2000"}, true), "CIEDE2000 (\xCE\x94" "E) on the GPU where it can");
     EXPECT_EQ(cpu_metrics_text(keys, false), "PSNR, CAMBI, CIEDE2000 (\xCE\x94" "E)");
     EXPECT_EQ(cpu_metrics_text({"psnr", "ssim"}, true), "PSNR, SSIM");
+    EXPECT_EQ(cpu_metrics_text({"psnr", "ms_ssim"}, true), "PSNR; MS-SSIM on the GPU where it can");
     const std::vector<std::string> chroma{"psnr", "vmaf_yuv_u", "vmaf_yuv_v"};
-    EXPECT_EQ(cpu_metrics_text(chroma, true), "PSNR; VMAF YUV: U and VMAF YUV: V on the GPU where it can");
-    EXPECT_EQ(cpu_metrics_text(chroma, may_run_on_gpu(chroma, true, false)), "PSNR, VMAF YUV: U, VMAF YUV: V");
+    EXPECT_EQ(cpu_metrics_text(chroma, true), "PSNR; VMAF U and VMAF V on the GPU where it can");
+    EXPECT_EQ(cpu_metrics_text(chroma, may_run_on_gpu(chroma, true, false)), "PSNR, VMAF U, VMAF V");
     EXPECT_EQ(cpu_metrics_text({"psnr", "vmaf_yuv"}, true), "PSNR; VMAF YUV (6:1:1) on the GPU where it can");
+    // HDR VMAF's features follow VMAF's place (hdr_plan), in the CPU's task too.
+    EXPECT_EQ(cpu_metrics_text({"vmaf_hdr", "psnr", "cambi"}, true),
+              "PSNR; HDR VMAF and CAMBI on the GPU where it can");
+    EXPECT_EQ(cpu_metrics_text({"vmaf_hdr", "psnr"}, false), "HDR VMAF, PSNR");
 }
 
 }  // namespace

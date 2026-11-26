@@ -12,23 +12,29 @@
 #include <QScopeGuard>
 #include <QScrollBar>
 #include <QSizePolicy>
+#include <QSpinBox>
 #include <QSplitter>
 #include <QSignalBlocker>
 #include <QTabBar>
 #include <QTableWidget>
 #include <QTableWidgetItem>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 #include <algorithm>
 #include <set>
 #include <cmath>
+#include <limits>
 #include <fstream>
 #include <iterator>
 #include <span>
 
 #include "chart.h"
+#include "graph_legend.h"
+#include "popup_panel.h"
 #include "export_image.h"
 #include "i18n.h"
+#include "metric_order.h"
 #include "theme.h"
 #include "widgets.h"
 #include "window_helpers.h"
@@ -50,11 +56,62 @@ QString condition_label(const WeakCondition& condition) {
            qt_text(metric.format_value(condition.threshold));
 }
 
-QTableWidgetItem* cell(const QString& text, bool number = true) {
-    auto* item = new QTableWidgetItem(text);
+// A list's cell sorts by its number (a frame, a time, a score) where it has
+// one, and by its text where it has none ("Weak by"): as text, 100 would
+// come before 25. No score (none at that frame) sorts after every score,
+// whichever way the column is sorted.
+constexpr int sort_role = Qt::UserRole + 1;
+
+class SortedItem : public QTableWidgetItem {
+public:
+    using QTableWidgetItem::QTableWidgetItem;
+    bool operator<(const QTableWidgetItem& other) const override {
+        const QVariant mine = data(sort_role);
+        const QVariant theirs = other.data(sort_role);
+        if (!mine.isValid() || !theirs.isValid()) {
+            return QTableWidgetItem::operator<(other);
+        }
+        const double a = mine.toDouble();
+        const double b = theirs.toDouble();
+        if (std::isnan(a) || std::isnan(b)) {
+            if (std::isnan(a) == std::isnan(b)) {
+                return false;
+            }
+            // Descending, Qt asks whether the other is less than this one:
+            // the score without a value is then the "less" one, to come last.
+            const QTableWidget* table = tableWidget();
+            const bool descending =
+                table != nullptr && table->horizontalHeader()->sortIndicatorOrder() == Qt::DescendingOrder;
+            return descending ? std::isnan(a) : std::isnan(b);
+        }
+        return a < b;
+    }
+};
+
+QTableWidgetItem* cell(const QString& text, bool number = true, std::optional<double> key = std::nullopt) {
+    auto* item = new SortedItem(text);
     item->setTextAlignment(number ? (Qt::AlignRight | Qt::AlignVCenter) : (Qt::AlignLeft | Qt::AlignVCenter));
+    if (key) {
+        item->setData(sort_role, *key);
+    }
     return item;
 }
+
+// A list's heading, clicked to sort it. The arrow's room is in every column
+// from the start, its indicator "shown" with no column sorted: Qt widens
+// every column by it once it is shown, and showing it on the first click
+// moved the columns under the pointer. The lists sort themselves
+// (sort_list), never with setSortingEnabled, which shows and hides the
+// indicator as it is turned on and off.
+void sortable_heading(QTableWidget* table) {
+    QHeaderView* heading = table->horizontalHeader();
+    heading->setSectionsClickable(true);
+    heading->setSortIndicatorShown(true);
+    heading->setSortIndicator(-1, Qt::AscendingOrder);
+}
+
+// A score's sort key: none sorts last (SortedItem).
+double key_of(const std::optional<double>& value) { return value.value_or(std::numeric_limits<double>::quiet_NaN()); }
 
 // `measured`: the columns sized to their contents as they change, for a
 // short table; else sized once a fill ends (fit_list). A list of up to 1000
@@ -94,12 +151,13 @@ QStringList aligned(const std::vector<std::pair<QString, QString>>& rows) {
     return lines;
 }
 
-// The metrics `result` has scores of that the tab lists, in the app's order.
+// The metrics `result` has scores of that the tab lists, in the order shown
+// (shown_metrics).
 std::vector<std::string> metric_keys(const ComparisonResult& result) {
     std::vector<std::string> keys;
-    for (const MetricDefinition& definition : metrics()) {
-        if (score_samples(result.metric_results, std::string(definition.key))) {
-            keys.emplace_back(definition.key);
+    for (const MetricDefinition* definition : shown_metrics()) {
+        if (score_samples(result.metric_results, std::string(definition->key))) {
+            keys.emplace_back(definition->key);
         }
     }
     return keys;
@@ -158,6 +216,7 @@ std::optional<double> worst_score(const ScoreSamples& samples, MetricDirection d
 // ------------------------------------------------------------------ building
 
 WorstFramesTab::WorstFramesTab(Dialogs dialogs, QWidget* parent) : QWidget(parent), dialogs_(std::move(dialogs)) {
+    connect(&metric_order_signal(), &MetricOrderSignal::changed, this, [this] { reorder_metrics(); });
     auto* root = new QHBoxLayout(this);
 
     // The videos, each with its weak segments and its worst score.
@@ -212,6 +271,15 @@ WorstFramesTab::WorstFramesTab(Dialogs dialogs, QWidget* parent) : QWidget(paren
     video_title_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     auto* graph_head = new QHBoxLayout;
     graph_head->addWidget(video_title_, 1);
+    // What the graph's line, dots and shading mean (GraphLegend).
+    legend_button_ = new QToolButton;
+    legend_button_->setObjectName(QStringLiteral("worstGraphLegend"));
+    legend_button_->setAutoRaise(true);
+    legend_button_->setToolTip(app::tr("What the graph shows"));
+    legend_button_->setAccessibleName(app::tr("Graph legend"));
+    legend_button_->setIcon(info_icon(palette().color(QPalette::WindowText), devicePixelRatioF()));
+    PopupPanel::open_on_press(legend_button_, [this] { open_legend(); });
+    graph_head->addWidget(legend_button_);
     graph_head->addWidget(save_button(Card::graph));
     chart_layout_->addLayout(graph_head);
     // The graph as tall as the lists: with the conditions on the left, the
@@ -245,21 +313,20 @@ QWidget* WorstFramesTab::build_toolbar() {
     QWidget* bar = theme::container("toolbar", true, &row);
     bar->setObjectName("worstToolbar");
     row->addWidget(new QLabel(app::tr("Metric")));
-    metric_bar_ = new QTabBar;
-    metric_bar_->setDrawBase(false);
-    metric_bar_->setExpanding(false);
-    theme::set_role(metric_bar_, "segmented");
+    // The metrics as pills in rows that wrap (TabPills), every name whole;
+    // the bar keeps the tabs, hidden: scrolling, it cut one at an end.
+    metric_bar_ = new WatchedTabBar(bar);
+    metric_bar_->hide();
+    metric_pills_ = new TabPills(metric_bar_);
+    theme::style_pills(metric_pills_);
     connect(metric_bar_, &QTabBar::currentChanged, this, [this](int index) {
         if (!building_ && index >= 0) {
             choose_metric(metric_bar_->tabData(index).toString().toStdString());
         }
     });
-    // The bar takes the whole row, its tabs at its left: given only its
-    // size hint, it showed scroll arrows once the selected (semibold) tab
-    // had widened it. Export is in the Weak segments card, what it exports:
-    // here it took the room of a metric, and at 1280 px ten (HDR VMAF's
-    // with the others) needed scroll arrows.
-    row->addWidget(metric_bar_, 1);
+    // The pills take the whole row. Export is in the Weak segments card,
+    // what it exports: here it took the room of a metric.
+    row->addWidget(metric_pills_, 1);
     return bar;
 }
 
@@ -446,20 +513,46 @@ QWidget* WorstFramesTab::build_lists() {
     for (const int count : worst_frame_counts) {
         count_combo_->addItem(ntr("{count} dip", "{count} dips", count), count);
     }
+    count_combo_->addItem(app::tr("Custom..."), 0);  // the number box beside it says how many
+    count_spin_ = new QSpinBox;
+    count_spin_->setRange(1, most_worst_frames);
+    count_spin_->setKeyboardTracking(false);  // a number typed counts once it is finished
+    count_spin_->setToolTip(app::tr("How many dips to list, up to {count}.", {{"count", most_worst_frames}}));
+    count_spin_->setAccessibleName(app::tr("Dips listed"));
+    count_spin_->hide();
     connect(count_combo_, &QComboBox::currentIndexChanged, this, [this](int index) {
-        if (index >= 0 && !building_) {
-            count_ = count_combo_->itemData(index).toInt();
-            fill_worst();
-            refresh_chart();
-            show_details();  // the list made again: a row selected is gone
-            select_kept();
-            emit count_changed(count_);
+        if (index < 0 || building_) {
+            return;
+        }
+        const int preset = count_combo_->itemData(index).toInt();
+        count_spin_->setVisible(preset == 0);
+        if (preset == 0) {
+            // Custom...: the number box, from the count listed now.
+            const QSignalBlocker blocker(count_spin_);
+            count_spin_->setValue(count_);
+            count_spin_->setFocus();
+            count_spin_->selectAll();
+            return;
+        }
+        apply_count(preset);
+    });
+    connect(count_spin_, &QSpinBox::valueChanged, this, [this](int count) {
+        if (!building_) {
+            apply_count(count);
         }
     });
     worst_head->addWidget(count_combo_);
+    worst_head->addWidget(count_spin_);
     worst_head->addWidget(save_button(Card::worst));
     worst->addLayout(worst_head);
     worst_table_ = make_table(false);  // sized by fit_list
+    sortable_heading(worst_table_);
+    // A quick second click comes as a double-click, which the heading takes
+    // for no click (Windows sends no second press): it is a click too.
+    for (const auto heard : {&QHeaderView::sectionClicked, &QHeaderView::sectionDoubleClicked}) {
+        connect(worst_table_->horizontalHeader(), heard, this,
+                [this](int column) { header_clicked(worst_table_, worst_sort_, column); });
+    }
     offer_menu(worst_table_, [this](QMenu* menu) { fill_worst_menu(menu); });
     connect(worst_table_, &QTableWidget::itemSelectionChanged, this, [this] {
         const QList<QTableWidgetItem*> selected = worst_table_->selectedItems();
@@ -507,6 +600,13 @@ QWidget* WorstFramesTab::build_lists() {
     segments_head->addWidget(save_button(Card::segments));
     segments->addLayout(segments_head);
     segments_table_ = make_table(false);  // sized by fit_list
+    sortable_heading(segments_table_);
+    // A quick second click comes as a double-click, which the heading takes
+    // for no click (Windows sends no second press): it is a click too.
+    for (const auto heard : {&QHeaderView::sectionClicked, &QHeaderView::sectionDoubleClicked}) {
+        connect(segments_table_->horizontalHeader(), heard, this,
+                [this](int column) { header_clicked(segments_table_, segments_sort_, column); });
+    }
     offer_menu(segments_table_, [this](QMenu* menu) { fill_segments_menu(menu); });
     connect(segments_table_, &QTableWidget::itemSelectionChanged, this, [this] {
         const QList<QTableWidgetItem*> selected = segments_table_->selectedItems();
@@ -520,12 +620,12 @@ QWidget* WorstFramesTab::build_lists() {
             const QSignalBlocker blocker(worst_table_);
             worst_table_->clearSelection();
         }
-        const int row = selected.front()->row();
-        if (row >= 0 && static_cast<std::size_t>(row) < segments_.size() && chosen_video() != nullptr) {
-            kept_ = Kept{chosen_video()->identity, true, {}, segments_[static_cast<std::size_t>(row)].first_frame};
+        const std::optional<std::size_t> index = segment_of_row(selected.front()->row());
+        if (index && chosen_video() != nullptr) {
+            kept_ = Kept{chosen_video()->identity, true, {}, segments_[*index].first_frame};
         }
-        if (row >= 0 && static_cast<std::size_t>(row) < segments_.size() && chart_ != nullptr) {
-            const WeakSegment& segment = segments_[static_cast<std::size_t>(row)];
+        if (index && chart_ != nullptr) {
+            const WeakSegment& segment = segments_[*index];
             chart_->set_highlight(std::pair(segment.start_time, segment.end_time));
             chart_->set_cursor_time(std::nullopt);
             chart_->bring_into_view(segment.start_time);
@@ -666,13 +766,21 @@ void WorstFramesTab::set_segment_profiles(std::vector<SegmentProfile> profiles, 
 }
 
 void WorstFramesTab::set_worst_count(int count) {
+    if (count < 1) {
+        count = worst_frame_counts.front();
+    }
+    count = std::min(count, most_worst_frames);
     const auto found = std::find(worst_frame_counts.begin(), worst_frame_counts.end(), count);
-    const int index = found == worst_frame_counts.end() ? 0 : static_cast<int>(found - worst_frame_counts.begin());
+    const bool custom = found == worst_frame_counts.end();
     {
         const QSignalBlocker blocker(count_combo_);
-        count_combo_->setCurrentIndex(index);
+        count_combo_->setCurrentIndex(custom ? static_cast<int>(worst_frame_counts.size())
+                                             : static_cast<int>(found - worst_frame_counts.begin()));
+        const QSignalBlocker spin_blocker(count_spin_);
+        count_spin_->setValue(count);
+        count_spin_->setVisible(custom);
     }
-    count_ = worst_frame_counts[static_cast<std::size_t>(index)];
+    count_ = count;
     fill_worst();
     refresh_chart();
     show_details();  // the list made again: a row selected is gone
@@ -704,19 +812,7 @@ void WorstFramesTab::choose_video(int index) {
     const std::string key =
         std::find(keys_.begin(), keys_.end(), previous) != keys_.end() ? previous : keys_.empty() ? "" : keys_.front();
     metric_ = key.empty() ? nullptr : &metric_definition(key);
-    {
-        const QSignalBlocker blocker(metric_bar_);
-        while (metric_bar_->count() > 0) {
-            metric_bar_->removeTab(0);
-        }
-        for (const std::string& k : keys_) {
-            const int tab = metric_bar_->addTab(qt_text(metric_definition(k).short_label));
-            metric_bar_->setTabData(tab, qt_text(k));
-            if (k == key) {
-                metric_bar_->setCurrentIndex(tab);
-            }
-        }
-    }
+    fill_metric_bar();
     // The conditions edited here, on this video's metrics; those shown stay
     // where they are on its metrics too.
     const SegmentRules shown = editor_ != nullptr ? editor_->rules() : SegmentRules{};
@@ -766,6 +862,37 @@ void WorstFramesTab::choose_video(int index) {
     refresh();
 }
 
+// The metric bar's tabs and pills: keys_, in order, metric_ chosen.
+void WorstFramesTab::fill_metric_bar() {
+    {
+        const QSignalBlocker blocker(metric_bar_);
+        while (metric_bar_->count() > 0) {
+            metric_bar_->removeTab(0);
+        }
+        for (const std::string& key : keys_) {
+            const int tab = metric_bar_->addTab(qt_text(metric_definition(key).short_label));
+            metric_bar_->setTabData(tab, qt_text(key));
+            if (metric_ != nullptr && key == metric_->key) {
+                metric_bar_->setCurrentIndex(tab);
+            }
+        }
+    }
+    metric_pills_->rebuild();  // the bar's signals were blocked
+}
+
+// The chosen video's metrics in their new order: the same metrics, so the
+// metric and the conditions shown stay as the user left them.
+void WorstFramesTab::reorder_metrics() {
+    const WeakFramesVideo* video = chosen_video();
+    if (video == nullptr || editor_ == nullptr) {
+        return;
+    }
+    keys_ = metric_keys(*video->result);
+    fill_metric_bar();
+    editor_->set_keys(keys_);  // emits no changed
+    refresh();
+}
+
 void WorstFramesTab::choose_metric(const std::string& key) {
     if (std::find(keys_.begin(), keys_.end(), key) == keys_.end()) {
         return;
@@ -779,6 +906,7 @@ void WorstFramesTab::choose_metric(const std::string& key) {
             }
         }
     }
+    metric_pills_->rebuild();  // the bar's signals were blocked
     refresh();
 }
 
@@ -969,6 +1097,7 @@ void WorstFramesTab::refresh_chart() {
 void WorstFramesTab::fill_worst() {
     // Its columns fitted to what it shows, on every way out, emptied too.
     const auto fitted = qScopeGuard([this] {
+        sort_list(worst_table_, worst_sort_);
         fit_list(worst_table_, worst_width_);
         filling_ = false;
     });
@@ -991,9 +1120,9 @@ void WorstFramesTab::fill_worst() {
     // segments. Every metric's score at the frame is in the row's tooltip.
     std::vector<std::pair<const MetricDefinition*, ScoreSamples>> columns{{metric_, *samples}};
     std::vector<std::pair<const MetricDefinition*, ScoreSamples>> all;
-    for (const MetricDefinition& other : metrics()) {
-        if (const std::optional<ScoreSamples> found = score_samples(results, std::string(other.key))) {
-            all.emplace_back(&other, *found);
+    for (const MetricDefinition* other : shown_metrics()) {
+        if (const std::optional<ScoreSamples> found = score_samples(results, std::string(other->key))) {
+            all.emplace_back(other, *found);
         }
     }
     if (editor_ != nullptr) {
@@ -1029,17 +1158,17 @@ void WorstFramesTab::fill_worst() {
                          qt_text(definition->format_value(score_at(column_samples, worst_[row].frame)));
         }
         const QString tooltip = every.join(QLatin1Char('\n'));
-        QTableWidgetItem* frame = cell(QString::number(worst_[row].frame));
+        QTableWidgetItem* frame = cell(QString::number(worst_[row].frame), true, worst_[row].frame);
         frame->setData(Qt::UserRole, worst_[row].frame);
         frame->setToolTip(tooltip);
         worst_table_->setItem(r, 0, frame);
-        QTableWidgetItem* time = cell(time_text(worst_[row].time));
+        QTableWidgetItem* time = cell(time_text(worst_[row].time), true, worst_[row].time);
         time->setToolTip(tooltip);
         worst_table_->setItem(r, 1, time);
         for (std::size_t c = 0; c < columns.size(); ++c) {
             const auto& [definition, column_samples] = columns[c];
-            QTableWidgetItem* score =
-                cell(qt_text(definition->format_value(score_at(column_samples, worst_[row].frame))));
+            const std::optional<double> value = score_at(column_samples, worst_[row].frame);
+            QTableWidgetItem* score = cell(qt_text(definition->format_value(value)), true, key_of(value));
             score->setToolTip(tooltip);
             worst_table_->setItem(r, static_cast<int>(c) + 2, score);
         }
@@ -1047,8 +1176,8 @@ void WorstFramesTab::fill_worst() {
     worst_note_->setText(samples->per_second
                              ? app::tr("CVVDP scores each second: a row is its second's first frame, and a dip is the "
                                        "seconds within 1 s of a worse one.")
-                             : app::tr("The worst frame of each dip, worst first: a frame within 1 s of a worse one is "
-                                       "part of its dip."));
+                             : app::tr("The worst frame of each dip, worst first until a heading is clicked: a frame "
+                                       "within 1 s of a worse one is part of its dip."));
 }
 
 void WorstFramesTab::fill_segments() {
@@ -1081,10 +1210,12 @@ void WorstFramesTab::fill_segments() {
     segments_table_->setRowCount(rows);
     for (int r = 0; r < rows; ++r) {
         const WeakSegment& segment = segments_[static_cast<std::size_t>(r)];
-        segments_table_->setItem(r, 0, cell(QString::number(segment.first_frame)));
-        segments_table_->setItem(r, 1, cell(QString::number(segment.last_frame)));
-        segments_table_->setItem(r, 2, cell(QString::number(segment.frames())));
-        QTableWidgetItem* start = cell(time_text(segment.start_time));
+        QTableWidgetItem* first = cell(QString::number(segment.first_frame), true, segment.first_frame);
+        first->setData(Qt::UserRole, r);  // its segment, wherever a sort puts the row
+        segments_table_->setItem(r, 0, first);
+        segments_table_->setItem(r, 1, cell(QString::number(segment.last_frame), true, segment.last_frame));
+        segments_table_->setItem(r, 2, cell(QString::number(segment.frames()), true, segment.frames()));
+        QTableWidgetItem* start = cell(time_text(segment.start_time), true, segment.start_time);
         start->setToolTip(app::tr("{start} to {end}", {{"start", time_text(segment.start_time)},
                                                          {"end", time_text(segment.end_time)}}));
         segments_table_->setItem(r, 3, start);
@@ -1107,10 +1238,12 @@ void WorstFramesTab::fill_segments() {
         for (const SegmentMetric& metric : segment.metrics) {
             const MetricDefinition& definition = metric_definition(metric.key);
             const std::optional<double> end = segment_end_value(metric, segment_end(current, definition));
-            segments_table_->setItem(r, column++, cell(qt_text(definition.format_value(end))));
-            segments_table_->setItem(r, column++, cell(qt_text(definition.format_value(metric.mean))));
+            segments_table_->setItem(r, column++, cell(qt_text(definition.format_value(end)), true, key_of(end)));
+            segments_table_->setItem(r, column++,
+                                     cell(qt_text(definition.format_value(metric.mean)), true, metric.mean));
         }
     }
+    sort_list(segments_table_, segments_sort_);
     fit_list(segments_table_, segments_width_);
 }
 
@@ -1251,9 +1384,8 @@ void WorstFramesTab::show_details() {
                 text = frame_details(*frame);
             }
         } else if (const QList<QTableWidgetItem*> picked = segments_table_->selectedItems(); !picked.isEmpty()) {
-            const int row = picked.front()->row();
-            if (row >= 0 && static_cast<std::size_t>(row) < segments_.size()) {
-                text = segment_details(segments_[static_cast<std::size_t>(row)]);
+            if (const std::optional<std::size_t> index = segment_of_row(picked.front()->row())) {
+                text = segment_details(segments_[*index]);
             }
         }
     }
@@ -1358,6 +1490,92 @@ std::optional<int> WorstFramesTab::worst_frame_of_row(int row) const {
     return item != nullptr ? std::optional(item->data(Qt::UserRole).toInt()) : std::nullopt;
 }
 
+void WorstFramesTab::open_legend() {
+    if (metric_ == nullptr) {
+        return;
+    }
+    const WeakFramesVideo* video = chosen_video();
+    const std::optional<ScoreSamples> samples =
+        video != nullptr ? score_samples(video->result->metric_results, std::string(metric_->key)) : std::nullopt;
+    auto* legend = new GraphLegend(qt_text(metric_->label), metric_->direction == MetricDirection::lower_is_better,
+                                   samples && samples->per_second, this);
+    legend->open_under(legend_button_);
+}
+
+void WorstFramesTab::changeEvent(QEvent* event) {
+    QWidget::changeEvent(event);
+    if ((event->type() == QEvent::PaletteChange || event->type() == QEvent::StyleChange) &&
+        legend_button_ != nullptr) {
+        legend_button_->setIcon(info_icon(palette().color(QPalette::WindowText), devicePixelRatioF()));  // the theme's text colour
+    }
+}
+
+void WorstFramesTab::apply_count(int count) {
+    if (count == count_) {
+        return;
+    }
+    count_ = count;
+    fill_worst();
+    refresh_chart();
+    show_details();  // the list made again: a row selected is gone
+    select_kept();
+    emit count_changed(count_);
+}
+
+std::optional<std::size_t> WorstFramesTab::segment_of_row(int row) const {
+    const QTableWidgetItem* item = segments_table_->item(row, 0);
+    if (item == nullptr) {
+        return std::nullopt;
+    }
+    const auto index = static_cast<std::size_t>(item->data(Qt::UserRole).toInt());
+    return index < segments_.size() ? std::optional(index) : std::nullopt;
+}
+
+void WorstFramesTab::sort_list(QTableWidget* table, std::optional<ListSort>& sort) {
+    QHeaderView* header = table->horizontalHeader();
+    // The column sorted by is found again by its heading: the columns change
+    // with the metric shown and the conditions. Gone, the list's own order.
+    int column = -1;
+    for (int c = 0; sort && c < table->columnCount() && column < 0; ++c) {
+        if (const QTableWidgetItem* heading = table->horizontalHeaderItem(c);
+            heading != nullptr && heading->text() == sort->heading) {
+            column = c;
+        }
+    }
+    if (column < 0) {
+        if (table->columnCount() > 0) {
+            sort.reset();  // a column of another metric or condition: gone
+        }  // with none (no video, no metric for now), kept for when there are
+        header->setSortIndicator(-1, Qt::AscendingOrder);  // no arrow; its room kept (sortable_heading)
+        return;
+    }
+    header->setSortIndicator(column, sort->order);  // SortedItem reads the order
+    table->sortItems(column, sort->order);
+}
+
+void WorstFramesTab::header_clicked(QTableWidget* table, std::optional<ListSort>& sort, int column) {
+    const QTableWidgetItem* heading = table->horizontalHeaderItem(column);
+    if (heading == nullptr) {
+        return;
+    }
+    // Ascending, then descending, then the list's own order again (worst
+    // first, segments in time): Qt's own sorting has no way back to it.
+    const bool same = sort && sort->heading == heading->text();
+    if (!same) {
+        sort = ListSort{heading->text(), Qt::AscendingOrder};
+    } else if (sort->order == Qt::AscendingOrder) {
+        sort->order = Qt::DescendingOrder;
+    } else {
+        sort.reset();
+    }
+    if (table == worst_table_) {
+        fill_worst();
+    } else {
+        fill_segments();
+    }
+    select_kept();  // the row selected stays selected, wherever it now is
+}
+
 void WorstFramesTab::keep_worst_frame(const std::string& identity, const QString& metric, int frame) {
     // Only for the list opened from here (the same video and metric): a
     // list of another metric, from Metric Graphs, leaves the row here as it is.
@@ -1381,8 +1599,8 @@ void WorstFramesTab::select_kept() {
         if (kept_->segment) {
             // The segment holding its first frame: the same one, or the one
             // it became under rules changed since.
-            const WeakSegment& segment = segments_[static_cast<std::size_t>(row)];
-            if (segment.first_frame <= kept_->frame && kept_->frame <= segment.last_frame) {
+            const std::optional<std::size_t> index = segment_of_row(row);
+            if (index && segments_[*index].first_frame <= kept_->frame && kept_->frame <= segments_[*index].last_frame) {
                 found = row;
             }
         } else if (worst_frame_of_row(row) == kept_->frame) {
@@ -1430,9 +1648,8 @@ void WorstFramesTab::open_selected() {
         return;
     }
     if (const QList<QTableWidgetItem*> segment = segments_table_->selectedItems(); !segment.isEmpty()) {
-        const int row = segment.front()->row();
-        if (row >= 0 && static_cast<std::size_t>(row) < segments_.size()) {
-            emit open_requested(video->identity, segments_[static_cast<std::size_t>(row)].first_frame, {});
+        if (const std::optional<std::size_t> index = segment_of_row(segment.front()->row())) {
+            emit open_requested(video->identity, segments_[*index].first_frame, {});
         }
     }
 }

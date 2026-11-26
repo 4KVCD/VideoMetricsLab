@@ -53,6 +53,7 @@ class QTabWidget;
 namespace vml::app {
 
 class ChartWidget;
+class TabPills;
 class FileWrites;
 class FrameControls;
 class VideoColors;
@@ -176,6 +177,9 @@ public:
     std::optional<double> time_of_frame(int frame) const;
     std::optional<int> frame_at_time(double seconds, bool at_or_after) const;
 
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
 private:
     friend class GraphPanelTest;  // the graph's tests (tests/app)
 
@@ -191,6 +195,8 @@ private:
     QString readout_prefix(const QString& label, int frame, double time) const;
     std::vector<const MetricDefinition*> extra_columns() const;
     void refresh_readout_layout();
+    std::vector<std::size_t> readout_breaks() const;
+    QString wrapped(const QString& text) const;
     QString readout_row(const QString& prefix, std::optional<double> value,
                         const std::map<std::string, std::optional<double>>& others) const;
     static std::map<std::string, std::optional<double>> other_values(const MetricCurve& curve, int frame,
@@ -239,6 +245,9 @@ private:
     int series_width_ = 0;
     int main_width_ = 0;
     std::vector<std::pair<const MetricDefinition*, int>> columns_;
+    // The first of columns_ on each of a line's rows (readout_breaks): {0}
+    // while they fit on one.
+    std::vector<std::size_t> breaks_{0};
     ChartWidget* chart_ = nullptr;
     QLabel* no_data_label_ = nullptr;
     ReadoutLabel* hover_label_ = nullptr;
@@ -484,6 +493,7 @@ private:
     QTableWidget* stats_table_ = nullptr;
     QStyledItemDelegate* remove_marks_ = nullptr;  // the remove column's, moved to it as columns change
     QTabWidget* tabs_ = nullptr;
+    TabPills* metric_pills_ = nullptr;  // tabs_' tabs, in rows that wrap (its own bar hidden)
     std::map<std::string, MetricPage*> pages_;
     // The metrics with a tab and a mean column, in the app's order: those
     // some line has scores of (scored_metrics), or while none has any, the

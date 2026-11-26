@@ -111,6 +111,7 @@ const std::unordered_map<std::string, Field>& fields() {
         {"export_graph_text", &Settings::export_graph_text},
         {"hidden_metrics", &Settings::hidden_metrics},
         {"listed_metrics", &Settings::listed_metrics},
+        {"metric_order", &Settings::metric_order},
         {"show_yuv_planes", &Settings::show_yuv_planes},
         {"cvvdp_default_preset", &Settings::cvvdp_default_preset},
         {"notify_finished", &Settings::notify_finished},
@@ -614,6 +615,7 @@ std::string Settings::text() const {
         }
     }
     data["listed_metrics"] = listed;
+    data["metric_order"] = metric_order;
     Json presets = Json::parse(cvvdp_presets_json, nullptr, false);
     data["cvvdp_presets"] = presets.is_array() ? presets : Json::array();
     data["cvvdp_default_preset"] = cvvdp_default_preset;

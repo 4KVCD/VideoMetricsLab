@@ -5,11 +5,15 @@
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
 #include <QScreen>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QToolButton>
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <functional>
 #include <array>
 #include <vector>
 
@@ -137,7 +141,10 @@ MetricList::MetricList(Place place, QWidget* parent) : QWidget(parent), place_(p
             grid->setColumnMinimumWidth(0, names);
         }
     }
-    set_specialized_open(place_ == Place::settings);
+    // Open in both places, so that every metric is in sight: folded, the
+    // specialized ones (MS-SSIM, PSNR-HVS-M, CAMBI, CIEDE2000...) were found
+    // only by those who knew to unfold them (#251). Folding still works.
+    set_specialized_open(true);
     refresh();
 }
 
@@ -316,6 +323,34 @@ void MetricList::refresh() {
 
 // ----------------------------------------------------------------- the panel
 
+namespace {
+
+// The panel's scroll area: as large as the list, up to `room` high, then
+// scrolled. QScrollArea's own size hint is at most 24 lines of text high,
+// which would scroll a list that fits.
+class FittingScroll : public QScrollArea {
+public:
+    explicit FittingScroll(std::function<int()> room) : room_(std::move(room)) {}
+    QSize sizeHint() const override {
+        // The list's own size, its minimum width included (72 characters):
+        // narrower, the panel cut its right side off.
+        const QWidget* list = widget();
+        QSize hint = list != nullptr ? list->sizeHint().expandedTo(list->minimumSize()) : QSize();
+        const int room = room_();
+        if (room > 0 && hint.height() > room) {
+            hint.setHeight(room);
+            hint.rwidth() += verticalScrollBar()->sizeHint().width();  // beside the list, not over it
+        }
+        return hint + QSize(2 * frameWidth(), 2 * frameWidth());
+    }
+    QSize minimumSizeHint() const override { return sizeHint(); }
+
+private:
+    std::function<int()> room_;
+};
+
+}  // namespace
+
 MetricsPanel::MetricsPanel(QWidget* parent) : PopupPanel(parent) {
     setAttribute(Qt::WA_DeleteOnClose);
     setFrameShape(QFrame::StyledPanel);
@@ -333,10 +368,53 @@ MetricsPanel::MetricsPanel(QWidget* parent) : PopupPanel(parent) {
     // Wide enough for each metric's few words on one line, and its lines of
     // text on two or three.
     list_->setMinimumWidth(list_->fontMetrics().averageCharWidth() * 72);
-    layout->addWidget(list_);
+    // Scrolled where it is taller than its screen's room: with Specialized
+    // open (#251), the panel is about 610 pixels at 100 %.
+    scroll_ = new FittingScroll([this] { return room_; });
+    scroll_->setFrameShape(QFrame::NoFrame);
+    scroll_->setWidgetResizable(true);
+    scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll_->setWidget(list_);
+    scroll_->viewport()->setAutoFillBackground(false);  // the card's own background
+    list_->setAutoFillBackground(false);
+    list_->installEventFilter(this);  // its layout changed (Specialized folded): the panel sized again
+    layout->addWidget(scroll_);
+    // The order every list shows the metrics in: changed by dragging a
+    // metric's heading in the Videos table, put back here.
+    order_row_ = new QWidget;
+    auto* order = new QHBoxLayout(order_row_);
+    order->setContentsMargins(0, 0, 0, 0);
+    auto* how = new QLabel(app::tr("Drag a heading in the Videos table to move its metric in every list."));
+    how->setWordWrap(true);
+    theme::set_role(how, "hint");
+    order->addWidget(how, 1);
+    default_order_ = new QPushButton(app::tr("Default order"));
+    default_order_->setToolTip(app::tr("The metrics in the order this list shows them, in every list."));
+    order->addWidget(default_order_, 0, Qt::AlignVCenter);
+    layout->addWidget(order_row_);
+}
+
+void MetricsPanel::fit_height(int height) {
+    // The list's room: the panel's less its margins and frame.
+    const QMargins margins = layout()->contentsMargins();
+    const int below = order_row_->sizeHint().height() + layout()->spacing();  // the order's row under the list
+    room_ = height > 0 ? std::max(1, height - margins.top() - margins.bottom() - 2 * frameWidth() - below) : 0;
+    scroll_->updateGeometry();
+    adjustSize();
+}
+
+bool MetricsPanel::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == list_ && event->type() == QEvent::LayoutRequest) {
+        scroll_->updateGeometry();  // the list's size changed: the scroll area's hint with it
+    }
+    return PopupPanel::eventFilter(watched, event);
 }
 
 void MetricsPanel::show_at(const QPoint& top_left, std::optional<QPoint> top_right) {
+    // The panel as high as the screen has room for.
+    if (const QScreen* screen = QGuiApplication::screenAt(top_right.value_or(top_left)); screen != nullptr) {
+        fit_height(screen->availableGeometry().height());
+    }
     adjustSize();
     QPoint place = top_right ? *top_right - QPoint(width(), 0) : top_left;
     if (const QScreen* screen = QGuiApplication::screenAt(top_right.value_or(top_left)); screen != nullptr) {

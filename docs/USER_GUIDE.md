@@ -97,15 +97,22 @@ calculated in resolution tests.
    shortest segment, or, with every condition, a frame where another doesn't
    hold). On the right, pick the metric in the bar at the top. The graph
    shows the video's scores with its weak segments shaded and its worst
-   frames dotted. Below it, side by side where the window has room and one
+   frames dotted; the ⓘ beside its save icon says what each of its marks
+   means. Below it, side by side where the window has room and one
    above the other where it hasn't:
    - **Worst frames**: the worst frame of each of the metric's 10, 25 or 50
-     worst dips (a frame within 1 s of a worse one is part of its dip), with
-     the conditions' metrics' scores there; every metric's is in the row's
+     worst dips, or as many as you give after **Custom...** (up to 999). A
+     frame within 1 s of a worse one is part of its dip. With it, the
+     conditions' metrics' scores there; every metric's is in the row's
      tooltip.
    - **Weak segments**: the stretches where the conditions hold; with more
      than one condition and **any condition holds**, the **Weak by** column
      names those behind each segment.
+
+   Click a column's heading to sort its list by it: once ascending, again
+   descending, a third time back to the list's own order (Worst frames
+   worst first, Weak segments in time). Video Compare's **Previous worst**
+   and **Next worst** follow Worst frames as it is sorted.
 
    Click a row to mark it on the graph; double-click it to see it in Video
    Compare (a segment from its first frame). Point at the
@@ -510,8 +517,9 @@ app's own bands, or the metric's authors' scale). *General purpose* (VMAF
 v0.6.1, VMAF NEG, VMAF v1, HDR VMAF, PSNR, SSIM, XPSNR, SSIMULACRA2,
 Butteraugli and CVVDP) is what a new install shows, HDR VMAF unticked.
 *Specialized* (PSNR YUV, PSNR YUV avg. MSE, SSIM YUV, MS-SSIM, MS-SSIM YUV,
-PSNR-HVS-M, CAMBI, CIEDE2000 and VMAF YUV) is folded away
-until one of them is shown. A tick there shows or hides a metric's column,
+PSNR-HVS-M, CAMBI, CIEDE2000 and VMAF YUV) is open too, so every metric is in
+sight; its heading folds it away. On a screen too small for the whole list,
+the panel scrolls. A tick there shows or hides a metric's column,
 nothing more; the tick in a column says whether that row calculates it, and a
 run calculates what is ticked and shown. The Specialized metrics start
 ticked but hidden, so showing one is enough to calculate it (settings already
@@ -1368,7 +1376,7 @@ by the Export panel, the right-click menus or after each run. Tick:
   together too, as **Graphs as ZIP...** draws them, once the bitrate is
   read;
 - **Worst frames**: each video's worst frames of every metric, as many
-  dips as the Worst Frames tab lists (10, 25 or 50), each with every
+  dips as the Worst Frames tab lists (10, 25, 50 or its Custom... number), each with every
   metric's score there (`<video> - worst frames.json`, `.csv`; see
   [RESULTS_JSON.md](RESULTS_JSON.md#worst-frames-as-json-and-csv));
 - **Weak segments**: by the profile in use: a video's

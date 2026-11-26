@@ -336,8 +336,8 @@ FrameScores parse_libvmaf_log(const std::filesystem::path& log, double fps,
 // returns what the parent needs to read them.
 nlohmann::json scoring_task(const nlohmann::json& request, const std::filesystem::path& folder);
 
-// Whether metric `key` follows VMAF's place when VMAF is set to the GPU: CAMBI, CIEDE2000, VMAF YUV with its U and
-// V, and HDR VMAF's features go to the Vulkan engine with it where the engine scores VMAF, and stay on the CPU
+// Whether metric `key` follows VMAF's place when VMAF is set to the GPU: CAMBI, CIEDE2000, MS-SSIM, MS-SSIM YUV
+// (engine_takes_cpu_metric), VMAF YUV with its U and V, and HDR VMAF's features go to the Vulkan engine with it where the engine scores VMAF, and stay on the CPU
 // otherwise.
 bool follows_vulkan_engine(std::string_view key);
 

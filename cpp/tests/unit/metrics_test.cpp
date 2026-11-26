@@ -126,6 +126,28 @@ TEST(Metrics, TooSmallPicturesNameTheMetricsAndTheSizeEachNeeds) {
 // Add/remove metrics' and Settings' two sections come from the one list,
 // metrics_hidden_at_first, in the registry's order; a plane is in its
 // metric's and listed in neither.
+// The order the user set comes first, each plane after its metric; unknown
+// keys, planes and repeats in it are passed over, and the metrics it leaves
+// out follow in the registry's order. No order is the registry's.
+TEST(Metrics, OrderedMetricsPutTheUsersOrderFirst) {
+    const auto keys_of = [](const std::vector<const MetricDefinition*>& ordered) {
+        std::vector<std::string> keys;
+        for (const MetricDefinition* metric : ordered) {
+            keys.emplace_back(metric->key);
+        }
+        return keys;
+    };
+    const std::vector<std::string> keys = keys_of(ordered_metrics({"cvvdp", "nope", "psnr_yuv_u", "psnr_yuv", "cvvdp"}));
+    ASSERT_EQ(keys.size(), metrics().size());
+    EXPECT_EQ(std::vector<std::string>(keys.begin(), keys.begin() + 7),
+              (std::vector<std::string>{"cvvdp", "psnr_yuv", "psnr_yuv_y", "psnr_yuv_u", "psnr_yuv_v", "vmaf", "vmaf_neg"}));
+    std::vector<std::string> registry;
+    for (const MetricDefinition& metric : metrics()) {
+        registry.emplace_back(metric.key);
+    }
+    EXPECT_EQ(keys_of(ordered_metrics({})), registry);
+}
+
 TEST(Metrics, SectionsComeFromTheListHiddenAtFirst) {
     using Keys = std::vector<std::string_view>;
     EXPECT_EQ(metrics_in(MetricSection::general_purpose),

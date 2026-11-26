@@ -67,6 +67,9 @@ struct Libvmaf {
     decltype(&::vmaf_use_features_from_model) use_features_from_model;
     decltype(&::vmaf_write_output) write_output;
     decltype(&::vmaf_picture_alloc) picture_alloc;
+    // The process's helper threads, which split one frame's work in the
+    // extractors that can (MS-SSIM and MS-SSIM YUV).
+    decltype(&::vmaf_set_helper_threads) set_helper_threads;
     // For HDR VMAF (vmaf_hdr.h): its conversion of pictures to the colours,
     // format and size a model asks for (zimg, linked into the library).
     decltype(&::vmaf_picture_convert_context_init) picture_convert_context_init = nullptr;

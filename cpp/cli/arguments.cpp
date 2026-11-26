@@ -215,13 +215,13 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   -m, --metrics LIST    comma-separated: vmaf, vmaf_neg, vmaf_v1, vmaf_hdr,
-                        psnr, ssim, psnr_yuv, psnr_yuv_mse, ssim_yuv, xpsnr,
-                        ms_ssim, ms_ssim_yuv, psnr_hvs, cambi, ciede2000,
-                        vmaf_yuv, ssimulacra2, butteraugli, cvvdp; a plane of
-                        psnr_yuv, ssim_yuv, ms_ssim_yuv, psnr_hvs or vmaf_yuv
-                        with _y, _u or _v (psnr_yuv_u); or all (every one but
-                        vmaf_hdr, which scores PQ (HDR10) videos only, and the
-                        planes) (default: the app's)
+                        psnr, ssim, xpsnr, ssimulacra2, butteraugli, cvvdp,
+                        psnr_yuv, psnr_yuv_mse, ssim_yuv, ms_ssim,
+                        ms_ssim_yuv, psnr_hvs, cambi, ciede2000, vmaf_yuv; a
+                        plane of psnr_yuv, ssim_yuv, ms_ssim_yuv, psnr_hvs or
+                        vmaf_yuv with _y, _u or _v (psnr_yuv_u); or all (every
+                        one but vmaf_hdr, which scores PQ (HDR10) videos only,
+                        and the planes) (default: the app's)
   --model MODEL         VMAF v0.6.1's model: auto (4K model for a 4K
                         comparison), standard, 4k, or a model .json file
                         (default: auto)
@@ -742,9 +742,9 @@ options:
   --test FILE         the test encoder's encodes, in either form; sequences
                       are paired by name
   -m, --metrics LIST  comma-separated: vmaf, vmaf_neg, vmaf_v1, vmaf_hdr,
-                      psnr, ssim, psnr_yuv, psnr_yuv_mse, ssim_yuv, xpsnr,
-                      ms_ssim, ms_ssim_yuv, psnr_hvs, cambi, ciede2000,
-                      vmaf_yuv, ssimulacra2, butteraugli, cvvdp; a plane of
+                      psnr, ssim, xpsnr, ssimulacra2, butteraugli, cvvdp,
+                      psnr_yuv, psnr_yuv_mse, ssim_yuv, ms_ssim, ms_ssim_yuv,
+                      psnr_hvs, cambi, ciede2000, vmaf_yuv; a plane of
                       psnr_yuv, ssim_yuv, ms_ssim_yuv, psnr_hvs or vmaf_yuv
                       with _y, _u or _v (psnr_yuv_u); or all but vmaf_hdr and
                       the planes (default: those the files have columns for)

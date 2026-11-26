@@ -1,5 +1,5 @@
-// The run's progress lines under the Run button: one line of text per
-// running video, in list order. The labels are made once by the window's
+// The run's progress lines under the Run button: a line of text per running
+// video (more where its metrics do not fit on one), in list order. The labels are made once by the window's
 // layout and hidden: lines appearing and disappearing mid-run would shift
 // everything below them.
 #pragma once
@@ -12,12 +12,12 @@
 
 namespace vml::app {
 
-class ElidedLabel;
+class WrappingLabel;
 
 class JobLines {
 public:
     // One more line to show a video on (the window's layout owns it).
-    void add_label(ElidedLabel* label);
+    void add_label(WrappingLabel* label);
 
     // A run starting: no video has a line, every label is hidden and empty.
     void clear();
@@ -42,7 +42,7 @@ private:
     // label keeps the previous video's tooltip.
     void arrange();
 
-    std::vector<ElidedLabel*> labels_;
+    std::vector<WrappingLabel*> labels_;
     std::map<int, std::pair<QString, QString>> text_;  // each video's text and tooltip, kept to lay the lines out again
     std::map<int, int> slot_;                          // which label shows each video
 };

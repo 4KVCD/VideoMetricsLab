@@ -20,6 +20,7 @@
 #include <QMouseEvent>
 #include <QDoubleSpinBox>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QSignalSpy>
 #include <QSpinBox>
 #include <QTabWidget>
@@ -35,9 +36,11 @@
 #include <fstream>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "chart.h"
@@ -147,7 +150,9 @@ protected:
         panel.tabs_->setCurrentIndex(static_cast<int>(at - shown.begin()));
         return *panel.pages_.at(key);
     }
-    static QString readout(const MetricPage& page) { return page.hover_label_->text(); }
+    // The readout's text, before it is wrapped to the page's width, and as shown.
+    static QString readout(const MetricPage& page) { return page.hover_text_; }
+    static QString shown_readout(const MetricPage& page) { return page.hover_label_->text(); }
     static const QFont& readout_font(const MetricPage& page) { return page.readout_font_; }
     static int readout_height(const MetricPage& page) { return page.hover_label_->maximumHeight(); }
     // The crosshair's pixel column on a page's chart, if shown.
@@ -549,7 +554,7 @@ TEST_F(GraphPanelTest, TheReadoutFollowsTheLinesShown) {
     vmaf.chart().resize(800, 400);
     const auto lines_fit = [&vmaf] {
         // fit_hover_label's height: a line spacing a line, and 28 px of padding.
-        const qsizetype lines = readout(vmaf).count(QLatin1Char('\n')) + 1;
+        const qsizetype lines = shown_readout(vmaf).count(QLatin1Char('\n')) + 1;
         return lines * QFontMetrics(readout_font(vmaf)).lineSpacing() + 28 <= readout_height(vmaf);
     };
     vmaf.on_hover(5 / 30.0, 1000.0, entries(panel));
@@ -588,6 +593,57 @@ TEST_F(GraphPanelTest, TheReadoutTellsALineAddedOrRescored) {
     panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(10, 70.0F))), "a", "row a", false});
     EXPECT_TRUE(readout(vmaf).contains(QStringLiteral("70.00"))) << readout(vmaf).toStdString();
     EXPECT_FALSE(readout(vmaf).contains(QStringLiteral("90.00"))) << readout(vmaf).toStdString();
+}
+
+// The other metrics go on to more rows where they do not fit the page's
+// width, the same columns on every video's rows: with Metric Graphs' 20-odd
+// metrics, one row ran past the readout's right edge and was cut.
+TEST_F(GraphPanelTest, TheReadoutWrapsTheOtherMetricsInColumns) {
+    const std::vector<std::string> others{"psnr", "ssim", "xpsnr", "psnr_yuv", "ssim_yuv", "ms_ssim",
+                                          "psnr_hvs", "ciede2000", "vmaf_neg", "vmaf_v1", "ssimulacra2", "butteraugli"};
+    std::vector<GraphPanel::Run> runs;
+    for (const char* name : {"a", "b"}) {
+        ComparisonResult result = vmaf_result(std::string(name) + ".mkv", {90.0F, 80.0F});
+        for (const std::string& key : others) {
+            add_frames(result, key, {0, 1}, {10.0F, 20.0F});
+        }
+        runs.push_back({shared(std::move(result)), QString::fromLatin1(name), {}, true});
+    }
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    panel.add_runs(runs);
+    MetricPage& vmaf = page(panel, "vmaf");
+    constexpr int page_width = 600;
+    vmaf.resize(page_width, 400);
+    QResizeEvent resized(vmaf.size(), QSize());  // resize() sends none to a hidden widget
+    QCoreApplication::sendEvent(&vmaf, &resized);
+    vmaf.show_frame(1, entries(panel));
+
+    const QStringList rows = shown_readout(vmaf).split(QLatin1Char('\n'));
+    EXPECT_GT(rows.size(), readout(vmaf).count(QLatin1Char('\n')) + 1) << shown_readout(vmaf).toStdString();
+    const QFontMetrics metrics(readout_font(vmaf));
+    // Each field's row among its video's rows, and its column, by video.
+    std::map<QString, std::map<QString, std::pair<int, qsizetype>>> places;
+    QString video;
+    int row_in_video = 0;
+    for (const QString& row : rows) {
+        EXPECT_LE(metrics.horizontalAdvance(row), page_width - 28) << row.toStdString();
+        if (row.startsWith(QStringLiteral("[a]")) || row.startsWith(QStringLiteral("[b]"))) {
+            video = row.left(3);
+            row_in_video = 0;
+        } else {
+            ++row_in_video;
+        }
+        for (const std::string& key : others) {
+            const std::string_view label = metric_definition(key).label;
+            const QString field = " " + QString::fromUtf8(label.data(), static_cast<qsizetype>(label.size())) + "=";
+            if (const qsizetype column = row.indexOf(field); column >= 0 && !video.isEmpty()) {
+                places[video][field] = {row_in_video, column};
+            }
+        }
+    }
+    ASSERT_EQ(places["[a]"].size(), others.size()) << shown_readout(vmaf).toStdString();
+    EXPECT_EQ(places["[a]"], places["[b]"]) << shown_readout(vmaf).toStdString();
 }
 
 // A readout over a long-named video: its line is cut at the edge, not made
@@ -1159,8 +1215,8 @@ TEST_F(GraphPanelTest, TabsAndColumnsAreTheScoredMetrics) {
     panel.add_run({shared(std::move(d)), "d", {}, true});
     EXPECT_EQ(shown_metrics(panel),
               (std::vector<std::string>{"vmaf", "psnr_yuv", "psnr_yuv_y", "psnr_yuv_u", "psnr_yuv_v"}));
-    EXPECT_EQ(means(), (std::vector<std::string>{"VMAF v0.6.1", "PSNR YUV (6:1:1)", "PSNR YUV: Y", "PSNR YUV: U",
-                                                 "PSNR YUV: V"}));
+    EXPECT_EQ(means(), (std::vector<std::string>{"VMAF v0.6.1", "PSNR YUV (6:1:1)", "PSNR Y", "PSNR U",
+                                                 "PSNR V"}));
     EXPECT_EQ(table(panel).item(0, 3)->text(), "—");  // c has no Y plane
     EXPECT_EQ(table(panel).item(1, 3)->text(), "42.00");
     panel.remove_runs({id_of(panel, "d")});

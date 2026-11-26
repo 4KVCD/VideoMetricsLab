@@ -55,6 +55,7 @@
 #include "formatting.h"
 #include "i18n.h"
 #include "metric_list.h"
+#include "metric_order.h"
 #include "results_export.h"
 #include "saved_deletion.h"
 #include "saved_score_details.h"
@@ -712,11 +713,16 @@ QGroupBox* SettingsPanel::build_weak_segments_box() {
     profile_row->addWidget(weak_profile_delete);
     profile_row->addStretch(1);
     layout->addLayout(profile_row);
-    std::vector<std::string> keys;
-    for (const MetricDefinition& definition : metrics()) {
-        keys.emplace_back(definition.key);
-    }
-    weak_segments = new SegmentRulesEditor(std::move(keys), false);
+    const auto shown_keys = [] {
+        std::vector<std::string> keys;
+        for (const MetricDefinition* definition : shown_metrics()) {
+            keys.emplace_back(definition->key);
+        }
+        return keys;
+    };
+    weak_segments = new SegmentRulesEditor(shown_keys(), false);
+    connect(&metric_order_signal(), &MetricOrderSignal::changed, weak_segments,
+            [this, shown_keys] { weak_segments->set_keys(shown_keys()); });
     fill_weak_profiles();
     connect(weak_profile, &QComboBox::currentIndexChanged, this, [this] {
         if (filling_profiles_) {

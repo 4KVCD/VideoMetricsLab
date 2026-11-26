@@ -790,9 +790,15 @@ void ChartWidget::draw_axes(QPainter& painter, const theme::ChartColours& colour
 
 namespace {
 
-// The dots on a line's points (ChartSeries::marks). More than fit: the largest
-// frame of each `seconds_per_column`, on a grid from time 0 as draw_columns' so
-// that a drag does not change which, and drawing costs what the width does.
+// The dots on a line's points (ChartSeries::marks). Where the marked points
+// in view are no more than the columns of `seconds_per_column` (Worst Frames'
+// dips, up to 999), every one, each at its own height: drawing costs no more
+// than the width allows. More than fit (the Bitrate Viewer's, every frame
+// marked with its type): one point a column, on a grid from time 0 as
+// draw_columns' so that a drag does not change which, the largest marked one
+// (the largest frame). Kept by size, a column's few marked points lost to an
+// unmarked neighbour above them (no dot), or the deepest dip to a shallower
+// one beside it.
 template <typename ToX, typename ToY>
 void draw_marks(QPainter& painter, const ChartSeries& series, std::ptrdiff_t lo, std::ptrdiff_t hi,
                 double seconds_per_column, double radius, ToX to_x, ToY to_y) {
@@ -805,19 +811,39 @@ void draw_marks(QPainter& painter, const ChartSeries& series, std::ptrdiff_t lo,
             painter.drawEllipse(QPointF(to_x(series.times[point]), to_y(series.values[point])), radius, radius);
         }
     };
-    std::ptrdiff_t largest = lo;
-    double column = std::floor(series.times[lo] / seconds_per_column);
+    if (hi <= lo) {
+        return;  // no point in view
+    }
+    const double first_column = std::floor(series.times[lo] / seconds_per_column);
+    const auto columns = static_cast<std::ptrdiff_t>(std::floor(series.times[hi - 1] / seconds_per_column) - first_column) + 1;
+    std::ptrdiff_t marked = 0;
+    for (std::ptrdiff_t point = lo; point < hi && marked <= columns; ++point) {
+        marked += series.marks[point] != 0 ? 1 : 0;
+    }
+    if (marked <= columns) {
+        for (std::ptrdiff_t point = lo; point < hi; ++point) {
+            draw(point);  // an unmarked one draws nothing
+        }
+        return;
+    }
+    const auto better = [&series](std::ptrdiff_t point, std::ptrdiff_t than) {
+        const bool marked = series.marks[point] != 0;
+        const bool than_marked = series.marks[than] != 0;
+        return marked != than_marked ? marked : series.values[point] > series.values[than];
+    };
+    std::ptrdiff_t kept = lo;
+    double column = first_column;
     for (std::ptrdiff_t point = lo + 1; point < hi; ++point) {
         const double its_column = std::floor(series.times[point] / seconds_per_column);
         if (its_column != column) {
-            draw(largest);
-            largest = point;
+            draw(kept);
+            kept = point;
             column = its_column;
-        } else if (series.values[point] > series.values[largest]) {
-            largest = point;
+        } else if (better(point, kept)) {
+            kept = point;
         }
     }
-    draw(largest);
+    draw(kept);
 }
 
 }  // namespace

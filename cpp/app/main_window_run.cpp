@@ -29,6 +29,7 @@
 #include "graph_panel.h"
 #include "i18n.h"
 #include "main_window.h"
+#include "metric_order.h"
 #include "notifier.h"
 #include "options_panel.h"
 #include "run_worker.h"
@@ -893,7 +894,8 @@ QString MainWindow::ended_tooltip() const {
         if (row_data->analysis_status == RowState::failed) {
             lines.append(tr_message(row_data->status_detail.section("\n\n", 0, 0)));  // the video's reason
         } else if (row_data->analysis_status == RowState::partly_failed) {
-            for (const MetricDefinition& metric : metrics()) {
+            for (const MetricDefinition* shown : shown_metrics()) {
+                const MetricDefinition& metric = *shown;
                 if (metric.is_plane()) {
                     continue;  // a plane fails with its metric, which says so
                 }
@@ -1180,7 +1182,10 @@ void MainWindow::render_job_progress(int index) {
         const bool source_only = job_rows_[static_cast<std::size_t>(index)]->options.resample_test.has_value();
         parts.append(qt_text(decoder_text(line.plans, source_only, window_wording())));
     }
-    job_lines_.set(index, job_label(index) + " — " + parts.join("   ·   "), qt_text(line.tooltip));
+    // Metric names are not broken at their hyphens (MS-SSIM); the video's
+    // name may be, a long one needing it.
+    job_lines_.set(index, job_label(index) + " — " + WrappingLabel::unhyphenated(parts.join("   ·   ")),
+                   qt_text(line.tooltip));
 }
 
 std::optional<int> MainWindow::row_index_of(const RowData* row_data) const {
@@ -1388,9 +1393,9 @@ std::shared_ptr<CompletedRun> MainWindow::make_completed_run(const RowData& row_
 
 QString MainWindow::scores_detail(const ComparisonResult& result) const {
     QStringList labels;
-    for (const MetricDefinition& metric : metrics()) {
-        if (result.has_metric(std::string(metric.key))) {
-            labels.append(qt_text(metric.label));
+    for (const MetricDefinition* metric : shown_metrics()) {
+        if (result.has_metric(std::string(metric->key))) {
+            labels.append(qt_text(metric->label));
         }
     }
     const auto frames = static_cast<long long>(frame_scores_from_results(result.metric_results).frame.size());
@@ -1533,7 +1538,7 @@ void MainWindow::notify_run_end() {
         video.scored = completed != nullptr && state != RowState::failed && state != RowState::cancelled;
         if (video.scored) {
             video.frames = completed->result.compared_frame_count;
-            video.metrics = notified_metrics(completed->result);
+            video.metrics = notified_metrics(completed->result, settings_.metric_order);
         }
         run.videos.push_back(std::move(video));
     }

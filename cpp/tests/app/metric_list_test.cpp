@@ -15,8 +15,11 @@
 #include <QTest>
 #include <QToolButton>
 
+#include <QScrollArea>
+#include <QScrollBar>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <memory>
 #include <set>
 #include <string>
@@ -24,6 +27,7 @@
 
 #include "main_window.h"
 #include "metric_list.h"
+#include "metric_order.h"
 #include "vml/metrics.h"
 #include "vml/settings.h"
 #include "widgets.h"
@@ -45,16 +49,17 @@ TEST(MetricList, AllAndNoneTickASectionKeepingOneInThePanel) {
     EXPECT_EQ(section_ticks({"psnr", "ssim"}, MetricSection::general_purpose, false, 0), Keys{});
 }
 
-// The panel: the 17 metrics with their tooltips, Specialized folded and
-// counted, the count of shown, the last shown kept, and the planes' switch
-// apart from the metrics' ticks.
+// The panel: the 17 metrics with their tooltips, Specialized open at first
+// (#251: folded, its metrics were found only by those who knew to unfold
+// it) and, folded, counted; the count of shown, the last shown kept, and
+// the planes' switch apart from the metrics' ticks.
 TEST(MetricList, PanelCountsTheMetricsShownAndKeepsThePlanesApart) {
     MetricList list(MetricList::Place::panel);
     const Keys general{"vmaf", "vmaf_neg", "vmaf_v1", "vmaf_hdr", "psnr", "ssim", "xpsnr",
                        "ssimulacra2", "butteraugli", "cvvdp"};
     list.set_ticked(general);
     EXPECT_EQ(list.ticked(), general);
-    EXPECT_FALSE(list.specialized_open());
+    EXPECT_TRUE(list.specialized_open());
     const auto label_with = [&list](const QString& text) {
         for (const QLabel* label : list.findChildren<QLabel*>()) {
             if (label->text() == text) {
@@ -70,6 +75,8 @@ TEST(MetricList, PanelCountsTheMetricsShownAndKeepsThePlanesApart) {
     };
     EXPECT_TRUE(label_with("10 of 19 shown"));
     EXPECT_TRUE(label_with("General purpose (10)"));
+    EXPECT_TRUE(label_with("Specialized (9)"));
+    list.set_specialized_open(false);  // folded still: how many of it are shown
     EXPECT_TRUE(label_with("Specialized (9) · 0 shown"));
     ASSERT_NE(list.box("cambi"), nullptr);
     EXPECT_EQ(list.box("psnr_yuv_y"), nullptr);  // a plane is no metric of the list
@@ -110,14 +117,55 @@ TEST(MetricList, PanelShrinksBackWhenSpecializedFolds) {
     panel->list()->set_ticked(Keys{"vmaf"});
     panel->show_at(QPoint(0, 0));
     settle();
+    const int open = panel->height();  // as it opens (#251)
+    panel->list()->set_specialized_open(false);
+    settle();
     const int folded = panel->height();
+    EXPECT_LT(folded, open);
     panel->list()->set_specialized_open(true);
     settle();
-    EXPECT_GT(panel->height(), folded);
+    EXPECT_EQ(panel->height(), open);
     panel->list()->set_specialized_open(false);
     settle();
     EXPECT_EQ(panel->height(), folded);
     EXPECT_EQ(panel->list()->height(), panel->list()->sizeHint().height());
+    panel->hide();
+}
+
+// Taller than its screen's room (Specialized open, #251, on a small screen or
+// at a large scaling), the panel stays within it and its list scrolls, every
+// metric still reachable; with room, nothing scrolls.
+TEST(MetricList, PanelScrollsRatherThanRunPastTheScreen) {
+    auto* panel = new MetricsPanel(nullptr);
+    const std::unique_ptr<MetricsPanel> owned(panel);
+    panel->list()->set_ticked(Keys{"vmaf"});
+    // As wide as the list must be: its minimum width (72 characters) is more
+    // than its size hint in the window's fonts, and a scroll area as narrow
+    // as the hint cut the panel's right side off. Made so here.
+    panel->list()->setMinimumWidth(panel->list()->sizeHint().width() + 200);
+    panel->fit_height(0);  // no bound
+    panel->show();
+    QApplication::processEvents();
+    const int open = panel->height();
+    EXPECT_FALSE(panel->scroll()->verticalScrollBar()->isVisible());
+    EXPECT_GE(panel->scroll()->viewport()->width(), panel->list()->minimumWidth());
+    EXPECT_EQ(panel->list()->width(), panel->scroll()->viewport()->width());
+
+    panel->fit_height(open / 2);
+    QApplication::processEvents();
+    EXPECT_LE(panel->height(), open / 2);
+    QScrollBar* bar = panel->scroll()->verticalScrollBar();
+    EXPECT_TRUE(bar->isVisible());
+    EXPECT_GT(bar->maximum(), 0);
+    bar->setValue(bar->maximum());  // the last metric in sight at the bottom
+    QCheckBox* last = panel->list()->box("vmaf_yuv");
+    ASSERT_NE(last, nullptr);
+    const QPoint in_view = last->mapTo(panel->scroll()->viewport(), QPoint(0, last->height()));
+    EXPECT_LE(in_view.y(), panel->scroll()->viewport()->height());
+
+    panel->fit_height(open * 2);  // room again
+    QApplication::processEvents();
+    EXPECT_EQ(panel->height(), open);
     panel->hide();
 }
 
@@ -165,11 +213,29 @@ TEST(MetricList, SettingsListsAllSeventeenOpen) {
     EXPECT_TRUE(list.ticked().empty());
 }
 
+// The Videos table's metric columns are in the registry's order, the one
+// Metric Graphs, Video Compare and BD-rate list the metrics in: Metric
+// Graphs' tabs had XPSNR after the YUV planes, the table after SSIM.
+TEST(MetricList, TheTablesColumnsAreInTheRegistrysOrder) {
+    std::vector<std::string> registry;
+    for (const MetricDefinition& metric : metrics()) {
+        if (std::any_of(metric_columns().begin(), metric_columns().end(),
+                        [&metric](const MetricColumn& item) { return metric.key == item.key; })) {
+            registry.emplace_back(metric.key);
+        }
+    }
+    std::vector<std::string> table;
+    for (const MetricColumn& item : metric_columns()) {
+        table.emplace_back(item.key);
+    }
+    EXPECT_EQ(table, registry);
+}
+
 // A plane's tooltip says whose plane it is, then its metric's text, without
 // its metric's bands.
 TEST(MetricList, PlanesTipsAreTheirMetrics) {
     const QString tip = metric_tip("ssim_yuv_u");
-    EXPECT_TRUE(tip.startsWith("SSIM YUV: U: the U plane alone, calculated with SSIM YUV (6:1:1).")) << tip.toStdString();
+    EXPECT_TRUE(tip.startsWith("SSIM U: the U plane alone, calculated with SSIM YUV (6:1:1).")) << tip.toStdString();
     EXPECT_TRUE(tip.contains("MSU's codec comparisons"));
     EXPECT_FALSE(tip.contains("The app's bands"));
     EXPECT_TRUE(metric_tip("ssim_yuv").contains("The app's bands"));
@@ -191,6 +257,7 @@ protected:
         window_ = nullptr;
     }
     static MetricList* open_panel() {
+        QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);  // panels closed before: gone
         for (QPushButton* button : window_->findChildren<QPushButton*>()) {
             if (button->text() == "Add/remove metrics") {
                 button->click();
@@ -352,6 +419,76 @@ TEST_F(MetricsPanelInWindow, AVideosRemoveMarkStartsItsRow) {
         EXPECT_FALSE(frozen->horizontalHeader()->isSectionHidden(column)) << column;  // frozen
     }
     EXPECT_TRUE(frozen->horizontalHeader()->isSectionHidden(col_info));
+}
+
+// A metric's column dragged to another place puts the metric there in every
+// list (shown_metrics) and saves the order; dropped among the video's
+// columns, it comes first. A plane's column or a video's column goes back
+// to its place. Default order, in Add/remove metrics, puts the registry's
+// back.
+TEST_F(MetricsPanelInWindow, ADraggedMetricColumnSetsTheOrderShown) {
+    auto* table = window_->findChild<FillColumnTable*>();
+    ASSERT_NE(table, nullptr);
+    QHeaderView* header = table->horizontalHeader();
+    const auto first_keys = [](std::size_t count) {
+        std::vector<std::string> keys;
+        for (const MetricDefinition* metric : shown_metrics()) {
+            if (!metric->is_plane() && keys.size() < count) {
+                keys.emplace_back(metric->key);
+            }
+        }
+        return keys;
+    };
+    const auto saved_order = [] { return Settings::load_from(app_data_folder() / "settings.json").metric_order; };
+    header->moveSection(header->visualIndex(col_cambi), header->visualIndex(col_psnr));
+    EXPECT_EQ(first_keys(6), (std::vector<std::string>{"vmaf", "vmaf_neg", "vmaf_v1", "vmaf_hdr", "cambi", "psnr"}));
+    EXPECT_EQ(header->visualIndex(col_cambi) + 1, header->visualIndex(col_psnr));
+    const std::vector<std::string> saved = saved_order();
+    ASSERT_GE(saved.size(), 6U);
+    EXPECT_EQ(std::vector<std::string>(saved.begin(), saved.begin() + 6), first_keys(6));
+    header->moveSection(header->visualIndex(col_ciede2000), header->visualIndex(col_info));
+    EXPECT_EQ(first_keys(2), (std::vector<std::string>{"ciede2000", "vmaf"}));
+    EXPECT_EQ(header->logicalIndex(4), col_info);  // the video's columns back in place
+    const std::vector<std::string> before = saved_order();
+    const int plane_at = header->visualIndex(col_psnr_yuv_y);
+    header->moveSection(plane_at, header->visualIndex(col_vmaf));
+    EXPECT_EQ(header->visualIndex(col_psnr_yuv_y), plane_at);
+    EXPECT_EQ(header->visualIndex(col_psnr_yuv_y), header->visualIndex(col_psnr_yuv) + 1);  // after its metric
+    header->moveSection(header->visualIndex(col_scaling), header->visualIndex(col_vmaf));
+    EXPECT_EQ(header->logicalIndex(6), col_scaling);
+    EXPECT_EQ(saved_order(), before);
+    // With the mouse, the header's own drag: the columns put back from inside
+    // its release. The metric after the first, dropped on the video's info
+    // column, goes first; the info column stays where it was.
+    const int dragged = header->logicalIndex(header->visualIndex(col_ciede2000) + 1);
+    ASSERT_FALSE(header->isSectionHidden(dragged));
+    ASSERT_FALSE(header->isSectionHidden(col_info));
+    const auto centre = [header](int logical) {
+        return QPointF(header->sectionViewportPosition(logical) + header->sectionSize(logical) / 2.0,
+                       header->height() / 2.0);
+    };
+    const auto mouse = [header](QEvent::Type type, QPointF at, Qt::MouseButtons held) {
+        QMouseEvent event(type, at, header->viewport()->mapToGlobal(at), Qt::LeftButton, held, Qt::NoModifier);
+        QApplication::sendEvent(header->viewport(), &event);
+    };
+    mouse(QEvent::MouseButtonPress, centre(dragged), Qt::LeftButton);
+    mouse(QEvent::MouseMove, centre(dragged) - QPointF(20, 0), Qt::LeftButton);
+    mouse(QEvent::MouseMove, centre(col_info), Qt::LeftButton);
+    mouse(QEvent::MouseButtonRelease, centre(col_info), Qt::NoButton);
+    EXPECT_EQ(header->visualIndex(dragged) + 1, header->visualIndex(col_ciede2000));
+    EXPECT_EQ(header->logicalIndex(4), col_info);
+    EXPECT_EQ(saved_order().front(), first_keys(1).front());
+    EXPECT_EQ(first_keys(2).back(), "ciede2000");
+    MetricList* list = open_panel();
+    ASSERT_NE(list, nullptr);
+    auto* panel = qobject_cast<MetricsPanel*>(list->window());  // this one: an earlier test's may be left closed
+    ASSERT_NE(panel, nullptr);
+    ASSERT_TRUE(panel->default_order_button()->isEnabled());
+    panel->default_order_button()->click();
+    EXPECT_TRUE(saved_order().empty());
+    EXPECT_EQ(shown_metrics(), ordered_metrics({}));
+    EXPECT_FALSE(panel->default_order_button()->isEnabled());
+    panel->close();
 }
 
 }  // namespace

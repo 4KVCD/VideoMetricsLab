@@ -3,7 +3,10 @@
 // is slightly wrong for how the app uses it.
 #pragma once
 
+#include <QColor>
 #include <QFont>
+#include <QFontMetrics>
+#include <QIcon>
 #include <QHeaderView>
 #include <QItemSelectionModel>
 #include <QLabel>
@@ -15,6 +18,7 @@
 #include <QSize>
 #include <QStringList>
 #include <QStyledItemDelegate>
+#include <QTabBar>
 #include <QTabWidget>
 #include <QTableWidget>
 
@@ -25,8 +29,15 @@
 #include <vector>
 
 class QMimeData;
+class QToolButton;
 
 namespace vml::app {
+
+// A column heading on two lines where that makes it narrower: `text` split at
+// the space that makes its wider line the narrowest, in `metrics` ("PSNR YUV
+// avg. MSE (6:1:1)" -> "PSNR YUV avg.\nMSE (6:1:1)"); unchanged without a
+// space. Qt's header measures and draws the two lines itself.
+QString two_line_heading(const QString& text, const QFontMetrics& metrics);
 
 // A horizontal header where chosen sections have a checkbox, as FFMetrics'
 // PSNR, SSIM and XPSNR columns do, so that which metrics are calculated is
@@ -46,6 +57,9 @@ public:
     // Where this section's checkbox is drawn, in viewport coordinates: the
     // geometry paintSection uses, so what can be clicked is what is seen.
     QRect section_indicator_rect(int section) const;
+    // The size a section's heading and its checkbox need, hidden sections
+    // included (Qt's sectionSizeHint is 0 for those).
+    QSize content_size(int section) const { return sectionSizeFromContents(section); }
 
 signals:
     void sectionToggled(int section, bool checked);
@@ -251,6 +265,44 @@ private:
 // its place). A plain QLabel asks for its text's full width, so one long
 // line would set the window's minimum width; this one asks for no width at
 // all.
+// A line of text that goes on to more lines where it does not fit, never
+// cut: Video Compare's frame line and the Videos tab's run lines, which list
+// every metric. Its height is the lines its text needs at its width; it grows
+// when a text needs more and stays while texts need fewer, so a line rewritten
+// at each frame or progress tick does not move what is below it each time it
+// changes. A new width, or clear_text(), fits it to its text again. It takes
+// the width it is given (never widens the window).
+class WrappingLabel : public QLabel {
+    Q_OBJECT
+
+public:
+    explicit WrappingLabel(QWidget* parent = nullptr);
+
+    // Sets the text, and a tooltip to show with it.
+    void set_text(const QString& text, const QString& tooltip = QString());
+    // `text` kept on one line where the label wraps: no-break spaces, and
+    // a word joiner after each hyphen ("PSNR-HVS-M" is not broken at them).
+    static QString unbroken(QString text);
+    // `text` that may wrap at its spaces but not at its hyphens.
+    static QString unhyphenated(QString text);
+    // The text as given, without what unbroken() put in.
+    QString full_text() const;
+    // Clears the text and the tooltip, the height back to one line.
+    void clear_text();
+
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+    void showEvent(QShowEvent* event) override;
+    void changeEvent(QEvent* event) override;
+
+private:
+    // The height for the text at this width: grown to it, or set to it
+    // when `may_shrink`.
+    void fit_height(bool may_shrink);
+
+    int fitted_width_ = -1;
+};
+
 class ElidedLabel : public QLabel {
     Q_OBJECT
 
@@ -366,6 +418,68 @@ private:
     std::optional<Shape> laid_out_for_;
 };
 
+// A QTabBar that says when a tab is added or removed (QTabBar has no signal
+// for it), for a TabPills showing its tabs. QuietTabWidget's bar is one.
+class WatchedTabBar : public QTabBar {
+    Q_OBJECT
+
+public:
+    using QTabBar::QTabBar;
+
+signals:
+    void tabs_changed();
+
+protected:
+    void tabInserted(int index) override;
+    void tabRemoved(int index) override;
+};
+
+// A tab bar's tabs as a row of pills that wraps onto more rows where they do
+// not fit, every name whole. A QTabBar scrolls instead, with arrows that
+// leave a tab cut at one end (Metric Graphs' metrics, Worst frames'), and a
+// sliver of the tab before when scrolled back. The bar stays the model:
+// hidden, it keeps the tabs, their order and the current one; a pill clicked
+// makes its tab current, as a click on the tab would, and the bar's own
+// signals (currentChanged, tabBarClicked) still come.
+//
+// The pills follow the bar's current tab and, through a WatchedTabBar, its
+// tabs. Where the bar's signals are blocked while it changes, rebuild() after.
+// The widget takes the keyboard focus (Tab): Left, Right, Home and End move
+// the current tab, as on a tab bar.
+class TabPills : public QWidget {
+    Q_OBJECT
+
+public:
+    explicit TabPills(QTabBar* bar, QWidget* parent = nullptr);
+
+    // The pills made again from the bar's tabs, its current one checked.
+    void rebuild();
+    // The pills, in the bar's order (for tests).
+    const std::vector<QToolButton*>& pills() const { return pills_; }
+
+    bool hasHeightForWidth() const override { return true; }
+    int heightForWidth(int width) const override;
+    QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
+
+protected:
+    bool event(QEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+    void paintEvent(QPaintEvent* event) override;
+
+private:
+    // Places the pills in rows `width` wide (when `apply`) and returns the
+    // height they take.
+    int place(int width, bool apply) const;
+    void schedule_rebuild();
+    void check_current();
+
+    QTabBar* bar_;
+    std::vector<QToolButton*> pills_;
+    bool rebuild_pending_ = false;
+};
+
 // A page in a scroll area, to be a tab of its own. While the window is large
 // enough, the page fills the tab exactly as it would without the scroll
 // area; when the window is smaller than the page needs, the tab scrolls.
@@ -436,6 +550,11 @@ private:
 // table, for a usual number of rows. Made again once the style is set: the
 // header's and rows' heights follow it.
 void fit_table_height(QTableWidget* table, int rows);
+
+// An ⓘ, a circled "i" in `colour` (U+24D8 is not in every font), 16 px at
+// `ratio`: a button that opens what something shows (Worst Frames' graph
+// legend, Saved Results' details).
+QIcon info_icon(const QColor& colour, qreal ratio);
 
 // `text` as a tooltip that wraps: Qt shows a plain-text tooltip as one line,
 // however long (some ran the width of the screen), but wraps rich text. A

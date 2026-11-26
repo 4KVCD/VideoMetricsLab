@@ -94,6 +94,11 @@ struct VulkanEngine {
     // 45 - 20 log10(dE00); nullptr in an engine before libvmaf-fast b0927d4b.
     int (*v1_ciede)(VulkanContext* context);
     int (*v1_ciede_scores)(VulkanContext* context, double* out, unsigned frames);
+    // MS-SSIM of host frames (`planes` 1: the luma, from submit; 3: Y, Cb and
+    // Cr, from submit_v1, 4:2:0) and each plane's scores (0 Y, 1 Cb, 2 Cr), as
+    // libvmaf's float_ms_ssim; nullptr in an engine before libvmaf-fast 456b9065.
+    int (*v1_ms_ssim)(VulkanContext* context, int planes);
+    int (*v1_ms_ssim_scores)(VulkanContext* context, double* out, unsigned frames, int plane);
     int (*submit_v1)(VulkanContext* context, const std::uint8_t* const* planes, const std::ptrdiff_t* strides,
                      int score);
     int (*chroma_staging)(VulkanContext* context, std::uint8_t** planes, std::uint32_t* stride);
@@ -382,6 +387,11 @@ private:
 // timeline reaches), else waited for (giving 0).
 std::function<std::uint64_t(std::uint64_t, std::int64_t)> luma_copy(const VulkanScorer& scorer,
                                                                     GpuFrameStream& decoder, int slot);
+
+// Copies a luma plane written packed (`rows` rows of `row_bytes`) to the engine's memory at `plane`, whose rows are
+// `stride` bytes apart: for a width whose rows the engine pads to four bytes, where a decoder cannot write there itself.
+void copy_packed_rows(const std::uint8_t* packed, std::size_t row_bytes, std::size_t rows, std::uint8_t* plane,
+                      std::ptrdiff_t stride);
 
 // The probe's frame pairs (reference frames, distorted frames): flat,
 // smooth and textured areas, blurred, noisy and sharpened in turn, so that

@@ -14,6 +14,7 @@ add_library(vml_app STATIC
     bd_rate_panel.cpp
     bitrate_panel.cpp
     chart.cpp
+    chevron_icons.cpp
     click_twice.cpp
     frame_types.cpp
     cvvdp_display_dialog.cpp
@@ -48,7 +49,9 @@ add_library(vml_app STATIC
     main_window_saved_scores.cpp
     main_window_source.cpp
     metric_list.cpp
+    metric_order.cpp
     popup_panel.cpp
+    graph_legend.cpp
     text_panel.cpp
     options_panel.cpp
     playback_worker.cpp

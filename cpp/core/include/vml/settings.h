@@ -114,7 +114,7 @@ struct Settings {
     // Calculate metrics (VideoInfo::with_film_grain).
     std::string film_grain_default;
     std::string graph_metric = "vmaf";
-    // How many dips the Worst Frames tab's Worst frames list shows (10, 25 or 50).
+    // How many dips the Worst Frames tab's Worst frames list shows (10, 25, 50, or Custom...'s number up to 999).
     int graph_worst_frames = 10;
     // Metric Graphs' Weak segments, as last set there (saved_segment_rules,
     // weak_frames.h): its conditions as the command line's --segments writes
@@ -225,6 +225,10 @@ struct Settings {
     // Every metric the window had when the settings were saved: one added
     // since, if hidden at first, is hidden when they are read (load_from).
     std::vector<std::string> listed_metrics;
+    // The metrics' order, as the user dragged the Videos table's columns
+    // (ordered_metrics: keys of metrics that are not planes); empty, the
+    // registry's order, Add/remove metrics' (metrics()).
+    std::vector<std::string> metric_order;
     // The CVVDP presets the user saved, as JSON text of their list
     // ([{"name": ..., "settings": ...}]), and the preset new videos start
     // with: "", or a name no preset has, is Automatic (automatic_cvvdp_preset:

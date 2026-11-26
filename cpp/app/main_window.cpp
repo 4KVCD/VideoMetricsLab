@@ -42,6 +42,7 @@
 #include "worst_frames_tab.h"
 #include "i18n.h"
 #include "metric_list.h"
+#include "metric_order.h"
 #include "notifier.h"
 #include "options_panel.h"
 #include "run_worker.h"
@@ -129,9 +130,10 @@ constexpr int max_videos_in_flight = max_parallel_jobs + 1;
 
 }  // namespace
 
-const std::vector<MetricColumn>& metric_columns() {
-    // VMAF NEG beside VMAF v0.6.1, whose variant it is; VMAF v1 and HDR VMAF
-    // after them; a metric's planes after it.
+namespace {
+
+// Each metric's column of the test-video table, by its stable index.
+const std::vector<MetricColumn>& column_of_each_metric() {
     static const std::vector<MetricColumn> columns{
         {col_vmaf, "vmaf"},
         {col_vmaf_neg, "vmaf_neg"},
@@ -171,6 +173,27 @@ const std::vector<MetricColumn>& metric_columns() {
     return columns;
 }
 
+}  // namespace
+
+const std::vector<MetricColumn>& metric_columns() {
+    // In the order shown (shown_metrics: a metric's planes after it), made
+    // again when the user orders the metrics otherwise.
+    static std::vector<const MetricDefinition*> made_for;
+    static std::vector<MetricColumn> columns;
+    if (made_for != shown_metrics()) {
+        made_for = shown_metrics();
+        columns.clear();
+        for (const MetricDefinition* metric : made_for) {
+            for (const MetricColumn& item : column_of_each_metric()) {
+                if (metric->key == item.key) {
+                    columns.push_back(item);
+                }
+            }
+        }
+    }
+    return columns;
+}
+
 const MetricColumn* metric_column_of(int column) {
     for (const MetricColumn& item : metric_columns()) {
         if (item.column == column) {
@@ -188,6 +211,7 @@ MainWindow::MainWindow() {
     // come from them, so they must be applied before the tool check or any
     // row is added.
     settings_ = Settings::load();
+    set_metric_order(settings_.metric_order);  // before any list of metrics is made
     logger.info(std::string("Settings: parallel CPU metrics ") + (settings_.parallel_jobs > 1 ? "on" : "off") +
                 ", GPU decode " + (settings_.default_gpu_decode ? "on" : "off") + ", VVC decoded on the " +
                 (settings_.vvc_decode_on_gpu ? "GPU" : "CPU") + ", VMAF v0.6.1 and NEG on " +
@@ -1217,18 +1241,29 @@ void MainWindow::build_test_table() {
     }
     metric_header_ = new CheckableHeaderView(checkable, distorted_table_);
     distorted_table_->setHorizontalHeader(metric_header_);
-    int visual = 6;
-    for (const MetricColumn& item : metric_columns()) {
-        metric_header_->moveSection(metric_header_->visualIndex(item.column), visual++);
-    }
+    lay_out_metric_columns();
+    // A metric's heading dragged to another place moves the metric in every
+    // list; the marks, the tick box and File name are under the frozen
+    // columns' own heading (freeze_leading_columns), which does not move.
+    metric_header_->setSectionsMovable(true);
+    connect(metric_header_, &QHeaderView::sectionMoved, this, [this](int column) { on_column_moved(column); });
+    connect(&metric_order_signal(), &MetricOrderSignal::changed, this, [this] { lay_out_metric_columns(); });
     connect(metric_header_, &CheckableHeaderView::sectionToggled, this,
             [this](int column, bool checked) { on_metric_column_toggled(column, checked); });
-    const auto header_of = [](const char* key) {
-        return QStringLiteral("   ") + qt_text(metric_definition(key).table_header);
+    // The centred headings on two lines where that makes them narrower, so a
+    // long name takes less of the row's width (measured in the header's bold,
+    // as Qt measures a heading). The checkbox's room on both sides is in the
+    // header's size (CheckableHeaderView::sectionSizeFromContents).
+    QFont heading_font = metric_header_->font();
+    heading_font.setBold(true);
+    const QFontMetrics heading_metrics(heading_font);
+    const auto two_lines = [&heading_metrics](const QString& text) { return two_line_heading(text, heading_metrics); };
+    const auto header_of = [&two_lines](const char* key) {
+        return two_lines(qt_text(metric_definition(key).table_header));
     };
     distorted_table_->setHorizontalHeaderLabels({
-        "", app::tr("File name"), app::tr("Media info"), app::tr("Black bars"), app::tr("Scaling"),
-        app::tr("Approx. bitrate"), header_of("psnr"), header_of("ssim"), header_of("vmaf"), header_of("xpsnr"),
+        "", app::tr("File name"), app::tr("Media info"), two_lines(app::tr("Black bars")), app::tr("Scaling"),
+        two_lines(app::tr("Approx. bitrate")), header_of("psnr"), header_of("ssim"), header_of("vmaf"), header_of("xpsnr"),
         header_of("vmaf_neg"), header_of("ssimulacra2"), header_of("butteraugli"), header_of("cvvdp"),
         header_of("vmaf_v1"), header_of("vmaf_hdr"), header_of("psnr_yuv"), header_of("psnr_yuv_mse"),
         header_of("ssim_yuv"), header_of("ms_ssim"), header_of("ms_ssim_yuv"), header_of("psnr_hvs"),
@@ -1269,8 +1304,6 @@ void MainWindow::build_test_table() {
     send_marks->off = [this](const QModelIndex& index) { return !line_removed(index.row()); };
     distorted_table_->setItemDelegateForColumn(col_graph, send_marks);
     distorted_table_->unselecting_columns = {col_remove, col_graph};  // a press on a mark leaves the selection
-    metric_header_->moveSection(metric_header_->visualIndex(col_graph), 0);
-    metric_header_->moveSection(metric_header_->visualIndex(col_remove), 0);
     RemoveMarkDelegate::track_hover(distorted_table_);
     connect(distorted_table_, &QAbstractItemView::clicked, this, [this](const QModelIndex& index) {
         if (index.row() >= static_cast<int>(rows_.size())) {
@@ -1353,23 +1386,86 @@ void MainWindow::build_test_table() {
     distorted_table_->freeze_leading_columns(4);
 }
 
+void MainWindow::lay_out_metric_columns() {
+    laying_out_columns_ = true;
+    int visual = 0;
+    const auto place = [this, &visual](int column) {
+        if (metric_header_->visualIndex(column) != visual) {
+            metric_header_->moveSection(metric_header_->visualIndex(column), visual);
+        }
+        ++visual;
+    };
+    for (const int column : {col_remove, col_graph, col_check, col_path, col_info, col_black_bars, col_scaling,
+                             col_bitrate}) {
+        place(column);
+    }
+    for (const MetricColumn& item : metric_columns()) {
+        place(item.column);
+    }
+    laying_out_columns_ = false;
+}
+
+void MainWindow::on_column_moved(int column) {
+    if (laying_out_columns_) {
+        return;
+    }
+    const MetricColumn* moved = metric_column_of(column);
+    if (moved == nullptr || metric_definition(moved->key).is_plane()) {
+        lay_out_metric_columns();  // back to its place
+        return;
+    }
+    // The metrics as their headings now stand, hidden ones where they were;
+    // one dropped among the video's columns comes first.
+    std::vector<std::pair<int, std::string>> placed;
+    for (const MetricColumn& item : metric_columns()) {
+        if (!metric_definition(item.key).is_plane()) {
+            placed.emplace_back(metric_header_->visualIndex(item.column), item.key);
+        }
+    }
+    std::sort(placed.begin(), placed.end());
+    std::vector<std::string> order;
+    for (auto& [visual, key] : placed) {
+        order.push_back(std::move(key));
+    }
+    apply_metric_order(std::move(order));
+    lay_out_metric_columns();  // its planes after it, the video's columns back in place
+}
+
+void MainWindow::apply_metric_order(std::vector<std::string> order) {
+    if (ordered_metrics(order) == ordered_metrics({})) {
+        order.clear();  // the registry's: a metric added later then comes in its own place
+    }
+    if (order == settings_.metric_order) {
+        return;
+    }
+    settings_.metric_order = std::move(order);
+    save_settings();
+    set_metric_order(settings_.metric_order);  // every list told (metric_order_signal)
+}
+
 void MainWindow::fit_table_columns() {
-    QHeaderView* header = distorted_table_->horizontalHeader();
     // Never narrower than the heading needs: an empty table would clip its
-    // headings ("Video bitrate" at 65 px showed as "'ideo bitrat").
+    // headings ("Video bitrate" at 65 px showed as "'ideo bitrat"). Measured
+    // for hidden columns too: Qt's size hint of a hidden section is 0, so the
+    // metrics hidden at first, shown later, kept a guessed width and their
+    // headings were cut at both ends.
     std::map<int, int> starting_widths{
         {col_remove, 26}, {col_graph, 26}, {col_check, 28}, {col_info, 150}, {col_black_bars, 78}, {col_scaling, 90}, {col_bitrate, 65},
     };
     for (const MetricColumn& item : metric_columns()) {
-        const bool wide = item.column == col_psnr || item.column == col_xpsnr || item.column == col_psnr_yuv ||
-                          item.column == col_psnr_yuv_mse ||
-                          item.column == col_psnr_hvs || item.column == col_ciede2000 ||
-                          item.column == col_ssimulacra2 || item.column == col_butteraugli;
-        starting_widths[item.column] = wide ? 110 : 78;
+        starting_widths[item.column] = 78;
     }
     for (const auto& [column, width] : starting_widths) {
-        distorted_table_->setColumnWidth(column, std::max(width, header->sectionSizeHint(column)));
+        distorted_table_->setColumnWidth(column, std::max(width, metric_header_->content_size(column).width()));
     }
+    // As tall as the tallest heading, hidden ones included: Qt's own height
+    // counts only the shown ones, so showing a two-line heading would make
+    // the header grow under the user.
+    int height = 0;
+    for (int column = 0; column < distorted_table_->columnCount(); ++column) {
+        height = std::max(height, metric_header_->content_size(column).height());
+    }
+    metric_header_->setMinimumHeight(height);
 }
 
 // The buttons under the table, and Highlight best/worst. Returns the
@@ -1491,7 +1587,7 @@ QWidget* MainWindow::build_run_panel() {
     // One line of text per running video, built once and hidden: lines
     // appearing and disappearing mid-run would shift everything below them.
     for (int i = 0; i < max_videos_in_flight; ++i) {
-        auto* line = new ElidedLabel;
+        auto* line = new WrappingLabel;
         theme::style(line, "color: {run_line};");
         line->setVisible(false);
         layout->addWidget(line);

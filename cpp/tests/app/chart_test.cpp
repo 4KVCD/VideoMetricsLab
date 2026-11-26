@@ -162,6 +162,46 @@ TEST_F(ChartTest, ManyShadedStretchesTintAsOne) {
     EXPECT_EQ(many, single);
 }
 
+// A dot on a marked point among unmarked ones (Worst Frames' worst frame of
+// a dip) is drawn however far out the graph is: the dots were thinned to one
+// a few pixels, the point kept the column's largest, a neighbour above the
+// dip whose missing mark drew nothing, or a shallower dip beside the deepest
+// (the user's 2-hour film: its worst frame had no dot). Few marked points
+// are all drawn; the Bitrate Viewer's, every frame marked, are still thinned.
+TEST_F(ChartTest, AMarkedDipKeepsItsDotAmongUnmarkedPoints) {
+    std::vector<double> times(1001);
+    std::vector<float> values(1001, 95.0F);
+    for (std::size_t i = 0; i < times.size(); ++i) {
+        times[i] = static_cast<double>(i) / 10.0;  // 0 to 100 s, 10 frames a second
+    }
+    constexpr std::size_t dip = 437;
+    values[dip] = 40.0F;
+    values[dip + 2] = 60.0F;  // a shallower dip in the same few pixels, marked too
+    ChartWidget chart(QStringLiteral("VMAF"), 100.0);
+    chart.resize(800, 400);  // over a frame a pixel: several frames to each dot's room
+    ChartSeries series = line_of(std::move(times), std::move(values));
+    std::vector<std::uint8_t> marks(1001, 0);
+    marks[dip] = 1;
+    marks[dip + 2] = 1;
+    const std::vector<QColor> colours{QColor(), QColor(255, 0, 0)};
+    series.marks = marks;
+    series.mark_colors = colours;
+    chart.set_series(0, series);
+    const QImage image = chart.render_to_pixmap().toImage();
+    const QRect rect = chart.plot_rect();
+    const auto [bottom, top] = chart.y_range();
+    const int x = rect.left() + static_cast<int>(43.7 / 100.0 * rect.width());
+    const int y = rect.bottom() - static_cast<int>((40.0 - bottom) / (top - bottom) * rect.height());
+    int red = 0;
+    for (int dx = -4; dx <= 4; ++dx) {
+        for (int dy = -4; dy <= 4; ++dy) {
+            const QColor colour = image.pixelColor(x + dx, y + dy);
+            red += colour.red() > 200 && colour.green() < 80 && colour.blue() < 80 ? 1 : 0;
+        }
+    }
+    EXPECT_GT(red, 0) << "no dot on the dip";
+}
+
 TEST_F(ChartTest, ANarrowDipSurvivesAndASettledSizeIsDrawnOnce) {
     // A 3-frame dip in 200,000 frames: drawn as one min/max stroke per pixel
     // column, it is still there, not averaged away or skipped. It is off its

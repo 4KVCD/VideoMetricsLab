@@ -29,6 +29,7 @@
 
 #include "i18n.h"
 #include "key_guide.h"
+#include "metric_order.h"
 #include "text_panel.h"
 #include "theme.h"
 #include "video_compare_view.h"
@@ -420,6 +421,8 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
                                      int decoded_videos, QWidget* parent)
     : QWidget(parent), ffmpeg_(std::move(ffmpeg)), decoded_videos_(std::max(1, decoded_videos)), color_mode_(color_mode) {
     qRegisterMetaType<DetectedCrops>();
+    // The frame line's scores in the metrics' new order (score_text).
+    connect(&metric_order_signal(), &MetricOrderSignal::changed, this, [this] { update_frame_line(); });
     auto* root = new QVBoxLayout(this);
 
     // The rows above the view, a toolbar of their own in VML Modern; the
@@ -643,7 +646,7 @@ void FrameComparePanel::add_seek_rows(QBoxLayout* root) {
 void FrameComparePanel::add_labels(QVBoxLayout* root) {
     // Elided, so that the text's width is not the page's (see
     // QuietTabWidget).
-    detail_label = new ElidedLabel;
+    detail_label = new WrappingLabel;
     detail_label->setAlignment(Qt::AlignCenter);
     detail_label->set_text(app::tr("No frame selected."));
     root->addWidget(detail_label);
@@ -1493,7 +1496,8 @@ QString FrameComparePanel::score_text(const FrameComparisonEntry& entry) const {
         return app::tr("No metric results loaded");
     }
     QStringList values;
-    for (const MetricDefinition& metric : metrics()) {
+    for (const MetricDefinition* shown : shown_metrics()) {
+        const MetricDefinition& metric = *shown;
         if (metric.kind != MetricKind::frame) {
             continue;
         }
@@ -1509,8 +1513,9 @@ QString FrameComparePanel::score_text(const FrameComparisonEntry& entry) const {
         if (std::isnan(value)) {
             continue;
         }
-        values.append(qt_text(std::string(metric.label) + " " + metric.format_value(value) +
-                              std::string(metric.value_suffix)));
+        // Where the line wraps, a metric's name and score stay together.
+        values.append(WrappingLabel::unbroken(qt_text(std::string(metric.label) + " " +
+                                                      metric.format_value(value) + std::string(metric.value_suffix))));
     }
     if (!values.isEmpty()) {
         return values.join(QString::fromUtf8(" \xC2\xB7 "));

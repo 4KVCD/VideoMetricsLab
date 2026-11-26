@@ -37,6 +37,8 @@
 #include <QStyleOptionButton>
 #include <QStyleOptionHeader>
 #include <QTabBar>
+#include <QTimer>
+#include <QToolButton>
 #include <QTableView>
 #include <QUrl>
 #include <QWheelEvent>
@@ -58,6 +60,22 @@ constexpr int indicator_margin = 4;
 constexpr int min_fill_characters = 24;
 
 }  // namespace
+
+QString two_line_heading(const QString& text, const QFontMetrics& metrics) {
+    QString best = text;
+    int best_width = metrics.horizontalAdvance(text);
+    for (qsizetype space = text.indexOf(QLatin1Char(' ')); space >= 0;
+         space = text.indexOf(QLatin1Char(' '), space + 1)) {
+        const QString first = text.left(space);
+        const QString second = text.mid(space + 1);
+        const int wider = std::max(metrics.horizontalAdvance(first), metrics.horizontalAdvance(second));
+        if (wider < best_width) {
+            best_width = wider;
+            best = first + QLatin1Char('\n') + second;
+        }
+    }
+    return best;
+}
 
 // ----------------------------------------------------------- CheckableHeaderView
 
@@ -826,6 +844,81 @@ void BandSlider::paintEvent(QPaintEvent* event) {
     style()->drawComplexControl(QStyle::CC_Slider, &option, &painter, this);
 }
 
+WrappingLabel::WrappingLabel(QWidget* parent) : QLabel(parent) {
+    setTextFormat(Qt::PlainText);
+    setWordWrap(true);
+    setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    fit_height(true);
+}
+
+void WrappingLabel::set_text(const QString& text, const QString& tooltip) {
+    if (text != QLabel::text()) {
+        QLabel::setText(text);
+        fit_height(false);
+    }
+    setToolTip(tooltip);
+}
+
+namespace {
+constexpr char16_t no_break_space = 0x00A0;
+constexpr char16_t word_joiner = 0x2060;  // invisible; no line break on either side
+}  // namespace
+
+QString WrappingLabel::unbroken(QString text) {
+    return unhyphenated(text.replace(QLatin1Char(' '), QChar(no_break_space)));
+}
+
+QString WrappingLabel::unhyphenated(QString text) {
+    return text.replace(QLatin1Char('-'), QString(QLatin1Char('-')) + QChar(word_joiner));
+}
+
+QString WrappingLabel::full_text() const {
+    return QLabel::text().replace(QChar(no_break_space), QLatin1Char(' ')).remove(QChar(word_joiner));
+}
+
+void WrappingLabel::clear_text() {
+    QLabel::clear();
+    setToolTip(QString());
+    fit_height(true);
+}
+
+void WrappingLabel::resizeEvent(QResizeEvent* event) {
+    QLabel::resizeEvent(event);
+    if (width() != fitted_width_) {  // not for the height it set itself
+        fit_height(true);
+    }
+}
+
+void WrappingLabel::showEvent(QShowEvent* event) {
+    QLabel::showEvent(event);
+    fit_height(true);
+}
+
+void WrappingLabel::changeEvent(QEvent* event) {
+    QLabel::changeEvent(event);
+    if (event->type() == QEvent::FontChange || event->type() == QEvent::StyleChange) {
+        fit_height(true);
+    }
+}
+
+void WrappingLabel::fit_height(bool may_shrink) {
+    // Measured as QLabel draws a word-wrapped plain text (QStyle::drawItemText
+    // with Qt::TextWordWrap). Before it is laid out the width is a
+    // placeholder: one line, until a real width comes.
+    fitted_width_ = width();
+    const int frame = height() - contentsRect().height();
+    const int room = contentsRect().width();
+    const int one_line = fontMetrics().height();
+    const int text_height =
+        isVisible() && room > 0 && !text().isEmpty()
+            ? fontMetrics().boundingRect(QRect(0, 0, room, 1 << 20), int(alignment()) | Qt::TextWordWrap, text()).height()
+            : one_line;
+    const int wanted = std::max(one_line, text_height) + frame;
+    if (wanted > height() || (may_shrink && wanted != height())) {
+        setFixedHeight(wanted);
+    }
+}
+
 ElidedLabel::ElidedLabel(QWidget* parent) : QLabel(parent) {
     setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 }
@@ -1045,6 +1138,7 @@ void keep_focus_on_tab_click(QTabWidget* tabs) {
 }
 
 QuietTabWidget::QuietTabWidget(QWidget* parent) : QTabWidget(parent) {
+    setTabBar(new WatchedTabBar(this));  // for a TabPills in its place, where one is
     keep_focus_on_tab_click(this);
 #ifdef Q_OS_MACOS
     // Control+Tab reaches the window, not the focused control, and only as
@@ -1069,6 +1163,207 @@ bool QuietTabWidget::event(QEvent* event) {
         laid_out_for_ = shape;
     }
     return QTabWidget::event(event);
+}
+
+void WatchedTabBar::tabInserted(int index) {
+    QTabBar::tabInserted(index);
+    emit tabs_changed();
+}
+
+void WatchedTabBar::tabRemoved(int index) {
+    QTabBar::tabRemoved(index);
+    emit tabs_changed();
+}
+
+namespace {
+
+// Room between pills, across and between rows.
+constexpr int pill_spacing = 4;
+
+// A pill as wide as its name needs in bold, checked or not: the checked
+// pill's name is bold (semibold in VML Modern), and a pill that widened when
+// checked would move the pills after it, or onto another row.
+class PillButton : public QToolButton {
+public:
+    using QToolButton::QToolButton;
+
+    QSize sizeHint() const override {
+        QSize hint = QToolButton::sizeHint();
+        QFont bold = font();
+        bold.setBold(true);
+        const int bolder = QFontMetrics(bold).horizontalAdvance(text()) - fontMetrics().horizontalAdvance(text());
+        hint.setWidth(hint.width() + std::max(0, bolder));
+        return hint;
+    }
+};
+
+}  // namespace
+
+TabPills::TabPills(QTabBar* bar, QWidget* parent) : QWidget(parent), bar_(bar) {
+    setFocusPolicy(Qt::TabFocus);
+    QSizePolicy policy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+    policy.setHeightForWidth(true);
+    setSizePolicy(policy);
+    connect(bar_, &QTabBar::currentChanged, this, [this] { check_current(); });
+    if (auto* watched = qobject_cast<WatchedTabBar*>(bar_)) {
+        connect(watched, &WatchedTabBar::tabs_changed, this, [this] { schedule_rebuild(); });
+    }
+    rebuild();
+}
+
+void TabPills::schedule_rebuild() {
+    // One rebuild for the many tabs a bar gets at once (a tab per metric).
+    if (!rebuild_pending_) {
+        rebuild_pending_ = true;
+        QTimer::singleShot(0, this, [this] { rebuild(); });
+    }
+}
+
+void TabPills::rebuild() {
+    rebuild_pending_ = false;
+    const auto count = static_cast<std::size_t>(std::max(0, bar_->count()));
+    // Pills beyond the bar's tabs go later, not now: rebuild() can run from
+    // a pill's own click (a metric chosen lays the tabs out again).
+    for (std::size_t index = count; index < pills_.size(); ++index) {
+        pills_[index]->hide();
+        pills_[index]->deleteLater();
+    }
+    pills_.resize(std::min(pills_.size(), count));
+    while (pills_.size() < count) {
+        auto* pill = new PillButton(this);
+        pill->setCheckable(true);
+        pill->setFocusPolicy(Qt::NoFocus);
+        pill->setProperty("vmlRole", "pill");
+        connect(pill, &QToolButton::clicked, this, [this, pill] {
+            const auto at = std::find(pills_.begin(), pills_.end(), pill);
+            if (at == pills_.end()) {
+                return;
+            }
+            const int index = static_cast<int>(at - pills_.begin());
+            // The tab's own click, for what listens to it (keep_focus_on_tab_click).
+            emit bar_->tabBarClicked(index);
+            bar_->setCurrentIndex(index);
+            check_current();  // a click on the checked pill unchecked it
+        });
+        pills_.push_back(pill);
+    }
+    for (std::size_t index = 0; index < count; ++index) {
+        const int tab = static_cast<int>(index);
+        QToolButton* pill = pills_[index];
+        pill->setText(bar_->tabText(tab));
+        pill->setToolTip(bar_->tabToolTip(tab));
+        pill->setEnabled(bar_->isTabEnabled(tab));
+        pill->setVisible(bar_->isTabVisible(tab));
+    }
+    check_current();
+    updateGeometry();
+    place(width(), true);
+}
+
+void TabPills::check_current() {
+    const int current = bar_->currentIndex();
+    for (std::size_t index = 0; index < pills_.size(); ++index) {
+        pills_[index]->setChecked(static_cast<int>(index) == current);
+    }
+    update();  // the focus frame follows the current pill
+}
+
+int TabPills::place(int width, bool apply) const {
+    int x = 0;
+    int y = 0;
+    int row_height = 0;
+    for (QToolButton* pill : pills_) {
+        if (pill->isHidden()) {
+            continue;
+        }
+        const QSize size = pill->sizeHint();
+        if (x > 0 && x + size.width() > width) {  // whole pills only: this one starts the next row
+            x = 0;
+            y += row_height + pill_spacing;
+            row_height = 0;
+        }
+        if (apply) {
+            pill->setGeometry(x, y, std::min(size.width(), std::max(width, 1)), size.height());
+        }
+        x += size.width() + pill_spacing;
+        row_height = std::max(row_height, size.height());
+    }
+    return y + row_height;
+}
+
+int TabPills::heightForWidth(int width) const {
+    return place(width, false);
+}
+
+QSize TabPills::sizeHint() const {
+    // Every pill on one row; the layout gives the row what room it has.
+    int width = 0;
+    int height = 0;
+    for (QToolButton* pill : pills_) {
+        if (!pill->isHidden()) {
+            const QSize size = pill->sizeHint();
+            width += (width > 0 ? pill_spacing : 0) + size.width();
+            height = std::max(height, size.height());
+        }
+    }
+    return {width, height};
+}
+
+QSize TabPills::minimumSizeHint() const {
+    // The widest pill: narrower, a name would be cut.
+    QSize widest(0, 0);
+    for (QToolButton* pill : pills_) {
+        if (!pill->isHidden()) {
+            widest = widest.expandedTo(pill->sizeHint());
+        }
+    }
+    return widest;
+}
+
+bool TabPills::event(QEvent* event) {
+    // A pill's size changed (a style sheet or font applied to it): its
+    // updateGeometry() asks its parent, this, to lay out again.
+    if (event->type() == QEvent::LayoutRequest) {
+        updateGeometry();
+        place(width(), true);
+        return true;
+    }
+    return QWidget::event(event);
+}
+
+void TabPills::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    place(width(), true);
+}
+
+void TabPills::keyPressEvent(QKeyEvent* event) {
+    const int count = bar_->count();
+    const int current = bar_->currentIndex();
+    int next = -1;
+    switch (event->key()) {
+    case Qt::Key_Left: next = std::max(0, current - 1); break;
+    case Qt::Key_Right: next = std::min(count - 1, current + 1); break;
+    case Qt::Key_Home: next = 0; break;
+    case Qt::Key_End: next = count - 1; break;
+    default: QWidget::keyPressEvent(event); return;
+    }
+    if (next >= 0 && next != current) {
+        bar_->setCurrentIndex(next);
+    }
+    event->accept();
+}
+
+void TabPills::paintEvent(QPaintEvent* /*event*/) {
+    // Reached with the keyboard: a focus frame around the current pill.
+    const int current = bar_->currentIndex();
+    if (!hasFocus() || current < 0 || current >= static_cast<int>(pills_.size())) {
+        return;
+    }
+    QPainter painter(this);
+    QStyleOptionFocusRect option;
+    option.initFrom(this);
+    option.rect = pills_[static_cast<std::size_t>(current)]->geometry().adjusted(-2, -2, 2, 2);
+    style()->drawPrimitive(QStyle::PE_FrameFocusRect, &option, &painter, this);
 }
 
 #ifdef Q_OS_MACOS
@@ -1437,6 +1732,26 @@ bool WheelPastValueBoxes::eventFilter(QObject* watched, QEvent* event) {
 
 // A plain line of a tooltip longer than this many characters is wrapped.
 constexpr int tool_tip_line = 70;
+
+QIcon info_icon(const QColor& colour, qreal ratio) {
+    const int size = 16;
+    QPixmap pixmap(QSize(size, size) * ratio);
+    pixmap.setDevicePixelRatio(ratio);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    QPen pen(colour);
+    pen.setWidthF(1.3);
+    painter.setPen(pen);
+    painter.drawEllipse(QRectF(1, 1, size - 2, size - 2));
+    pen.setWidthF(1.6);
+    pen.setCapStyle(Qt::RoundCap);
+    painter.setPen(pen);
+    painter.drawLine(QPointF(size / 2.0, 7.0), QPointF(size / 2.0, 11.5));
+    painter.drawPoint(QPointF(size / 2.0, 4.6));
+    painter.end();
+    return QIcon(pixmap);
+}
 
 void fit_table_height(QTableWidget* table, int rows) {
     // The header's hint, not its height: before the table is first shown its

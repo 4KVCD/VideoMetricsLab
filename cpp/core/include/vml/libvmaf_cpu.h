@@ -117,7 +117,7 @@ std::string cpu_library_build();
 // Frames are given packed as FFmpeg's rawvideo writes them (add), as planes
 // wherever they are (add_planes), or as a decoder's pictures (add_decoded).
 // Told, as a CPU scorer starts, which of its `metrics` the GPU calculates
-// (`on_gpu`: CIEDE2000 and CAMBI where it can, gpu_metrics_of; empty where
+// (`on_gpu`: CIEDE2000, CAMBI and MS-SSIM where it can, gpu_metrics_of; empty where
 // none), for the run line (StatusKind::metrics_on_gpu).
 using GpuMetricsReport =
     std::function<void(const std::vector<std::string>& metrics, const std::vector<std::string>& on_gpu)>;
@@ -128,7 +128,7 @@ public:
     // on `threads` libvmaf threads (0: libvmaf's own choice). `frame_rate`
     // is XPSNR's, as FFmpeg's filter takes it: whole frames per second.
     // `cambi`: CAMBI's test video. With `gpu` (Vulkan's number for the GPU,
-    // -1 for the one VMAF runs on), CIEDE2000 and CAMBI are calculated there
+    // -1 for the one VMAF runs on), CIEDE2000, CAMBI and MS-SSIM are calculated there
     // where it can (gpu_cpu_metrics.h), from the same pictures; else, and
     // where the GPU cannot, by libvmaf. `vmaf_model`: the run's VMAF model
     // (its model= value), for VMAF YUV's U and V, which go on `gpu` too
@@ -164,7 +164,10 @@ public:
     // U and V copied on the GPU from the decoders' memory (ChromaVmaf::
     // takes_decoded) are copied first; with nothing else to score (and no
     // `also` below), no picture is downloaded. Only these pairs may then be given (add and
-    // add_planes throw std::logic_error).
+    // add_planes throw std::logic_error). Where the GPU alone reads a pair, and only its two luma planes
+    // (luma_to_gpu_alone), and neither decoder is NVIDIA's, no picture is taken: the decoders write the luma planes
+    // straight into the engine's memory (the software decoder's copied from where it holds them), which halves the
+    // copies on this thread.
     void add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot);
 
     // add_decoded, giving `also` the pair's two luma planes (the source's,
@@ -185,7 +188,7 @@ public:
     std::vector<std::string> gpu_metrics() const;
 
 private:
-    // Starts CIEDE2000 and CAMBI on GPU `gpu` where it can (gpu_), and sets
+    // Starts CIEDE2000, CAMBI and MS-SSIM on GPU `gpu` where it can (gpu_), and sets
     // libvmaf_metrics_. `cambi_with`: CAMBI's libvmaf options.
     void start_gpu(int width, int height, int bit_depth, std::optional<int> gpu,
                    const std::vector<std::pair<std::string, std::string>>& cambi_with);
@@ -199,6 +202,14 @@ private:
     // Both pictures of a pair, at the same time where add_decoded says.
     void download_both(VmafPicture& reference_picture, GpuFrameStream& reference, int reference_slot,
                        VmafPicture& distorted_picture, GpuFrameStream& test, int test_slot);
+    // Runs the two streams' takes, at the same time or one after the other, as add_decoded says.
+    void take_both(const GpuFrameStream& reference, const GpuFrameStream& test,
+                   const std::function<void()>& take_reference, const std::function<void()>& take_test);
+    // Whether the GPU alone reads a pair, from its two luma planes (MS-SSIM, with CAMBI or not): libvmaf's pictures
+    // are then skipped (add_planes gives it the planes, add_decoded_luma the decoders' downloads).
+    bool luma_to_gpu_alone() const;
+    // add_decoded where luma_to_gpu_alone: the luma planes go straight into the engine's memory.
+    void add_decoded_luma(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot);
     // Copies the planes the pictures hold into the picture.
     void fill(VmafPicture& picture, const FramePlanes& frame) const;
     // Whether the picture's planes lie as those of a packed frame, so that a
@@ -209,7 +220,7 @@ private:
     const Libvmaf& library_;
     std::vector<std::string> metrics_;
     std::vector<std::string> libvmaf_metrics_;  // those of metrics_ libvmaf calculates; the GPU the others
-    std::unique_ptr<GpuMetricsScorer> gpu_;     // CIEDE2000 and CAMBI on the GPU, or nullptr
+    std::unique_ptr<GpuMetricsScorer> gpu_;     // CIEDE2000, CAMBI and MS-SSIM on the GPU, or nullptr
     std::unique_ptr<ChromaVmaf> chroma_vmaf_;   // VMAF YUV's U and V, or nullptr
     std::string cambi_feature_;  // CAMBI's score's name, which libvmaf builds from its options
     unsigned step_ = 1;
@@ -256,6 +267,25 @@ CpuMetricsCost cpu_metrics_cost(const std::vector<std::string>& metrics);
 // two pairs; XPSNR gets one more, for the test pictures it keeps from the
 // previous frames.
 int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr, bool chroma, CpuMetricsCost cost);
+
+// How CpuScorer uses `threads`: frame threads, each scoring a pair of its
+// own, and helper threads, which share each pair's MS-SSIM with the frame
+// threads (libvmaf-fast's vmaf_set_helper_threads); `pairs` as cpu_pairs
+// gives them for the frame threads.
+struct CpuThreads {
+    int pairs;
+    unsigned frame_threads;
+    unsigned helpers;
+};
+
+// The split for `metrics` (cpu_feature keys, chroma VMAF taken out) on
+// `threads` threads: as many frame threads as cpu_pairs gives pairs, but with
+// MS-SSIM and MS-SSIM YUV alone, one frame thread for every three threads,
+// for less memory. With MS-SSIM or MS-SSIM YUV, the threads left over are
+// helpers (with other metrics too, only where the pictures' memory limit
+// leaves fewer pairs than threads: 8K, where 10-bit pictures leave 6 pairs).
+CpuThreads cpu_threads(int width, int height, int bit_depth, int threads, const std::vector<std::string>& metrics,
+                       bool chroma);
 
 // Copies the given planes (0 Y, 1 U, 2 V) of a frame into a libvmaf picture of
 // its size, `sample` bytes a sample. Its planes are the frame's, but for an odd

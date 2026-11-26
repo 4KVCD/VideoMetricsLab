@@ -121,6 +121,8 @@ VulkanEngine::VulkanEngine(const std::filesystem::path& path)
       v1_speed_scores(optional_function<decltype(v1_speed_scores)>(library, "vv_v1_speed_scores")),
       v1_ciede(optional_function<decltype(v1_ciede)>(library, "vv_v1_ciede")),
       v1_ciede_scores(optional_function<decltype(v1_ciede_scores)>(library, "vv_v1_ciede_scores")),
+      v1_ms_ssim(optional_function<decltype(v1_ms_ssim)>(library, "vv_v1_ms_ssim")),
+      v1_ms_ssim_scores(optional_function<decltype(v1_ms_ssim_scores)>(library, "vv_v1_ms_ssim_scores")),
       submit_v1(optional_function<decltype(submit_v1)>(library, "vv_submit_v1")),
       chroma_staging(optional_function<decltype(chroma_staging)>(library, "vv_chroma_staging")),
       shared_chroma(optional_function<decltype(shared_chroma)>(library, "vv_shared_chroma")),
@@ -382,9 +384,7 @@ void VulkanScorer::add_decoded(const std::function<void(std::uint8_t*)>& referen
         packed_.resize(luma_bytes_);
         write(packed_.data());
         const auto row_bytes = static_cast<std::size_t>(luma_stride_);
-        for (std::size_t row = 0; row < luma_bytes_ / row_bytes; ++row) {
-            std::copy_n(packed_.data() + row * row_bytes, row_bytes, plane + row * stride);
-        }
+        copy_packed_rows(packed_.data(), row_bytes, luma_bytes_ / row_bytes, plane, stride);
     };
     fill(reference, reference_plane);
     if (score) {
@@ -426,6 +426,13 @@ std::function<std::uint64_t(std::uint64_t, std::int64_t)> luma_copy(const Vulkan
     };
 }
 
+void copy_packed_rows(const std::uint8_t* packed, std::size_t row_bytes, std::size_t rows, std::uint8_t* plane,
+                      std::ptrdiff_t stride) {
+    for (std::size_t row = 0; row < rows; ++row) {
+        std::copy_n(packed + row * row_bytes, row_bytes, plane + row * stride);
+    }
+}
+
 bool VulkanScorer::takes_host_planes() const { return shared_.has_value() && engine_.shared_host_plane != nullptr; }
 
 void VulkanScorer::add_shared_mixed(const std::function<void(std::uint8_t*)>& reference,
@@ -441,9 +448,7 @@ void VulkanScorer::add_shared_mixed(const std::function<void(std::uint8_t*)>& re
         packed_.resize(luma_bytes_);
         reference(packed_.data());
         const auto row_bytes = static_cast<std::size_t>(luma_stride_);
-        for (std::size_t row = 0; row < luma_bytes_ / row_bytes; ++row) {
-            std::copy_n(packed_.data() + row * row_bytes, row_bytes, plane + row * stride);
-        }
+        copy_packed_rows(packed_.data(), row_bytes, luma_bytes_ / row_bytes, plane, stride);
     }
     if (score) {
         if (const std::uint64_t copied = distorted(next.distorted, next.pitch); copied != 0) {

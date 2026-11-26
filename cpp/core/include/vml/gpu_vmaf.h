@@ -125,7 +125,7 @@ struct GpuPlan {
     int threads = 0;     // the CPU extractors' libvmaf threads
     int frame_rate = 0;  // XPSNR's, in whole frames per second
     CambiInput cambi;    // CAMBI's test video (libvmaf_cpu.h)
-    // The GPU the CPU metrics' CIEDE2000 and CAMBI go on (CpuScorer's `gpu`:
+    // The GPU the CPU metrics' CIEDE2000, CAMBI and MS-SSIM go on (CpuScorer's `gpu`:
     // Vulkan's number, -1 for the one VMAF runs on) where the Vulkan engine
     // scores this PC's GPU VMAF, or nothing (cpu_plan).
     std::optional<int> extra_gpu;
@@ -238,7 +238,7 @@ void add_beside(PairScores& scores, std::optional<BesideScorer>& beside);
 
 // The GPU's turn: one GPU pass (VMAF, NEG and VMAF v1 on the GPU, Vship's
 // metrics) at a time in this process (the Python app's gpu.GPU_PASS). The
-// lighter GPU work of a CPU task (HDR VMAF's features, CIEDE2000 and CAMBI
+// lighter GPU work of a CPU task (HDR VMAF's features, CIEDE2000, CAMBI and MS-SSIM
 // of the CPU's metrics) does not take it and runs beside a pass.
 std::timed_mutex& gpu_pass();
 
@@ -332,8 +332,9 @@ private:
 // beside the GPU's, GpuPlan::beside).
 class GpuAttempt {
 public:
-    // Throws LibvmafError (VmafVulkanError) when the scorer cannot start,
-    // and platform::PipeError.
+    // Opens the pipes and starts building the plan's scorer on the thread
+    // that will feed it, so that the FFmpegs can start meanwhile. Throws
+    // platform::PipeError.
     GpuAttempt(const GpuPlan& plan, int n_subsample);
     ~GpuAttempt();
     GpuAttempt(const GpuAttempt&) = delete;
@@ -349,6 +350,11 @@ public:
     // starts: once taken they are that FFmpeg's to close. None on Windows.
     std::vector<int> take_output_descriptors(std::size_t output);
 
+    // Waits until the scorer is built. Throws what building it threw:
+    // LibvmafError (VmafVulkanError) when the scorer cannot start. Its
+    // failure also closes the pipes, so the FFmpegs end on their own.
+    void wait_started() const;
+
     // Call once FFmpeg has ended: the scores, or nothing when FFmpeg failed
     // (the caller then retries or gives up), a video's frames cut short by
     // that included. Throws LibvmafError when the scoring failed.
@@ -361,7 +367,8 @@ public:
     bool closed_pipe_of(std::size_t output) const;
 
 private:
-    void feed();
+    void start_scorer(const GpuPlan& plan, int n_subsample);
+    void feed(const GpuPlan& plan, int n_subsample);
     void feed_pairs();
     void stop();
 

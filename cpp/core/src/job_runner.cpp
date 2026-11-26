@@ -312,7 +312,7 @@ private:
     // A task's metrics as the log and the run line show them: those scored in
     // its own place, and those the CPU scores beside them.
     std::pair<std::vector<std::string>, std::vector<std::string>> shown_keys(std::size_t task) const;
-    // Whether the task's run may put VMAF's family (CAMBI, CIEDE2000, VMAF U and V, HDR VMAF's features) on
+    // Whether the task's run may put VMAF's family (CAMBI, CIEDE2000, MS-SSIM, VMAF U and V, HDR VMAF's features) on
     // the GPU: the run's choice, except in a CPU task the planner gave VMAF, NEG or v1 (plan_tasks), or one
     // split from it (vmaf_on_cpu), which stays on the CPU. The run's own placement (models_on_gpu), seeing
     // only this task's metrics, might otherwise move them to the GPU. A CPU task without them keeps the
@@ -1612,7 +1612,7 @@ std::optional<std::pair<int, int>> planned_size(const VideoInfo& source, const V
 // the CPU, or "" for any other. Those are heavy in CPU time and memory there:
 // alone at 4K on the Core Ultra 9 285K, VMAF took 5,603 MB on the CPU, CAMBI
 // 2,233 MB and CIEDE2000 1,250 MB, the CPU-only metrics 92 to 1,684 MB. VMAF YUV's U
-// and V make one metric. `on_vulkan`: the task's CAMBI, CIEDE2000, U and V
+// and V make one metric. `on_vulkan`: the task's CAMBI, CIEDE2000, MS-SSIM, U and V
 // and HDR VMAF's features go to the Vulkan engine (VMAF's place for the task
 // is the GPU and the engine scores VMAF here: cpu_plan,
 // hdr_plan); `chroma_on_gpu`: the engine takes the U and V too.
@@ -1622,6 +1622,11 @@ std::string heavy_cpu_unit(const std::string& key, bool on_vulkan, bool chroma_o
     }
     if (key == vmaf_u_key || key == vmaf_v_key) {
         return on_vulkan && chroma_on_gpu ? "" : "vmaf_yuv";
+    }
+    // MS-SSIM on the CPU stays with the CPU-only metrics, as before its GPU route: libvmaf's helper threads split
+    // its pairs (cpu_threads), and a task of its own would decode the videos again.
+    if (key.starts_with("ms_ssim")) {  // MS-SSIM, MS-SSIM YUV and its planes
+        return "";
     }
     if (follows_vulkan_engine(key)) {
         return on_vulkan ? "" : key;

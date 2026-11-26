@@ -22,6 +22,7 @@
 #include <QAbstractItemView>
 #include <QGroupBox>
 #include <QHeaderView>
+#include <QIcon>
 #include <QImage>
 #include <QLabel>
 #include <QLineEdit>
@@ -29,13 +30,20 @@
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QMouseEvent>
+#include <QScreen>
 #include <QSet>
 #include <QSlider>
+#include <QSpinBox>
+#include <QStyle>
+#include <QStyleOption>
 #include <QTabWidget>
+#include <QTableWidget>
 #include <QWidget>
+#include <QWindow>
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
@@ -44,6 +52,7 @@
 #include "main_window.h"
 #include "quick_save.h"
 #include "theme.h"
+#include "widgets.h"
 
 namespace vml::app {
 namespace {
@@ -363,6 +372,112 @@ TEST_F(Appearance, ALeftClickOnASliderJumpsThereInModern) {
     EXPECT_NEAR(slider.value(), 750, 30);  // not 10, one page step
 }
 
+// The leftmost column of `image` inside `area` with a pixel far from
+// `background`: where the text or a drawing starts. -1: none.
+int first_ink(const QImage& image, const QRect& area, const QColor& background) {
+    for (int x = area.left(); x <= area.right(); ++x) {
+        for (int y = area.top(); y <= area.bottom(); ++y) {
+            const QColor c = image.pixelColor(x, y);
+            if (std::abs(c.red() - background.red()) + std::abs(c.green() - background.green()) +
+                    std::abs(c.blue() - background.blue()) > 90) {
+                return x;
+            }
+        }
+    }
+    return -1;
+}
+
+// Issue #250: Modern's drop-downs and spin boxes. The arrow is a chevron
+// inside the rounded field, not a separate box; the list opens below the
+// field, at least as wide as its longest entry; a spin box's steps sit
+// inside its field, and its text is inset as a drop-down's.
+TEST_F(Appearance, DropDownsInModern) {
+    ASSERT_EQ(theme::current_interface(), theme::Interface::modern);  // run after ModernLight
+    QWidget host;
+    auto* combo = new QComboBox(&host);
+    const QString longest = QStringLiteral("An entry much longer than the field it is chosen in");
+    combo->addItems({QStringLiteral("0 short"), longest});
+    combo->setGeometry(10, 10, 140, 28);
+    auto* spin = new QSpinBox(&host);
+    spin->setGeometry(10, 50, 140, 28);
+    host.resize(400, 300);
+    host.show();
+    QApplication::processEvents();
+    QStyle* style = combo->style();
+    const QRect field = combo->rect();
+
+    QStyleOptionComboBox option;
+    option.initFrom(combo);
+    option.subControls = QStyle::SC_All;
+    EXPECT_EQ(style->styleHint(QStyle::SH_ComboBox_Popup, &option, combo), 0);
+    // The arrow's area inside the border (1 px) and as tall as the text's, at
+    // the right; the text's area ends where it starts.
+    const QRect arrow = style->subControlRect(QStyle::CC_ComboBox, &option, QStyle::SC_ComboBoxArrow, combo);
+    EXPECT_TRUE(field.adjusted(1, 1, -1, -1).contains(arrow)) << arrow.x() << "," << arrow.y();
+    EXPECT_EQ(arrow.right(), field.right() - 1);
+    const QRect text = style->subControlRect(QStyle::CC_ComboBox, &option, QStyle::SC_ComboBoxEditField, combo);
+    EXPECT_LT(text.right(), arrow.left());
+    // The chevron drawn in it, in the muted text colour: no bevelled box.
+    const QImage drawn = combo->grab().toImage();
+    const QColor background = theme::modern_colour("field", false);
+    const int chevron = first_ink(drawn, arrow, background);
+    EXPECT_GE(chevron, arrow.left() + 2);
+    EXPECT_EQ(drawn.pixelColor(arrow.center().x(), arrow.top() + 1), background);
+    // Its icon: painted, sharp at any scale, in the colour its name gives.
+    const QPixmap red = QIcon(QStringLiteral("chevron-down-ff0000.vmlchevron")).pixmap(QSize(20, 12), 1.5);
+    ASSERT_FALSE(red.isNull());
+    const QImage red_image = red.toImage();
+    EXPECT_EQ(red_image.pixelColor(red_image.width() / 2, red_image.height() * 3 / 4).red(), 255);
+    EXPECT_EQ(red_image.pixelColor(0, red_image.height() - 1).alpha(), 0);
+
+    // The list below the field, the field still in view, as wide as the
+    // longest entry; its window see-through for its rounded corners.
+    combo->showPopup();
+    QApplication::processEvents();
+    QWidget* list = combo->view()->window();
+    ASSERT_NE(list, combo->window());
+    EXPECT_TRUE(list->isVisible());
+    const QPoint below = combo->mapToGlobal(QPoint(0, combo->height()));
+    EXPECT_GE(list->geometry().top(), below.y());
+    EXPECT_EQ(list->geometry().left(), below.x());
+    EXPECT_GE(list->width(), combo->view()->fontMetrics().horizontalAdvance(longest));
+    EXPECT_TRUE(list->testAttribute(Qt::WA_TranslucentBackground));
+    combo->hidePopup();
+    // With no room below, above it, the same distance away.
+    const QRect screen = combo->screen()->availableGeometry();
+    const QPoint home = host.pos();
+    host.move(screen.left(), screen.bottom() - 45);
+    QApplication::processEvents();
+    combo->showPopup();
+    QApplication::processEvents();
+    const int field_top = combo->mapToGlobal(QPoint(0, 0)).y();
+    if (combo->mapToGlobal(QPoint(0, combo->height())).y() + list->height() > screen.bottom()) {
+        EXPECT_LE(list->geometry().bottom(), field_top - 1);
+        EXPECT_GE(list->geometry().bottom(), field_top - 4);
+    } else {
+        ADD_FAILURE() << "the field is not near enough the screen's bottom";
+    }
+    combo->hidePopup();
+    host.move(home);
+
+    // The spin box's steps inside its field, at the right; its text inset
+    // as the drop-down's.
+    QStyleOptionSpinBox spin_option;
+    spin_option.initFrom(spin);
+    spin_option.subControls = QStyle::SC_All;
+    spin_option.buttonSymbols = QAbstractSpinBox::UpDownArrows;
+    spin_option.stepEnabled = QAbstractSpinBox::StepUpEnabled;
+    const QRect spin_field = spin->rect().adjusted(1, 1, -1, -1);
+    for (const auto step : {QStyle::SC_SpinBoxUp, QStyle::SC_SpinBoxDown}) {
+        const QRect rect = style->subControlRect(QStyle::CC_SpinBox, &spin_option, step, spin);
+        EXPECT_TRUE(spin_field.contains(rect)) << rect.x() << "," << rect.y() << " " << rect.width() << "x" << rect.height();
+    }
+    const int combo_text = first_ink(drawn, QRect(2, 4, 30, field.height() - 8), background);
+    const int spin_text = first_ink(spin->grab().toImage(), QRect(2, 4, 30, spin->height() - 8), background);
+    EXPECT_GE(combo_text, 6);
+    EXPECT_NEAR(spin_text, combo_text, 1);
+}
+
 TEST_F(Appearance, ModernDark) {
     theme::apply_theme("dark");
     if (!theme::is_dark()) {
@@ -391,6 +506,43 @@ TEST_F(Appearance, ModernMocha) {
     EXPECT_EQ(QApplication::palette().color(QPalette::Base), theme::modern_colour("card", true));
     EXPECT_NE(theme::modern_colour("card", true), QColor("#251c16"));
     EXPECT_NE(QApplication::palette().color(QPalette::Accent), theme::mocha_accent());  // the system's again
+}
+
+// The Videos table's metric headings are on two lines where that makes
+// them narrower, and every metric column is as wide as its heading needs,
+// hidden ones too: Qt sizes a hidden section as 0 wide, so a column shown
+// later kept 78 px and its heading was cut at both ends.
+TEST_F(Appearance, MetricHeadingsFitTheirColumns) {
+    QTableWidget* table = nullptr;
+    for (QTableWidget* candidate : window_->findChildren<QTableWidget*>()) {
+        if (candidate->columnCount() == column_count) {
+            table = candidate;
+        }
+    }
+    ASSERT_NE(table, nullptr);
+    window_->fit_to_style();
+    const auto* header = dynamic_cast<const CheckableHeaderView*>(table->horizontalHeader());
+    ASSERT_NE(header, nullptr);
+    int tallest = 0;
+    for (const MetricColumn& item : metric_columns()) {
+        const QSize needed = header->content_size(item.column);
+        // Shown, a hidden column has the width it was given while hidden
+        // (Qt says 0 for it until then).
+        const bool hidden = table->isColumnHidden(item.column);
+        table->setColumnHidden(item.column, false);
+        EXPECT_GE(table->columnWidth(item.column), needed.width())
+            << table->horizontalHeaderItem(item.column)->text().toStdString();
+        table->setColumnHidden(item.column, hidden);
+        tallest = std::max(tallest, needed.height());
+    }
+    EXPECT_GE(header->minimumHeight(), tallest);  // as tall as the tallest heading, shown or not
+    QString long_heading;  // "PSNR YUV MSE (dB)", on two lines
+    for (const MetricColumn& item : metric_columns()) {
+        if (std::string_view(item.key) == "psnr_yuv_mse") {
+            long_heading = table->horizontalHeaderItem(item.column)->text();
+        }
+    }
+    EXPECT_EQ(long_heading.count(QLatin1Char('\n')), 1) << long_heading.toStdString();
 }
 
 // Light's looks: Dim's and Desert's colours in place of Light's, Desert's

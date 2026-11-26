@@ -92,8 +92,15 @@ struct MetricDefinition {
     bool can_be_infinite() const { return aggregation != MetricAggregation::arithmetic; }
 };
 
-// Every metric, in the order the app shows them.
+// Every metric, in the order the app shows them until the user orders them
+// (ordered_metrics): Add/remove metrics' General purpose, then Specialized.
 std::span<const MetricDefinition> metrics();
+
+// Every metric in the user's order (Settings::metric_order, keys of metrics
+// that are not planes): those of `order` first, then any it lacks (a metric
+// added since, or an empty order) in metrics()' order; each plane right
+// after its metric. Unknown keys, planes and repeats in `order` are skipped.
+std::vector<const MetricDefinition*> ordered_metrics(const std::vector<std::string>& order);
 
 // The metric with this key, or nullptr if there is none.
 const MetricDefinition* find_metric(std::string_view key);
