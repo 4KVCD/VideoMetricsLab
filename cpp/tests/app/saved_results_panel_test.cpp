@@ -571,7 +571,6 @@ TEST(SavedResultsPanel, ClickingARowKeepsTheListWhereItWas) {
     EXPECT_EQ(table.rowAt(table.visualItemRect(table.item(last, 0)).center().y()), last);
 }
 
-// Two saved scores of VMAF (two models), and one of PSNR, of one comparison.
 // A quick second click on a heading reverses the sort: Windows sends it as a
 // double-click with no second press, which QHeaderView took for no click,
 // neither sorting nor reversing, so every second quick click was lost.
@@ -620,6 +619,7 @@ TEST(SavedResultsPanel, AQuickSecondClickOnAHeadingSortsAgain) {
     EXPECT_EQ(shown(), first);
 }
 
+// Two saved scores of VMAF (two models), and one of PSNR, of one comparison.
 struct TwoOfVmaf {
     test::Folder folder;
     Settings settings;
