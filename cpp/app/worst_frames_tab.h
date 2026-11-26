@@ -41,9 +41,11 @@ class QComboBox;
 class QLabel;
 class QMenu;
 class QPushButton;
+class QSpinBox;
 class QSplitter;
 class QTabBar;
 class QTableWidget;
+class QToolButton;
 class QVBoxLayout;
 
 namespace vml::app {
@@ -60,8 +62,10 @@ struct WeakFramesVideo {
     QString shown{};  // its name in the videos list, as Metric Graphs shows it; empty: label
 };
 
-// How many dips Worst frames can list.
+// How many dips Worst frames lists: one of these, or a number of the user's
+// own (Custom...) up to most_worst_frames.
 inline constexpr std::array<int, 3> worst_frame_counts{10, 25, 50};
+inline constexpr int most_worst_frames = 999;
 
 class WorstFramesTab : public QWidget {
     Q_OBJECT
@@ -90,7 +94,8 @@ public:
     // use. Changed in Settings, the profile picked here stays picked where it
     // is still there, with the conditions shown kept.
     void set_segment_profiles(std::vector<SegmentProfile> profiles, const std::string& in_use);
-    // How many dips Worst frames lists: 10, 25 or 50 (another: 10).
+    // How many dips Worst frames lists: 10, 25, 50, or another number up to
+    // most_worst_frames, shown as Custom... with its number (none: 10).
     void set_worst_count(int count);
 
     // The rules shown, with the range.
@@ -119,6 +124,9 @@ public:
     QTableWidget* segments_table() const { return segments_table_; }
     QTabBar* metric_bar() const { return metric_bar_; }
     QComboBox* profile_combo() const { return profile_combo_; }
+    QComboBox* count_combo() const { return count_combo_; }
+    QToolButton* legend_button() const { return legend_button_; }
+    QSpinBox* count_spin() const { return count_spin_; }
     QPushButton* save_button() const { return save_button_; }
     QPushButton* save_new_button() const { return save_new_button_; }
     QPushButton* preset_button() const { return preset_button_; }
@@ -140,6 +148,8 @@ signals:
 protected:
     // The work area resized (by the window or the divider): the lists arranged for its width.
     bool eventFilter(QObject* watched, QEvent* event) override;
+    // The theme changed: the legend's ⓘ drawn in its text colour.
+    void changeEvent(QEvent* event) override;
 
 private:
     QWidget* build_toolbar();
@@ -226,6 +236,20 @@ private:
     // three videos at a time.
     void fit_videos_height();
     std::optional<int> worst_frame_of_row(int row) const;
+    // The segment a Weak segments row shows, wherever a sort has put it.
+    std::optional<std::size_t> segment_of_row(int row) const;
+    // A list sorted by a column (a click on its heading): kept by heading
+    // while the list is filled again, as long as that column is there.
+    struct ListSort {
+        QString heading;
+        Qt::SortOrder order = Qt::AscendingOrder;
+    };
+    std::optional<ListSort> worst_sort_;
+    std::optional<ListSort> segments_sort_;
+    // The list put in `sort`'s order, after it is filled in its own.
+    void sort_list(QTableWidget* table, std::optional<ListSort>& sort);
+    // A click on a list's heading: ascending, descending, then its own order.
+    void header_clicked(QTableWidget* table, std::optional<ListSort>& sort, int column);
     void open_selected();
     // The row last selected in either list, selected again (and scrolled
     // to) after the lists are filled again: they are on every refresh, as
@@ -294,6 +318,13 @@ private:
     QWidget* worst_card_ = nullptr;
     QWidget* segments_card_ = nullptr;
     QComboBox* count_combo_ = nullptr;
+    QSpinBox* count_spin_ = nullptr;  // Custom...'s number, shown with it
+    QToolButton* legend_button_ = nullptr;  // the graph's ⓘ
+    // What the graph shows, under its ⓘ: the metric shown's line, dots and shading.
+    void open_legend();
+    // The dips listed changed (the drop-down or the number box): the list
+    // and the graph's dots made again, Settings told.
+    void apply_count(int count);
     QTableWidget* worst_table_ = nullptr;
     QLabel* worst_note_ = nullptr;
     QTableWidget* segments_table_ = nullptr;

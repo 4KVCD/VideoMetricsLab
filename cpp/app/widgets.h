@@ -3,8 +3,10 @@
 // is slightly wrong for how the app uses it.
 #pragma once
 
+#include <QColor>
 #include <QFont>
 #include <QFontMetrics>
+#include <QIcon>
 #include <QHeaderView>
 #include <QItemSelectionModel>
 #include <QLabel>
@@ -548,6 +550,11 @@ private:
 // table, for a usual number of rows. Made again once the style is set: the
 // header's and rows' heights follow it.
 void fit_table_height(QTableWidget* table, int rows);
+
+// An ⓘ, a circled "i" in `colour` (U+24D8 is not in every font), 16 px at
+// `ratio`: a button that opens what something shows (Worst Frames' graph
+// legend, Saved Results' details).
+QIcon info_icon(const QColor& colour, qreal ratio);
 
 // `text` as a tooltip that wraps: Qt shows a plain-text tooltip as one line,
 // however long (some ran the width of the screen), but wraps rich text. A

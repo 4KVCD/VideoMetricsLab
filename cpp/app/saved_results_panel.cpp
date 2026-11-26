@@ -19,7 +19,6 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMouseEvent>
-#include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
 #include <QRadioButton>
@@ -938,25 +937,8 @@ int SavedResultsPanel::scores_column_width() const {
 void SavedResultsPanel::scores_settings_changed() { show_details(); }
 
 void SavedResultsPanel::draw_details_icon() {
-    // A circled "i" in the text's colour (U+24D8 is not in every font).
-    const qreal ratio = devicePixelRatioF();
-    const int size = 16;
-    QPixmap pixmap(QSize(size, size) * ratio);
-    pixmap.setDevicePixelRatio(ratio);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing);
-    QPen pen(palette().color(QPalette::WindowText));
-    pen.setWidthF(1.3);
-    painter.setPen(pen);
-    painter.drawEllipse(QRectF(1, 1, size - 2, size - 2));
-    pen.setWidthF(1.6);
-    pen.setCapStyle(Qt::RoundCap);
-    painter.setPen(pen);
-    painter.drawLine(QPointF(size / 2.0, 7.0), QPointF(size / 2.0, 11.5));
-    painter.drawPoint(QPointF(size / 2.0, 4.6));
-    painter.end();
-    details_button_->setIcon(QIcon(pixmap));
+    // The ⓘ (info_icon, as Worst Frames' graph legend has it) in the text's colour.
+    details_button_->setIcon(info_icon(palette().color(QPalette::WindowText), devicePixelRatioF()));
 }
 
 void SavedResultsPanel::changeEvent(QEvent* event) {

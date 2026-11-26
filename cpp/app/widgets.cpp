@@ -1733,6 +1733,26 @@ bool WheelPastValueBoxes::eventFilter(QObject* watched, QEvent* event) {
 // A plain line of a tooltip longer than this many characters is wrapped.
 constexpr int tool_tip_line = 70;
 
+QIcon info_icon(const QColor& colour, qreal ratio) {
+    const int size = 16;
+    QPixmap pixmap(QSize(size, size) * ratio);
+    pixmap.setDevicePixelRatio(ratio);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    QPen pen(colour);
+    pen.setWidthF(1.3);
+    painter.setPen(pen);
+    painter.drawEllipse(QRectF(1, 1, size - 2, size - 2));
+    pen.setWidthF(1.6);
+    pen.setCapStyle(Qt::RoundCap);
+    painter.setPen(pen);
+    painter.drawLine(QPointF(size / 2.0, 7.0), QPointF(size / 2.0, 11.5));
+    painter.drawPoint(QPointF(size / 2.0, 4.6));
+    painter.end();
+    return QIcon(pixmap);
+}
+
 void fit_table_height(QTableWidget* table, int rows) {
     // The header's hint, not its height: before the table is first shown its
     // header has not been laid out yet.
