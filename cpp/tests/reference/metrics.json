@@ -1710,7 +1710,7 @@
   },
   {
    "key": "psnr_yuv_y",
-   "label": "PSNR YUV: Y",
+   "label": "PSNR Y",
    "short_label": "PSNR Y",
    "table_header": "Y",
    "axis_label": "PSNR Y (dB)",
@@ -1929,7 +1929,7 @@
   },
   {
    "key": "psnr_yuv_u",
-   "label": "PSNR YUV: U",
+   "label": "PSNR U",
    "short_label": "PSNR U",
    "table_header": "U",
    "axis_label": "PSNR U (dB)",
@@ -2148,7 +2148,7 @@
   },
   {
    "key": "psnr_yuv_v",
-   "label": "PSNR YUV: V",
+   "label": "PSNR V",
    "short_label": "PSNR V",
    "table_header": "V",
    "axis_label": "PSNR V (dB)",
@@ -2855,7 +2855,7 @@
   },
   {
    "key": "ssim_yuv_y",
-   "label": "SSIM YUV: Y",
+   "label": "SSIM Y",
    "short_label": "SSIM Y",
    "table_header": "Y",
    "axis_label": "SSIM Y",
@@ -3074,7 +3074,7 @@
   },
   {
    "key": "ssim_yuv_u",
-   "label": "SSIM YUV: U",
+   "label": "SSIM U",
    "short_label": "SSIM U",
    "table_header": "U",
    "axis_label": "SSIM U",
@@ -3293,7 +3293,7 @@
   },
   {
    "key": "ssim_yuv_v",
-   "label": "SSIM YUV: V",
+   "label": "SSIM V",
    "short_label": "SSIM V",
    "table_header": "V",
    "axis_label": "SSIM V",
@@ -4194,7 +4194,7 @@
   },
   {
    "key": "ms_ssim_yuv_y",
-   "label": "MS-SSIM YUV: Y",
+   "label": "MS-SSIM Y",
    "short_label": "MS-SSIM Y",
    "table_header": "Y",
    "axis_label": "MS-SSIM Y",
@@ -4413,7 +4413,7 @@
   },
   {
    "key": "ms_ssim_yuv_u",
-   "label": "MS-SSIM YUV: U",
+   "label": "MS-SSIM U",
    "short_label": "MS-SSIM U",
    "table_header": "U",
    "axis_label": "MS-SSIM U",
@@ -4632,7 +4632,7 @@
   },
   {
    "key": "ms_ssim_yuv_v",
-   "label": "MS-SSIM YUV: V",
+   "label": "MS-SSIM V",
    "short_label": "MS-SSIM V",
    "table_header": "V",
    "axis_label": "MS-SSIM V",
@@ -5070,7 +5070,7 @@
   },
   {
    "key": "psnr_hvs_y",
-   "label": "PSNR-HVS-M: Y",
+   "label": "PSNR-HVS-M Y",
    "short_label": "PSNR-HVS-M Y",
    "table_header": "Y",
    "axis_label": "PSNR-HVS-M Y (dB)",
@@ -5289,7 +5289,7 @@
   },
   {
    "key": "psnr_hvs_u",
-   "label": "PSNR-HVS-M: U",
+   "label": "PSNR-HVS-M U",
    "short_label": "PSNR-HVS-M U",
    "table_header": "U",
    "axis_label": "PSNR-HVS-M U (dB)",
@@ -5508,7 +5508,7 @@
   },
   {
    "key": "psnr_hvs_v",
-   "label": "PSNR-HVS-M: V",
+   "label": "PSNR-HVS-M V",
    "short_label": "PSNR-HVS-M V",
    "table_header": "V",
    "axis_label": "PSNR-HVS-M V (dB)",
@@ -6409,7 +6409,7 @@
   },
   {
    "key": "vmaf_yuv_y",
-   "label": "VMAF YUV: Y",
+   "label": "VMAF Y",
    "short_label": "VMAF Y",
    "table_header": "Y",
    "axis_label": "VMAF Y",
@@ -6628,7 +6628,7 @@
   },
   {
    "key": "vmaf_yuv_u",
-   "label": "VMAF YUV: U",
+   "label": "VMAF U",
    "short_label": "VMAF U",
    "table_header": "U",
    "axis_label": "VMAF U",
@@ -6847,7 +6847,7 @@
   },
   {
    "key": "vmaf_yuv_v",
-   "label": "VMAF YUV: V",
+   "label": "VMAF V",
    "short_label": "VMAF V",
    "table_header": "V",
    "axis_label": "VMAF V",

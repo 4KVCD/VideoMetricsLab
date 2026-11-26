@@ -1146,8 +1146,8 @@ TEST(JobRunner, CpuMetricsTheGpuMayTakeAreNamedSo) {
     EXPECT_EQ(cpu_metrics_text({"psnr", "ssim"}, true), "PSNR, SSIM");
     EXPECT_EQ(cpu_metrics_text({"psnr", "ms_ssim"}, true), "PSNR; MS-SSIM on the GPU where it can");
     const std::vector<std::string> chroma{"psnr", "vmaf_yuv_u", "vmaf_yuv_v"};
-    EXPECT_EQ(cpu_metrics_text(chroma, true), "PSNR; VMAF YUV: U and VMAF YUV: V on the GPU where it can");
-    EXPECT_EQ(cpu_metrics_text(chroma, may_run_on_gpu(chroma, true, false)), "PSNR, VMAF YUV: U, VMAF YUV: V");
+    EXPECT_EQ(cpu_metrics_text(chroma, true), "PSNR; VMAF U and VMAF V on the GPU where it can");
+    EXPECT_EQ(cpu_metrics_text(chroma, may_run_on_gpu(chroma, true, false)), "PSNR, VMAF U, VMAF V");
     EXPECT_EQ(cpu_metrics_text({"psnr", "vmaf_yuv"}, true), "PSNR; VMAF YUV (6:1:1) on the GPU where it can");
     // HDR VMAF's features follow VMAF's place (hdr_plan), in the CPU's task too.
     EXPECT_EQ(cpu_metrics_text({"vmaf_hdr", "psnr", "cambi"}, true),

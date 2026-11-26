@@ -215,7 +215,7 @@ TEST(MetricList, SettingsListsAllSeventeenOpen) {
 // its metric's bands.
 TEST(MetricList, PlanesTipsAreTheirMetrics) {
     const QString tip = metric_tip("ssim_yuv_u");
-    EXPECT_TRUE(tip.startsWith("SSIM YUV: U: the U plane alone, calculated with SSIM YUV (6:1:1).")) << tip.toStdString();
+    EXPECT_TRUE(tip.startsWith("SSIM U: the U plane alone, calculated with SSIM YUV (6:1:1).")) << tip.toStdString();
     EXPECT_TRUE(tip.contains("MSU's codec comparisons"));
     EXPECT_FALSE(tip.contains("The app's bands"));
     EXPECT_TRUE(metric_tip("ssim_yuv").contains("The app's bands"));

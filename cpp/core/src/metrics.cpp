@@ -71,11 +71,11 @@ const std::array<MetricDefinition, 34> registry{{
     // YUV's are further down, after it), each after its metric (shown with Add/remove metrics' "Y, U and V of the
     // YUV metrics"), scored in that metric's pass. No thresholds: a chroma
     // plane's PSNR runs far higher than the luma's.
-    {"psnr_yuv_y", "PSNR YUV: Y", "PSNR Y", "Y", "PSNR Y (dB)", 2, " dB", frame, higher_is_better, arithmetic,
+    {"psnr_yuv_y", "PSNR Y", "PSNR Y", "Y", "PSNR Y (dB)", 2, " dB", frame, higher_is_better, arithmetic,
      std::nullopt, {}, bool_option("compute_psnr_yuv_y"), {}, 0, "psnr_yuv"},
-    {"psnr_yuv_u", "PSNR YUV: U", "PSNR U", "U", "PSNR U (dB)", 2, " dB", frame, higher_is_better, arithmetic,
+    {"psnr_yuv_u", "PSNR U", "PSNR U", "U", "PSNR U (dB)", 2, " dB", frame, higher_is_better, arithmetic,
      std::nullopt, {}, bool_option("compute_psnr_yuv_u"), {}, 0, "psnr_yuv"},
-    {"psnr_yuv_v", "PSNR YUV: V", "PSNR V", "V", "PSNR V (dB)", 2, " dB", frame, higher_is_better, arithmetic,
+    {"psnr_yuv_v", "PSNR V", "PSNR V", "V", "PSNR V (dB)", 2, " dB", frame, higher_is_better, arithmetic,
      std::nullopt, {}, bool_option("compute_psnr_yuv_v"), {}, 0, "psnr_yuv"},
     // MSU's YUV-PSNR "avg. MSE" 6:1:1: the three planes' mean squared errors
     // weighted (6 Y + Cb + Cr) / 8 in each frame's value, and averaged over
@@ -87,11 +87,11 @@ const std::array<MetricDefinition, 34> registry{{
      bool_option("compute_psnr_yuv_mse"), {}, 0},
     {"ssim_yuv", "SSIM YUV (6:1:1)", "SSIM YUV", "SSIM YUV", "SSIM YUV", 4, "", frame, higher_is_better,
      arithmetic, std::nullopt, ssim_thresholds, bool_option("compute_ssim_yuv"), {}, 22},
-    {"ssim_yuv_y", "SSIM YUV: Y", "SSIM Y", "Y", "SSIM Y", 4, "", frame, higher_is_better, arithmetic,
+    {"ssim_yuv_y", "SSIM Y", "SSIM Y", "Y", "SSIM Y", 4, "", frame, higher_is_better, arithmetic,
      std::nullopt, {}, bool_option("compute_ssim_yuv_y"), {}, 22, "ssim_yuv"},
-    {"ssim_yuv_u", "SSIM YUV: U", "SSIM U", "U", "SSIM U", 4, "", frame, higher_is_better, arithmetic,
+    {"ssim_yuv_u", "SSIM U", "SSIM U", "U", "SSIM U", 4, "", frame, higher_is_better, arithmetic,
      std::nullopt, {}, bool_option("compute_ssim_yuv_u"), {}, 22, "ssim_yuv"},
-    {"ssim_yuv_v", "SSIM YUV: V", "SSIM V", "V", "SSIM V", 4, "", frame, higher_is_better, arithmetic,
+    {"ssim_yuv_v", "SSIM V", "SSIM V", "V", "SSIM V", 4, "", frame, higher_is_better, arithmetic,
      std::nullopt, {}, bool_option("compute_ssim_yuv_v"), {}, 22, "ssim_yuv"},
     // XPSNR is the one metric that reports infinity (an identical frame),
     // and is averaged its own way (stats.h).
@@ -106,11 +106,11 @@ const std::array<MetricDefinition, 34> registry{{
      std::nullopt, {}, bool_option("compute_ms_ssim"), {}, 0},
     {"ms_ssim_yuv", "MS-SSIM YUV (6:1:1)", "MS-SSIM YUV", "MS-SSIM YUV", "MS-SSIM YUV", 4, "", frame,
      higher_is_better, arithmetic, std::nullopt, {}, bool_option("compute_ms_ssim_yuv"), {}, 0},
-    {"ms_ssim_yuv_y", "MS-SSIM YUV: Y", "MS-SSIM Y", "Y", "MS-SSIM Y", 4, "", frame, higher_is_better,
+    {"ms_ssim_yuv_y", "MS-SSIM Y", "MS-SSIM Y", "Y", "MS-SSIM Y", 4, "", frame, higher_is_better,
      arithmetic, std::nullopt, {}, bool_option("compute_ms_ssim_yuv_y"), {}, 0, "ms_ssim_yuv"},
-    {"ms_ssim_yuv_u", "MS-SSIM YUV: U", "MS-SSIM U", "U", "MS-SSIM U", 4, "", frame, higher_is_better,
+    {"ms_ssim_yuv_u", "MS-SSIM U", "MS-SSIM U", "U", "MS-SSIM U", 4, "", frame, higher_is_better,
      arithmetic, std::nullopt, {}, bool_option("compute_ms_ssim_yuv_u"), {}, 0, "ms_ssim_yuv"},
-    {"ms_ssim_yuv_v", "MS-SSIM YUV: V", "MS-SSIM V", "V", "MS-SSIM V", 4, "", frame, higher_is_better,
+    {"ms_ssim_yuv_v", "MS-SSIM V", "MS-SSIM V", "V", "MS-SSIM V", 4, "", frame, higher_is_better,
      arithmetic, std::nullopt, {}, bool_option("compute_ms_ssim_yuv_v"), {}, 0, "ms_ssim_yuv"},
     // PSNR-HVS-M (Ponomarenko et al. 2007, Xiph's code): PSNR of the
     // contrast-masked, contrast-sensitivity-weighted DCT error of 8x8 blocks,
@@ -118,11 +118,11 @@ const std::array<MetricDefinition, 34> registry{{
     // fully masked) frame, so averaged as its error.
     {"psnr_hvs", "PSNR-HVS-M", "PSNR-HVS-M", "PSNR-HVS-M (dB)", "PSNR-HVS-M (dB)", 2, " dB", frame,
      higher_is_better, mean_error_db, std::nullopt, {}, bool_option("compute_psnr_hvs"), {}, 0},
-    {"psnr_hvs_y", "PSNR-HVS-M: Y", "PSNR-HVS-M Y", "Y", "PSNR-HVS-M Y (dB)", 2, " dB", frame,
+    {"psnr_hvs_y", "PSNR-HVS-M Y", "PSNR-HVS-M Y", "Y", "PSNR-HVS-M Y (dB)", 2, " dB", frame,
      higher_is_better, mean_error_db, std::nullopt, {}, bool_option("compute_psnr_hvs_y"), {}, 0, "psnr_hvs"},
-    {"psnr_hvs_u", "PSNR-HVS-M: U", "PSNR-HVS-M U", "U", "PSNR-HVS-M U (dB)", 2, " dB", frame,
+    {"psnr_hvs_u", "PSNR-HVS-M U", "PSNR-HVS-M U", "U", "PSNR-HVS-M U (dB)", 2, " dB", frame,
      higher_is_better, mean_error_db, std::nullopt, {}, bool_option("compute_psnr_hvs_u"), {}, 0, "psnr_hvs"},
-    {"psnr_hvs_v", "PSNR-HVS-M: V", "PSNR-HVS-M V", "V", "PSNR-HVS-M V (dB)", 2, " dB", frame,
+    {"psnr_hvs_v", "PSNR-HVS-M V", "PSNR-HVS-M V", "V", "PSNR-HVS-M V (dB)", 2, " dB", frame,
      higher_is_better, mean_error_db, std::nullopt, {}, bool_option("compute_psnr_hvs_v"), {}, 0, "psnr_hvs"},
     // CAMBI: Netflix's banding of the test video alone (0 none, about 5
     // annoying, 24 the most Netflix has seen; libvmaf clips at 1000).
@@ -140,11 +140,11 @@ const std::array<MetricDefinition, 34> registry{{
     // metric alone (cpu_metrics_unfit).
     {"vmaf_yuv", "VMAF YUV (6:1:1)", "VMAF YUV", "VMAF YUV", "VMAF YUV", 2, "", frame, higher_is_better,
      arithmetic, 100.0, vmaf_thresholds, bool_option("compute_vmaf_yuv"), {}, 0},
-    {"vmaf_yuv_y", "VMAF YUV: Y", "VMAF Y", "Y", "VMAF Y", 2, "", frame, higher_is_better, arithmetic, 100.0, {},
+    {"vmaf_yuv_y", "VMAF Y", "VMAF Y", "Y", "VMAF Y", 2, "", frame, higher_is_better, arithmetic, 100.0, {},
      bool_option("compute_vmaf_yuv_y"), {}, 0, "vmaf_yuv"},
-    {"vmaf_yuv_u", "VMAF YUV: U", "VMAF U", "U", "VMAF U", 2, "", frame, higher_is_better, arithmetic, 100.0, {},
+    {"vmaf_yuv_u", "VMAF U", "VMAF U", "U", "VMAF U", 2, "", frame, higher_is_better, arithmetic, 100.0, {},
      bool_option("compute_vmaf_yuv_u"), {}, 0, "vmaf_yuv"},
-    {"vmaf_yuv_v", "VMAF YUV: V", "VMAF V", "V", "VMAF V", 2, "", frame, higher_is_better, arithmetic, 100.0, {},
+    {"vmaf_yuv_v", "VMAF V", "VMAF V", "V", "VMAF V", 2, "", frame, higher_is_better, arithmetic, 100.0, {},
      bool_option("compute_vmaf_yuv_v"), {}, 0, "vmaf_yuv"},
     {"ssimulacra2", "SSIMULACRA2", "SSIMULACRA2", "SSIMULACRA2", "SSIMULACRA2", 2, "", frame, higher_is_better,
      arithmetic, 100.0, ssimulacra2_thresholds, std::nullopt, "perceptual", 8},
