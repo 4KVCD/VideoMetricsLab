@@ -44,7 +44,7 @@ std::vector<std::string> may_run_on_gpu(const std::vector<std::string>& keys, bo
 std::string cpu_metrics_text(const std::vector<std::string>& keys, const std::vector<std::string>& maybe_gpu);
 
 // The same before VMAF's GPU backend is known: with `gpu_offered` (VMAF's place is the GPU:
-// VmafOptions::vmaf_on_gpu), every metric the GPU may take is named so.
+// VmafOptions::vmaf_on_gpu), every metric the GPU may take is named so, HDR VMAF (its features) included.
 std::string cpu_metrics_text(const std::vector<std::string>& keys, bool gpu_offered);
 
 // gpu_metrics_of's metrics on the GPU failed after they started (a lost device, say),

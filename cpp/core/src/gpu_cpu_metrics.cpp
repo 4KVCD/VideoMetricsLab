@@ -94,7 +94,13 @@ std::string cpu_metrics_text(const std::vector<std::string>& keys, const std::ve
 }
 
 std::string cpu_metrics_text(const std::vector<std::string>& keys, bool gpu_offered) {
-    return cpu_metrics_text(keys, may_run_on_gpu(keys, gpu_offered, gpu_offered));
+    std::vector<std::string> maybe_gpu = may_run_on_gpu(keys, gpu_offered, gpu_offered);
+    // HDR VMAF, scored in the app rather than by CpuScorer, follows VMAF's place too: its features on the engine
+    // (hdr_plan). maybe_gpu is a set to cpu_metrics_text, so its order does not matter.
+    if (gpu_offered && has(keys, "vmaf_hdr")) {
+        maybe_gpu.emplace_back("vmaf_hdr");
+    }
+    return cpu_metrics_text(keys, maybe_gpu);
 }
 
 struct GpuMetricsScorer::State {
