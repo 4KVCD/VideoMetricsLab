@@ -697,6 +697,9 @@ ParsedScores execute_gpu_run(const RunFrames& run, const VmafOptions& options, c
                                       },
                                       [&attempt](std::size_t command) { return attempt.closed_pipe_of(command); },
                                       run.total_frames, on_progress, cancel, folder.path());
+            // The scorer is built while the FFmpegs run; when it could not
+            // start, that is the failure to report, not theirs.
+            attempt.wait_started();
         } catch (const platform::ProcessError& error) {
             abandon();
             throw VmafRunError(std::string("FFmpeg could not be started: ") + error.what());

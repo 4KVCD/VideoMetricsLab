@@ -5,6 +5,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <future>
 #include <map>
 #include <mutex>
 #include <thread>
@@ -656,8 +657,12 @@ struct GpuAttempt::State {
     std::optional<BesideScorer> beside;  // the plan's metrics beside the pass's own
     std::unique_ptr<StreamReader> distorted;
     std::unique_ptr<StreamReader> reference;
+    std::size_t frame_bytes = 0;  // of each frame the pipes carry
+    // Set by the feeder once it has built the scorer, or failed to.
+    std::promise<void> starting;
+    std::shared_future<void> started;
     std::thread feeder;
-    std::exception_ptr error;  // the feeder's, set before it ends
+    std::exception_ptr error;  // the feeder's once the scorer started, set before it ends
     std::optional<PairScores> result;
     bool gpu_vmaf = true;  // a GPU VMAF pass, not the CPU metrics' alone (backend "cpu")
 };
@@ -665,6 +670,23 @@ struct GpuAttempt::State {
 GpuAttempt::GpuAttempt(const GpuPlan& plan, int n_subsample) : state_(std::make_unique<State>()) {
     State& s = *state_;
     s.gpu_vmaf = plan.backend != "cpu";
+    // Every scorer takes whole packed frames of the plan's size (checked
+    // once it is built), so the pipes can open before it exists.
+    s.frame_bytes = PackedFrame(plan.width, plan.height, plan.bit_depth).bytes();
+    s.distorted = std::make_unique<StreamReader>("distorted", s.frame_bytes);
+    s.reference = std::make_unique<StreamReader>("reference", s.frame_bytes);
+    s.distorted->start();
+    s.reference->start();
+    s.started = s.starting.get_future().share();
+    // The scorer is built on the feeder thread, while the FFmpegs start and
+    // decode their first frames: starting a GPU scorer (its Vulkan device,
+    // pipelines and memory) takes about 0.1 s, which used to come before
+    // the FFmpegs were even started.
+    s.feeder = std::thread([this, plan, n_subsample] { feed(plan, n_subsample); });
+}
+
+void GpuAttempt::start_scorer(const GpuPlan& plan, int n_subsample) {
+    State& s = *state_;
     if (plan.backend == "cpu") {
         std::vector<std::string> metrics;
         for (const auto& [key, same] : plan.models) {
@@ -692,15 +714,12 @@ GpuAttempt::GpuAttempt(const GpuPlan& plan, int n_subsample) : state_(std::make_
     }
     start_beside(s.beside, plan, n_subsample);
     // Both read the frames FFmpeg writes: whole frames, luma first.
-    if (s.beside && s.beside->frame_bytes() != s.scorer->frame_bytes()) {
-        throw LibvmafError("the metrics beside the pass take frames of another size than its own");
+    if (s.scorer->frame_bytes() != s.frame_bytes || (s.beside && s.beside->frame_bytes() != s.frame_bytes)) {
+        throw LibvmafError("the pass's scorers take frames of another size than its pipes carry");
     }
-    s.distorted = std::make_unique<StreamReader>("distorted", s.scorer->frame_bytes());
-    s.reference = std::make_unique<StreamReader>("reference", s.scorer->frame_bytes());
-    s.distorted->start();
-    s.reference->start();
-    s.feeder = std::thread([this] { feed(); });
 }
+
+void GpuAttempt::wait_started() const { state_->started.get(); }
 
 GpuAttempt::~GpuAttempt() {
     if (state_->feeder.joinable()) {
@@ -745,8 +764,19 @@ void GpuAttempt::feed_pairs() {
     }
 }
 
-void GpuAttempt::feed() {
+void GpuAttempt::feed(const GpuPlan& plan, int n_subsample) {
     State& s = *state_;
+    try {
+        start_scorer(plan, n_subsample);
+    } catch (...) {
+        // Kept apart from a scoring failure: the caller rethrows it as it
+        // is (wait_started), as when the scorer was built before the
+        // FFmpegs. Closing the pipes ends them.
+        s.starting.set_exception(std::current_exception());
+        stop();
+        return;
+    }
+    s.starting.set_value();
     try {
         StreamReader& test = *s.distorted;
         StreamReader& source = *s.reference;
@@ -781,6 +811,7 @@ std::optional<PairScores> GpuAttempt::finish(bool ffmpeg_succeeded) {
     }
     s.scorer.reset();  // its GPU memory, before anything else runs
     s.beside.reset();
+    wait_started();  // a scorer that could not start fails the run as it is
     // Frames cut short where FFmpeg failed are that failure, which the
     // caller reports and tries another decode plan for.
     if (s.error && !(holds<FramesCutError>(s.error) && !ffmpeg_succeeded)) {
