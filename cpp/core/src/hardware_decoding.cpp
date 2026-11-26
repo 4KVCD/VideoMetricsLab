@@ -425,12 +425,13 @@ bool take_read_details(VideoInfo& saved, const VideoInfo& read) {
         return false;
     }
     const bool changed = (saved.profile.empty() && !read.profile.empty()) ||
-                         saved.start_offset != read.start_offset || saved.format_name != read.format_name ||
-                         (read.monochrome_h264 && !saved.monochrome_h264);
+                         saved.start_offset != read.start_offset || saved.lead_in != read.lead_in ||
+                         saved.format_name != read.format_name || (read.monochrome_h264 && !saved.monochrome_h264);
     if (saved.profile.empty()) {
         saved.profile = read.profile;
     }
     saved.start_offset = read.start_offset;
+    saved.lead_in = read.lead_in;
     saved.format_name = read.format_name;
     // Never cleared: a reading that did not scan the stream says false.
     saved.monochrome_h264 = saved.monochrome_h264 || read.monochrome_h264;

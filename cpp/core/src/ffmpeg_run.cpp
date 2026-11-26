@@ -15,6 +15,7 @@
 #include <mutex>
 #include <regex>
 #include <set>
+#include <span>
 #include <sstream>
 #include <thread>
 #include <variant>
@@ -2430,13 +2431,37 @@ std::optional<RunScores> score_hdr_beside(const RunFrames& run, const VmafOption
     }
 }
 
-// A video whose container gives no duration was expected to be a frame long
-// (estimate_total_frames): its result, and Video Compare's frame box, then count
-// what was scored.
-void count_scored_frames(ComparisonResult& result, const ParsedScores& scores) {
-    if (result.compared_frame_count <= 1 && !scores.frame.empty()) {
-        result.compared_frame_count =
-            std::max<long long>(result.compared_frame_count, scores.frame.back() - scores.frame.front() + 1);
+// The frames one part's scores span; 0 for a part with none. Its step is
+// that of its frame numbers (some metrics score every frame of a subsampled
+// run), or the run's for a single score. Scores of every step-th frame
+// span up to step - 1 frames past the last score, which may not be there:
+// the estimate caps those, unless the container gave no length (the
+// estimate is then 1).
+long long scored_span(const ParsedScores& part, long long estimate, int run_step) {
+    if (part.frame.empty()) {
+        return 0;
+    }
+    const long long step = part.frame.size() > 1 ? part.frame[1] - part.frame[0] : run_step;
+    const long long scored = static_cast<long long>(part.frame.back()) - part.frame.front() + 1;
+    if (step <= 1 || estimate <= 1) {
+        return scored;
+    }
+    return std::max(scored, std::min(scored - 1 + step, estimate));
+}
+
+// The frames a run compared, for its result, its pass's fps and Video
+// Compare's frame box, once its parts' scores are in: the most any part
+// spans, not the estimate it started from (estimate_total_frames), which a
+// video shorter or longer than its length says gets wrong. The estimate
+// stays where no part has scores.
+void count_scored_frames(ComparisonResult& result, std::span<const ParsedScores> parts, int run_step) {
+    const long long estimate = result.compared_frame_count;
+    long long compared = 0;
+    for (const ParsedScores& part : parts) {
+        compared = std::max(compared, scored_span(part, estimate, run_step));
+    }
+    if (compared > 0) {
+        result.compared_frame_count = compared;
     }
 }
 
@@ -2553,8 +2578,8 @@ ComparisonResult score_pair_once(const RunEnvironment& environment, const VideoI
                 FrameMetricResult{key, part.frame, part.time, part.metrics.at(key), std::move(provenance)});
         }
         result.metric_failures.insert(part.failed.begin(), part.failed.end());
-        count_scored_frames(result, part);
     }
+    count_scored_frames(result, scores->parts, options.n_subsample);
     if (!result.metric_results.frame("vmaf_hdr")) {
         result.model_hdr.clear();  // no HDR VMAF score: no model to record with it
         result.model_choice_hdr.reset();
@@ -2839,7 +2864,7 @@ ComparisonResult resample_test_by_ffmpeg(const RunEnvironment& environment, cons
     result.distorted = synthetic_resample_distorted_path(source.path, *options.resample_test);
     result.resample_target = options.resample_test;
     result.metric_failures = scores.failed;
-    count_scored_frames(result, scores);
+    count_scored_frames(result, std::span(&scores, 1), options.n_subsample);
     for (const std::string& key : scores.order) {
         std::map<std::string, std::string> parameters;
         if (key == "vmaf_neg") {

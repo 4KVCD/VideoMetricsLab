@@ -112,6 +112,22 @@ TEST(Ffprobe, ReadsARotationTagAndAPairMustShareIt) {
     EXPECT_NE(pair_problem(upside_down, upright, 0, 0), std::nullopt);
 }
 
+// A Matroska length counts from the file's zero: 240 frames from 0.125 s end
+// at 10.124 s. A shorter DURATION tag may count from the first frame already.
+TEST(Ffprobe, AMatroskaVideosFramesStartAtItsFirstFrame) {
+    const auto video_with_tag = [](const std::string& tag) {
+        return video_info_from_probe(
+            "a.mkv", R"({"streams":[{"codec_type":"video","codec_name":"hevc","width":640,"height":360,)"
+                     R"("pix_fmt":"yuv420p","r_frame_rate":"24/1","avg_frame_rate":"24/1","start_time":"0.125",)"
+                     R"("tags":{"DURATION":")" + tag + R"("}}],)"
+                     R"("format":{"format_name":"matroska,webm","start_time":"0.125","duration":"10.124"}})");
+    };
+    const VideoInfo from_zero = video_with_tag("00:00:10.124000000");
+    EXPECT_EQ(from_zero.duration, 10.124);  // as saved scores' fingerprints have it
+    EXPECT_EQ(from_zero.estimated_frame_count(), 240);
+    EXPECT_EQ(video_with_tag("00:00:09.999000000").estimated_frame_count(), 240);
+}
+
 // Matroska's statistics tags tell a stream's rate, unless FFmpeg wrote the
 // file: then they are its input's, even through a re-encode.
 TEST(Ffprobe, StatisticsTagsCountUnlessFfmpegCopiedThem) {

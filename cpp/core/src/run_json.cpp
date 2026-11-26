@@ -138,6 +138,7 @@ nlohmann::json video_json(const VideoInfo& info) {
             {"chroma_location", info.chroma_location},
             {"format_name", info.format_name},
             {"start_offset", info.start_offset},
+            {"lead_in", info.lead_in},
             {"timed_raw", info.timed_raw}};
     if (info.bit_rate_estimated) {  // likewise
         text["bit_rate_estimated"] = true;
@@ -190,6 +191,7 @@ VideoInfo video_from(const nlohmann::json& text) {
     text.at("chroma_location").get_to(info.chroma_location);
     text.at("format_name").get_to(info.format_name);
     text.at("start_offset").get_to(info.start_offset);
+    info.lead_in = text.value("lead_in", 0.0);
     text.at("timed_raw").get_to(info.timed_raw);
     if (info.frame_rate_unknown()) {
         info.forget_frame_rate();  // saved before the rate was looked for: FFmpeg's guess

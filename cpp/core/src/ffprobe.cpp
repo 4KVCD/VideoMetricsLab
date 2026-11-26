@@ -420,6 +420,26 @@ double start_offset(const Json& stream, const Json& format) {
     return std::max(0.0, *stream_start - *file_start);
 }
 
+// The part of a Matroska video's length (as stream_duration took it) before
+// its first frame. Matroska's segment duration, and the DURATION tags
+// FFmpeg and mkvmerge write, run from the file's zero to the last frame's
+// end, so a video whose first frame comes at 0.125 s holds 0.125 s fewer
+// frames than its length says. Only a length equal to the container's is
+// taken to count from zero: a stream's own duration, or a tag shorter than
+// the container, may count from the first frame already.
+double matroska_lead_in(const Json& stream, const Json& format, double length, double container) {
+    const bool matroska = string_member(format, "format_name").find("matroska") != std::string::npos;
+    if (!matroska || truthy(member(stream, "duration"))) {
+        return 0.0;
+    }
+    constexpr double same_length = 0.01;
+    const std::optional<double> first_frame = float_of(member(stream, "start_time"));
+    if (!first_frame || *first_frame <= 0.0 || *first_frame >= length || std::abs(length - container) > same_length) {
+        return 0.0;
+    }
+    return *first_frame;
+}
+
 int integer_member(const Json& object, const char* key) {
     const Json* value = member(object, key);
     if (value == nullptr) {
@@ -466,6 +486,7 @@ VideoInfo video_info_from_probe(const std::filesystem::path& path, std::string_v
         container = float_of(duration).value_or(0.0);
     }
     info.duration = stream_duration(*video, container);
+    info.lead_in = matroska_lead_in(*video, format, info.duration, container);
 
     if (const Json* frames = member(*video, "nb_frames"); truthy(frames)) {
         info.nb_frames = frames->is_string() ? python_int(frames->get_ref<const std::string&>()).value_or(0)

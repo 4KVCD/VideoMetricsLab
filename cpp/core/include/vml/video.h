@@ -139,6 +139,10 @@ struct VideoInfo {
     // How long after the file's start the video's first frame comes, in
     // seconds.
     double start_offset = 0.0;
+    // The part of `duration` before the video's first frame, in seconds: a
+    // Matroska file's length counts from the file's zero, so a first frame
+    // at 0.125 s adds 0.125 s that holds no frame. 0 for other files.
+    double lead_in = 0.0;
     // A raw stream or raw YUV file whose frame rate is known: found in its
     // headers, entered in the window or given by the command line's --fps
     // (ffprobe.h's raw_stream_as_found, timed_raw_stream, probe_raw_yuv). Its
@@ -181,7 +185,9 @@ struct VideoInfo {
     // Its frames' size as they reach the comparison's filters: scaled_to,
     // or its own.
     std::pair<int, int> frame_size() const { return scaled_to.value_or(std::pair(width, height)); }
-    // The frame count ffprobe reports, or else duration times fps.
+    // Its length from its first frame to its end: duration less lead_in.
+    double length_seconds() const { return duration - lead_in; }
+    // The frame count ffprobe reports, or else length_seconds times fps.
     long long estimated_frame_count() const;
     // Whether this is a raw stream whose frame rate nobody knows: its headers
     // have none and none was entered. Its frames cannot be placed in time, so

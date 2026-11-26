@@ -26,7 +26,7 @@ nlohmann::ordered_json crop_to_dict(const std::optional<CropBox>& crop);
 // Nothing for null. Throws std::invalid_argument for a crop of another shape.
 std::optional<CropBox> crop_from_dict(const nlohmann::json& data);
 
-// A video's details (without format_name and start_offset, which the window
+// A video's details (without format_name, start_offset and lead_in, which the window
 // reads again from the file: take_read_details; and which neither
 // file keeps).
 nlohmann::ordered_json video_info_to_dict(const VideoInfo& info);

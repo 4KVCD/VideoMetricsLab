@@ -76,7 +76,7 @@ long long VideoInfo::estimated_frame_count() const {
         return nb_frames;
     }
     // Python's round(): halves go to the even neighbour.
-    return std::max(1LL, static_cast<long long>(std::nearbyint(duration * fps)));
+    return std::max(1LL, static_cast<long long>(std::nearbyint(length_seconds() * fps)));
 }
 
 void VideoInfo::set_frame_rate(double frames_per_second) {

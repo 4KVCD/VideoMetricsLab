@@ -33,10 +33,10 @@ std::string with_thousands(long long number) {
 
 // The frames a video's length holds at its frame rate; 0 when not known.
 long long length_frames(const VideoInfo& video) {
-    if (video.duration <= 0 || video.fps <= 0) {
+    if (video.length_seconds() <= 0 || video.fps <= 0) {
         return 0;
     }
-    return std::llround(video.duration * video.fps);
+    return std::llround(video.length_seconds() * video.fps);
 }
 
 // The first frame a ranged run's scores start at (their provenance's
