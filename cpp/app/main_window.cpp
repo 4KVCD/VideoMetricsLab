@@ -41,6 +41,7 @@
 #include "graph_panel.h"
 #include "worst_frames_tab.h"
 #include "i18n.h"
+#include "keyboard.h"
 #include "metric_list.h"
 #include "metric_order.h"
 #include "notifier.h"
@@ -294,6 +295,8 @@ MainWindow::MainWindow() {
     open_videos_timer_->setSingleShot(true);
     open_videos_timer_->setInterval(0);
     connect(open_videos_timer_, &QTimer::timeout, this, [this] { save_open_videos(); });
+    // Where the focus is, shown while it is moved with the keys (VML Modern's ring).
+    keyboard::install();
     build_ui();
     // At least 1050x650, and never smaller than the window's contents need.
     setMinimumSize(QSize(1050, 650).expandedTo(minimumSizeHint()));

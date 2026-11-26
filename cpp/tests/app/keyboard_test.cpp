@@ -1,5 +1,6 @@
 // The window from the keyboard: Tab moves from control to control and out of
-// every table and time box, as on Windows.
+// every table and time box, as on Windows, and Enter presses a button the
+// keys moved to.
 #include <QAbstractItemView>
 #include <QApplication>
 #include <QHeaderView>
@@ -11,6 +12,7 @@
 
 #include <gtest/gtest.h>
 
+#include "keyboard.h"
 #include "main_window.h"
 #include "options_panel.h"
 #include "vml/options.h"
@@ -104,6 +106,36 @@ TEST(Keyboard, TabLeavesATimeBoxAtOnce) {
     QTest::keyClick(start, Qt::Key_Right, Qt::NoModifier);
     QTest::keyClick(start, Qt::Key_Right, Qt::NoModifier);
     EXPECT_EQ(start->currentSection(), QDateTimeEdit::MinuteSection);  // past "00:" to the minutes
+}
+
+// Enter presses a button the keys moved to, as Space does; after a click
+// Enter is left alone (nothing shows where the focus is), and a dialog's
+// buttons keep Qt's own Enter, its default button's.
+TEST(Keyboard, EnterPressesAButtonTheKeysMovedTo) {
+    keyboard::install();
+    QWidget window;
+    auto* layout = new QVBoxLayout(&window);
+    auto* first = new QPushButton(QStringLiteral("first"));
+    auto* second = new QPushButton(QStringLiteral("second"));
+    layout->addWidget(first);
+    layout->addWidget(second);
+    int pressed = 0;
+    QObject::connect(second, &QPushButton::clicked, [&pressed] { ++pressed; });
+    window.show();
+    window.activateWindow();
+    ASSERT_TRUE(QTest::qWaitForWindowActive(&window));
+    first->setFocus(Qt::OtherFocusReason);
+    QTest::keyClick(first, Qt::Key_Tab);
+    ASSERT_EQ(QApplication::focusWidget(), second);
+    EXPECT_TRUE(keyboard::focus_visible());
+    QTest::keyClick(second, Qt::Key_Return);
+    EXPECT_EQ(pressed, 1);
+    QTest::mouseClick(first, Qt::LeftButton);
+    EXPECT_FALSE(keyboard::focus_visible());
+    second->setFocus(Qt::OtherFocusReason);
+    QTest::keyClick(second, Qt::Key_Return);
+    QApplication::processEvents();
+    EXPECT_EQ(pressed, 1);
 }
 
 }  // namespace
