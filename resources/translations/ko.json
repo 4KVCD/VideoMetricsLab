@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Default order": "기본 순서",
+  "Drag a heading in the Videos table to move its metric in every list.": "동영상 표의 머리글을 끌면 해당 지표가 모든 목록에서 이동합니다.",
+  "The metrics in the order this list shows them, in every list.": "이 목록이 보여 주는 순서의 지표를 모든 목록에서 사용합니다.",
   "Copied": "복사됨",
   "Copy": "복사",
   "Copy all of it": "모두 복사",

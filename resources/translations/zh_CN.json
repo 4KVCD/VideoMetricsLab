@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Default order": "默认顺序",
+  "Drag a heading in the Videos table to move its metric in every list.": "在视频表中拖动标题，即可在所有列表中移动其指标。",
+  "The metrics in the order this list shows them, in every list.": "所有列表都按此列表显示的顺序排列指标。",
   "Copied": "已复制",
   "Copy": "复制",
   "Copy all of it": "全部复制",

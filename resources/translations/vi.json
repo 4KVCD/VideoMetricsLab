@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Default order": "Thứ tự mặc định",
+  "Drag a heading in the Videos table to move its metric in every list.": "Kéo một tiêu đề trong bảng Video để di chuyển chỉ số của nó trong mọi danh sách.",
+  "The metrics in the order this list shows them, in every list.": "Các chỉ số theo thứ tự danh sách này hiển thị, trong mọi danh sách.",
   "Copied": "Đã sao chép",
   "Copy": "Sao chép",
   "Copy all of it": "Sao chép tất cả",

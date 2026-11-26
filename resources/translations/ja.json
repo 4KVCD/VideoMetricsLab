@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Default order": "既定の順序",
+  "Drag a heading in the Videos table to move its metric in every list.": "動画の表の見出しをドラッグすると、その指標がすべての一覧で移動します。",
+  "The metrics in the order this list shows them, in every list.": "この一覧が表示する順序の指標を、すべての一覧で使います。",
   "Copied": "コピーしました",
   "Copy": "コピー",
   "Copy all of it": "すべてコピー",

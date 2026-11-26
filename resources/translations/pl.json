@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Default order": "Domyślna kolejność",
+  "Drag a heading in the Videos table to move its metric in every list.": "Przeciągnij nagłówek w tabeli filmów, aby przenieść jego metrykę na każdej liście.",
+  "The metrics in the order this list shows them, in every list.": "Metryki w kolejności, w jakiej pokazuje je ta lista, na każdej liście.",
   "Copied": "Skopiowano",
   "Copy": "Kopiuj",
   "Copy all of it": "Kopiuj wszystko",
