@@ -879,7 +879,17 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     // The 6:1:1 metrics beside read the chroma too: the decoders decode whole
     // frames, and the engine is given their luma.
     const bool chroma_beside = cpu_metrics_read_chroma(plan.beside);
-    std::string gpu;  // its name, for messages
+    // The Vulkan engine's GPU's name; throws VmafVulkanError where Vulkan lists none such. Asked for once the
+    // decoders have started: the GPU's Vulkan driver loads meanwhile (scoring_task), which took 194 ms (RTX 5090).
+    const auto vulkan_gpu = [&plan] {
+        const std::vector<VulkanDevice> found = vulkan_devices();
+        const auto chosen = std::find_if(found.begin(), found.end(),
+                                         [&](const VulkanDevice& device) { return device.index == plan.device; });
+        if (chosen == found.end()) {
+            throw VmafVulkanError("no GPU that Vulkan can calculate VMAF on");
+        }
+        return chosen->name;
+    };
     if (cuda) {
         // libvmaf's CUDA code takes NVIDIA's pictures on the GPU and uploads
         // the software decoder's.
@@ -888,18 +898,10 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
                 throw GpuDecodeUnavailableError("libvmaf's CUDA code takes NVIDIA's and the software decoder's");
             }
         }
-        gpu = "NVIDIA's GPU";
-    } else {
-        const std::vector<VulkanDevice> found = vulkan_devices();
-        const auto chosen = std::find_if(found.begin(), found.end(),
-                                         [&](const VulkanDevice& device) { return device.index == plan.device; });
-        if (chosen == found.end()) {
-            throw VmafVulkanError("no GPU that Vulkan can calculate VMAF on");
-        }
-        gpu = chosen->name;
     }
     for (const std::string& library : {source_backend, test_backend}) {
         if (library.empty() || !decoder_available(library)) {
+            const std::string gpu = cuda ? std::string("NVIDIA's GPU") : vulkan_gpu();
             throw GpuDecodeUnavailableError("no decoder library for " + gpu);
         }
     }
@@ -942,6 +944,7 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
         open_pass_stream(distorted, plans[0], 4, test_backend, vvdec.test, plan.device, ffmpeg, ffprobe, hand_over);
     GpuFrameStream reference = open_pass_stream(source, plans[1], 4, source_backend, vvdec.reference, plan.device,
                                                 ffmpeg, ffprobe, hand_over);
+    static_cast<void>(vulkan_gpu());  // that Vulkan lists the engine's GPU, now its driver has had time to load
     // The metrics beside. Where the decoders and Vulkan share memory (below), HDR VMAF's GPU takes the pictures
     // from the decoders too, if it converts them (HdrScorer's `shared`); the pass's scorer then does as well.
     // After the streams, so that it goes before them: it gives back the memory NVIDIA's decoder page-locked for

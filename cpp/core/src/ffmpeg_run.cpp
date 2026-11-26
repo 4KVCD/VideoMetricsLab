@@ -8,6 +8,7 @@
 #include <cmath>
 #include <condition_variable>
 #include <fstream>
+#include <future>
 #include <limits>
 #include <map>
 #include <memory>
@@ -45,6 +46,7 @@
 #include "vml/vmaf_cuda.h"
 #include "vml/vmaf_hdr.h"
 #include "vml/vmaf_v1_gpu.h"
+#include "vml/vmaf_vulkan.h"
 
 namespace vml {
 
@@ -1732,7 +1734,34 @@ bool shares_decode(const VideoInfo& source, const VideoInfo& test, const VmafOpt
     return !decoding.source || !decoding.distorted || pass_feeds_cpu_metrics(source, test, decoding);
 }
 
+namespace {
+
+// Whether scoring `plan` opens the Vulkan engine: VMAF on it, VMAF v1 (Vulkan's on every GPU), HDR VMAF's features
+// on the GPU, or CIEDE2000, CAMBI or VMAF YUV's U and V on it (extra_gpu, set only for those).
+bool plan_opens_vulkan(const GpuPlan& plan) {
+    const std::vector<std::string> keys = plan_keys(plan);
+    return plan.backend == "vulkan" || plan.extra_gpu || plan.hdr_gpu ||
+           std::find(keys.begin(), keys.end(), "vmaf_v1") != keys.end();
+}
+
+}  // namespace
+
 nlohmann::json scoring_task(const nlohmann::json& request, const std::filesystem::path& folder) {
+    const GpuPlan plan = plan_from(request.at("plan"));
+    // The GPU's Vulkan driver loaded on a thread of its own while the decoders start, where the plan opens the
+    // engine: its first instance in a process took 194 ms (RTX 5090, driver 617.24), every later one 15-20 ms, and
+    // each pass is a process of its own. The engine makes its one instance once, whichever thread asks first. The
+    // future waits for the thread as it goes (std::jthread is not in the macOS CI's library).
+    std::future<void> vulkan_warmup;
+    if (plan_opens_vulkan(plan)) {
+        vulkan_warmup = std::async(std::launch::async, [] {
+            try {
+                static_cast<void>(vulkan_devices());
+            } catch (const std::exception&) {
+                // The pass's own first use reports it.
+            }
+        });
+    }
     RunEnvironment environment;
     environment.ffmpeg = request.at("ffmpeg").get<std::string>();
     environment.ffprobe = request.at("ffprobe").get<std::string>();
@@ -1741,7 +1770,6 @@ nlohmann::json scoring_task(const nlohmann::json& request, const std::filesystem
     const VideoInfo distorted = video_from(request.at("distorted"));
     const std::optional<CropBox> source_crop = crop_from(request.at("source_crop"));
     const std::optional<CropBox> distorted_crop = crop_from(request.at("distorted_crop"));
-    const GpuPlan plan = plan_from(request.at("plan"));
     const HardwareDecoding decoding{hwaccel_from(decoders.at("source")), hwaccel_from(decoders.at("distorted"))};
     const CancelToken cancel;  // the parent cancels by ending this process
     // The plan was made in the parent, with the metrics that follow VMAF's place already placed.
