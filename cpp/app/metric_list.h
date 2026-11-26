@@ -26,6 +26,9 @@ class QGridLayout;
 class QLabel;
 class QToolButton;
 
+class QEvent;
+class QScrollArea;
+
 namespace vml::app {
 
 // A metric's tooltip: what it measures, its unit and which way is better,
@@ -110,9 +113,20 @@ public:
     // Shows the panel with its top-right corner at `top_right` (a button's
     // bottom right), or its top left at `top_left`, kept on the screen.
     void show_at(const QPoint& top_left, std::optional<QPoint> top_right = std::nullopt);
+    // The list's scroll area: it scrolls only where the list is taller than
+    // the screen's room (a small screen, a large scaling).
+    QScrollArea* scroll() const { return scroll_; }
+    // The panel at most `height` high, the list scrolled within it where it
+    // is taller (show_at: its screen's available height; 0: no bound).
+    void fit_height(int height);
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     MetricList* list_;
+    QScrollArea* scroll_ = nullptr;
+    int room_ = 0;  // the most height the list may take on its screen (show_at); 0: no bound
 };
 
 }  // namespace vml::app

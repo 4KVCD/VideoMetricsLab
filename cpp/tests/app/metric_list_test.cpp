@@ -15,6 +15,8 @@
 #include <QTest>
 #include <QToolButton>
 
+#include <QScrollArea>
+#include <QScrollBar>
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -45,16 +47,17 @@ TEST(MetricList, AllAndNoneTickASectionKeepingOneInThePanel) {
     EXPECT_EQ(section_ticks({"psnr", "ssim"}, MetricSection::general_purpose, false, 0), Keys{});
 }
 
-// The panel: the 17 metrics with their tooltips, Specialized folded and
-// counted, the count of shown, the last shown kept, and the planes' switch
-// apart from the metrics' ticks.
+// The panel: the 17 metrics with their tooltips, Specialized open at first
+// (#251: folded, its metrics were found only by those who knew to unfold
+// it) and, folded, counted; the count of shown, the last shown kept, and
+// the planes' switch apart from the metrics' ticks.
 TEST(MetricList, PanelCountsTheMetricsShownAndKeepsThePlanesApart) {
     MetricList list(MetricList::Place::panel);
     const Keys general{"vmaf", "vmaf_neg", "vmaf_v1", "vmaf_hdr", "psnr", "ssim", "xpsnr",
                        "ssimulacra2", "butteraugli", "cvvdp"};
     list.set_ticked(general);
     EXPECT_EQ(list.ticked(), general);
-    EXPECT_FALSE(list.specialized_open());
+    EXPECT_TRUE(list.specialized_open());
     const auto label_with = [&list](const QString& text) {
         for (const QLabel* label : list.findChildren<QLabel*>()) {
             if (label->text() == text) {
@@ -70,6 +73,8 @@ TEST(MetricList, PanelCountsTheMetricsShownAndKeepsThePlanesApart) {
     };
     EXPECT_TRUE(label_with("10 of 19 shown"));
     EXPECT_TRUE(label_with("General purpose (10)"));
+    EXPECT_TRUE(label_with("Specialized (9)"));
+    list.set_specialized_open(false);  // folded still: how many of it are shown
     EXPECT_TRUE(label_with("Specialized (9) · 0 shown"));
     ASSERT_NE(list.box("cambi"), nullptr);
     EXPECT_EQ(list.box("psnr_yuv_y"), nullptr);  // a plane is no metric of the list
@@ -110,14 +115,55 @@ TEST(MetricList, PanelShrinksBackWhenSpecializedFolds) {
     panel->list()->set_ticked(Keys{"vmaf"});
     panel->show_at(QPoint(0, 0));
     settle();
+    const int open = panel->height();  // as it opens (#251)
+    panel->list()->set_specialized_open(false);
+    settle();
     const int folded = panel->height();
+    EXPECT_LT(folded, open);
     panel->list()->set_specialized_open(true);
     settle();
-    EXPECT_GT(panel->height(), folded);
+    EXPECT_EQ(panel->height(), open);
     panel->list()->set_specialized_open(false);
     settle();
     EXPECT_EQ(panel->height(), folded);
     EXPECT_EQ(panel->list()->height(), panel->list()->sizeHint().height());
+    panel->hide();
+}
+
+// Taller than its screen's room (Specialized open, #251, on a small screen or
+// at a large scaling), the panel stays within it and its list scrolls, every
+// metric still reachable; with room, nothing scrolls.
+TEST(MetricList, PanelScrollsRatherThanRunPastTheScreen) {
+    auto* panel = new MetricsPanel(nullptr);
+    const std::unique_ptr<MetricsPanel> owned(panel);
+    panel->list()->set_ticked(Keys{"vmaf"});
+    // As wide as the list must be: its minimum width (72 characters) is more
+    // than its size hint in the window's fonts, and a scroll area as narrow
+    // as the hint cut the panel's right side off. Made so here.
+    panel->list()->setMinimumWidth(panel->list()->sizeHint().width() + 200);
+    panel->fit_height(0);  // no bound
+    panel->show();
+    QApplication::processEvents();
+    const int open = panel->height();
+    EXPECT_FALSE(panel->scroll()->verticalScrollBar()->isVisible());
+    EXPECT_GE(panel->scroll()->viewport()->width(), panel->list()->minimumWidth());
+    EXPECT_EQ(panel->list()->width(), panel->scroll()->viewport()->width());
+
+    panel->fit_height(open / 2);
+    QApplication::processEvents();
+    EXPECT_LE(panel->height(), open / 2);
+    QScrollBar* bar = panel->scroll()->verticalScrollBar();
+    EXPECT_TRUE(bar->isVisible());
+    EXPECT_GT(bar->maximum(), 0);
+    bar->setValue(bar->maximum());  // the last metric in sight at the bottom
+    QCheckBox* last = panel->list()->box("vmaf_yuv");
+    ASSERT_NE(last, nullptr);
+    const QPoint in_view = last->mapTo(panel->scroll()->viewport(), QPoint(0, last->height()));
+    EXPECT_LE(in_view.y(), panel->scroll()->viewport()->height());
+
+    panel->fit_height(open * 2);  // room again
+    QApplication::processEvents();
+    EXPECT_EQ(panel->height(), open);
     panel->hide();
 }
 

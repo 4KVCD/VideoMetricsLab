@@ -510,8 +510,9 @@ app's own bands, or the metric's authors' scale). *General purpose* (VMAF
 v0.6.1, VMAF NEG, VMAF v1, HDR VMAF, PSNR, SSIM, XPSNR, SSIMULACRA2,
 Butteraugli and CVVDP) is what a new install shows, HDR VMAF unticked.
 *Specialized* (PSNR YUV, PSNR YUV avg. MSE, SSIM YUV, MS-SSIM, MS-SSIM YUV,
-PSNR-HVS-M, CAMBI, CIEDE2000 and VMAF YUV) is folded away
-until one of them is shown. A tick there shows or hides a metric's column,
+PSNR-HVS-M, CAMBI, CIEDE2000 and VMAF YUV) is open too, so every metric is in
+sight; its heading folds it away. On a screen too small for the whole list,
+the panel scrolls. A tick there shows or hides a metric's column,
 nothing more; the tick in a column says whether that row calculates it, and a
 run calculates what is ticked and shown. The Specialized metrics start
 ticked but hidden, so showing one is enough to calculate it (settings already
