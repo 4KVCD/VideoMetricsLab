@@ -143,6 +143,11 @@ public:
     // The pointer at time `x`, value `y`: the frames to report, and the
     // crosshair on the moment chosen.
     void on_hover(double x, double y, const std::map<int, SeriesEntry>& entries);
+    // Each shown line's frame that the readout reports for the pointer at
+    // time `x`, value `y` (the graph's right-click: that frame in Video
+    // Compare); none when no line is shown.
+    std::vector<std::pair<const SeriesEntry*, int>> frames_at(double x, double y,
+                                                              const std::map<int, SeriesEntry>& entries) const;
     // Every shown line at exactly `frame`; whether any has it.
     bool show_frame(int frame, const std::map<int, SeriesEntry>& entries);
     // The readout written again for the point it shows (the last hover or
@@ -215,6 +220,14 @@ private:
                                                       double x_per_pixel) const;
     // A line's row in the readout: its run, line and point.
     using ReadoutPick = std::tuple<const SeriesEntry*, const MetricCurve*, std::size_t>;
+    // The shown lines' rows for the pointer at time `x`, value `y`, in the
+    // table's order (none when no line is shown), and where the crosshair
+    // goes: nothing for the first row's point.
+    struct ReadoutPicks {
+        std::vector<ReadoutPick> picks;
+        std::optional<double> cursor_time;
+    };
+    ReadoutPicks readout_picks(double x, double y, const std::map<int, SeriesEntry>& entries) const;
     std::optional<QString> delta_row(const ReadoutPick& first, const ReadoutPick& second) const;
 
     const MetricDefinition* metric_;
@@ -370,6 +383,9 @@ signals:
     // The statistics' right-click menu, as the Videos table's: a line's
     // video's export, of what Settings' Exports include.
     void video_export_requested(const std::string& identity);
+    // The graph's right-click: frame `frame` of a line's video in Video
+    // Compare.
+    void video_compare_requested(const std::string& identity, int frame);
     // Show removed videos: the rows' lines removed here, to add again with
     // restore (the window has their results).
     void restore_removed_requested();
@@ -456,7 +472,10 @@ private:
     void add_quick_grabs(QMenu& menu, StatsMenu& items, bool graph, bool statistics) const;
     // Each of `items` doing what it says.
     void connect_menu(const StatsMenu& items);
-    void show_graph_menu(ChartWidget& chart, const QPoint& position);
+    // The graph's right-click at `position` on `page`'s chart: the frame
+    // there in Video Compare, inside the plotting area, then the quick grabs.
+    void fill_graph_menu(QMenu& menu, MetricPage& page, const QPoint& position, StatsMenu& items);
+    void show_graph_menu(MetricPage& page, const QPoint& position);
     // The statistics' file name without extension, and their text as JSON
     // or CSV (export_statistics' and the save icon's).
     QString statistics_stem() const;

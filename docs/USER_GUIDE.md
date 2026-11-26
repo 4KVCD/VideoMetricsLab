@@ -86,7 +86,9 @@ calculated in resolution tests.
    — then; its graph's statistics are of the whole seconds the frames fall in.
    **Clear range** goes back to the whole videos. The CSV export always holds
    every frame. **Go to time** moves to the frame shown at a time, as **Go to
-   frame** does to a frame.
+   frame** does to a frame. Right-click the graph for **Show frame N in Video
+   Compare**: the frame the readout gives there, opened in Video Compare (with
+   several videos shown, pick whose under **Show frame in Video Compare**).
 6. Find a video's weak spots in **Worst Frames**. On the left, every video
    with its number of weak segments and its worst score on the metric shown,
    so the weakest encode stands out; click one to work on it. Under the

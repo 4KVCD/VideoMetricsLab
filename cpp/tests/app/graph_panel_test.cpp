@@ -108,6 +108,23 @@ protected:
         }
         return texts;
     }
+    // The graph's right-click menu at `at` on `page`'s chart, filled into
+    // `menu`: its items' texts, a submenu's as "submenu > item".
+    static QStringList graph_menu(GraphPanel& panel, MetricPage& page, QPoint at, QMenu& menu) {
+        GraphPanel::StatsMenu items;
+        panel.fill_graph_menu(menu, page, at, items);
+        QStringList texts;
+        for (const QAction* action : menu.actions()) {
+            if (action->menu() != nullptr) {
+                for (const QAction* item : action->menu()->actions()) {
+                    texts << action->text() + " > " + item->text();
+                }
+            } else if (!action->isSeparator()) {
+                texts << action->text();
+            }
+        }
+        return texts;
+    }
     // Every cell's text, row by row.
     static std::vector<QStringList> cell_texts(GraphPanel& panel) {
         std::vector<QStringList> rows;
@@ -539,6 +556,45 @@ TEST_F(GraphPanelTest, TheReadoutPairsTheLinesByFrame) {
     panel.add_run({shared(vmaf_result("c.mkv", unscored)), "c", {}, true});
     vmaf.on_hover(5 / 30.0, 60.0, entries(panel));
     EXPECT_FALSE(readout(vmaf).contains(QStringLiteral("Δ"))) << readout(vmaf).toStdString();
+}
+
+// The graph's right-click offers the frame the readout reports there in
+// Video Compare: with several lines, each line's video at its frame; none
+// outside the plotting area.
+TEST_F(GraphPanelTest, TheGraphsRightClickShowsTheFrameThereInVideoCompare) {
+    std::vector<float> dip(10, 95.0F);
+    dip[5] = 30.0F;
+    const auto menu_at_dip = [](GraphPanel& panel, QMenu& menu) {
+        MetricPage& vmaf = page(panel, "vmaf");
+        vmaf.chart().resize(800, 400);
+        int row = vmaf.chart().lines_rect().top();
+        while (vmaf.chart().value_at(row) > 60.0) {  // the hover at the dip of TheReadoutPairsTheLinesByFrame
+            ++row;
+        }
+        return graph_menu(panel, vmaf, QPoint(vmaf.chart().pixel_for_time(5 / 30.0), row), menu);
+    };
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    panel.add_runs({{shared(vmaf_result("short.mkv", {80.0F, 80.0F, 80.0F})), "short", "id-short", true},
+                    {shared(vmaf_result("a.mkv", dip)), "a", "id-a", true}});
+    QMenu menu;
+    const QStringList texts = menu_at_dip(panel, menu);
+    ASSERT_GE(texts.size(), 2);
+    // The shorter line, without frame 5, at its frame nearest that moment, as its readout row.
+    EXPECT_EQ(texts.mid(0, 2), (QStringList{"Show frame in Video Compare > short: frame 2",
+                                            "Show frame in Video Compare > a: frame 5"}));
+    std::vector<std::pair<std::string, int>> asked;
+    QObject::connect(&panel, &GraphPanel::video_compare_requested,
+                     [&asked](const std::string& identity, int frame) { asked.emplace_back(identity, frame); });
+    menu.actions().front()->menu()->actions().back()->trigger();
+    EXPECT_EQ(asked, (std::vector<std::pair<std::string, int>>{{"id-a", 5}}));
+    QMenu outside;
+    EXPECT_FALSE(graph_menu(panel, page(panel, "vmaf"), QPoint(0, 0), outside).join('\n').contains("Video Compare"));
+
+    GraphPanel one(&colors);
+    one.add_runs({{shared(vmaf_result("a.mkv", dip)), "a", "id-a", true}});
+    QMenu single;
+    EXPECT_EQ(menu_at_dip(one, single).front(), QStringLiteral("Show frame 5 in Video Compare"));
 }
 
 // Lines ticked off or on after a hover: the readout's text is of the lines

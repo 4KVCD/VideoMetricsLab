@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Show frame {frame} in Video Compare": "Kare {frame} Video karşılaştırmada göster",
+  "Show frame in Video Compare": "Kareyi Video karşılaştırmada göster",
+  "{video}: frame {frame}": "{video}: kare {frame}",
   "Default order": "Varsayılan sıra",
   "Drag a heading in the Videos table to move its metric in every list.": "Videolar tablosunda bir başlığı sürükleyerek metriğini her listede taşıyın.",
   "The metrics in the order this list shows them, in every list.": "Metrikler, bu listenin gösterdiği sırayla, her listede.",

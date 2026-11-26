@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Show frame {frame} in Video Compare": "Mostrar o quadro {frame} em Comparar vídeos",
+  "Show frame in Video Compare": "Mostrar o quadro em Comparar vídeos",
+  "{video}: frame {frame}": "{video}: quadro {frame}",
   "Default order": "Ordem padrão",
   "Drag a heading in the Videos table to move its metric in every list.": "Arraste um cabeçalho na tabela de vídeos para mover sua métrica em todas as listas.",
   "The metrics in the order this list shows them, in every list.": "As métricas na ordem em que esta lista as mostra, em todas as listas.",

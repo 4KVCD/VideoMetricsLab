@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Show frame {frame} in Video Compare": "Показати кадр {frame} у Порівнянні відео",
+  "Show frame in Video Compare": "Показати кадр у Порівнянні відео",
+  "{video}: frame {frame}": "{video}: кадр {frame}",
   "Default order": "Типовий порядок",
   "Drag a heading in the Videos table to move its metric in every list.": "Перетягніть заголовок у таблиці відео, щоб перемістити його метрику в усіх списках.",
   "The metrics in the order this list shows them, in every list.": "Метрики в порядку, у якому їх показує цей список, в усіх списках.",

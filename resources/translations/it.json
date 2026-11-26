@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Show frame {frame} in Video Compare": "Mostra il fotogramma {frame} in Confronto video",
+  "Show frame in Video Compare": "Mostra il fotogramma in Confronto video",
+  "{video}: frame {frame}": "{video}: fotogramma {frame}",
   "Default order": "Ordine predefinito",
   "Drag a heading in the Videos table to move its metric in every list.": "Trascina un’intestazione nella tabella dei video per spostarne la metrica in ogni elenco.",
   "The metrics in the order this list shows them, in every list.": "Le metriche nell’ordine in cui le mostra questo elenco, in ogni elenco.",

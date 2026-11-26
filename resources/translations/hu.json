@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Show frame {frame} in Video Compare": "A(z) {frame}. képkocka megjelenítése a Videó-összehasonlításban",
+  "Show frame in Video Compare": "A képkocka megjelenítése a Videó-összehasonlításban",
+  "{video}: frame {frame}": "{video}: {frame}. képkocka",
   "Default order": "Alapértelmezett sorrend",
   "Drag a heading in the Videos table to move its metric in every list.": "Húzzon egy fejlécet a Videók táblázatban, hogy a metrikáját minden listában áthelyezze.",
   "The metrics in the order this list shows them, in every list.": "A metrikák abban a sorrendben, ahogy ez a lista mutatja őket, minden listában.",

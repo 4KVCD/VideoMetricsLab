@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Show frame {frame} in Video Compare": "在视频对比中显示第 {frame} 帧",
+  "Show frame in Video Compare": "在视频对比中显示此帧",
+  "{video}: frame {frame}": "{video}：第 {frame} 帧",
   "Default order": "默认顺序",
   "Drag a heading in the Videos table to move its metric in every list.": "在视频表中拖动标题，即可在所有列表中移动其指标。",
   "The metrics in the order this list shows them, in every list.": "所有列表都按此列表显示的顺序排列指标。",

@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Show frame {frame} in Video Compare": "عرض الإطار {frame} في مقارنة الفيديو",
+  "Show frame in Video Compare": "عرض الإطار في مقارنة الفيديو",
+  "{video}: frame {frame}": "{video}: الإطار {frame}",
   "Default order": "الترتيب الافتراضي",
   "Drag a heading in the Videos table to move its metric in every list.": "اسحب عنوانًا في جدول الفيديوهات لنقل مقياسه في كل القوائم.",
   "The metrics in the order this list shows them, in every list.": "المقاييس بالترتيب الذي تعرضها به هذه القائمة، في كل القوائم.",

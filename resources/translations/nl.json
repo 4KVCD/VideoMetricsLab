@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Show frame {frame} in Video Compare": "Frame {frame} tonen in Video vergelijken",
+  "Show frame in Video Compare": "Frame tonen in Video vergelijken",
+  "{video}: frame {frame}": "{video}: frame {frame}",
   "Default order": "Standaardvolgorde",
   "Drag a heading in the Videos table to move its metric in every list.": "Sleep een kop in de videotabel om de metriek ervan in elke lijst te verplaatsen.",
   "The metrics in the order this list shows them, in every list.": "De metrieken in de volgorde waarin deze lijst ze toont, in elke lijst.",

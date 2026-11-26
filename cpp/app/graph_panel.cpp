@@ -1034,8 +1034,8 @@ void MetricPage::refresh_readout(const std::map<int, SeriesEntry>& entries) {
     }
 }
 
-void MetricPage::hover_readout(double x, double y, const std::map<int, SeriesEntry>& entries, bool place_cursor) {
-    const double x_per_pixel = chart_->seconds_per_pixel();
+MetricPage::ReadoutPicks MetricPage::readout_picks(double x, double y,
+                                                   const std::map<int, SeriesEntry>& entries) const {
     std::vector<std::pair<const SeriesEntry*, const MetricCurve*>> shown;
     for (const auto& [id, curve] : curves_) {
         const auto entry = entries.find(id);
@@ -1043,16 +1043,12 @@ void MetricPage::hover_readout(double x, double y, const std::map<int, SeriesEnt
             shown.emplace_back(&entry->second, &curve);
         }
     }
-    const QString time_line = app::tr("Time: {time}", {{"time", qt_text(format_hms(x, 2))}});
+    ReadoutPicks result;
     if (shown.empty()) {
-        if (place_cursor) {
-            chart_->set_cursor_time(x);
-        }
-        set_hover_text(time_line);
-        return;
+        return result;
     }
-    std::vector<ReadoutPick> picks;
-    std::optional<double> cursor_time;  // nothing: the first line's point
+    std::vector<ReadoutPick>& picks = result.picks;
+    const double x_per_pixel = chart_->seconds_per_pixel();
     if (metric_->kind == MetricKind::sequence) {
         // A per-second line: the second under the pointer. Snapping to dips
         // would look five whole seconds either side.
@@ -1077,14 +1073,35 @@ void MetricPage::hover_readout(double x, double y, const std::map<int, SeriesEnt
             picks.emplace_back(entry, curve, index.value_or(nearest_index_by_time(curve->times, target)));
         }
         if (anchor) {
-            cursor_time = target;
+            result.cursor_time = target;
         }
     } else {
         const auto& [entry, curve] = shown.front();
         const double half_window = std::max(step_of(curve->times), x_per_pixel) * hover_search_steps;
         picks.emplace_back(entry, curve, find_hover_index(*curve, x, y, half_window));
     }
+    return result;
+}
 
+std::vector<std::pair<const SeriesEntry*, int>> MetricPage::frames_at(double x, double y,
+                                                                      const std::map<int, SeriesEntry>& entries) const {
+    std::vector<std::pair<const SeriesEntry*, int>> frames;
+    for (const auto& [entry, curve, index] : readout_picks(x, y, entries).picks) {
+        frames.emplace_back(entry, curve->frames[index]);
+    }
+    return frames;
+}
+
+void MetricPage::hover_readout(double x, double y, const std::map<int, SeriesEntry>& entries, bool place_cursor) {
+    const QString time_line = app::tr("Time: {time}", {{"time", qt_text(format_hms(x, 2))}});
+    const auto [picks, cursor_time] = readout_picks(x, y, entries);
+    if (picks.empty()) {
+        if (place_cursor) {
+            chart_->set_cursor_time(x);
+        }
+        set_hover_text(time_line);
+        return;
+    }
     QStringList lines{time_line};
     for (const auto& [entry, curve, index] : picks) {
         const double value = curve->values[index];
@@ -1444,7 +1461,7 @@ MetricPage* GraphPanel::build_page(const MetricDefinition& metric) {
             [this, page](double start, double now, bool finished) { on_range_dragged(page, start, now, finished); });
     page->chart().setContextMenuPolicy(Qt::CustomContextMenu);
     connect(&page->chart(), &QWidget::customContextMenuRequested, this,
-            [this, page](const QPoint& position) { show_graph_menu(page->chart(), position); });
+            [this, page](const QPoint& position) { show_graph_menu(*page, position); });
     pages_[std::string(metric.key)] = page;
     return page;
 }
@@ -2618,16 +2635,48 @@ void GraphPanel::connect_menu(const StatsMenu& items) {
     }
 }
 
-void GraphPanel::show_graph_menu(ChartWidget& chart, const QPoint& position) {
-    // The graph's right-click: the graph, and the difference it shows.
+void GraphPanel::fill_graph_menu(QMenu& menu, MetricPage& page, const QPoint& position, StatsMenu& items) {
+    // The frame the readout reports there, as the pointer reads the chart
+    // (ChartWidget::report_hover), over the band too. A line Video Compare
+    // does not have (a saved line, a results file's) is offered as well:
+    // show_in_video_compare says why it cannot be shown.
+    const ChartWidget& chart = page.chart();
+    std::vector<std::pair<const SeriesEntry*, int>> frames;
+    if (chart.plot_rect().contains(position)) {
+        frames = page.frames_at(chart.time_at(position.x()), chart.value_at(position.y()), entries_);
+    }
+    const auto add_open = [this](QMenu& into, const QString& text, std::string identity, int frame) {
+        connect(into.addAction(text), &QAction::triggered, this,
+                [this, identity = std::move(identity), frame] { emit video_compare_requested(identity, frame); });
+    };
+    if (frames.size() == 1) {
+        add_open(menu, app::tr("Show frame {frame} in Video Compare", {{"frame", frames.front().second}}),
+                 frames.front().first->identity, frames.front().second);
+    } else if (!frames.empty()) {
+        // Several lines: whose video, as the readout names them.
+        QMenu* videos = menu.addMenu(app::tr("Show frame in Video Compare"));
+        for (const auto& [entry, frame] : frames) {
+            add_open(*videos, app::tr("{video}: frame {frame}", {{"video", shown_label(*entry)}, {"frame", frame}}),
+                     entry->identity, frame);
+        }
+    }
+    if (!frames.empty()) {
+        menu.addSeparator();
+    }
+    add_quick_grabs(menu, items, true, false);
+}
+
+void GraphPanel::show_graph_menu(MetricPage& page, const QPoint& position) {
+    // The graph's right-click: the frame there in Video Compare, the graph,
+    // and the difference it shows.
     QMenu menu(this);
     StatsMenu items;
-    add_quick_grabs(menu, items, true, false);
+    fill_graph_menu(menu, page, position, items);
     if (menu.isEmpty()) {
         return;
     }
     connect_menu(items);
-    menu.exec(chart.mapToGlobal(position));
+    menu.exec(page.chart().mapToGlobal(position));
 }
 
 void GraphPanel::show_stats_menu(const QPoint& position) {

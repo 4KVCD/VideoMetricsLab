@@ -874,6 +874,8 @@ void MainWindow::build_ui() {
             export_this_video(*row);
         }
     });
+    connect(graph_panel_, &GraphPanel::video_compare_requested, this,
+            [this](const std::string& identity, int frame) { show_in_video_compare(identity, frame, {}); });
     graph_panel_->row_identities = [this] {
         std::vector<std::string> identities;
         for (const std::shared_ptr<RowData>& row_data : rows_) {

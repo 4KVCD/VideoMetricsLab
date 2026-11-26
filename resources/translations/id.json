@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Show frame {frame} in Video Compare": "Tampilkan bingkai {frame} di Bandingkan video",
+  "Show frame in Video Compare": "Tampilkan bingkai di Bandingkan video",
+  "{video}: frame {frame}": "{video}: bingkai {frame}",
   "Default order": "Urutan bawaan",
   "Drag a heading in the Videos table to move its metric in every list.": "Seret judul di tabel Video untuk memindahkan metriknya di setiap daftar.",
   "The metrics in the order this list shows them, in every list.": "Metrik dalam urutan yang ditampilkan daftar ini, di setiap daftar.",

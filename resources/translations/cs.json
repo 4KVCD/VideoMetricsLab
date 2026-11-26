@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Show frame {frame} in Video Compare": "Zobrazit snímek {frame} v Porovnání videa",
+  "Show frame in Video Compare": "Zobrazit snímek v Porovnání videa",
+  "{video}: frame {frame}": "{video}: snímek {frame}",
   "Default order": "Výchozí pořadí",
   "Drag a heading in the Videos table to move its metric in every list.": "Přetažením nadpisu v tabulce Videa přesunete jeho metriku ve všech seznamech.",
   "The metrics in the order this list shows them, in every list.": "Metriky v pořadí, v jakém je ukazuje tento seznam, ve všech seznamech.",
