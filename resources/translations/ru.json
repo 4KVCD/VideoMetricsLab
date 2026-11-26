@@ -1506,7 +1506,11 @@
   "Ready": "Готово к запуску",
   "Ready: no test videos ticked.": "Готово к запуску: не отмечено ни одного тестового видео.",
   "Ready: {videos}, {metrics}.": "Готово к запуску: {videos}, {metrics}.",
-  "{low} to {high} metrics": "от {low} до {high} метрик"
+  "{low} to {high} metrics": "от {low} до {high} метрик",
+  "Rebuild index": "Перестроить индекс",
+  "Reading the saved results' folders...": "Чтение папок сохранённых результатов...",
+  "Only needed if saved comparisons were changed outside this version of the app: reads every saved folder again into the index. Nothing is deleted or scored again.": "Нужно, только если сохранённые сравнения изменялись вне этой версии приложения: заново читает каждую сохранённую папку в индекс. Ничего не удаляется и не оценивается заново.",
+  "The index could not be made in this folder; the saved results are read from their folders.": "В этой папке нельзя создать индекс; сохранённые результаты читаются из их папок."
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [
@@ -1703,6 +1707,7 @@
   "Click to open the Videos tab: the failed video's row says more.": ["Нажмите, чтобы открыть вкладку «Видео»: в строке видео с ошибкой есть подробности.", "Нажмите, чтобы открыть вкладку «Видео»: в строках видео с ошибкой есть подробности.", "Нажмите, чтобы открыть вкладку «Видео»: в строках видео с ошибкой есть подробности."],
   "{count} metric": ["{count} метрика", "{count} метрики", "{count} метрик"],
   "{count} metric each": ["по {count} метрике", "по {count} метрики", "по {count} метрик"],
-  "{count} test video ticked": ["отмечено {count} тестовое видео", "отмечено {count} тестовых видео", "отмечено {count} тестовых видео"]
+  "{count} test video ticked": ["отмечено {count} тестовое видео", "отмечено {count} тестовых видео", "отмечено {count} тестовых видео"],
+  "Read {count} saved comparison into the index.": ["В индекс считано {count} сохранённое сравнение.", "В индекс считано {count} сохранённых сравнения.", "В индекс считано {count} сохранённых сравнений."]
  }
 }

@@ -1506,7 +1506,11 @@
   "Ready": "準備完了",
   "Ready: no test videos ticked.": "準備完了：チェックされたテスト動画はありません。",
   "Ready: {videos}, {metrics}.": "準備完了：{videos}、{metrics}。",
-  "{low} to {high} metrics": "{low}〜{high} 個の指標"
+  "{low} to {high} metrics": "{low}〜{high} 個の指標",
+  "Rebuild index": "インデックスを再構築",
+  "Reading the saved results' folders...": "保存済みの結果のフォルダーを読み込んでいます...",
+  "Only needed if saved comparisons were changed outside this version of the app: reads every saved folder again into the index. Nothing is deleted or scored again.": "保存済みの比較がこのバージョンのアプリ以外で変更された場合にのみ必要です。保存済みの各フォルダーをインデックスに読み直します。削除や再スコアリングは行いません。",
+  "The index could not be made in this folder; the saved results are read from their folders.": "このフォルダーにはインデックスを作成できません。保存済みの結果はそれぞれのフォルダーから読み込まれます。"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [
@@ -1631,6 +1635,7 @@
   "Click to open the Videos tab: the failed video's row says more.": ["クリックすると動画タブを開きます。失敗した動画の行に詳細があります。"],
   "{count} metric": ["指標 {count} 個"],
   "{count} metric each": ["それぞれ指標 {count} 個"],
-  "{count} test video ticked": ["テスト動画 {count} 本にチェック"]
+  "{count} test video ticked": ["テスト動画 {count} 本にチェック"],
+  "Read {count} saved comparison into the index.": ["保存済みの比較 {count} 件をインデックスに読み込みました。"]
  }
 }

@@ -1506,7 +1506,11 @@
   "Ready": "Gereed",
   "Ready: no test videos ticked.": "Gereed: geen testvideo's aangevinkt.",
   "Ready: {videos}, {metrics}.": "Gereed: {videos}, {metrics}.",
-  "{low} to {high} metrics": "{low} tot {high} metrieken"
+  "{low} to {high} metrics": "{low} tot {high} metrieken",
+  "Rebuild index": "Index opnieuw opbouwen",
+  "Reading the saved results' folders...": "Mappen van opgeslagen resultaten worden gelezen...",
+  "Only needed if saved comparisons were changed outside this version of the app: reads every saved folder again into the index. Nothing is deleted or scored again.": "Alleen nodig als opgeslagen vergelijkingen buiten deze versie van de app zijn gewijzigd: leest elke opgeslagen map opnieuw in de index. Niets wordt verwijderd of opnieuw gescoord.",
+  "The index could not be made in this folder; the saved results are read from their folders.": "De index kan in deze map niet worden gemaakt; de opgeslagen resultaten worden uit hun mappen gelezen."
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [
@@ -1667,6 +1671,7 @@
   "Click to open the Videos tab: the failed video's row says more.": ["Klik om het tabblad Video's te openen: de rij van de mislukte video zegt meer.", "Klik om het tabblad Video's te openen: de rijen van de mislukte video's zeggen meer."],
   "{count} metric": ["{count} metriek", "{count} metrieken"],
   "{count} metric each": ["elk {count} metriek", "elk {count} metrieken"],
-  "{count} test video ticked": ["{count} testvideo aangevinkt", "{count} testvideo's aangevinkt"]
+  "{count} test video ticked": ["{count} testvideo aangevinkt", "{count} testvideo's aangevinkt"],
+  "Read {count} saved comparison into the index.": ["{count} opgeslagen vergelijking in de index gelezen.", "{count} opgeslagen vergelijkingen in de index gelezen."]
  }
 }

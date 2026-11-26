@@ -70,6 +70,7 @@
 #include "vml/metric_cache.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
+#include "vml/saved_index.h"
 #include "vml/saved_results.h"
 #include "vml/segment_presets.h"
 #include "vml/segment_profiles.h"
@@ -97,9 +98,11 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
       tools_(std::move(tools)),
       dialogs_(dialogs),
       counting_(new QFutureWatcher<CacheSummary>(this)),
+      rebuilding_(new QFutureWatcher<std::optional<int>>(this)),
       deletion_listing_(new QFutureWatcher<std::vector<SavedComparison>>(this)),
       started_language_(settings.language) {
     connect(counting_, &QFutureWatcher<CacheSummary>::finished, this, [this] { show_cache_summary(); });
+    connect(rebuilding_, &QFutureWatcher<std::optional<int>>::finished, this, [this] { show_index_rebuilt(); });
     connect(deletion_listing_, &QFutureWatcher<std::vector<SavedComparison>>::finished, this,
             [this] { ask_and_delete(deletion_listing_->result()); });
     connect(&file_writes_, &FileWrites::became_idle, this, [this] { on_file_writes_idle(); });
@@ -423,6 +426,31 @@ QGroupBox* SettingsPanel::build_saved_results_box() {
     cache_summary->setObjectName("savedResultsSummary");
     cache_summary->setWordWrap(true);
     saved_form->addRow("", cache_summary);
+
+    // The index the listings read (saved_index.h), made again from the
+    // folders: for what another program changed inside one. Folders added
+    // or deleted are seen by every listing, so the hint does not ask for it
+    // then.
+    rebuild_index_button = new QPushButton(app::tr("Rebuild index"));
+    rebuild_index_button->setObjectName("rebuildSavedIndex");
+    connect(rebuild_index_button, &QPushButton::clicked, this, [this] { rebuild_index(); });
+    rebuild_index_note = new QLabel;
+    rebuild_index_note->setObjectName("rebuildSavedIndexNote");
+    auto* rebuild_row = new QHBoxLayout;
+    rebuild_row->addWidget(rebuild_index_button);
+    rebuild_row->addWidget(rebuild_index_note, 1);
+    saved_form->addRow("", rebuild_row);
+    // A WrappingLabel: a QLabel's height here, where it wraps (a narrow
+    // window, a longer language), was its guess for 80 characters a line,
+    // with gaps above and below its lines.
+    auto* rebuild_hint = new WrappingLabel;
+    rebuild_hint->setObjectName("rebuildSavedIndexHint");
+    rebuild_hint->set_text(
+        app::tr("Only needed if saved comparisons were changed outside this version of the app: reads every saved "
+                "folder again into the index. Nothing is deleted or scored again."));
+    theme::style(rebuild_hint, "color: {muted};");
+    rebuild_index_button->setAccessibleDescription(rebuild_hint->full_text());
+    saved_form->addRow("", rebuild_hint);
 
     // Deleting them, one way for all of it (docs/ARCHITECTURE.md, "Removing
     // and deleting"): every saved result, those not saved again for a while,
@@ -1407,6 +1435,26 @@ void SettingsPanel::ask_and_delete(const std::vector<SavedComparison>& listed) {
 
 std::filesystem::path SettingsPanel::cache_folder() const {
     return settings_.cache_dir_path().value_or(default_cache_dir());
+}
+
+void SettingsPanel::rebuild_index() {
+    // Not disabled meanwhile (that would move the keyboard's focus to the
+    // next control): a second click while it reads is ignored.
+    if (rebuilding_->isRunning()) {
+        return;
+    }
+    rebuild_index_note->setText(app::tr("Reading the saved results' folders..."));
+    rebuilding_->setFuture(QtConcurrent::run([folder = cache_folder()] { return vml::saved_index::rebuild(folder); }));
+}
+
+void SettingsPanel::show_index_rebuilt() {
+    const std::optional<int> read = rebuilding_->result();
+    rebuild_index_note->setText(
+        read ? ntr("Read {count} saved comparison into the index.", "Read {count} saved comparisons into the index.",
+                   *read)
+             : app::tr("The index could not be made in this folder; the saved results are read from their "
+                       "folders."));
+    refresh_status();  // counted again, from the index as it is now
 }
 
 void SettingsPanel::show_cache_summary() {

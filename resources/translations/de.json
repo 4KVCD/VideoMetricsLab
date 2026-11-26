@@ -1506,7 +1506,11 @@
   "Ready": "Bereit",
   "Ready: no test videos ticked.": "Bereit: keine Testvideos angehakt.",
   "Ready: {videos}, {metrics}.": "Bereit: {videos}, {metrics}.",
-  "{low} to {high} metrics": "{low} bis {high} Metriken"
+  "{low} to {high} metrics": "{low} bis {high} Metriken",
+  "Rebuild index": "Index neu aufbauen",
+  "Reading the saved results' folders...": "Ordner der gespeicherten Ergebnisse werden gelesen...",
+  "Only needed if saved comparisons were changed outside this version of the app: reads every saved folder again into the index. Nothing is deleted or scored again.": "Nur nötig, wenn gespeicherte Vergleiche außerhalb dieser Version der App geändert wurden: liest jeden gespeicherten Ordner erneut in den Index. Nichts wird gelöscht oder neu bewertet.",
+  "The index could not be made in this folder; the saved results are read from their folders.": "Der Index kann in diesem Ordner nicht angelegt werden; die gespeicherten Ergebnisse werden aus ihren Ordnern gelesen."
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [
@@ -1667,6 +1671,7 @@
   "Click to open the Videos tab: the failed video's row says more.": ["Klicken, um den Tab Videos zu öffnen: Die Zeile des fehlgeschlagenen Videos sagt mehr.", "Klicken, um den Tab Videos zu öffnen: Die Zeilen der fehlgeschlagenen Videos sagen mehr."],
   "{count} metric": ["{count} Metrik", "{count} Metriken"],
   "{count} metric each": ["je {count} Metrik", "je {count} Metriken"],
-  "{count} test video ticked": ["{count} Testvideo angehakt", "{count} Testvideos angehakt"]
+  "{count} test video ticked": ["{count} Testvideo angehakt", "{count} Testvideos angehakt"],
+  "Read {count} saved comparison into the index.": ["{count} gespeicherter Vergleich in den Index gelesen.", "{count} gespeicherte Vergleiche in den Index gelesen."]
  }
 }

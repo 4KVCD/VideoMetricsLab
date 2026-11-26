@@ -1506,7 +1506,11 @@
   "Ready": "Gotowe",
   "Ready: no test videos ticked.": "Gotowe: nie zaznaczono żadnych wideo testowych.",
   "Ready: {videos}, {metrics}.": "Gotowe: {videos}, {metrics}.",
-  "{low} to {high} metrics": "od {low} do {high} metryk"
+  "{low} to {high} metrics": "od {low} do {high} metryk",
+  "Rebuild index": "Odbuduj indeks",
+  "Reading the saved results' folders...": "Odczytywanie folderów zapisanych wyników...",
+  "Only needed if saved comparisons were changed outside this version of the app: reads every saved folder again into the index. Nothing is deleted or scored again.": "Potrzebne tylko wtedy, gdy zapisane porównania zostały zmienione poza tą wersją aplikacji: ponownie wczytuje każdy zapisany folder do indeksu. Nic nie jest usuwane ani oceniane ponownie.",
+  "The index could not be made in this folder; the saved results are read from their folders.": "Nie można utworzyć indeksu w tym folderze; zapisane wyniki są odczytywane z ich folderów."
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [
@@ -1703,6 +1707,7 @@
   "Click to open the Videos tab: the failed video's row says more.": ["Kliknij, aby otworzyć kartę Wideo: wiersz wideo z błędem mówi więcej.", "Kliknij, aby otworzyć kartę Wideo: wiersze wideo z błędem mówią więcej.", "Kliknij, aby otworzyć kartę Wideo: wiersze wideo z błędem mówią więcej."],
   "{count} metric": ["{count} metryka", "{count} metryki", "{count} metryk"],
   "{count} metric each": ["{count} metryka w każdym", "{count} metryki w każdym", "{count} metryk w każdym"],
-  "{count} test video ticked": ["{count} zaznaczone wideo testowe", "{count} zaznaczone wideo testowe", "{count} zaznaczonych wideo testowych"]
+  "{count} test video ticked": ["{count} zaznaczone wideo testowe", "{count} zaznaczone wideo testowe", "{count} zaznaczonych wideo testowych"],
+  "Read {count} saved comparison into the index.": ["Wczytano do indeksu {count} zapisane porównanie.", "Wczytano do indeksu {count} zapisane porównania.", "Wczytano do indeksu {count} zapisanych porównań."]
  }
 }

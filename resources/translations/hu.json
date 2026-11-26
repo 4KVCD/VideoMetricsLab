@@ -1506,7 +1506,11 @@
   "Ready": "Készen áll",
   "Ready: no test videos ticked.": "Készen áll: nincs bejelölt tesztvideó.",
   "Ready: {videos}, {metrics}.": "Készen áll: {videos}, {metrics}.",
-  "{low} to {high} metrics": "{low}–{high} metrika"
+  "{low} to {high} metrics": "{low}–{high} metrika",
+  "Rebuild index": "Index újraépítése",
+  "Reading the saved results' folders...": "A mentett eredmények mappáinak olvasása...",
+  "Only needed if saved comparisons were changed outside this version of the app: reads every saved folder again into the index. Nothing is deleted or scored again.": "Csak akkor szükséges, ha a mentett összehasonlítások ezen az alkalmazásverzión kívül változtak meg: minden mentett mappát újra beolvas az indexbe. Semmi sem törlődik, és semmit sem pontoz újra.",
+  "The index could not be made in this folder; the saved results are read from their folders.": "Az indexet nem lehet létrehozni ebben a mappában; a mentett eredmények a mappáikból lesznek beolvasva."
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [
@@ -1667,6 +1671,7 @@
   "Click to open the Videos tab: the failed video's row says more.": ["Kattintson a(z) Videók lap megnyitásához: a sikertelen videó sora többet mond.", "Kattintson a(z) Videók lap megnyitásához: a sikertelen videók sorai többet mondanak."],
   "{count} metric": ["{count} metrika", "{count} metrika"],
   "{count} metric each": ["videónként {count} metrika", "videónként {count} metrika"],
-  "{count} test video ticked": ["{count} bejelölt tesztvideó", "{count} bejelölt tesztvideó"]
+  "{count} test video ticked": ["{count} bejelölt tesztvideó", "{count} bejelölt tesztvideó"],
+  "Read {count} saved comparison into the index.": ["{count} mentett összehasonlítás beolvasva az indexbe.", "{count} mentett összehasonlítás beolvasva az indexbe."]
  }
 }

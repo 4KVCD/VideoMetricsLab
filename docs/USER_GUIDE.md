@@ -966,6 +966,9 @@ be gone:
 # Delete one, by at least 12 hex digits of its ID (it asks nothing)
 .\VideoMetricsLab-cli.exe saved delete 3fa9c1d24b07
 
+# Read every saved comparison's folder into the index again (Settings > Saved Results > Rebuild index)
+.\VideoMetricsLab-cli.exe saved rebuild
+
 # Run files (.metrics.json: compare --run-dir, the window's Run file (.metrics.json)...), reported the same way
 .\VideoMetricsLab-cli.exe report runs\*.metrics.json --segments saved
 ```
@@ -1267,6 +1270,14 @@ reference as "*name* (not found)", in italics: its saved scores are the only
 ones there are, and could not be calculated again without it. Both
 **Delete...** buttons, here and in Settings > Saved Results, say how many
 such they would delete before they do.
+
+The list comes from an index of the saved results, kept beside them in the
+folder (`saved_results.sqlite`), so it shows at once however many there are.
+The first time a version with the index lists them, it reads every saved
+comparison's folder in, once, which takes as long as a listing took before.
+A folder another program changed (an older version of the app saving into
+it) is read again only after **Settings > Saved Results > Rebuild index**;
+comparisons it saved or deleted are seen at the next listing anyway.
 
 **Saved scores**, in a column on the list's left, shows the selected
 comparison's scores: each metric's score for the whole video, as Metric

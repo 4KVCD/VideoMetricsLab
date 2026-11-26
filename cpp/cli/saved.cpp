@@ -17,6 +17,7 @@
 #include "stills.h"
 #include "weak_report.h"
 #include "vml/metric_cache.h"
+#include "vml/saved_index.h"
 #include "vml/metrics.h"
 #include "vml/number_format.h"
 #include "vml/platform/console.h"
@@ -365,6 +366,18 @@ Json saved_list_json(const std::vector<const SavedComparison*>& saved) {
 int saved(const SavedArguments& arguments, const Settings& settings) {
     // The settings' folder, or --cache-dir's (compare's own)
     const std::filesystem::path folder = saved_scores_use(arguments.profile, settings).folder;
+    if (arguments.action == "rebuild") {
+        const std::optional<int> read = saved_index::rebuild(folder);
+        if (!read) {
+            print_error("The index could not be made in " + platform::path_text(folder) +
+                        "; the saved comparisons are read from their folders.");
+            return exit_failed;
+        }
+        return print_results("Read " + with_thousands(*read) + (*read == 1 ? " saved comparison" : " saved comparisons") +
+                             " into the index.\n")
+                   ? exit_ok
+                   : exit_failed;
+    }
     const std::vector<SavedComparison> all = list_saved_comparisons(folder);
     if (arguments.action == "list") {
         std::vector<const SavedComparison*> shown;

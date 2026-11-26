@@ -1506,7 +1506,11 @@
   "Ready": "준비됨",
   "Ready: no test videos ticked.": "준비됨: 체크된 테스트 영상이 없습니다.",
   "Ready: {videos}, {metrics}.": "준비됨: {videos}, {metrics}.",
-  "{low} to {high} metrics": "지표 {low}~{high}개"
+  "{low} to {high} metrics": "지표 {low}~{high}개",
+  "Rebuild index": "인덱스 다시 만들기",
+  "Reading the saved results' folders...": "저장된 결과의 폴더를 읽는 중...",
+  "Only needed if saved comparisons were changed outside this version of the app: reads every saved folder again into the index. Nothing is deleted or scored again.": "저장된 비교가 이 버전의 앱 밖에서 변경된 경우에만 필요합니다. 저장된 모든 폴더를 인덱스로 다시 읽습니다. 아무것도 삭제하거나 다시 점수를 매기지 않습니다.",
+  "The index could not be made in this folder; the saved results are read from their folders.": "이 폴더에는 인덱스를 만들 수 없습니다. 저장된 결과는 각 폴더에서 읽습니다."
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [
@@ -1631,6 +1635,7 @@
   "Click to open the Videos tab: the failed video's row says more.": ["클릭하면 영상 탭을 엽니다. 실패한 영상의 행에 자세한 내용이 있습니다."],
   "{count} metric": ["지표 {count}개"],
   "{count} metric each": ["각각 지표 {count}개"],
-  "{count} test video ticked": ["테스트 영상 {count}개 체크됨"]
+  "{count} test video ticked": ["테스트 영상 {count}개 체크됨"],
+  "Read {count} saved comparison into the index.": ["저장된 비교 {count}개를 인덱스로 읽었습니다."]
  }
 }

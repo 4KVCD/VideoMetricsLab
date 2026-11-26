@@ -1506,7 +1506,11 @@
   "Ready": "Prêt",
   "Ready: no test videos ticked.": "Prêt : aucune vidéo de test cochée.",
   "Ready: {videos}, {metrics}.": "Prêt : {videos}, {metrics}.",
-  "{low} to {high} metrics": "de {low} à {high} métriques"
+  "{low} to {high} metrics": "de {low} à {high} métriques",
+  "Rebuild index": "Reconstruire l'index",
+  "Reading the saved results' folders...": "Lecture des dossiers des résultats enregistrés...",
+  "Only needed if saved comparisons were changed outside this version of the app: reads every saved folder again into the index. Nothing is deleted or scored again.": "Nécessaire uniquement si des comparaisons enregistrées ont été modifiées en dehors de cette version de l'application : relit chaque dossier enregistré dans l'index. Rien n'est supprimé ni recalculé.",
+  "The index could not be made in this folder; the saved results are read from their folders.": "Impossible de créer l'index dans ce dossier ; les résultats enregistrés sont lus depuis leurs dossiers."
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [
@@ -1667,6 +1671,7 @@
   "Click to open the Videos tab: the failed video's row says more.": ["Cliquez pour ouvrir l'onglet Vidéos : la ligne de la vidéo en échec en dit plus.", "Cliquez pour ouvrir l'onglet Vidéos : les lignes des vidéos en échec en disent plus."],
   "{count} metric": ["{count} métrique", "{count} métriques"],
   "{count} metric each": ["{count} métrique chacune", "{count} métriques chacune"],
-  "{count} test video ticked": ["{count} vidéo de test cochée", "{count} vidéos de test cochées"]
+  "{count} test video ticked": ["{count} vidéo de test cochée", "{count} vidéos de test cochées"],
+  "Read {count} saved comparison into the index.": ["{count} comparaison enregistrée lue dans l'index.", "{count} comparaisons enregistrées lues dans l'index."]
  }
 }
