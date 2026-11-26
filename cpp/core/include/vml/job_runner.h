@@ -68,11 +68,12 @@ struct MetricTask {
     // video runs one such task at a time, in either queue (Scheduler::take_next).
     bool heavy_cpu = false;
     // Of an "ffmpeg" task: it holds only the Vulkan engine's CPU-route metrics (CIEDE2000, CAMBI, MS-SSIM, MS-SSIM
-    // YUV: engine_takes_cpu_metric), a GPU pass of their own that waits in a queue of its own, run beside the CPU's
-    // and the GPU's (plan_tasks). Like them in the CPU's tasks, they never take the GPU turn (take_gpu_turn).
+    // YUV: engine_takes_cpu_metric), a GPU pass of their own (plan_tasks). It waits in the GPU's queue, so it runs
+    // after the video's other GPU passes and never at the same time as one: a GPU with little memory need not hold
+    // VMAF's and theirs at once.
     bool engine_lane = false;
 
-    // Whether it waits in the GPU's queue rather than the CPU's (or the engine's: engine_lane).
+    // Whether it waits in the GPU's queue rather than the CPU's (engine_lane's too).
     bool on_gpu() const { return backend == gpu_vmaf_task || backend == perceptual_task; }
 
     // Whether it calculates SSIMULACRA2, Butteraugli or CVVDP.
@@ -189,8 +190,8 @@ CropPair job_crops(const VmafJob& job, const std::string& ffmpeg, const CancelTo
 struct TaskSnapshot {
     std::string backend;
     std::vector<std::string> metric_keys;
-    // "cpu" or "gpu": the queue it waits in; "cpu" for the engine's lane too (MetricTask::engine_lane), a CPU-route
-    // task whose metrics are shown as the GPU's once its scorer says so (gpu_keys).
+    // "cpu" or "gpu": the queue it waits in; "cpu" for MetricTask::engine_lane's, a CPU-route task in the GPU's
+    // queue whose metrics are shown as the GPU's once its scorer says so (gpu_keys).
     std::string lane;
     // The metrics the CPU is calculating since VMAF on the GPU failed; the
     // progress figures are then theirs.

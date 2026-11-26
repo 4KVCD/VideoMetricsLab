@@ -205,9 +205,7 @@ std::string took_since(std::chrono::steady_clock::time_point started) {
     return format_hms(std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count());
 }
 
-// The queues tasks wait in: the CPU's, the GPU's, and the Vulkan engine's CPU-route metrics' (MetricTask::engine_lane).
-enum Pool { cpu_pool, gpu_pool, engine_pool };
-constexpr std::size_t pool_count = 3;
+enum Pool { cpu_pool, gpu_pool };
 
 // A task's metrics but those scored beside them (MetricTask::cpu_beside).
 std::vector<std::string> own_keys(const MetricTask& task) {
@@ -232,7 +230,7 @@ public:
     std::size_t task_count() const { return tasks_.size(); }
     Pool pool_of(std::size_t task) const {
         const MetricTask& planned = job_.tasks[task];
-        return planned.engine_lane ? engine_pool : planned.on_gpu() ? gpu_pool : cpu_pool;
+        return planned.on_gpu() || planned.engine_lane ? gpu_pool : cpu_pool;
     }
     bool heavy_cpu(std::size_t task) const { return job_.tasks[task].heavy_cpu; }
 
@@ -477,8 +475,8 @@ private:
     // room for a task.
     std::mutex mutex_;
     std::condition_variable room_;
-    std::array<std::deque<Picked>, pool_count> queues_;
-    std::array<int, pool_count> busy_{};
+    std::array<std::deque<Picked>, 2> queues_;
+    std::array<int, 2> busy_{0, 0};
     std::set<std::size_t> in_flight_;
     // The videos running a heavy_cpu task (MetricTask): each runs one at a time, in either queue.
     std::set<std::size_t> heavy_running_;
@@ -783,7 +781,7 @@ void JobRun::report_status(std::size_t task, const RunStatus& status) {
     if (tasks_.size() > 1 && status.kind == StatusKind::gpu_wait) {
         state.waiting_for = "GPU";
     }
-    if (pool_of(task) == gpu_pool && status.kind == StatusKind::gpu_vmaf_failed) {
+    if (pool_of(task) == gpu_pool && !job_.tasks[task].engine_lane && status.kind == StatusKind::gpu_vmaf_failed) {
         // FFmpeg's libvmaf takes over on the CPU, from frame 0.
         state.cpu_keys = job_.tasks[task].metric_keys;
         state.progress.reset();
@@ -1040,7 +1038,9 @@ std::vector<TaskSnapshot> JobRun::snapshots() const {
             // Shown as the CPU's task they were, with the GPU's progress.
             found.push_back(snapshot_of(task, "ffmpeg", "cpu", beside));
         }
-        found.push_back(snapshot_of(task, job_.tasks[task].backend, pool_of(task) == gpu_pool ? "gpu" : "cpu", own));
+        // The engine's pass is shown as the CPU route's task it is (TaskSnapshot::lane).
+        const bool gpu_lane = pool_of(task) == gpu_pool && !job_.tasks[task].engine_lane;
+        found.push_back(snapshot_of(task, job_.tasks[task].backend, gpu_lane ? "gpu" : "cpu", own));
     }
     return found;
 }
@@ -1154,12 +1154,11 @@ void JobRun::close_pass(std::size_t task, const std::string& end, std::optional<
     PassTiming pass;
     pass.task = job_.tasks[task].backend;
     pass.metric_keys = state.pass_keys;
-    // Where its scores came from: the CPU once the GPU's VMAF fell back; the engine's lane on the GPU where its
+    // Where its scores came from: the CPU once the GPU's VMAF fell back; the engine's pass on the GPU where its
     // scorer said the GPU took them (metrics_on_gpu)
-    const Pool pool = pool_of(task);
-    pass.on = (pool == gpu_pool && state.cpu_keys.empty()) || (pool == engine_pool && !state.gpu_keys.empty())
-                  ? "gpu"
-                  : "cpu";
+    const bool on_gpu = job_.tasks[task].engine_lane ? !state.gpu_keys.empty()
+                                                     : pool_of(task) == gpu_pool && state.cpu_keys.empty();
+    pass.on = on_gpu ? "gpu" : "cpu";
     pass.seconds = scheduler_.cancel.now() - state.pass_began;
     pass.paused_seconds = scheduler_.cancel.paused_seconds() - state.pass_paused_before;
     pass.frames = frames.value_or(
@@ -1454,17 +1453,12 @@ void Scheduler::run() {
             queues_[run->pool_of(task)].emplace_back(run.get(), task);
         }
     }
-    if (!queues_[engine_pool].empty()) {
-        logger.info("CIEDE2000, CAMBI, MS-SSIM and MS-SSIM YUV on the GPU in a pass of their own, one video at a "
-                    "time, beside the other GPU metrics");
-    }
-    const bool gpu_queued = !queues_[gpu_pool].empty() || !queues_[engine_pool].empty();
-    if (parallel_jobs_.load() > 1 && queues_[cpu_pool].empty() && gpu_queued && runs_.size() > 1) {
+    if (parallel_jobs_.load() > 1 && queues_[cpu_pool].empty() && !queues_[gpu_pool].empty() && runs_.size() > 1) {
         // Issue #21: PSNR, SSIM and XPSNR in VMAF's GPU pass, say (plan_tasks).
         logger.info("Every task of this run is on the GPU, one video at a time: CPU metrics for several videos at "
                     "once do not apply");
     }
-    // The GPU has one lane, the engine's metrics another. The last lane runs on this thread. CPU lanes for
+    // The GPU has one lane. The last lane runs on this thread. CPU lanes for
     // the CPU tasks that may run at once: a video's heavy_cpu tasks count as
     // one, which then has every core (share_cores).
     int cpu_tasks_at_once = 0;
@@ -1481,17 +1475,13 @@ void Scheduler::run() {
     const int cpu_lanes = std::min(max_parallel_jobs, cpu_tasks_at_once);
     lane_count_ = std::max(1, cpu_lanes);
     std::vector<Pool> lanes(static_cast<std::size_t>(cpu_lanes), cpu_pool);
-    for (const Pool pool : {gpu_pool, engine_pool}) {
-        if (!queues_[pool].empty()) {
-            lanes.push_back(pool);
-        }
+    if (!queues_[gpu_pool].empty()) {
+        lanes.push_back(gpu_pool);
     }
     std::vector<std::thread> threads;
     for (std::size_t lane = 0; lane + 1 < lanes.size(); ++lane) {
         // Named in the log as the Python app named them.
-        std::string thread_name = lanes[lane] == gpu_pool      ? std::string("vmaf-gpu")
-                                  : lanes[lane] == engine_pool ? std::string("vmaf-gpu-metrics")
-                                                               : "vmaf-cpu-" + std::to_string(lane);
+        std::string thread_name = lanes[lane] == gpu_pool ? "vmaf-gpu" : "vmaf-cpu-" + std::to_string(lane);
         threads.emplace_back([this, pool = lanes[lane], thread_name = std::move(thread_name)]() mutable {
             app_log::set_thread_name(std::move(thread_name));
             drain_queue(pool);
@@ -1798,9 +1788,10 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
     const bool vmaf_on_cpu = contains(ffmpeg.metric_keys, "vmaf") || contains(ffmpeg.metric_keys, "vmaf_neg") ||
                              contains(ffmpeg.metric_keys, "vmaf_v1");
     const bool engine = options.vmaf_on_gpu && (!gpu_answers.engine || gpu_answers.engine->on_engine);
-    // CIEDE2000, CAMBI, MS-SSIM and MS-SSIM YUV where the Vulkan engine takes them make a GPU pass of their own, in
-    // a lane of its own beside VMAF's and the CPU's (MetricTask::engine_lane): VMAF's pass does not wait for them,
-    // nor do the CPU-only metrics, at the cost of a decode of the videos of their own. Those it cannot take at a size
+    // CIEDE2000, CAMBI, MS-SSIM and MS-SSIM YUV where the Vulkan engine takes them make a GPU pass of their own
+    // (MetricTask::engine_lane), in the GPU's queue after VMAF's: never on the GPU at the same time as VMAF's pass,
+    // whose memory a smaller GPU may not have room beside, and the CPU-only metrics do not wait for them. Each pass
+    // decodes the videos itself. Those it cannot take at a size
     // known before the run (gpu_metrics_of: MS-SSIM YUV at an odd size) stay with the CPU-only metrics; CAMBI goes,
     // its options aside, and is scored on the CPU in the lane where the GPU cannot take them.
     MetricTask engines{"ffmpeg", {}};

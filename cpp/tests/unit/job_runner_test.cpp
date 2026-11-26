@@ -1026,26 +1026,30 @@ TEST(JobRunner, EnginesMetricsAreAGpuPassOfTheirOwn) {
               (Shape{{in_registry_order({"psnr", "ms_ssim", "ms_ssim_yuv", "ciede2000"}), false}, {{"cambi"}, true}}));
 }
 
-// The engine's lane runs beside the CPU's and the GPU's: a video's three tasks meet, with one CPU lane.
-TEST(JobRunner, TheEnginesLaneRunsBesideTheCpusAndTheGpus) {
+// The engine's pass waits in the GPU's queue: it runs on the GPU's lane, after VMAF's pass and never beside it, and
+// the CPU's task on a lane of its own.
+TEST(JobRunner, TheEnginesPassRunsOnTheGpusLane) {
     std::vector<MetricTask> tasks{{"ffmpeg", {"psnr"}}, {std::string(gpu_vmaf_task), {"vmaf"}}, {"ffmpeg", {"ms_ssim"}}};
     tasks[2].engine_lane = true;
-    Meeting all_three(3);
     std::mutex mutex;
-    bool met = true;
+    std::map<std::string, std::thread::id> lane_of;
     Reported reported;
     run_jobs(
         {job_of(tasks)}, 1, reported.events(),
         [&](const VmafJob&, const VmafOptions& options, const ProgressCallback&, const StatusCallback&,
             const CancelToken&) {
-            const bool together = all_three.arrive_and_wait();
-            const std::lock_guard lock(mutex);
-            met = met && together;
-            return result_with({{options.requested_metrics().front(), {0}}});
+            const std::string key = options.requested_metrics().front();
+            {
+                const std::lock_guard lock(mutex);
+                lane_of[key] = std::this_thread::get_id();
+            }
+            return result_with({{key, {0}}});
         },
         24, CancelToken());
 
-    EXPECT_TRUE(met);
+    ASSERT_EQ(lane_of.size(), 3u);
+    EXPECT_EQ(lane_of["ms_ssim"], lane_of["vmaf"]);
+    EXPECT_NE(lane_of["psnr"], lane_of["vmaf"]);
     ASSERT_EQ(reported.finished.size(), 1u);
     EXPECT_EQ(reported.finished.at(0).metric_results.keys(), (std::vector<std::string>{"psnr", "vmaf", "ms_ssim"}));
 }
