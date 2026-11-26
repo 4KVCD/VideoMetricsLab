@@ -1031,6 +1031,7 @@
   "GPU decoding failed ({error}); decoding through FFmpeg instead…": "การถอดรหัสด้วย GPU ล้มเหลว ({error}) กำลังถอดรหัสผ่าน FFmpeg แทน…",
   "The GPU's video decoding failed ({error}); the videos were decoded on the CPU…": "การถอดรหัสวิดีโอด้วย GPU ล้มเหลว ({error}) ถอดรหัสวิดีโอด้วย CPU แทน…",
   "Reading the videos failed ({error}); trying again…": "การอ่านวิดีโอล้มเหลว ({error}) กำลังลองอีกครั้ง…",
+  "Not enough memory for all the metrics at once ({error}); calculating them in two passes…": "หน่วยความจำไม่พอสำหรับทุกเมตริกพร้อมกัน ({error}) กำลังคำนวณเป็นสองรอบ…",
   "GPU metric {number}/{count}: {metrics}": "เมตริก GPU {number}/{count}: {metrics}",
   "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF บน GPU ล้มเหลว ({error}) กำลังคำนวณบน CPU…",
   "VMAF compute:": "การคำนวณ VMAF:",

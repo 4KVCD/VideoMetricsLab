@@ -106,6 +106,12 @@ bool cpu_runs_x86_64_v3();
 // pages on macOS. Nothing when the system does not say.
 std::optional<unsigned long long> available_memory();
 
+// How many more bytes this process can be given before the system pages or
+// refuses: on Windows the smaller of the available physical memory and what
+// may still be committed before the system's commit limit; elsewhere
+// available_memory(). Nothing when the system does not say.
+std::optional<unsigned long long> memory_headroom();
+
 // How many bytes of physical memory the PC has, or nothing when the system
 // does not say.
 std::optional<unsigned long long> total_memory();

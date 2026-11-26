@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "vml/libvmaf.h"
+#include "vml/memory_fit.h"
 #include "vml/pair_scorer.h"
 #include "vml/platform/library.h"
 
@@ -142,6 +143,11 @@ struct VulkanEngine {
     // packed, 16-bit samples), and its size (nullptr in an engine without it).
     int (*convert_source)(VulkanContext* context, int side, int plane, std::uint64_t* offset, std::uint32_t* width,
                           std::uint32_t* height);
+    // GPU `device`'s own memory as its driver reports it (VK_EXT_memory_budget):
+    // what this process uses, what it may use, and what the engine meant for
+    // it but had to put in the PC's memory; -1 where the driver does not say
+    // (nullptr in an engine without it).
+    int (*memory)(int device, std::uint64_t* used, std::uint64_t* budget, std::uint64_t* spilled);
 };
 
 // How many frames the engine works on at once, as the Python app asks for
@@ -206,6 +212,11 @@ std::optional<VulkanDevice> best_vulkan_device(const std::vector<VulkanDevice>& 
 // or not as one it can use), which the log says: VMAF is then calculated on
 // the CPU, never on another GPU, which the choice may keep free.
 std::optional<VulkanDevice> chosen_vulkan_device(const std::vector<VulkanDevice>& found);
+
+// GPU `device`'s memory as the engine's `memory` reads it (-1: the one
+// chosen_vulkan_device gives), or nothing where the engine or the driver
+// cannot say. Never throws.
+std::optional<GpuMemory> vulkan_memory(int device);
 
 // The buffers that a context made with vulkan_shared_flag reads each pair's
 // planes from: GPU memory that a decoder on the same GPU imports and copies

@@ -1031,6 +1031,7 @@
   "GPU decoding failed ({error}); decoding through FFmpeg instead…": "فشل فك الترميز عبر GPU ({error})؛ يُفك الترميز عبر FFmpeg بدلًا من ذلك…",
   "The GPU's video decoding failed ({error}); the videos were decoded on the CPU…": "فشل فك ترميز الفيديو على GPU ({error})؛ فُك ترميز الفيديوهات على CPU…",
   "Reading the videos failed ({error}); trying again…": "فشلت قراءة الفيديوهات ({error})؛ تُعاد المحاولة…",
+  "Not enough memory for all the metrics at once ({error}); calculating them in two passes…": "لا توجد ذاكرة كافية لكل المقاييس معًا ({error})؛ تُحسب على مرحلتين…",
   "GPU metric {number}/{count}: {metrics}": "مقياس GPU {number}/{count}: {metrics}",
   "VMAF on the GPU failed ({error}); calculating it on the CPU…": "فشل VMAF على GPU ({error})؛ يُحسب على المعالج…",
   "VMAF compute:": "حساب VMAF:",

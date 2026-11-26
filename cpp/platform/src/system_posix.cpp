@@ -122,6 +122,8 @@ std::optional<unsigned long long> available_memory() {
 #endif
 }
 
+std::optional<unsigned long long> memory_headroom() { return available_memory(); }
+
 std::optional<unsigned long long> total_memory() {
 #ifdef __APPLE__
     std::uint64_t bytes = 0;

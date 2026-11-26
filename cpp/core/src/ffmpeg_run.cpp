@@ -8,7 +8,9 @@
 #include <cmath>
 #include <condition_variable>
 #include <fstream>
+#include <functional>
 #include <future>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <memory>
@@ -34,6 +36,7 @@
 #include "vml/grain_feed.h"
 #include "vml/isolated.h"
 #include "vml/libvmaf_cpu.h"
+#include "vml/memory_fit.h"
 #include "vml/metrics.h"
 #include "vml/model_select.h"
 #include "vml/platform/process.h"
@@ -537,26 +540,39 @@ ParsedScores execute_run(const CommandBuilder& build_command, const VmafOptions&
     return scores;
 }
 
+ParsedScores score_watched(const RunFrames& run, const std::vector<std::string>& keys,
+                           MemoryWatch::GpuReader gpu_memory, const ProgressCallback& on_progress,
+                           const std::function<ParsedScores(const RunFrames&, const ProgressCallback&)>& score);
+
 // execute_run for a comparison of two videos (build_filtergraph and
 // build_ffmpeg_command), without the metrics FFmpeg cannot score
-// (without_app_only).
+// (without_app_only). Watched for the PC's memory (score_watched): FFmpeg's
+// libvmaf on the CPU is the biggest pass of a CPU run. Its GPU memory
+// (libvmaf's CUDA code in FFmpeg) is another process's, not watched.
 ParsedScores execute_run(const RunFrames& run, const VmafOptions& options, const std::string& model,
                          const ProgressCallback& on_progress, const StatusCallback& on_status) {
     const VideoInfo& source = run.source;
     const VideoInfo& distorted = run.distorted;
     const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt}));
     return without_app_only(options, depth, [&](const VmafOptions& scored) {
-        const VmafOptions seeking = reading_near_range(scored, run.environment, source, distorted, run.cancel);
-        const auto build_command = [&](const HardwareDecoding& plan, const std::string& run_model,
-                                       const std::optional<std::string>& xpsnr_log_name, const PairFeeds& feeds) {
-            const std::string graph =
-                build_filtergraph(source, distorted, seeking, run.source_crop, run.distorted_crop, plan,
-                                  "vmaf_log.json", run_model, xpsnr_log_name, run.environment.cores);
-            return build_ffmpeg_command(run.environment.ffmpeg, distorted.path, source.path, graph, plan,
-                                        run_inputs(feeds, source, distorted, seeking.range_seeks));
-        };
-        return execute_run(build_command, scored, model, distorted.fps, run.total_frames, run.decoding, "vmaf_run_",
-                           on_progress, on_status, run.cancel, run.environment, &source, &distorted);
+        return score_watched(
+            run, scored.requested_metrics(), nullptr, on_progress,
+            [&](const RunFrames& watched, const ProgressCallback& progress) {
+                const VmafOptions seeking =
+                    reading_near_range(scored, watched.environment, source, distorted, watched.cancel);
+                const auto build_command = [&](const HardwareDecoding& plan, const std::string& run_model,
+                                               const std::optional<std::string>& xpsnr_log_name,
+                                               const PairFeeds& feeds) {
+                    const std::string graph =
+                        build_filtergraph(source, distorted, seeking, run.source_crop, run.distorted_crop, plan,
+                                          "vmaf_log.json", run_model, xpsnr_log_name, run.environment.cores);
+                    return build_ffmpeg_command(run.environment.ffmpeg, distorted.path, source.path, graph, plan,
+                                                run_inputs(feeds, source, distorted, seeking.range_seeks));
+                };
+                return execute_run(build_command, scored, model, distorted.fps, run.total_frames, run.decoding,
+                                   "vmaf_run_", progress, on_status, watched.cancel, run.environment, &source,
+                                   &distorted);
+            });
     });
 }
 
@@ -814,11 +830,11 @@ ParsedScores score_decoded_here(const RunFrames& run, const VmafOptions& options
 // NVIDIA's decoder's pictures and the software decoder's, so with it VMAF
 // and NEG without VMAF v1 are decoded here only by those. CIEDE2000 and
 // CAMBI on the GPU (extra_gpu) that fail partway make the pass again with
-// them in libvmaf on the CPU.
-ParsedScores score_plan(const RunFrames& run, const VmafOptions& options, const GpuPlan& plan,
-                        const ProgressCallback& on_progress, const StatusCallback& on_status);
+// them in libvmaf on the CPU. score_plan watches it for memory.
+ParsedScores score_plan_unwatched(const RunFrames& run, const VmafOptions& options, const GpuPlan& plan,
+                                  const ProgressCallback& on_progress, const StatusCallback& on_status);
 
-// score_plan, without making the pass again for CIEDE2000, CAMBI and MS-SSIM.
+// score_plan_unwatched, without making the pass again for CIEDE2000, CAMBI and MS-SSIM.
 ParsedScores score_plan_as_planned(const RunFrames& run, const VmafOptions& options, const GpuPlan& plan,
                                    const ProgressCallback& on_progress, const StatusCallback& on_status) {
     // A video whose size changes is decoded by FFmpeg, which scales each of
@@ -833,13 +849,13 @@ ParsedScores score_plan_as_planned(const RunFrames& run, const VmafOptions& opti
         } catch (const SeekRefused& error) {
             // Nothing scored yet: the same pass from the videos' start, with the decoders it had
             turn_off_range_seek(error.what());
-            return score_plan(run, options, plan, on_progress, on_status);
+            return score_plan_unwatched(run, options, plan, on_progress, on_status);
         } catch (const GpuDecodeUnavailableError& error) {
             if (error.backend() == vvdec_decoder) {
                 // vvdec-vulkan refused: off for the run, and the same pass with the app's VVdeC (vvdec_wanted is
                 // false now, so this runs once)
                 turn_off_vvdec(error.what(), on_status);
-                return score_plan(run, options, plan, on_progress, on_status);
+                return score_plan_unwatched(run, options, plan, on_progress, on_status);
             }
             // FFmpeg decodes the videos.
             logger.info(doing(plan) + ": the videos are decoded by FFmpeg (" + error.what() + ")");
@@ -853,7 +869,7 @@ ParsedScores score_plan_as_planned(const RunFrames& run, const VmafOptions& opti
                     on_status({decoding_failed_status(error, "with VVdeC on the CPU")});
                 }
                 turn_off_vvdec(error.what(), on_status);
-                return score_plan(run, options, plan, on_progress, on_status);
+                return score_plan_unwatched(run, options, plan, on_progress, on_status);
             }
             logger.warning("Decoding for " + (plan.backend == "cpu" ? metric_names(plan) : "VMAF on the GPU") +
                            " failed; decoding through FFmpeg instead: " + error.what());
@@ -866,8 +882,8 @@ ParsedScores score_plan_as_planned(const RunFrames& run, const VmafOptions& opti
     return execute_gpu_run(run, options, plan, on_progress, on_status);
 }
 
-ParsedScores score_plan(const RunFrames& run, const VmafOptions& options, const GpuPlan& plan,
-                        const ProgressCallback& on_progress, const StatusCallback& on_status) {
+ParsedScores score_plan_unwatched(const RunFrames& run, const VmafOptions& options, const GpuPlan& plan,
+                                  const ProgressCallback& on_progress, const StatusCallback& on_status) {
     try {
         return score_plan_as_planned(run, options, plan, on_progress, on_status);
     } catch (const GpuMetricsFailed& error) {
@@ -881,6 +897,131 @@ ParsedScores score_plan(const RunFrames& run, const VmafOptions& options, const 
         on_cpu.extra_gpu.reset();
         return score_plan_as_planned(run, options, on_cpu, on_progress, on_status);
     }
+}
+
+// A token of its own for a part of the run that may be stopped alone, which
+// follows the run's Cancel and Pause (`cancel`) for as long as it lives,
+// looking every 50 ms. (With only a Cancel passed on, and only once the
+// run's own scoring had ended, a part beside it went on scoring through a
+// Pause; the Python app hands it the run's own process handle.)
+class FollowingToken {
+public:
+    explicit FollowingToken(const CancelToken& cancel) : cancel_(cancel), relay_([this] { relay(); }) {}
+    ~FollowingToken() {
+        {
+            const std::lock_guard lock(mutex_);
+            ended_ = true;
+        }
+        wake_.notify_all();
+        relay_.join();
+    }
+    FollowingToken(const FollowingToken&) = delete;
+    FollowingToken& operator=(const FollowingToken&) = delete;
+
+    const CancelToken& token() const { return stop_; }
+    // Stops the part alone.
+    void stop() { stop_.cancel(); }
+
+private:
+    void relay() {
+        std::unique_lock lock(mutex_);
+        while (!wake_.wait_for(lock, std::chrono::milliseconds(50), [this] { return ended_; })) {
+            lock.unlock();
+            if (cancel_.cancelled()) {
+                stop_.cancel();
+            }
+            if (cancel_.paused() && !stop_.paused()) {
+                stop_.pause();
+            } else if (!cancel_.paused() && stop_.paused()) {
+                stop_.resume();
+            }
+            lock.lock();
+        }
+    }
+
+    const CancelToken& cancel_;
+    CancelToken stop_;
+    std::mutex mutex_;
+    std::condition_variable wake_;
+    bool ended_ = false;
+    std::thread relay_;  // last: it starts once the others are made
+};
+
+// The metrics a pass scores: its plan's own and those beside them.
+std::vector<std::string> pass_keys(const GpuPlan& plan) {
+    std::vector<std::string> keys = plan_keys(plan);
+    for (const std::string& key : plan.beside) {
+        if (std::find(keys.begin(), keys.end(), key) == keys.end()) {
+            keys.push_back(key);
+        }
+    }
+    return keys;
+}
+
+// The pass's GPU's memory (MemoryWatch): the GPU the Vulkan engine scores
+// its metrics on. None where it uses none (libvmaf's CUDA code alone, whose
+// memory Vulkan's budget may not see, and the CPU).
+MemoryWatch::GpuReader pass_gpu_memory(const GpuPlan& plan) {
+    const std::optional<int> device = plan.backend == "vulkan" ? std::optional(plan.device)
+                                      : plan.extra_gpu         ? plan.extra_gpu
+                                                               : plan.hdr_gpu;
+    if (!device) {
+        return nullptr;
+    }
+    return [device = *device] { return vulkan_memory(device); };
+}
+
+// A pass of `keys` that `score` scores (given the run and the progress
+// callback to score it with), watched for memory (memory_fit.h) where its
+// metrics could be split: a pass found not to fit as it starts is stopped,
+// and it and one refused memory throw MemoryShort, for the run to score its
+// metrics in halves (score_fitting). Its own token, which follows the run's
+// Cancel and Pause, stops it alone. `gpu_memory`: the pass's GPU's, if any.
+ParsedScores score_watched(const RunFrames& run, const std::vector<std::string>& keys,
+                           MemoryWatch::GpuReader gpu_memory, const ProgressCallback& on_progress,
+                           const std::function<ParsedScores(const RunFrames&, const ProgressCallback&)>& score) {
+    MemoryWatch watch(keys, std::move(gpu_memory), [] { return platform::memory_headroom(); });
+    if (!watch.active()) {
+        return score(run, on_progress);
+    }
+    FollowingToken pass(run.cancel);
+    const ProgressCallback progress = [&](long long done, long long whole, double fps) {
+        // FFmpeg's reader threads report progress, which must not throw: a check that fails is no shortage.
+        try {
+            if (watch.check(done)) {
+                pass.stop();
+            }
+        } catch (const std::exception&) {
+        }
+        if (on_progress) {
+            on_progress(done, whole, fps);
+        }
+    };
+    try {
+        return score(run.with_cancel(pass.token()), progress);
+    } catch (const std::exception& error) {
+        if (run.cancel.cancelled() || dynamic_cast<const MemoryShort*>(&error) != nullptr) {
+            throw;
+        }
+        std::optional<MemoryShortage> shortage = watch.shortage();
+        if (!shortage) {
+            const std::optional<bool> on_gpu = memory_refused(error);
+            if (!on_gpu || memory_split_groups(keys, *on_gpu) < 2) {
+                throw;
+            }
+            shortage = MemoryShortage{*on_gpu, error.what()};
+        }
+        throw MemoryShort(*shortage);
+    }
+}
+
+// score_plan_unwatched, watched for memory (score_watched).
+ParsedScores score_plan(const RunFrames& run, const VmafOptions& options, const GpuPlan& plan,
+                        const ProgressCallback& on_progress, const StatusCallback& on_status) {
+    return score_watched(run, pass_keys(plan), pass_gpu_memory(plan), on_progress,
+                         [&](const RunFrames& watched, const ProgressCallback& progress) {
+                             return score_plan_unwatched(watched, options, plan, progress, on_status);
+                         });
 }
 
 // ----------------------------------------------- PSNR, SSIM and XPSNR in the app
@@ -1295,27 +1436,21 @@ std::optional<ParsedScores> run_on_gpu(const RunFrames& run, const VmafOptions& 
 // Scores made on a thread beside the run's own (`run`: XPSNR by an FFmpeg of
 // its own beside the app's PSNR and SSIM, or the app's CPU metrics beside the
 // GPU's), with the run's Cancel and Pause passed on to it for as long as it
-// runs. Its token is its own, so that it can be stopped alone when the run's
-// own scoring fails. (With only a Cancel passed on, and only once that
-// scoring had ended, it went on scoring through a Pause; the Python app hands
-// it the run's own process handle.) Stopped and waited for when it goes.
+// runs. Its token is its own (FollowingToken), so that it can be stopped
+// alone when the run's own scoring fails. Stopped and waited for when it goes.
 class ScoresBeside {
 public:
-    ScoresBeside(std::function<ParsedScores(const CancelToken&)> run, const CancelToken& cancel) : cancel_(cancel) {
+    ScoresBeside(std::function<ParsedScores(const CancelToken&)> run, const CancelToken& cancel) : stop_(cancel) {
         run_ = std::thread([this, run = std::move(run)] {
             try {
-                ParsedScores found = run(stop_);
+                ParsedScores found = run(stop_.token());
                 const std::lock_guard lock(mutex_);
                 scores_ = std::move(found);
             } catch (...) {
                 const std::lock_guard lock(mutex_);
                 error_ = std::current_exception();
             }
-            const std::lock_guard lock(mutex_);
-            done_ = true;
-            ended_.notify_all();
         });
-        relay_ = std::thread([this] { relay(); });
     }
     ~ScoresBeside() {
         stop();
@@ -1324,12 +1459,9 @@ public:
     ScoresBeside(const ScoresBeside&) = delete;
     ScoresBeside& operator=(const ScoresBeside&) = delete;
 
-    void stop() { stop_.cancel(); }
+    void stop() { stop_.stop(); }
     // Waits for its run to end.
     void join() {
-        if (relay_.joinable()) {
-            relay_.join();
-        }
         if (run_.joinable()) {
             run_.join();
         }
@@ -1356,32 +1488,11 @@ public:
     }
 
 private:
-    // Passes the run's Cancel and Pause on until the run ends.
-    void relay() {
-        std::unique_lock lock(mutex_);
-        while (!ended_.wait_for(lock, std::chrono::milliseconds(50), [this] { return done_; })) {
-            lock.unlock();
-            if (cancel_.cancelled()) {
-                stop_.cancel();
-            }
-            if (cancel_.paused() && !stop_.paused()) {
-                stop_.pause();
-            } else if (!cancel_.paused() && stop_.paused()) {
-                stop_.resume();
-            }
-            lock.lock();
-        }
-    }
-
-    const CancelToken& cancel_;
-    CancelToken stop_;
+    FollowingToken stop_;
     std::mutex mutex_;
-    std::condition_variable ended_;
-    bool done_ = false;
     std::optional<ParsedScores> scores_;
     std::exception_ptr error_;
     std::thread run_;
-    std::thread relay_;
 };
 
 // XPSNR's scores (`xpsnr`, from its own FFmpeg) taken into `frames`, for the
@@ -2265,17 +2376,6 @@ std::optional<RunScores> score_gpu_and_cpu(const RunFrames& run, const VmafOptio
     return score_apart(run, gpu_options, cpu_options, *gpu, cpu, model, on_progress, on_status);
 }
 
-// The progress of part `index` of `parts` run one after the other, as the
-// whole run's: each part counts as much as the others.
-ProgressCallback part_in_sequence(const ProgressCallback& on_progress, long long index, long long parts) {
-    if (!on_progress) {
-        return nullptr;
-    }
-    return [on_progress, index, parts](long long done, long long whole, double fps) {
-        on_progress(index * whole + done, parts * whole, fps);
-    };
-}
-
 // HDR VMAF's plan for the run (backend "hdr"), or why it fails for this pair: videos it does not take (not PQ, say),
 // or a model it cannot load or that refuses the size. Neither decodes anything.
 std::variant<GpuPlan, std::string> hdr_plan(const RunFrames& run, const VmafOptions& options) {
@@ -2495,32 +2595,11 @@ ComparisonResult result_of_pair(const VideoInfo& source, const VideoInfo& distor
     return result;
 }
 
-// score_pair's run, as its reading of the videos is set.
-ComparisonResult score_pair_once(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
-                                 VmafOptions options, const std::optional<CropBox>& source_crop,
-                                 const std::optional<CropBox>& distorted_crop, const HardwareDecoding& decoding,
-                                 const ProgressCallback& on_progress, const StatusCallback& on_status,
-                                 const CancelToken& cancel,
-                                 const std::optional<std::filesystem::path>& result_distorted_path,
-                                 const std::optional<EnginePlace>& engine) {
-    if (options.compute_vmaf_yuv || options.compute_vmaf_yuv_y) {
-        // Made from VMAF and its U and V by the video's job (JobRun::merged), which asks for those instead.
-        throw std::invalid_argument("VMAF YUV and its Y are not scored by a run: they are made from VMAF and "
-                                    "its U and V");
-    }
-    const auto [width, height] = analysis_dimensions(source, distorted, options, source_crop, distorted_crop);
-    const std::string model = resolve_run_models(options, width, height);
-    // The range's frames counted at the source's rate, as the run cuts them (run_range).
-    const long long total_frames = estimate_total_frames(source, options, &distorted);
-    const long long decoded_frames = estimate_decoded_frames(source, options, &distorted);
-    const FrameRange range = run_range(options, source);
-    const long long first_frame = range.start;
-
-    const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt}));
-    const RunFrames run{environment, source,         distorted, source_crop, distorted_crop, width,
-                        height,      depth,          decoded_frames, decoding, cancel,         engine};
-    // HDR VMAF in the others' pass where it can (score_hdr_beside); else a part of its own, after the others
-    // (score_hdr), they scored as they would be without it.
+// The run's metrics in `options` (score_pair_once's): HDR VMAF in the
+// others' pass where it can (score_hdr_beside); else a part of its own, after
+// the others (score_hdr), they scored as they would be without it.
+RunScores score_run_metrics(const RunFrames& run, const VmafOptions& options, const std::string& model,
+                            const ProgressCallback& on_progress, const StatusCallback& on_status) {
     VmafOptions others = options;
     others.compute_vmaf_hdr = false;
     const bool with_others = !others.requested_metrics().empty();
@@ -2555,6 +2634,77 @@ ComparisonResult score_pair_once(const RunEnvironment& environment, const VideoI
         }
         scores->parts.push_back(std::move(hdr_part));
     }
+    return std::move(*scores);
+}
+
+// `options` with only `keys` of its metrics asked for.
+VmafOptions with_metrics_only(const VmafOptions& options, const std::vector<std::string>& keys) {
+    VmafOptions only = options;
+    for (const std::string& key : options.requested_metrics()) {
+        only.set_metric_enabled(key, std::find(keys.begin(), keys.end(), key) != keys.end());
+    }
+    return only;
+}
+
+// score_run_metrics; where a pass of it does not fit in memory (MemoryShort,
+// memory_fit.h), its metrics in two passes of half of them each, one after
+// the other, a half that does not fit halved again. Each metric is scored
+// from the same frames by the same code as in one pass.
+RunScores score_fitting(const RunFrames& run, const VmafOptions& options, const std::string& model,
+                        const ProgressCallback& on_progress, const StatusCallback& on_status) {
+    std::optional<std::pair<std::vector<std::string>, std::vector<std::string>>> halves;
+    try {
+        return score_run_metrics(run, options, model, on_progress, on_status);
+    } catch (const MemoryShort& error) {
+        halves = halve_metrics(options.requested_metrics(), error.gpu());
+        if (!halves) {
+            throw;  // only a pass that could be split throws it (score_watched): never here
+        }
+        logger.warning(std::string(error.what()) + ": scoring the metrics in two passes, " + join(halves->first, ", ") +
+                       ", then " + join(halves->second, ", "));
+        if (on_status) {
+            on_status({"Not enough memory for all the metrics at once (" + std::string(error.what()) +
+                       "); calculating them in two passes\xE2\x80\xA6"});
+        }
+    }
+    RunScores scores = score_fitting(run, with_metrics_only(options, halves->first), model,
+                                     part_in_sequence(on_progress, 0, 2), on_status);
+    RunScores second = score_fitting(run, with_metrics_only(options, halves->second), model,
+                                     part_in_sequence(on_progress, 1, 2), on_status);
+    if (scores.gpu_keys.empty()) {
+        scores.gpu_backend = second.gpu_backend;
+    }
+    std::move(second.parts.begin(), second.parts.end(), std::back_inserter(scores.parts));
+    scores.cpu_keys.merge(second.cpu_keys);
+    scores.gpu_keys.merge(second.gpu_keys);
+    return scores;
+}
+
+// score_pair's run, as its reading of the videos is set.
+ComparisonResult score_pair_once(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
+                                 VmafOptions options, const std::optional<CropBox>& source_crop,
+                                 const std::optional<CropBox>& distorted_crop, const HardwareDecoding& decoding,
+                                 const ProgressCallback& on_progress, const StatusCallback& on_status,
+                                 const CancelToken& cancel,
+                                 const std::optional<std::filesystem::path>& result_distorted_path,
+                                 const std::optional<EnginePlace>& engine) {
+    if (options.compute_vmaf_yuv || options.compute_vmaf_yuv_y) {
+        // Made from VMAF and its U and V by the video's job (JobRun::merged), which asks for those instead.
+        throw std::invalid_argument("VMAF YUV and its Y are not scored by a run: they are made from VMAF and "
+                                    "its U and V");
+    }
+    const auto [width, height] = analysis_dimensions(source, distorted, options, source_crop, distorted_crop);
+    const std::string model = resolve_run_models(options, width, height);
+    // The range's frames counted at the source's rate, as the run cuts them (run_range).
+    const long long total_frames = estimate_total_frames(source, options, &distorted);
+    const long long decoded_frames = estimate_decoded_frames(source, options, &distorted);
+    const FrameRange range = run_range(options, source);
+    const long long first_frame = range.start;
+
+    const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt}));
+    const RunFrames run{environment, source,         distorted, source_crop, distorted_crop, width,
+                        height,      depth,          decoded_frames, decoding, cancel,         engine};
+    std::optional<RunScores> scores = score_fitting(run, options, model, on_progress, on_status);
     for (const ParsedScores& part : scores->parts) {
         if (part.order.empty() && !part.failed.empty()) {
             continue;  // a part whose only metric failed: the others stand
@@ -2997,6 +3147,15 @@ ComparisonResult run_resample_test(const RunEnvironment& environment, const Vide
         cancel.throw_if_cancelled();
         decode_on_cpu(options, *gpu_decoding_distrusted(), {&source}, on_status);
     }
+}
+
+ProgressCallback part_in_sequence(const ProgressCallback& on_progress, long long index, long long parts) {
+    if (!on_progress) {
+        return nullptr;
+    }
+    return [on_progress, index, parts](long long done, long long whole, double fps) {
+        on_progress(index * whole + done, parts * whole, fps);
+    };
 }
 
 }  // namespace vml

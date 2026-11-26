@@ -1031,6 +1031,7 @@
   "GPU decoding failed ({error}); decoding through FFmpeg instead…": "GPU-Dekodierung fehlgeschlagen ({error}); stattdessen Dekodierung über FFmpeg…",
   "The GPU's video decoding failed ({error}); the videos were decoded on the CPU…": "Die Videodekodierung der GPU ist fehlgeschlagen ({error}); die Videos wurden auf der CPU dekodiert…",
   "Reading the videos failed ({error}); trying again…": "Lesen der Videos fehlgeschlagen ({error}); neuer Versuch…",
+  "Not enough memory for all the metrics at once ({error}); calculating them in two passes…": "Nicht genug Speicher für alle Metriken gleichzeitig ({error}); sie werden in zwei Durchgängen berechnet…",
   "GPU metric {number}/{count}: {metrics}": "GPU-Metrik {number}/{count}: {metrics}",
   "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF auf der GPU fehlgeschlagen ({error}); wird auf der CPU berechnet…",
   "VMAF compute:": "VMAF-Berechnung:",

@@ -33,6 +33,7 @@
 #include "vml/gpu_frames.h"
 #include "vml/grain_feed.h"
 #include "vml/isolated.h"
+#include "vml/memory_fit.h"
 #include "vml/model_select.h"
 #include "vml/number_format.h"
 #include "vml/cpu_pair_scorer.h"
@@ -1017,6 +1018,39 @@ PerceptualTaskOutput score_cpu_task_apart(const PerceptualRequest& request, cons
     return output;
 }
 
+// The task's metrics scored, in a process of its own where a program to run
+// it is set; where the PC's memory refused SSIMULACRA2 and Butteraugli
+// together (memory_refused, memory_fit.h), each in a pass of its own, one
+// after the other. (in_app_schedule already takes workers away to fit the
+// memory free as the task starts.) The scores are the same: the same
+// frames, scored by the same engines.
+PerceptualTaskOutput score_cpu_task_fitting(const PerceptualRequest& request, const std::vector<std::string>& keys,
+                                            const CropPair& crops, const ProgressCallback& on_progress,
+                                            const StatusCallback& on_status, const CancelToken& cancel) {
+    const auto score = [&](const std::vector<std::string>& some, const ProgressCallback& progress) {
+        return isolation_program() ? score_cpu_task_apart(request, some, crops, progress, on_status, cancel)
+                                   : score_cpu_task(request, some, crops, progress, on_status, cancel);
+    };
+    try {
+        return score(keys, on_progress);
+    } catch (const std::exception& error) {
+        if (keys.size() < 2 || ends_the_run(error) || memory_refused(error) != std::optional(false)) {
+            throw;
+        }
+        logger.warning(join(keys, " and ") + " on the CPU ran out of memory (" + error.what() +
+                       "); scoring them in two passes, one after the other");
+        if (on_status) {
+            on_status({"Not enough memory for all the metrics at once (" + std::string(error.what()) +
+                       "); calculating them in two passes\xE2\x80\xA6"});
+        }
+    }
+    PerceptualTaskOutput output = score({keys.front()}, part_in_sequence(on_progress, 0, 2));
+    PerceptualTaskOutput second = score({keys.back()}, part_in_sequence(on_progress, 1, 2));
+    output.metrics.add_all(second.metrics);
+    output.failures.insert(output.failures.end(), second.failures.begin(), second.failures.end());
+    return output;
+}
+
 }  // namespace
 
 PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, const std::vector<std::string>& keys,
@@ -1035,10 +1069,7 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
     scored_colours(request.source, request.distorted);
     const CropPair found = crops ? *crops : perceptual_crops(request, on_status, cancel);
     refuse_too_small(request, keys, found);
-    if (isolation_program()) {
-        return score_cpu_task_apart(request, keys, found, on_progress, on_status, cancel);
-    }
-    return score_cpu_task(request, keys, found, on_progress, on_status, cancel);
+    return score_cpu_task_fitting(request, keys, found, on_progress, on_status, cancel);
 }
 
 nlohmann::json cpu_perceptual_task(const nlohmann::json& request, const std::filesystem::path& folder) {

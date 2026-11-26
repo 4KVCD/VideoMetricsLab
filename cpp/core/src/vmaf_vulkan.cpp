@@ -135,7 +135,8 @@ VulkanEngine::VulkanEngine(const std::filesystem::path& path)
       export_part(optional_function<decltype(export_part)>(library, "vv_export_part")),
       v1_convert(optional_function<decltype(v1_convert)>(library, "vv_v1_convert")),
       test_convert(optional_function<decltype(test_convert)>(library, "vv_test_convert")),
-      convert_source(optional_function<decltype(convert_source)>(library, "vv_convert_source")) {}
+      convert_source(optional_function<decltype(convert_source)>(library, "vv_convert_source")),
+      memory(optional_function<decltype(memory)>(library, "vv_memory")) {}
 
 void check_vulkan(const VulkanEngine& engine, int error, const std::string& what) {
     if (error < 0) {
@@ -156,6 +157,29 @@ const VulkanEngine& vulkan_engine() {
         return loaded;
     } catch (const platform::LibraryError& error) {
         throw VmafVulkanError(error.what());
+    }
+}
+
+std::optional<GpuMemory> vulkan_memory(int device) {
+    try {
+        const VulkanEngine& engine = vulkan_engine();
+        if (engine.memory == nullptr) {
+            return std::nullopt;
+        }
+        if (device < 0) {
+            const std::optional<VulkanDevice> chosen = chosen_vulkan_device(vulkan_devices());
+            if (!chosen) {
+                return std::nullopt;
+            }
+            device = chosen->index;
+        }
+        GpuMemory memory;
+        if (engine.memory(device, &memory.used, &memory.budget, &memory.spilled) < 0) {
+            return std::nullopt;
+        }
+        return memory;
+    } catch (const std::exception&) {
+        return std::nullopt;
     }
 }
 

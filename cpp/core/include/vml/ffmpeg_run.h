@@ -45,6 +45,10 @@ private:
 // Called with (frames done, frames expected, frames per second).
 using ProgressCallback = std::function<void(long long, long long, double)>;
 
+// The progress of part `index` of `parts` run one after the other, as the
+// whole run's: each part counts as much as the others.
+ProgressCallback part_in_sequence(const ProgressCallback& on_progress, long long index, long long parts);
+
 // What a status tells the run line, beside its text (the Python app's
 // status kinds).
 enum class StatusKind {

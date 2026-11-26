@@ -174,6 +174,17 @@ std::optional<unsigned long long> available_memory() {
     return status.ullAvailPhys;
 }
 
+std::optional<unsigned long long> memory_headroom() {
+    MEMORYSTATUSEX status{};
+    status.dwLength = sizeof status;
+    if (!GlobalMemoryStatusEx(&status)) {
+        return std::nullopt;
+    }
+    // ullAvailPageFile: what may still be committed before the system's commit limit (a job object's memory
+    // limit does not show here).
+    return std::min(status.ullAvailPhys, status.ullAvailPageFile);
+}
+
 std::optional<unsigned long long> total_memory() {
     MEMORYSTATUSEX status{};
     status.dwLength = sizeof status;

@@ -11,7 +11,9 @@ namespace vml {
 // (VideoSizeChanged), for which run_vmaf and run_perceptual_task make the
 // run again with the video scaled first; and a video with film grain the
 // app's decoder cannot give the pictures of (FilmGrainRefusal), final
-// because every route decodes it with that same decoder (grain_feed.h).
+// because every route decodes it with that same decoder (grain_feed.h); and
+// a pass whose metrics did not fit in memory (MemoryShort), which the run
+// scores in halves instead.
 // The parts that try another route or report a metric as failed hand these
 // on first, as they are.
 bool ends_the_run(const std::exception& error);

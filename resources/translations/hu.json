@@ -1031,6 +1031,7 @@
   "GPU decoding failed ({error}); decoding through FFmpeg instead…": "A GPU-dekódolás sikertelen ({error}); dekódolás inkább FFmpeg-gel…",
   "The GPU's video decoding failed ({error}); the videos were decoded on the CPU…": "A GPU videodekódolása sikertelen ({error}); a videók dekódolása a CPU-n történt…",
   "Reading the videos failed ({error}); trying again…": "A videók beolvasása sikertelen ({error}); újrapróbálás…",
+  "Not enough memory for all the metrics at once ({error}); calculating them in two passes…": "Nincs elég memória az összes metrikához egyszerre ({error}); két menetben számolódnak…",
   "GPU metric {number}/{count}: {metrics}": "GPU-metrika {number}/{count}: {metrics}",
   "VMAF on the GPU failed ({error}); calculating it on the CPU…": "A VMAF sikertelen a GPU-n ({error}); számítás CPU-n…",
   "VMAF compute:": "VMAF számítása:",

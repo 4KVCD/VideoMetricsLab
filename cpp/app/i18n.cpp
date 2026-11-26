@@ -281,6 +281,7 @@ const char* const templates[] = {
     "GPU decoding failed ({error}); decoding with VVdeC on the CPU instead…",
     "The GPU's video decoding failed ({error}); the videos were decoded on the CPU…",
     "Reading the videos failed ({error}); trying again…",
+    "Not enough memory for all the metrics at once ({error}); calculating them in two passes…",
     "GPU metric {number}/{count}: {metrics}",
     "VMAF on the GPU failed ({error}); calculating it on the CPU…",
     "GPU decode failed, retrying (GPU decode: {plan})…",

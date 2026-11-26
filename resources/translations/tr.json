@@ -1031,6 +1031,7 @@
   "GPU decoding failed ({error}); decoding through FFmpeg instead…": "GPU kod çözme başarısız ({error}); bunun yerine FFmpeg ile kod çözülüyor…",
   "The GPU's video decoding failed ({error}); the videos were decoded on the CPU…": "GPU video kod çözme başarısız ({error}); videoların kodu CPU'da çözüldü…",
   "Reading the videos failed ({error}); trying again…": "Videolar okunamadı ({error}); yeniden deneniyor…",
+  "Not enough memory for all the metrics at once ({error}); calculating them in two passes…": "Tüm metrikler için aynı anda yeterli bellek yok ({error}); iki geçişte hesaplanıyor…",
   "GPU metric {number}/{count}: {metrics}": "GPU metriği {number}/{count}: {metrics}",
   "VMAF on the GPU failed ({error}); calculating it on the CPU…": "GPU'da VMAF başarısız ({error}); CPU'da hesaplanıyor…",
   "VMAF compute:": "VMAF hesaplama:",

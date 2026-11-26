@@ -1031,6 +1031,7 @@
   "GPU decoding failed ({error}); decoding through FFmpeg instead…": "Декодування на GPU не вдалося ({error}); декодування через FFmpeg…",
   "The GPU's video decoding failed ({error}); the videos were decoded on the CPU…": "Декодування відео на GPU не вдалося ({error}); відео декодовано на CPU…",
   "Reading the videos failed ({error}); trying again…": "Помилка читання відео ({error}); повторна спроба…",
+  "Not enough memory for all the metrics at once ({error}); calculating them in two passes…": "Недостатньо пам’яті для всіх метрик одразу ({error}); вони обчислюються у два проходи…",
   "GPU metric {number}/{count}: {metrics}": "Метрика GPU {number}/{count}: {metrics}",
   "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF на GPU не вдалося ({error}); обчислення на CPU…",
   "VMAF compute:": "Обчислення VMAF:",

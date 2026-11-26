@@ -32,6 +32,7 @@ add_executable(vml_tests
     unit/job_runner_test.cpp
     unit/library_test.cpp
     unit/libvmaf_test.cpp
+    unit/memory_fit_test.cpp
     unit/metric_cache_test.cpp
     unit/metrics_test.cpp
     unit/notifications_test.cpp

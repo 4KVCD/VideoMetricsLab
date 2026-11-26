@@ -1031,6 +1031,7 @@
   "GPU decoding failed ({error}); decoding through FFmpeg instead…": "GPU 解码失败（{error}）；改为通过 FFmpeg 解码…",
   "The GPU's video decoding failed ({error}); the videos were decoded on the CPU…": "GPU 视频解码失败（{error}）；已改为在 CPU 上解码视频…",
   "Reading the videos failed ({error}); trying again…": "读取视频失败（{error}）；正在重试…",
+  "Not enough memory for all the metrics at once ({error}); calculating them in two passes…": "内存不足，无法同时计算所有指标（{error}）；正在分两次计算…",
   "GPU metric {number}/{count}: {metrics}": "GPU 指标 {number}/{count}：{metrics}",
   "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF 在 GPU 上失败（{error}）；正在 CPU 上计算…",
   "VMAF compute:": "VMAF 计算：",
