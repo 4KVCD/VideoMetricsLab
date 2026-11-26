@@ -108,6 +108,9 @@ constexpr std::size_t medium_picture_memory = std::size_t{420} << 20;
 // run at 6.0 fps with 6 pairs, 10.8 with 12 and 15.1 with 24 (this limit:
 // 24 pairs of 4K 10-bit pictures with chroma), for 850 MB more at the peak.
 constexpr std::size_t heavy_picture_memory = std::size_t{800} << 20;
+// The most threads a pair's MS-SSIM is shared by (cpu_threads): one frame
+// thread scales 7.1 / 13.2 / 19.1 fps with 0 / 1 / 2 helpers (4K 10-bit).
+constexpr int ms_ssim_threads_per_pair = 3;
 
 bool has(const std::vector<std::string>& metrics, std::string_view key) {
     return std::find(metrics.begin(), metrics.end(), key) != metrics.end();
@@ -366,21 +369,14 @@ CpuScorer::CpuScorer(int width, int height, int bit_depth, std::vector<std::stri
     const ExtractorOptions cambi_with = cambi_options(cambi, width, height, bit_depth);
     start_gpu(width, height, bit_depth, gpu, cambi_with);
     std::erase_if(libvmaf_metrics_, [](const std::string& key) { return is_chroma_vmaf(key); });
-    // With libvmaf calculating nothing, each pair is given back as soon as the
-    // GPU has copied it: two pairs are all the decoders need.
-    const int pairs = libvmaf_metrics_.empty()
-                          ? 2
-                          : cpu_pairs(width, height, bit_depth, threads, has(libvmaf_metrics_, "xpsnr"), chroma_,
-                                      cpu_metrics_cost(libvmaf_metrics_));
-    // No more libvmaf threads than pairs: a pair is scored by one thread, and
-    // each thread that ever scores one keeps its own copy of every
-    // extractor's buffers (MS-SSIM's and CAMBI's: about 100 MB each at 4K).
-    const unsigned libvmaf_threads = static_cast<unsigned>(std::min(threads, pairs));
-    const VmafConfiguration configuration{VMAF_LOG_LEVEL_ERROR, libvmaf_threads, step_, 0, 0};
+    const CpuThreads split = cpu_threads(width, height, bit_depth, threads, libvmaf_metrics_, chroma_);
+    const int pairs = split.pairs;
+    const VmafConfiguration configuration{VMAF_LOG_LEVEL_ERROR, split.frame_threads, step_, 0, 0};
     VmafContext* context = nullptr;
     check_libvmaf(library_.init(&context, configuration), "Starting libvmaf");
     context_ = context;
     try {
+        check_libvmaf(library_.set_helper_threads(split.helpers), "Starting libvmaf's helper threads");
         cambi_feature_ = cambi_feature(cambi_with);
         for (const Extractor& extractor : extractors_for(libvmaf_metrics_, frame_rate, cambi_with)) {
             VmafFeatureDictionary* options = nullptr;
@@ -450,6 +446,9 @@ void CpuScorer::release() {
         library_.close(context_);
         context_ = nullptr;
     }
+    // The helper threads end with their scratch (a scorer in the app's own
+    // process; an isolated one's process ends anyway).
+    library_.set_helper_threads(0);
 }
 
 VmafPicture CpuScorer::take_picture() {
@@ -786,6 +785,41 @@ int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr, boo
     const auto fit = static_cast<long long>(memory / (2 * picture));
     const long long wanted = busy + 1;
     return static_cast<int>(std::max(2LL, std::min(wanted, fit))) + (xpsnr ? 1 : 0);
+}
+
+CpuThreads cpu_threads(int width, int height, int bit_depth, int threads, const std::vector<std::string>& metrics,
+                       bool chroma) {
+    threads = std::max(0, threads);
+    // With libvmaf calculating nothing, each pair is given back as soon as the
+    // GPU has copied it: two pairs are all the decoders need.
+    if (metrics.empty()) {
+        return {2, static_cast<unsigned>(std::min(threads, 2)), 0};
+    }
+    const auto is_ms_ssim = [](const std::string& key) {
+        const std::string_view metric = scored_by(key);
+        return metric == "ms_ssim" || metric == "ms_ssim_yuv";
+    };
+    // MS-SSIM alone: each pair gets up to three threads (its frame thread and
+    // two helpers), the rest go to more pairs. Each frame thread keeps its own
+    // MS-SSIM buffers and a pair of pictures, so a third of the frame threads
+    // take about half the memory, at a cost in speed: 4K 10-bit on a Core
+    // Ultra 9 285K (24 threads), 24 frame threads 72 fps and 1678 MB at the
+    // peak, 8 frame threads + 16 helpers 58-61 fps and 834 MB (1080p 8-bit:
+    // 369-376 fps and 458 MB, 362-368 fps and 310 MB). With any other metric,
+    // fewer frame threads would slow that one, which is not split.
+    const bool ms_ssim_alone = std::all_of(metrics.begin(), metrics.end(), is_ms_ssim);
+    const int busy = ms_ssim_alone ? (threads + ms_ssim_threads_per_pair - 1) / ms_ssim_threads_per_pair : threads;
+    const int pairs = cpu_pairs(width, height, bit_depth, busy, has(metrics, "xpsnr"), chroma,
+                                cpu_metrics_cost(metrics));
+    // No more frame threads than pairs: a pair is scored by one thread, and
+    // each thread that ever scores one keeps its own copy of every
+    // extractor's buffers (MS-SSIM's and CAMBI's: about 100 MB each at 4K).
+    const int frame_threads = std::min(busy, pairs);
+    // The threads left over share each pair's MS-SSIM (with other metrics,
+    // only those the pairs' memory limit leaves idle, at 8K).
+    const bool ms_ssim = std::any_of(metrics.begin(), metrics.end(), is_ms_ssim);
+    const int helpers = ms_ssim ? threads - frame_threads : 0;
+    return {pairs, static_cast<unsigned>(frame_threads), static_cast<unsigned>(helpers)};
 }
 
 void fill_picture(VmafPicture& picture, const FramePlanes& frame, std::size_t sample,

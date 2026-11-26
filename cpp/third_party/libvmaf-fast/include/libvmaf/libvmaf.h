@@ -396,6 +396,21 @@ int vmaf_write_output(VmafContext *vmaf, const char *output_path,
  */
 const char *vmaf_version(void);
 
+/**
+ * libvmaf-fast: set the number of helper threads, shared by every context in
+ * the process, that split one frame's work in the feature extractors that
+ * can (float_ms_ssim: MS-SSIM and its chroma planes). Scores are the same
+ * with any number. 0 (the default) runs each frame on its own thread only.
+ *
+ * Fewer frames then need to be in flight to keep the CPU busy: a context with
+ * n_threads frame threads holds n_threads frames' pictures and extractor
+ * buffers, while helpers hold one stripe of buffers each.
+ *
+ * @return 0 on success, or < 0 (a negative errno code) on error; helpers
+ *         that did start keep running.
+ */
+int vmaf_set_helper_threads(unsigned helpers);
+
 #ifdef __cplusplus
 }
 #endif

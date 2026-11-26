@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -350,6 +351,27 @@ TEST(Libvmaf, ThePicturePoolFollowsTheSlowestMetric) {
     EXPECT_EQ(cpu_pairs(1920, 1080, 8, 4, false, true, CpuMetricsCost::medium), 5);
     EXPECT_EQ(cpu_pairs(3840, 2160, 10, 24, false, true, CpuMetricsCost::medium), 13);
     EXPECT_EQ(cpu_pairs(3840, 2160, 10, 24, false, true, CpuMetricsCost::light), 6);
+}
+
+// MS-SSIM alone gets a frame thread for every three threads and the rest as
+// helpers; beside other metrics, only the threads that the pictures' memory
+// leaves without a pair (8K 10-bit pictures leave 6 pairs of 24 threads);
+// other metrics get no helpers.
+TEST(Libvmaf, MsSsimSharesEachPairWithTwoHelpers) {
+    const auto split = [](int width, int height, const std::vector<std::string>& metrics, int threads = 24) {
+        const CpuThreads t = cpu_threads(width, height, 10, threads, metrics, false);
+        return std::array<int, 3>{t.pairs, static_cast<int>(t.frame_threads), static_cast<int>(t.helpers)};
+    };
+    EXPECT_EQ(split(3840, 2160, {"ms_ssim"}), (std::array<int, 3>{9, 8, 16}));
+    EXPECT_EQ(split(3840, 2160, {"ms_ssim", "ms_ssim_yuv_u"}), (std::array<int, 3>{9, 8, 16}));
+    EXPECT_EQ(split(3840, 2160, {"ms_ssim"}, 1), (std::array<int, 3>{2, 1, 0}));
+    EXPECT_EQ(split(3840, 2160, {"ms_ssim"}, 2), (std::array<int, 3>{2, 1, 1}));
+    EXPECT_EQ(split(3840, 2160, {"ms_ssim"}, 4), (std::array<int, 3>{3, 2, 2}));
+    EXPECT_EQ(split(3840, 2160, {"cambi", "ms_ssim"}), (std::array<int, 3>{25, 24, 0}));
+    EXPECT_EQ(split(7680, 4320, {"ms_ssim"}), (std::array<int, 3>{6, 6, 18}));
+    EXPECT_EQ(split(7680, 4320, {"psnr", "ms_ssim_yuv_u"}), (std::array<int, 3>{6, 6, 18}));
+    EXPECT_EQ(split(7680, 4320, {"cambi"}), (std::array<int, 3>{6, 6, 0}));
+    EXPECT_EQ(split(3840, 2160, {}), (std::array<int, 3>{2, 2, 0}));
 }
 
 // A model libvmaf does not have is an error that says what failed.

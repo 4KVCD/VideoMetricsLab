@@ -257,6 +257,25 @@ CpuMetricsCost cpu_metrics_cost(const std::vector<std::string>& metrics);
 // previous frames.
 int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr, bool chroma, CpuMetricsCost cost);
 
+// How CpuScorer uses `threads`: frame threads, each scoring a pair of its
+// own, and helper threads, which share each pair's MS-SSIM with the frame
+// threads (libvmaf-fast's vmaf_set_helper_threads); `pairs` as cpu_pairs
+// gives them for the frame threads.
+struct CpuThreads {
+    int pairs;
+    unsigned frame_threads;
+    unsigned helpers;
+};
+
+// The split for `metrics` (cpu_feature keys, chroma VMAF taken out) on
+// `threads` threads: as many frame threads as cpu_pairs gives pairs, but with
+// MS-SSIM and MS-SSIM YUV alone, one frame thread for every three threads,
+// for less memory. With MS-SSIM or MS-SSIM YUV, the threads left over are
+// helpers (with other metrics too, only where the pictures' memory limit
+// leaves fewer pairs than threads: 8K, where 10-bit pictures leave 6 pairs).
+CpuThreads cpu_threads(int width, int height, int bit_depth, int threads, const std::vector<std::string>& metrics,
+                       bool chroma);
+
 // Copies the given planes (0 Y, 1 U, 2 V) of a frame into a libvmaf picture of
 // its size, `sample` bytes a sample. Its planes are the frame's, but for an odd
 // size's chroma planes, which libvmaf rounds down where FFmpeg rounds up: the
