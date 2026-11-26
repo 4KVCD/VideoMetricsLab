@@ -95,12 +95,19 @@ constexpr int vmaf_smallest_plane = 32;      // VMAF's smallest side (the regist
 // 135 fps with 7 pairs, 154 with 8, 169 with 9 (its limit) and 171 with 10.
 constexpr std::size_t picture_memory = std::size_t{200} << 20;
 constexpr std::size_t xpsnr_picture_memory = std::size_t{270} << 20;
+// PSNR-HVS-M takes about 3.5 times as long as PSNR per pair: alone on the
+// CPU (Core Ultra 9 285K, software-decoded video), 4K 10-bit runs at 115 fps
+// with 6 pairs, 181 with 9, 200 with 11, 223 with 13 (12 threads and this
+// limit: 13 pairs of 4K 10-bit pictures with chroma) and 225 with 25; 1080p
+// 8-bit at 662 fps with 9 pairs, 834 with 13 and 830 with 25.
+constexpr int medium_threads = 12;
+constexpr std::size_t medium_picture_memory = std::size_t{420} << 20;
 // MS-SSIM, CAMBI and CIEDE2000 take far longer per pair than the decoders
 // take to feed one, so they get a pair per thread: on 4K 10-bit video beside
 // GPU VMAF (RTX 5090, Core Ultra 9 285K, 24 threads), the five new metrics
 // run at 6.0 fps with 6 pairs, 10.8 with 12 and 15.1 with 24 (this limit:
 // 24 pairs of 4K 10-bit pictures with chroma), for 850 MB more at the peak.
-constexpr std::size_t slow_picture_memory = std::size_t{800} << 20;
+constexpr std::size_t heavy_picture_memory = std::size_t{800} << 20;
 
 bool has(const std::vector<std::string>& metrics, std::string_view key) {
     return std::find(metrics.begin(), metrics.end(), key) != metrics.end();
@@ -278,11 +285,18 @@ bool cpu_metrics_read_chroma(const std::vector<std::string>& metrics) {
     });
 }
 
-bool cpu_metrics_slow(const std::vector<std::string>& metrics) {
-    return std::any_of(metrics.begin(), metrics.end(), [](const std::string& key) {
+CpuMetricsCost cpu_metrics_cost(const std::vector<std::string>& metrics) {
+    CpuMetricsCost cost = CpuMetricsCost::light;
+    for (const std::string& key : metrics) {
         const std::string_view metric = scored_by(key);
-        return metric == "ms_ssim" || metric == "ms_ssim_yuv" || metric == "cambi" || metric == "ciede2000";
-    });
+        if (metric == "ms_ssim" || metric == "ms_ssim_yuv" || metric == "cambi" || metric == "ciede2000") {
+            return CpuMetricsCost::heavy;
+        }
+        if (metric == "psnr_hvs") {
+            cost = CpuMetricsCost::medium;
+        }
+    }
+    return cost;
 }
 
 std::map<std::string, std::string> cpu_metrics_unfit(const std::vector<std::string>& metrics, int width,
@@ -357,7 +371,7 @@ CpuScorer::CpuScorer(int width, int height, int bit_depth, std::vector<std::stri
     const int pairs = libvmaf_metrics_.empty()
                           ? 2
                           : cpu_pairs(width, height, bit_depth, threads, has(libvmaf_metrics_, "xpsnr"), chroma_,
-                                      cpu_metrics_slow(libvmaf_metrics_));
+                                      cpu_metrics_cost(libvmaf_metrics_));
     // No more libvmaf threads than pairs: a pair is scored by one thread, and
     // each thread that ever scores one keeps its own copy of every
     // extractor's buffers (MS-SSIM's and CAMBI's: about 100 MB each at 4K).
@@ -738,17 +752,26 @@ bool cpu_scores_xpsnr() {
     return answer;
 }
 
-int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr, bool chroma, bool slow) {
+int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr, bool chroma, CpuMetricsCost cost) {
     // A picture's bytes as vmaf_picture_alloc lays it out: rows of 32
     // samples, and with chroma two planes half as wide and tall.
     const auto plane = [&](int w, int h) {
         return static_cast<std::size_t>((w + 31) & ~31) * static_cast<std::size_t>(h) * bytes_per_sample(bit_depth);
     };
     const std::size_t picture = plane(width, height) + (chroma ? 2 * plane(width / 2, height / 2) : 0);
-    const std::size_t luma_memory = slow ? slow_picture_memory : xpsnr ? xpsnr_picture_memory : picture_memory;
+    threads = std::max(1, threads);
+    std::size_t luma_memory = xpsnr ? xpsnr_picture_memory : picture_memory;
+    int busy = std::min(8, threads);
+    if (cost == CpuMetricsCost::medium) {
+        luma_memory = medium_picture_memory;
+        busy = std::min(medium_threads, threads);
+    } else if (cost == CpuMetricsCost::heavy) {
+        luma_memory = heavy_picture_memory;
+        busy = threads;
+    }
     const std::size_t memory = chroma ? luma_memory * 3 / 2 : luma_memory;
     const auto fit = static_cast<long long>(memory / (2 * picture));
-    const long long wanted = (slow ? std::max(1, threads) : std::min(8, std::max(1, threads))) + 1;
+    const long long wanted = busy + 1;
     return static_cast<int>(std::max(2LL, std::min(wanted, fit))) + (xpsnr ? 1 : 0);
 }
 

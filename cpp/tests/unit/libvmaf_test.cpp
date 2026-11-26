@@ -337,6 +337,21 @@ TEST(Libvmaf, OnlyTheCpuMetricsTheGpuCalculatesAsLibvmafGoToIt) {
     EXPECT_TRUE(gpu_metrics_of({"psnr", "ms_ssim"}, false, {}).empty());
 }
 
+// The pool holds a pair per busy libvmaf thread plus one: 8 threads for light
+// metrics, 12 for PSNR-HVS-M, every thread for a heavy metric beside it; and
+// 4K 10-bit pictures with chroma come to as many pairs as their memory allows.
+TEST(Libvmaf, ThePicturePoolFollowsTheSlowestMetric) {
+    EXPECT_EQ(cpu_metrics_cost({"psnr", "ssim"}), CpuMetricsCost::light);
+    EXPECT_EQ(cpu_metrics_cost({"psnr", "psnr_hvs"}), CpuMetricsCost::medium);
+    EXPECT_EQ(cpu_metrics_cost({"psnr_hvs", "ms_ssim_yuv_u"}), CpuMetricsCost::heavy);
+    EXPECT_EQ(cpu_pairs(1920, 1080, 8, 24, false, true, CpuMetricsCost::light), 9);
+    EXPECT_EQ(cpu_pairs(1920, 1080, 8, 24, false, true, CpuMetricsCost::medium), 13);
+    EXPECT_EQ(cpu_pairs(1920, 1080, 8, 24, false, true, CpuMetricsCost::heavy), 25);
+    EXPECT_EQ(cpu_pairs(1920, 1080, 8, 4, false, true, CpuMetricsCost::medium), 5);
+    EXPECT_EQ(cpu_pairs(3840, 2160, 10, 24, false, true, CpuMetricsCost::medium), 13);
+    EXPECT_EQ(cpu_pairs(3840, 2160, 10, 24, false, true, CpuMetricsCost::light), 6);
+}
+
 // A model libvmaf does not have is an error that says what failed.
 TEST(Libvmaf, AnUnknownModelIsAnError) {
     if (!std::filesystem::exists(libvmaf_folder() / platform::shared_library_name("libvmaf"))) {

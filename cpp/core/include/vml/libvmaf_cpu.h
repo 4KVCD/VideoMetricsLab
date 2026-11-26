@@ -234,18 +234,25 @@ private:
 // looks for both scores. Asked once.
 bool cpu_scores_xpsnr();
 
-// Whether `metrics` (cpu_feature keys) include one that takes far longer per
-// pair than the decoders take to feed it: MS-SSIM, MS-SSIM YUV, CAMBI,
-// CIEDE2000.
-bool cpu_metrics_slow(const std::vector<std::string>& metrics);
+// How long a pass's CPU metrics take per pair against the decoders' feed,
+// which sets how many libvmaf threads (and pairs of pictures) they keep busy.
+enum class CpuMetricsCost {
+    light,   // the others (PSNR, SSIM, XPSNR...): 8 threads keep up with the feed
+    medium,  // PSNR-HVS-M: 12 threads
+    heavy,   // MS-SSIM, MS-SSIM YUV, CAMBI, CIEDE2000: every thread
+};
+
+// The cost of `metrics` (cpu_feature keys): that of the slowest.
+CpuMetricsCost cpu_metrics_cost(const std::vector<std::string>& metrics);
 
 // How many pairs of pictures CpuScorer's pool holds: one pair per libvmaf
-// thread plus one being filled, counting at most 8 threads (every thread with
-// a `slow` metric), within 200 MB (270 MB with XPSNR, 800 MB with a slow
-// metric; half as much again for pictures with `chroma`, so that they come to
-// as many pairs), but at least two pairs; XPSNR gets one more, for the test
-// pictures it keeps from the previous frames.
-int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr, bool chroma, bool slow);
+// thread plus one being filled, counting at most 8 threads (12 for a medium
+// `cost`, every thread for a heavy one), within 200 MB (270 MB with XPSNR,
+// 420 MB for a medium cost, 800 MB for a heavy one; half as much again for
+// pictures with `chroma`, so that they come to as many pairs), but at least
+// two pairs; XPSNR gets one more, for the test pictures it keeps from the
+// previous frames.
+int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr, bool chroma, CpuMetricsCost cost);
 
 // Copies the given planes (0 Y, 1 U, 2 V) of a frame into a libvmaf picture of
 // its size, `sample` bytes a sample. Its planes are the frame's, but for an odd
