@@ -1,12 +1,16 @@
 #include "theme.h"
 
+#include <QAbstractItemView>
+#include <QAbstractSpinBox>
 #include <QApplication>
 #include <QBrush>
+#include <QComboBox>
 #include <QGroupBox>
 #include <QFrame>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QHash>
+#include <QLineEdit>
 #include <QPalette>
 #include <QMargins>
 #include <QPainter>
@@ -14,11 +18,14 @@
 #include <QPainterPath>
 #include <QPointer>
 #include <QProxyStyle>
+#include <QScrollBar>
 #include <QStyle>
 #include <QStyleFactory>
 #include <QStyleOption>
 #include <QStyleHints>
+#include <QStyledItemDelegate>
 #include <QTableWidgetItem>
+#include <QtPlugin>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -29,6 +36,9 @@
 #include <vector>
 
 #include "i18n.h"
+
+// VML Modern's drop-down and spin box arrows (chevron_icons.cpp).
+Q_IMPORT_PLUGIN(VmlChevronIconPlugin)
 
 namespace vml::app::theme {
 
@@ -275,6 +285,12 @@ LooksAsked& looks_asked() {
 // application's style sheet.
 class ModernStyle : public QProxyStyle {
 public:
+    // A spin box's text from its left edge: with the text box's own 2, the
+    // sheet's border and padding (1 + 6), as a drop-down's text.
+    static constexpr int spin_text_inset = 5;
+    // The open list's distance from its field, less one (the border row).
+    static constexpr int list_gap = 3;
+
     ModernStyle() : QProxyStyle(QStyleFactory::create(QStringLiteral("fusion"))) {}
 
     // A group box without a title is marked (vmlUntitled), so the sheet
@@ -284,8 +300,76 @@ public:
         if (auto* box = qobject_cast<QGroupBox*>(widget)) {
             box->setProperty("vmlUntitled", box->title().isEmpty());
         }
+        // A spin box's text inset as a drop-down's (the sheet's padding):
+        // Qt's style sheet places a spin box's text box at its left edge,
+        // padding or not, and the text box takes the spin box's rules, so
+        // the sheet cannot pad it. Issue #250.
+        if (qobject_cast<QAbstractSpinBox*>(widget) != nullptr) {
+            if (auto* edit = widget->findChild<QLineEdit*>(Qt::FindDirectChildrenOnly)) {
+                edit->setTextMargins(spin_text_inset, 0, 0, 0);
+            }
+        }
     }
+
     using QProxyStyle::polish;
+
+    // A drop-down's open list (issue #250). QComboBox asks for this rect as
+    // it opens the list, once the list exists and before it measures its
+    // rows or makes its window: the list is made as the sheet draws it here,
+    // when it is first opened, rather than for every drop-down as the
+    // window is built (Qt makes a list only when it is needed).
+    // - Its rows drawn by a QStyledItemDelegate: Qt's own row painters
+    //   ignore the sheet's ::item rules (padding, a rounded hover and
+    //   selection). Only Qt's own is replaced, not one the app set.
+    // - Its window see-through, so that the list's rounded corners show, and
+    //   without Windows' square shadow behind them: fixed when the window is
+    //   made (setWindowFlags makes it again if it was, for a list opened in
+    //   Classic). Frameless too: only then does Qt make a Windows window
+    //   see-through.
+    // - At least as wide as its longest entry, as Fusion's was: a field
+    //   narrower than an entry shows it in full when opened. QComboBox widens
+    //   the list only for Fusion's kind of list (SH_ComboBox_Popup), and
+    //   otherwise takes this rect's width, the field's.
+    // - A little space between the field and the list, below it or above:
+    //   QComboBox opens the list at this rect's bottom (or top), on the
+    //   field's border row.
+    QRect subControlRect(ComplexControl control, const QStyleOptionComplex* option, SubControl sub,
+                         const QWidget* widget) const override {
+        QRect rect = QProxyStyle::subControlRect(control, option, sub, widget);
+        auto* combo = const_cast<QComboBox*>(qobject_cast<const QComboBox*>(widget));
+        if (control != CC_ComboBox || sub != SC_ComboBoxListBoxPopup || combo == nullptr) {
+            return rect;
+        }
+        QAbstractItemDelegate* delegate = combo->itemDelegate();
+        if (delegate != nullptr && (delegate->inherits("QComboBoxDelegate") || delegate->inherits("QComboMenuDelegate"))) {
+            combo->setItemDelegate(new QStyledItemDelegate(combo));
+            delete delegate;
+        }
+        QAbstractItemView* view = combo->view();
+        QWidget* list_window = view->window();
+        if (list_window != combo->window() && !list_window->testAttribute(Qt::WA_TranslucentBackground)) {
+            list_window->setAttribute(Qt::WA_TranslucentBackground);
+            list_window->setWindowFlags(list_window->windowFlags() | Qt::FramelessWindowHint |
+                                        Qt::NoDropShadowWindowHint);
+        }
+        int widest = 0;
+        for (int row = 0; row < combo->count(); ++row) {
+            const QModelIndex index = combo->model()->index(row, combo->modelColumn(), combo->rootModelIndex());
+            widest = std::max(widest, view->sizeHintForIndex(index).width());
+        }
+        int width = widest + 2 * view->frameWidth();
+        if (combo->count() > combo->maxVisibleItems()) {
+            width += view->verticalScrollBar()->sizeHint().width();
+        }
+        if (width > rect.width()) {
+            if (option->direction == Qt::RightToLeft) {
+                rect.setLeft(rect.right() + 1 - width);
+            } else {
+                rect.setWidth(width);
+            }
+        }
+        return rect.adjusted(0, -list_gap, 0, list_gap);
+    }
 
     // A left click on a slider jumps there, as in Classic (Windows 11's
     // style); Fusion's pages toward it (by the page step, 10 frames on
@@ -297,6 +381,11 @@ public:
         }
         if (hint == SH_Slider_PageSetButtons) {
             return Qt::NoButton;
+        }
+        // A drop-down's list opens below the field, which stays in view,
+        // rather than over it (Fusion's, as on macOS). Issue #250.
+        if (hint == SH_ComboBox_Popup) {
+            return 0;
         }
         return QProxyStyle::styleHint(hint, option, widget, returned);
     }
@@ -789,6 +878,10 @@ void apply_appearance(Interface ui, std::optional<QColor> accent) {
     const bool modern_now = dynamic_cast<ModernStyle*>(QApplication::style()) != nullptr;
     if (ui == Interface::modern && !modern_now) {
         QApplication::setStyle(new ModernStyle);  // the application owns it
+        // A drop-down's list shown at once, as Fusion's was: Qt rolls a list
+        // that opens below its field (Windows' "animate combo boxes") as a
+        // picture of it in a plain window, its rounded corners black.
+        QApplication::setEffectEnabled(Qt::UI_AnimateCombo, false);
     } else if (ui == Interface::classic && modern_now) {
         // Not while the app runs: Windows 11's style, set again after an
         // application palette, drew a grey window and an older Windows' tabs,
@@ -969,6 +1062,14 @@ QColor modern_colour(const char* name, bool dark) {
     return QColor(dark ? pair.second : pair.first);
 }
 
+namespace {
+// The style sheet's image for a chevron pointing `up` or down in `colour`:
+// painted by the app's own icon engine (chevron_icons.cpp), not a file.
+QString chevron_icon(bool up, const QColor& colour) {
+    return QStringLiteral("chevron-%1-%2.vmlchevron").arg(up ? "up" : "down", colour.name(QColor::HexRgb).mid(1));
+}
+}  // namespace
+
 QString modern_style_sheet(bool dark, const QColor& accent) {
     QString sheet = QStringLiteral(R"(
 QGroupBox { background: {card}; border: 1px solid {border}; border-radius: 10px; margin-top: 0; padding: 36px 12px 12px 12px; font-weight: 600; }
@@ -1015,11 +1116,29 @@ QPushButton[vmlRole="quiet"]:hover { background: {hover}; }
 QPushButton[vmlRole="quiet"]:disabled { color: {disabled}; }
 QPushButton[vmlRole="icon"] { padding: 4px 6px; min-width: 16px; margin-left: 4px; }
 QPushButton::menu-indicator { subcontrol-origin: padding; subcontrol-position: right center; right: 4px; }
-QLineEdit, QComboBox { background: {field}; color: {text}; border: 1px solid {border_strong}; border-radius: 5px; padding: 2px 6px; min-height: 18px; selection-background-color: {accent}; selection-color: {accent_text}; }
-QLineEdit:focus, QComboBox:focus { border-color: {accent}; }
-QLineEdit:disabled, QComboBox:disabled { color: {disabled}; background: {card}; border-color: {border}; }
+QLineEdit, QComboBox, QAbstractSpinBox { background: {field}; color: {text}; border: 1px solid {border_strong}; border-radius: 5px; padding: 2px 6px; min-height: 18px; selection-background-color: {accent}; selection-color: {accent_text}; }
+QLineEdit:focus, QComboBox:focus, QAbstractSpinBox:focus { border-color: {accent}; }
+QLineEdit:disabled, QComboBox:disabled, QAbstractSpinBox:disabled { color: {disabled}; background: {card}; border-color: {border}; }
 QAbstractSpinBox > QLineEdit, QComboBox > QLineEdit { border: 0; background: transparent; padding: 0; min-height: 0; }
-QComboBox QAbstractItemView { background: {card}; color: {text}; border: 1px solid {border_strong}; selection-background-color: {accent_tint}; selection-color: {text}; outline: 0; }
+QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: center right; width: 16px; border: 0; background: transparent; }
+QComboBox::down-arrow { image: url("{chevron_down}"); width: 10px; height: 6px; }
+QComboBox::down-arrow:hover, QComboBox::down-arrow:focus, QComboBox::down-arrow:on { image: url("{chevron_down_accent}"); }
+QComboBox::down-arrow:disabled { image: url("{chevron_down_disabled}"); }
+QAbstractSpinBox::up-button, QAbstractSpinBox::down-button { subcontrol-origin: padding; width: 16px; border: 0; background: transparent; }
+QAbstractSpinBox::up-button { subcontrol-position: top right; }
+QAbstractSpinBox::down-button { subcontrol-position: bottom right; }
+QAbstractSpinBox::up-arrow { image: url("{chevron_up}"); width: 8px; height: 5px; }
+QAbstractSpinBox::down-arrow { image: url("{chevron_down}"); width: 8px; height: 5px; }
+QAbstractSpinBox::up-arrow:hover { image: url("{chevron_up_accent}"); }
+QAbstractSpinBox::down-arrow:hover { image: url("{chevron_down_accent}"); }
+QAbstractSpinBox::up-arrow:off, QAbstractSpinBox::up-arrow:disabled { image: url("{chevron_up_disabled}"); }
+QAbstractSpinBox::down-arrow:off, QAbstractSpinBox::down-arrow:disabled { image: url("{chevron_down_disabled}"); }
+QComboBoxPrivateContainer { background: transparent; border: 0; padding: 0; margin: 0; }
+QComboBox QAbstractItemView { background: {card}; color: {text}; border: 1px solid {border_strong}; border-radius: 8px; padding: 4px; selection-background-color: {accent_tint}; selection-color: {text}; outline: 0; }
+QComboBox QAbstractItemView::item { padding: 4px 6px; border-radius: 4px; min-height: 18px; }
+QComboBox QAbstractItemView::item:hover { background: {hover}; }
+QComboBox QAbstractItemView::item:selected { background: {accent_tint}; color: {text}; }
+QComboBox QAbstractItemView::item:disabled { color: {disabled}; }
 QTabWidget::pane { border: 0; border-top: 1px solid {border}; top: -1px; }
 QTabBar::tab { background: transparent; color: {text_muted}; border: 0; border-bottom: 2px solid transparent; padding: 6px 12px; margin-right: 2px; }
 QTabBar::tab:selected { color: {text}; font-weight: 600; border-bottom: 2px solid {accent}; }
@@ -1059,6 +1178,12 @@ QWidget[vmlRole="toolbar"] { background: {raised}; border: 1px solid {border}; b
         {"accent_tint", rgba(accent, dark ? 0.26 : 0.20)},
         {"danger_tint", rgba(modern_colour("danger", dark), 0.12)},
     };
+    for (const bool up : {true, false}) {
+        const QString name = up ? QStringLiteral("chevron_up") : QStringLiteral("chevron_down");
+        values.emplace_back(name, chevron_icon(up, modern_colour("text_muted", dark)));
+        values.emplace_back(name + "_accent", chevron_icon(up, accent));
+        values.emplace_back(name + "_disabled", chevron_icon(up, modern_colour("disabled", dark)));
+    }
     for (const auto& [name, pair] : modern_colours) {
         // #rrggbb, or #aarrggbb where see-through ("transparent"): name() alone drops the alpha.
         const QColor colour = modern_colour(name.toUtf8().constData(), dark);

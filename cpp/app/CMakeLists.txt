@@ -14,6 +14,7 @@ add_library(vml_app STATIC
     bd_rate_panel.cpp
     bitrate_panel.cpp
     chart.cpp
+    chevron_icons.cpp
     click_twice.cpp
     frame_types.cpp
     cvvdp_display_dialog.cpp
