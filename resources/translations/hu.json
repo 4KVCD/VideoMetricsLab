@@ -1506,7 +1506,14 @@
   "Ready": "Készen áll",
   "Ready: no test videos ticked.": "Készen áll: nincs bejelölt tesztvideó.",
   "Ready: {videos}, {metrics}.": "Készen áll: {videos}, {metrics}.",
-  "{low} to {high} metrics": "{low}–{high} metrika"
+  "{low} to {high} metrics": "{low}–{high} metrika",
+  "Anywhere in the window": "Bárhol az ablakban",
+  "Choose the reference": "Referencia kiválasztása",
+  "Go to a tab": "Ugrás egy lapra",
+  "Keyboard shortcuts": "Billentyűparancsok",
+  "Next or previous tab": "Következő vagy előző lap",
+  "Pause / resume": "Szünet / folytatás",
+  "Shortcut: {keys}": "Billentyűparancs: {keys}"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

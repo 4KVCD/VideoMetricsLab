@@ -1506,7 +1506,14 @@
   "Ready": "Готово до запуску",
   "Ready: no test videos ticked.": "Готово до запуску: не позначено жодного тестового відео.",
   "Ready: {videos}, {metrics}.": "Готово до запуску: {videos}, {metrics}.",
-  "{low} to {high} metrics": "від {low} до {high} метрик"
+  "{low} to {high} metrics": "від {low} до {high} метрик",
+  "Anywhere in the window": "Будь-де у вікні",
+  "Choose the reference": "Вибрати еталон",
+  "Go to a tab": "Перейти на вкладку",
+  "Keyboard shortcuts": "Комбінації клавіш",
+  "Next or previous tab": "Наступна або попередня вкладка",
+  "Pause / resume": "Пауза / продовжити",
+  "Shortcut: {keys}": "Комбінація клавіш: {keys}"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

@@ -304,6 +304,8 @@ signals:
     void restart_needed(const QString& what);
     // How test videos' names are shown changed (Video names).
     void video_names_changed();
+    // Keyboard shortcuts was clicked: the window shows its list.
+    void shortcuts_requested();
 
 private:
     QGroupBox* build_ffmpeg_box();

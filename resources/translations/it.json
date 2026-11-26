@@ -1506,7 +1506,14 @@
   "Ready": "Pronto",
   "Ready: no test videos ticked.": "Pronto: nessun video di prova spuntato.",
   "Ready: {videos}, {metrics}.": "Pronto: {videos}, {metrics}.",
-  "{low} to {high} metrics": "da {low} a {high} metriche"
+  "{low} to {high} metrics": "da {low} a {high} metriche",
+  "Anywhere in the window": "Ovunque nella finestra",
+  "Choose the reference": "Scegli il riferimento",
+  "Go to a tab": "Vai a una scheda",
+  "Keyboard shortcuts": "Scorciatoie da tastiera",
+  "Next or previous tab": "Scheda successiva o precedente",
+  "Pause / resume": "Pausa / riprendi",
+  "Shortcut: {keys}": "Scorciatoia: {keys}"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

@@ -4,6 +4,7 @@
 
 #include <QMenu>
 #include <QAbstractItemView>
+#include <QAction>
 #include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
@@ -1025,6 +1026,93 @@ void MainWindow::build_ui() {
     // title bar progress button, outside the tabs: Ctrl+Tab did nothing
     // until a Tab or a click moved it. Taken when the window is first shown.
     tabs_->tabBar()->setFocus(Qt::OtherFocusReason);
+    add_shortcuts();
+}
+
+void MainWindow::add_shortcuts() {
+    // Window-wide, while the window is the active one (not over a dialog),
+    // whatever has the focus: a shortcut presses its button, so it does what
+    // a click would, and nothing while the button is grayed.
+    for (const Shortcut& shortcut : shortcuts()) {
+        auto* action = new QAction(this);
+        action->setShortcut(shortcut.keys);
+        action->setShortcutContext(Qt::WindowShortcut);
+        const Command command = shortcut.command;
+        connect(action, &QAction::triggered, this, [this, command] { run_command(command); });
+        addAction(action);
+    }
+    for (int index = 0; index < tabs_->count() && index < 8; ++index) {
+        auto* action = new QAction(this);
+        action->setShortcut(tab_keys(index));
+        action->setShortcutContext(Qt::WindowShortcut);
+        connect(action, &QAction::triggered, this, [this, index] { tabs_->setCurrentIndex(index); });
+        addAction(action);
+    }
+    // Delete in the test videos' table removes the selected rows.
+    auto* remove = new QAction(distorted_table_);
+    remove->setShortcut(remove_keys());
+    remove->setShortcutContext(Qt::WidgetShortcut);
+    connect(remove, &QAction::triggered, remove_selected_button_, &QPushButton::click);
+    distorted_table_->addAction(remove);
+    // Each button's key in its tooltip.
+    const auto keys_of = [](Command command) {
+        for (const Shortcut& shortcut : shortcuts()) {
+            if (shortcut.command == command) {
+                return shortcut.keys;
+            }
+        }
+        return QKeySequence();
+    };
+    show_shortcut_in_tip(add_files_button_, keys_of(Command::add_videos));
+    show_shortcut_in_tip(source_browse_button_, keys_of(Command::choose_reference));
+    show_shortcut_in_tip(load_button_, keys_of(Command::import_run));
+    show_shortcut_in_tip(run_button_, keys_of(Command::calculate));
+    show_shortcut_in_tip(pause_button_, keys_of(Command::pause));
+    show_shortcut_in_tip(cancel_button_, keys_of(Command::cancel));
+    show_shortcut_in_tip(tab_export_button_, keys_of(Command::export_all));
+    show_shortcut_in_tip(remove_selected_button_, remove_keys());
+}
+
+void MainWindow::run_command(Command command) {
+    switch (command) {
+    case Command::add_videos:
+    case Command::choose_reference:
+    case Command::import_run:
+        // On the Videos tab, where the videos go.
+        tabs_->setCurrentIndex(tab_videos);
+        (command == Command::add_videos         ? add_files_button_
+         : command == Command::choose_reference ? source_browse_button_
+                                                : load_button_)
+            ->click();
+        break;
+    case Command::calculate:
+        run_button_->click();
+        break;
+    case Command::pause:
+        pause_button_->click();
+        break;
+    case Command::cancel:
+        cancel_button_->click();
+        break;
+    case Command::export_all:
+        tab_export_button_->click();  // its panel opens on the press (PopupPanel::open_on_press)
+        break;
+    case Command::settings:
+        tabs_->setCurrentIndex(tab_settings);
+        break;
+    case Command::shortcuts:
+        show_shortcuts();
+        break;
+    }
+}
+
+void MainWindow::show_shortcuts() {
+    if (shortcuts_dialog_ == nullptr) {
+        shortcuts_dialog_ = new ShortcutsDialog(this);
+    }
+    shortcuts_dialog_->show();
+    shortcuts_dialog_->raise();
+    shortcuts_dialog_->activateWindow();
 }
 
 SettingsPanel& MainWindow::settings_panel() {
@@ -1041,6 +1129,7 @@ SettingsPanel& MainWindow::settings_panel() {
     connect(settings_panel_, &SettingsPanel::decoded_videos_changed, frame_compare_panel_,
             &FrameComparePanel::set_decoded_videos);
     connect(settings_panel_, &SettingsPanel::ffmpeg_folder_changed, this, [this] { check_ffmpeg(false); });
+    connect(settings_panel_, &SettingsPanel::shortcuts_requested, this, [this] { show_shortcuts(); });
     connect(settings_panel_, &SettingsPanel::saved_results_cleared, this, [this] { on_saved_results_cleared(); });
     connect(settings_panel_, &SettingsPanel::video_names_changed, this, [this] {
         graph_panel_->set_video_name_rule(video_name_rule(settings_));
@@ -1508,6 +1597,7 @@ void MainWindow::fit_table_columns() {
 // buttons a run freezes.
 std::vector<QWidget*> MainWindow::add_file_buttons(QBoxLayout* buttons) {
     auto* add_button = new QPushButton(app::tr("Add files"));
+    add_files_button_ = add_button;
     connect(add_button, &QPushButton::clicked, this, [this] { on_add_distorted(); });
     auto* add_resample_button = new QPushButton(app::tr("Add resolution test"));
     add_resample_button->setToolTip(

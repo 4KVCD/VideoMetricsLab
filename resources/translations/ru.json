@@ -1506,7 +1506,14 @@
   "Ready": "Готово к запуску",
   "Ready: no test videos ticked.": "Готово к запуску: не отмечено ни одного тестового видео.",
   "Ready: {videos}, {metrics}.": "Готово к запуску: {videos}, {metrics}.",
-  "{low} to {high} metrics": "от {low} до {high} метрик"
+  "{low} to {high} metrics": "от {low} до {high} метрик",
+  "Anywhere in the window": "В любом месте окна",
+  "Choose the reference": "Выбрать эталон",
+  "Go to a tab": "Перейти на вкладку",
+  "Keyboard shortcuts": "Сочетания клавиш",
+  "Next or previous tab": "Следующая или предыдущая вкладка",
+  "Pause / resume": "Пауза / продолжить",
+  "Shortcut: {keys}": "Сочетание клавиш: {keys}"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

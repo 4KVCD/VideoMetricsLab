@@ -1506,7 +1506,14 @@
   "Ready": "Připraveno",
   "Ready: no test videos ticked.": "Připraveno: nejsou zaškrtnuta žádná testovací videa.",
   "Ready: {videos}, {metrics}.": "Připraveno: {videos}, {metrics}.",
-  "{low} to {high} metrics": "{low} až {high} metrik"
+  "{low} to {high} metrics": "{low} až {high} metrik",
+  "Anywhere in the window": "Kdekoli v okně",
+  "Choose the reference": "Vybrat referenci",
+  "Go to a tab": "Přejít na kartu",
+  "Keyboard shortcuts": "Klávesové zkratky",
+  "Next or previous tab": "Další nebo předchozí karta",
+  "Pause / resume": "Pozastavit / pokračovat",
+  "Shortcut: {keys}": "Zkratka: {keys}"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

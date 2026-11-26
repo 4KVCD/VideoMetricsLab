@@ -1506,7 +1506,14 @@
   "Ready": "就緒",
   "Ready: no test videos ticked.": "就緒：未勾選測試影片。",
   "Ready: {videos}, {metrics}.": "就緒：{videos}，{metrics}。",
-  "{low} to {high} metrics": "{low} 到 {high} 個指標"
+  "{low} to {high} metrics": "{low} 到 {high} 個指標",
+  "Anywhere in the window": "視窗中任何位置",
+  "Choose the reference": "選擇參考影片",
+  "Go to a tab": "前往某個分頁",
+  "Keyboard shortcuts": "鍵盤快速鍵",
+  "Next or previous tab": "下一個或上一個分頁",
+  "Pause / resume": "暫停 / 繼續",
+  "Shortcut: {keys}": "快速鍵：{keys}"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

@@ -1506,7 +1506,14 @@
   "Ready": "جاهز",
   "Ready: no test videos ticked.": "جاهز: لا توجد فيديوهات اختبار محددة.",
   "Ready: {videos}, {metrics}.": "جاهز: {videos}، {metrics}.",
-  "{low} to {high} metrics": "من {low} إلى {high} مقاييس"
+  "{low} to {high} metrics": "من {low} إلى {high} مقاييس",
+  "Anywhere in the window": "في أي مكان في النافذة",
+  "Choose the reference": "اختيار المرجع",
+  "Go to a tab": "الانتقال إلى علامة تبويب",
+  "Keyboard shortcuts": "اختصارات لوحة المفاتيح",
+  "Next or previous tab": "علامة التبويب التالية أو السابقة",
+  "Pause / resume": "إيقاف مؤقت / استئناف",
+  "Shortcut: {keys}": "الاختصار: {keys}"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

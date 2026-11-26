@@ -1506,7 +1506,14 @@
   "Ready": "พร้อม",
   "Ready: no test videos ticked.": "พร้อม: ไม่มีวิดีโอทดสอบที่ทำเครื่องหมาย",
   "Ready: {videos}, {metrics}.": "พร้อม: {videos}, {metrics}",
-  "{low} to {high} metrics": "ตัวชี้วัด {low} ถึง {high} รายการ"
+  "{low} to {high} metrics": "ตัวชี้วัด {low} ถึง {high} รายการ",
+  "Anywhere in the window": "ที่ใดก็ได้ในหน้าต่าง",
+  "Choose the reference": "เลือกวิดีโออ้างอิง",
+  "Go to a tab": "ไปยังแท็บ",
+  "Keyboard shortcuts": "แป้นพิมพ์ลัด",
+  "Next or previous tab": "แท็บถัดไปหรือก่อนหน้า",
+  "Pause / resume": "หยุดชั่วคราว / ทำต่อ",
+  "Shortcut: {keys}": "แป้นพิมพ์ลัด: {keys}"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

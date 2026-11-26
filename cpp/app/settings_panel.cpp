@@ -1169,6 +1169,14 @@ QGroupBox* SettingsPanel::build_window_box() {
     confirm_close->setChecked(settings_.confirm_close_during_run);
     connect(confirm_close, &QCheckBox::toggled, this, [this] { on_edited(); });
     window_layout->addWidget(confirm_close);
+    // The list of the window's keys (shortcuts.h), also F1.
+    auto* keys_button = new QPushButton(app::tr("Keyboard shortcuts"));
+    keys_button->setObjectName("keyboardShortcuts");
+    connect(keys_button, &QPushButton::clicked, this, &SettingsPanel::shortcuts_requested);
+    auto* keys_row = new QHBoxLayout;
+    keys_row->addWidget(keys_button);
+    keys_row->addStretch(1);
+    window_layout->addLayout(keys_row);
     return window_box;
 }
 

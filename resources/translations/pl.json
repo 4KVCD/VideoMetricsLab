@@ -1506,7 +1506,14 @@
   "Ready": "Gotowe",
   "Ready: no test videos ticked.": "Gotowe: nie zaznaczono żadnych wideo testowych.",
   "Ready: {videos}, {metrics}.": "Gotowe: {videos}, {metrics}.",
-  "{low} to {high} metrics": "od {low} do {high} metryk"
+  "{low} to {high} metrics": "od {low} do {high} metryk",
+  "Anywhere in the window": "W dowolnym miejscu okna",
+  "Choose the reference": "Wybierz referencję",
+  "Go to a tab": "Przejdź do karty",
+  "Keyboard shortcuts": "Skróty klawiszowe",
+  "Next or previous tab": "Następna lub poprzednia karta",
+  "Pause / resume": "Wstrzymaj / wznów",
+  "Shortcut: {keys}": "Skrót: {keys}"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

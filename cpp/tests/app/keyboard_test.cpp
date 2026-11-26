@@ -1,10 +1,11 @@
 // The window from the keyboard: Tab moves from control to control and out of
-// every table and time box, as on Windows, and Enter presses a button the
-// keys moved to.
+// every table and time box, as on Windows; Enter presses a button the keys
+// moved to; the main actions have shortcuts (shortcuts.h).
 #include <QAbstractItemView>
 #include <QApplication>
 #include <QHeaderView>
 #include <QPushButton>
+#include <QTabWidget>
 #include <QTableWidget>
 #include <QTest>
 #include <QTimeEdit>
@@ -12,9 +13,13 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <vector>
+
 #include "keyboard.h"
 #include "main_window.h"
 #include "options_panel.h"
+#include "shortcuts.h"
 #include "vml/options.h"
 
 namespace vml::app {
@@ -54,6 +59,64 @@ TEST_F(KeyboardInWindow, TabLeavesEveryTable) {
             << (view->parentWidget() != nullptr ? view->parentWidget()->objectName().toStdString() : "");
     }
     EXPECT_GE(tables, 6);  // the window's tables were found at all
+}
+
+// The window's shortcuts work wherever the focus is in it: Ctrl+, opens
+// Settings, Ctrl+3 the third tab, F1 the list of keys. A button's key is in
+// its tooltip.
+TEST_F(KeyboardInWindow, ShortcutsWorkAnywhereInTheWindow) {
+    window_->activateWindow();
+    ASSERT_TRUE(QTest::qWaitForWindowActive(window_));
+    auto* tabs = window_->findChild<QTabWidget*>();
+    ASSERT_NE(tabs, nullptr);
+    tabs->setCurrentIndex(0);
+    QWidget* focus = QApplication::focusWidget();
+    ASSERT_NE(focus, nullptr);
+    QTest::keyClick(focus, Qt::Key_Comma, Qt::ControlModifier);
+    EXPECT_EQ(tabs->currentIndex(), tabs->count() - 1);  // Settings, the last
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_3, Qt::ControlModifier);
+    EXPECT_EQ(tabs->currentIndex(), 2);
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_F1);
+    auto* list = window_->findChild<ShortcutsDialog*>();
+    ASSERT_NE(list, nullptr);
+    EXPECT_TRUE(list->isVisible());
+    list->close();
+    tabs->setCurrentIndex(0);
+    for (QPushButton* button : window_->findChildren<QPushButton*>()) {
+        if (button->text() == "Calculate metrics") {
+            EXPECT_TRUE(button->toolTip().endsWith("Shortcut: F5")) << button->toolTip().toStdString();
+        }
+    }
+}
+
+// No two of the window's keys are the same, and none is a key the text
+// boxes, the tables or Video Compare already take for themselves.
+TEST(Keyboard, TheShortcutsTakeNoKeyAlreadyTaken) {
+    std::vector<QKeySequence> taken;
+    for (const QKeySequence::StandardKey standard :
+         {QKeySequence::Copy, QKeySequence::Cut, QKeySequence::Paste, QKeySequence::Undo, QKeySequence::Redo,
+          QKeySequence::SelectAll, QKeySequence::Delete, QKeySequence::Find, QKeySequence::Save,
+          QKeySequence::Close, QKeySequence::Quit, QKeySequence::Print, QKeySequence::NextChild,
+          QKeySequence::PreviousChild}) {
+        for (const QKeySequence& keys : QKeySequence::keyBindings(standard)) {
+            taken.push_back(keys);
+        }
+    }
+    for (const int key : {int(Qt::Key_S), int(Qt::Key_Space), int(Qt::Key_Left), int(Qt::Key_Right)}) {
+        taken.emplace_back(key);  // Video Compare's
+    }
+    taken.emplace_back(Qt::CTRL | Qt::Key_Tab);
+    taken.emplace_back(Qt::CTRL | Qt::SHIFT | Qt::Key_Tab);
+    for (int index = 0; index < 8; ++index) {
+        taken.push_back(tab_keys(index));
+    }
+    for (const Shortcut& shortcut : shortcuts()) {
+        EXPECT_FALSE(shortcut.keys.isEmpty());
+        EXPECT_EQ(std::count(taken.begin(), taken.end(), shortcut.keys), 0)
+            << shortcut.keys.toString().toStdString();
+        taken.push_back(shortcut.keys);
+        EXPECT_FALSE(command_text(shortcut.command).isEmpty());
+    }
 }
 
 // What the property means: Tab from a table with rows reaches the next

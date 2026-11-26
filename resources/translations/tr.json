@@ -1506,7 +1506,14 @@
   "Ready": "Hazır",
   "Ready: no test videos ticked.": "Hazır: işaretli test videosu yok.",
   "Ready: {videos}, {metrics}.": "Hazır: {videos}, {metrics}.",
-  "{low} to {high} metrics": "{low} ile {high} arası metrik"
+  "{low} to {high} metrics": "{low} ile {high} arası metrik",
+  "Anywhere in the window": "Pencerenin herhangi bir yerinde",
+  "Choose the reference": "Referansı seç",
+  "Go to a tab": "Bir sekmeye git",
+  "Keyboard shortcuts": "Klavye kısayolları",
+  "Next or previous tab": "Sonraki veya önceki sekme",
+  "Pause / resume": "Duraklat / sürdür",
+  "Shortcut: {keys}": "Kısayol: {keys}"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

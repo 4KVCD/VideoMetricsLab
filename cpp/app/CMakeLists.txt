@@ -70,6 +70,7 @@ add_library(vml_app STATIC
     self_test.cpp
     series_colors.cpp
     settings_panel.cpp
+    shortcuts.cpp
     settings_appearance.cpp
     settings_notifications.cpp
     run_badge.cpp

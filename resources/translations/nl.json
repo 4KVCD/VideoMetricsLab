@@ -1506,7 +1506,14 @@
   "Ready": "Gereed",
   "Ready: no test videos ticked.": "Gereed: geen testvideo's aangevinkt.",
   "Ready: {videos}, {metrics}.": "Gereed: {videos}, {metrics}.",
-  "{low} to {high} metrics": "{low} tot {high} metrieken"
+  "{low} to {high} metrics": "{low} tot {high} metrieken",
+  "Anywhere in the window": "Overal in het venster",
+  "Choose the reference": "Referentie kiezen",
+  "Go to a tab": "Naar een tabblad gaan",
+  "Keyboard shortcuts": "Sneltoetsen",
+  "Next or previous tab": "Volgend of vorig tabblad",
+  "Pause / resume": "Pauzeren / hervatten",
+  "Shortcut: {keys}": "Sneltoets: {keys}"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

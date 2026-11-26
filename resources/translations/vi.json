@@ -1506,7 +1506,14 @@
   "Ready": "Sẵn sàng",
   "Ready: no test videos ticked.": "Sẵn sàng: chưa đánh dấu video thử nào.",
   "Ready: {videos}, {metrics}.": "Sẵn sàng: {videos}, {metrics}.",
-  "{low} to {high} metrics": "{low} đến {high} chỉ số"
+  "{low} to {high} metrics": "{low} đến {high} chỉ số",
+  "Anywhere in the window": "Ở bất kỳ đâu trong cửa sổ",
+  "Choose the reference": "Chọn video tham chiếu",
+  "Go to a tab": "Chuyển đến một thẻ",
+  "Keyboard shortcuts": "Phím tắt",
+  "Next or previous tab": "Thẻ tiếp theo hoặc trước đó",
+  "Pause / resume": "Tạm dừng / tiếp tục",
+  "Shortcut: {keys}": "Phím tắt: {keys}"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

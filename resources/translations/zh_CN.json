@@ -1506,7 +1506,14 @@
   "Ready": "就绪",
   "Ready: no test videos ticked.": "就绪：未勾选测试视频。",
   "Ready: {videos}, {metrics}.": "就绪：{videos}，{metrics}。",
-  "{low} to {high} metrics": "{low} 到 {high} 个指标"
+  "{low} to {high} metrics": "{low} 到 {high} 个指标",
+  "Anywhere in the window": "窗口中任意位置",
+  "Choose the reference": "选择参考视频",
+  "Go to a tab": "转到某个标签页",
+  "Keyboard shortcuts": "键盘快捷键",
+  "Next or previous tab": "下一个或上一个标签页",
+  "Pause / resume": "暂停 / 继续",
+  "Shortcut: {keys}": "快捷键：{keys}"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [
