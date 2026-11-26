@@ -53,6 +53,7 @@ class QTabWidget;
 namespace vml::app {
 
 class ChartWidget;
+class TabPills;
 class FileWrites;
 class FrameControls;
 class VideoColors;
@@ -484,6 +485,7 @@ private:
     QTableWidget* stats_table_ = nullptr;
     QStyledItemDelegate* remove_marks_ = nullptr;  // the remove column's, moved to it as columns change
     QTabWidget* tabs_ = nullptr;
+    TabPills* metric_pills_ = nullptr;  // tabs_' tabs, in rows that wrap (its own bar hidden)
     std::map<std::string, MetricPage*> pages_;
     // The metrics with a tab and a mean column, in the app's order: those
     // some line has scores of (scored_metrics), or while none has any, the

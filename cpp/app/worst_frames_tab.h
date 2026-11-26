@@ -50,6 +50,7 @@ namespace vml::app {
 
 class ChartWidget;
 class ElidedLabel;
+class TabPills;
 
 // A video the tab can show: a graph line's run.
 struct WeakFramesVideo {
@@ -271,7 +272,8 @@ private:
     bool filling_ = false;
 
     QTableWidget* videos_table_ = nullptr;
-    QTabBar* metric_bar_ = nullptr;
+    QTabBar* metric_bar_ = nullptr;  // hidden: metric_pills_ shows its tabs
+    TabPills* metric_pills_ = nullptr;
     QComboBox* profile_combo_ = nullptr;
     QPushButton* preset_button_ = nullptr;
     QPushButton* save_button_ = nullptr;

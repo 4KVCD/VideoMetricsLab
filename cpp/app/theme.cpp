@@ -778,6 +778,14 @@ void style_classic(QWidget* widget, const QString& template_text) {
     style(widget, classic_only_mark + template_text);
 }
 
+void style_pills(QWidget* pills) {
+    style_classic(pills, QStringLiteral(
+        "QToolButton[vmlRole=\"pill\"] {{ padding: 7px 16px; background: palette(button); "
+        "color: palette(button-text); border: 1px solid palette(mid); border-bottom: 3px solid transparent; }}"
+        "QToolButton[vmlRole=\"pill\"]:checked {{ background: palette(highlight); color: palette(highlighted-text); "
+        "border-bottom: 3px solid palette(highlighted-text); font-weight: bold; }}"));
+}
+
 void style(QWidget* widget, const QString& template_text) {
     QHash<QWidget*, QString>& widgets = styled();
     if (!widgets.contains(widget)) {
@@ -1084,6 +1092,9 @@ QTabBar[vmlRole="segmented"]::tab { background: transparent; color: {text_soft};
 QTabBar[vmlRole="segmented"]::tab:hover:!selected { color: {text}; background: {hover}; }
 QTabBar[vmlRole="segmented"]::tab:selected { background: {accent}; color: {accent_text}; font-weight: 600; }
 QTabWidget[vmlRole="segmented"]::pane { border: 0; top: 0; }
+QToolButton[vmlRole="pill"] { background: transparent; color: {text_soft}; border: 0; border-radius: 6px; padding: 5px 12px; min-height: 18px; }
+QToolButton[vmlRole="pill"]:hover:!checked { color: {text}; background: {hover}; }
+QToolButton[vmlRole="pill"]:checked { background: {accent}; color: {accent_text}; font-weight: 600; }
 QTabWidget[vmlRole="segmented"]::tab-bar { left: 0; }
 QFrame[vmlRole="separator"] { background: {border_strong}; border: 0; min-width: 1px; max-width: 1px; margin: 4px 6px; }
 QWidget[vmlRole="padding"] { background: transparent; }

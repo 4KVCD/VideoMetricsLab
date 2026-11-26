@@ -105,6 +105,11 @@ void style(QWidget* widget, const QString& template_text);
 // own, and Modern's draws it (a role, say).
 void style_classic(QWidget* widget, const QString& template_text);
 
+// A TabPills' look in VML Classic, where the native look can make the
+// current tab hard to tell from the others: framed buttons, the current one
+// filled and underlined. VML Modern's sheet has its own pills.
+void style_pills(QWidget* pills);
+
 // A table cell's text colour; none for the table's own, which follows the
 // palette as the theme changes.
 void foreground(QTableWidgetItem* item, std::optional<QColor> colour);

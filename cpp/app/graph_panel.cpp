@@ -1282,20 +1282,16 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     // drawing, its main cost, so pages are built when first shown. Until a
     // line comes, the preferred metric's tab alone.
     tabs_ = new QuietTabWidget;
-    // The metric tabs' own look: the native one can make the selected tab
-    // hard to tell from the others.
-    // In VML Modern, a row of pills (the segmented role) instead.
-    theme::style_classic(tabs_->tabBar(), QStringLiteral(
-        "QTabBar::tab {{ padding: 7px 16px; margin-right: 3px; background: palette(button); "
-        "color: palette(button-text); border: 1px solid palette(mid); border-bottom: 3px solid transparent; }}"
-        "QTabBar::tab:selected {{ background: palette(highlight); color: palette(highlighted-text); "
-        "border-bottom: 3px solid palette(highlighted-text); font-weight: bold; }}"));
-    theme::set_role(tabs_->tabBar(), "segmented");
     theme::set_role(tabs_, "segmented");
+    // The metrics are pills in rows that wrap (TabPills), every name whole:
+    // the tab bar, scrolling, cut one at an end. The bar stays, hidden.
+    tabs_->tabBar()->hide();
     const MetricDefinition& first = *find_metric(preferred_metric_);
     shown_metrics_ = {&first};
     tabs_->addTab(build_page(first), qt_text(first.label));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
+    metric_pills_ = new TabPills(tabs_->tabBar());
+    theme::style_pills(metric_pills_);
     // VML Modern: the metrics' pills, the chart and its readout one card,
     // as the stats are; Classic: the tabs as they were (theme::container).
     QBoxLayout* graph_layout = nullptr;
@@ -1317,7 +1313,11 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
         add_quick_grabs(menu, items, true, false);
         connect_menu(items);
     };
-    tabs_->setCornerWidget(graph_save_, Qt::TopRightCorner);
+    auto* pills_row = new QHBoxLayout;
+    pills_row->setContentsMargins(0, 0, 0, 6);
+    pills_row->addWidget(metric_pills_, 1);
+    pills_row->addWidget(graph_save_, 0, Qt::AlignTop);
+    graph_layout->addLayout(pills_row);
     graph_layout->addWidget(tabs_);
     root->addWidget(graph_card, 1);
     root->addWidget(build_action_bar());
@@ -1461,6 +1461,7 @@ void GraphPanel::set_metric_tabs(std::vector<const MetricDefinition*> shown, con
     const auto at = std::find(shown_metrics_.begin(), shown_metrics_.end(), &current);
     tabs_->setCurrentIndex(static_cast<int>(at - shown_metrics_.begin()));
     tabs_->blockSignals(blocked);
+    metric_pills_->rebuild();  // now, not after the next event loop pass
     build_current_page();
 }
 

@@ -16,6 +16,7 @@
 #include <QSize>
 #include <QStringList>
 #include <QStyledItemDelegate>
+#include <QTabBar>
 #include <QTabWidget>
 #include <QTableWidget>
 
@@ -26,6 +27,7 @@
 #include <vector>
 
 class QMimeData;
+class QToolButton;
 
 namespace vml::app {
 
@@ -374,6 +376,68 @@ protected:
 private:
     using Shape = std::tuple<QSize, QSize, QSize, std::optional<QSize>, std::optional<QSize>>;
     std::optional<Shape> laid_out_for_;
+};
+
+// A QTabBar that says when a tab is added or removed (QTabBar has no signal
+// for it), for a TabPills showing its tabs. QuietTabWidget's bar is one.
+class WatchedTabBar : public QTabBar {
+    Q_OBJECT
+
+public:
+    using QTabBar::QTabBar;
+
+signals:
+    void tabs_changed();
+
+protected:
+    void tabInserted(int index) override;
+    void tabRemoved(int index) override;
+};
+
+// A tab bar's tabs as a row of pills that wraps onto more rows where they do
+// not fit, every name whole. A QTabBar scrolls instead, with arrows that
+// leave a tab cut at one end (Metric Graphs' metrics, Worst frames'), and a
+// sliver of the tab before when scrolled back. The bar stays the model:
+// hidden, it keeps the tabs, their order and the current one; a pill clicked
+// makes its tab current, as a click on the tab would, and the bar's own
+// signals (currentChanged, tabBarClicked) still come.
+//
+// The pills follow the bar's current tab and, through a WatchedTabBar, its
+// tabs. Where the bar's signals are blocked while it changes, rebuild() after.
+// The widget takes the keyboard focus (Tab): Left, Right, Home and End move
+// the current tab, as on a tab bar.
+class TabPills : public QWidget {
+    Q_OBJECT
+
+public:
+    explicit TabPills(QTabBar* bar, QWidget* parent = nullptr);
+
+    // The pills made again from the bar's tabs, its current one checked.
+    void rebuild();
+    // The pills, in the bar's order (for tests).
+    const std::vector<QToolButton*>& pills() const { return pills_; }
+
+    bool hasHeightForWidth() const override { return true; }
+    int heightForWidth(int width) const override;
+    QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
+
+protected:
+    bool event(QEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+    void paintEvent(QPaintEvent* event) override;
+
+private:
+    // Places the pills in rows `width` wide (when `apply`) and returns the
+    // height they take.
+    int place(int width, bool apply) const;
+    void schedule_rebuild();
+    void check_current();
+
+    QTabBar* bar_;
+    std::vector<QToolButton*> pills_;
+    bool rebuild_pending_ = false;
 };
 
 // A page in a scroll area, to be a tab of its own. While the window is large

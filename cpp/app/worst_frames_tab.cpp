@@ -245,21 +245,20 @@ QWidget* WorstFramesTab::build_toolbar() {
     QWidget* bar = theme::container("toolbar", true, &row);
     bar->setObjectName("worstToolbar");
     row->addWidget(new QLabel(app::tr("Metric")));
-    metric_bar_ = new QTabBar;
-    metric_bar_->setDrawBase(false);
-    metric_bar_->setExpanding(false);
-    theme::set_role(metric_bar_, "segmented");
+    // The metrics as pills in rows that wrap (TabPills), every name whole;
+    // the bar keeps the tabs, hidden: scrolling, it cut one at an end.
+    metric_bar_ = new WatchedTabBar(bar);
+    metric_bar_->hide();
+    metric_pills_ = new TabPills(metric_bar_);
+    theme::style_pills(metric_pills_);
     connect(metric_bar_, &QTabBar::currentChanged, this, [this](int index) {
         if (!building_ && index >= 0) {
             choose_metric(metric_bar_->tabData(index).toString().toStdString());
         }
     });
-    // The bar takes the whole row, its tabs at its left: given only its
-    // size hint, it showed scroll arrows once the selected (semibold) tab
-    // had widened it. Export is in the Weak segments card, what it exports:
-    // here it took the room of a metric, and at 1280 px ten (HDR VMAF's
-    // with the others) needed scroll arrows.
-    row->addWidget(metric_bar_, 1);
+    // The pills take the whole row. Export is in the Weak segments card,
+    // what it exports: here it took the room of a metric.
+    row->addWidget(metric_pills_, 1);
     return bar;
 }
 
@@ -717,6 +716,7 @@ void WorstFramesTab::choose_video(int index) {
             }
         }
     }
+    metric_pills_->rebuild();  // the bar's signals were blocked
     // The conditions edited here, on this video's metrics; those shown stay
     // where they are on its metrics too.
     const SegmentRules shown = editor_ != nullptr ? editor_->rules() : SegmentRules{};
@@ -779,6 +779,7 @@ void WorstFramesTab::choose_metric(const std::string& key) {
             }
         }
     }
+    metric_pills_->rebuild();  // the bar's signals were blocked
     refresh();
 }
 

@@ -37,6 +37,8 @@
 #include <QStyleOptionButton>
 #include <QStyleOptionHeader>
 #include <QTabBar>
+#include <QTimer>
+#include <QToolButton>
 #include <QTableView>
 #include <QUrl>
 #include <QWheelEvent>
@@ -1061,6 +1063,7 @@ void keep_focus_on_tab_click(QTabWidget* tabs) {
 }
 
 QuietTabWidget::QuietTabWidget(QWidget* parent) : QTabWidget(parent) {
+    setTabBar(new WatchedTabBar(this));  // for a TabPills in its place, where one is
     keep_focus_on_tab_click(this);
 #ifdef Q_OS_MACOS
     // Control+Tab reaches the window, not the focused control, and only as
@@ -1085,6 +1088,207 @@ bool QuietTabWidget::event(QEvent* event) {
         laid_out_for_ = shape;
     }
     return QTabWidget::event(event);
+}
+
+void WatchedTabBar::tabInserted(int index) {
+    QTabBar::tabInserted(index);
+    emit tabs_changed();
+}
+
+void WatchedTabBar::tabRemoved(int index) {
+    QTabBar::tabRemoved(index);
+    emit tabs_changed();
+}
+
+namespace {
+
+// Room between pills, across and between rows.
+constexpr int pill_spacing = 4;
+
+// A pill as wide as its name needs in bold, checked or not: the checked
+// pill's name is bold (semibold in VML Modern), and a pill that widened when
+// checked would move the pills after it, or onto another row.
+class PillButton : public QToolButton {
+public:
+    using QToolButton::QToolButton;
+
+    QSize sizeHint() const override {
+        QSize hint = QToolButton::sizeHint();
+        QFont bold = font();
+        bold.setBold(true);
+        const int bolder = QFontMetrics(bold).horizontalAdvance(text()) - fontMetrics().horizontalAdvance(text());
+        hint.setWidth(hint.width() + std::max(0, bolder));
+        return hint;
+    }
+};
+
+}  // namespace
+
+TabPills::TabPills(QTabBar* bar, QWidget* parent) : QWidget(parent), bar_(bar) {
+    setFocusPolicy(Qt::TabFocus);
+    QSizePolicy policy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+    policy.setHeightForWidth(true);
+    setSizePolicy(policy);
+    connect(bar_, &QTabBar::currentChanged, this, [this] { check_current(); });
+    if (auto* watched = qobject_cast<WatchedTabBar*>(bar_)) {
+        connect(watched, &WatchedTabBar::tabs_changed, this, [this] { schedule_rebuild(); });
+    }
+    rebuild();
+}
+
+void TabPills::schedule_rebuild() {
+    // One rebuild for the many tabs a bar gets at once (a tab per metric).
+    if (!rebuild_pending_) {
+        rebuild_pending_ = true;
+        QTimer::singleShot(0, this, [this] { rebuild(); });
+    }
+}
+
+void TabPills::rebuild() {
+    rebuild_pending_ = false;
+    const auto count = static_cast<std::size_t>(std::max(0, bar_->count()));
+    // Pills beyond the bar's tabs go later, not now: rebuild() can run from
+    // a pill's own click (a metric chosen lays the tabs out again).
+    for (std::size_t index = count; index < pills_.size(); ++index) {
+        pills_[index]->hide();
+        pills_[index]->deleteLater();
+    }
+    pills_.resize(std::min(pills_.size(), count));
+    while (pills_.size() < count) {
+        auto* pill = new PillButton(this);
+        pill->setCheckable(true);
+        pill->setFocusPolicy(Qt::NoFocus);
+        pill->setProperty("vmlRole", "pill");
+        connect(pill, &QToolButton::clicked, this, [this, pill] {
+            const auto at = std::find(pills_.begin(), pills_.end(), pill);
+            if (at == pills_.end()) {
+                return;
+            }
+            const int index = static_cast<int>(at - pills_.begin());
+            // The tab's own click, for what listens to it (keep_focus_on_tab_click).
+            emit bar_->tabBarClicked(index);
+            bar_->setCurrentIndex(index);
+            check_current();  // a click on the checked pill unchecked it
+        });
+        pills_.push_back(pill);
+    }
+    for (std::size_t index = 0; index < count; ++index) {
+        const int tab = static_cast<int>(index);
+        QToolButton* pill = pills_[index];
+        pill->setText(bar_->tabText(tab));
+        pill->setToolTip(bar_->tabToolTip(tab));
+        pill->setEnabled(bar_->isTabEnabled(tab));
+        pill->setVisible(bar_->isTabVisible(tab));
+    }
+    check_current();
+    updateGeometry();
+    place(width(), true);
+}
+
+void TabPills::check_current() {
+    const int current = bar_->currentIndex();
+    for (std::size_t index = 0; index < pills_.size(); ++index) {
+        pills_[index]->setChecked(static_cast<int>(index) == current);
+    }
+    update();  // the focus frame follows the current pill
+}
+
+int TabPills::place(int width, bool apply) const {
+    int x = 0;
+    int y = 0;
+    int row_height = 0;
+    for (QToolButton* pill : pills_) {
+        if (pill->isHidden()) {
+            continue;
+        }
+        const QSize size = pill->sizeHint();
+        if (x > 0 && x + size.width() > width) {  // whole pills only: this one starts the next row
+            x = 0;
+            y += row_height + pill_spacing;
+            row_height = 0;
+        }
+        if (apply) {
+            pill->setGeometry(x, y, std::min(size.width(), std::max(width, 1)), size.height());
+        }
+        x += size.width() + pill_spacing;
+        row_height = std::max(row_height, size.height());
+    }
+    return y + row_height;
+}
+
+int TabPills::heightForWidth(int width) const {
+    return place(width, false);
+}
+
+QSize TabPills::sizeHint() const {
+    // Every pill on one row; the layout gives the row what room it has.
+    int width = 0;
+    int height = 0;
+    for (QToolButton* pill : pills_) {
+        if (!pill->isHidden()) {
+            const QSize size = pill->sizeHint();
+            width += (width > 0 ? pill_spacing : 0) + size.width();
+            height = std::max(height, size.height());
+        }
+    }
+    return {width, height};
+}
+
+QSize TabPills::minimumSizeHint() const {
+    // The widest pill: narrower, a name would be cut.
+    QSize widest(0, 0);
+    for (QToolButton* pill : pills_) {
+        if (!pill->isHidden()) {
+            widest = widest.expandedTo(pill->sizeHint());
+        }
+    }
+    return widest;
+}
+
+bool TabPills::event(QEvent* event) {
+    // A pill's size changed (a style sheet or font applied to it): its
+    // updateGeometry() asks its parent, this, to lay out again.
+    if (event->type() == QEvent::LayoutRequest) {
+        updateGeometry();
+        place(width(), true);
+        return true;
+    }
+    return QWidget::event(event);
+}
+
+void TabPills::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    place(width(), true);
+}
+
+void TabPills::keyPressEvent(QKeyEvent* event) {
+    const int count = bar_->count();
+    const int current = bar_->currentIndex();
+    int next = -1;
+    switch (event->key()) {
+    case Qt::Key_Left: next = std::max(0, current - 1); break;
+    case Qt::Key_Right: next = std::min(count - 1, current + 1); break;
+    case Qt::Key_Home: next = 0; break;
+    case Qt::Key_End: next = count - 1; break;
+    default: QWidget::keyPressEvent(event); return;
+    }
+    if (next >= 0 && next != current) {
+        bar_->setCurrentIndex(next);
+    }
+    event->accept();
+}
+
+void TabPills::paintEvent(QPaintEvent* /*event*/) {
+    // Reached with the keyboard: a focus frame around the current pill.
+    const int current = bar_->currentIndex();
+    if (!hasFocus() || current < 0 || current >= static_cast<int>(pills_.size())) {
+        return;
+    }
+    QPainter painter(this);
+    QStyleOptionFocusRect option;
+    option.initFrom(this);
+    option.rect = pills_[static_cast<std::size_t>(current)]->geometry().adjusted(-2, -2, 2, 2);
+    style()->drawPrimitive(QStyle::PE_FrameFocusRect, &option, &painter, this);
 }
 
 #ifdef Q_OS_MACOS
