@@ -832,6 +832,9 @@ void WorstFramesTab::choose_video(int index) {
     editor_->wrap_long_options();
     connect(editor_, &SegmentRulesEditor::changed, this, [this] { refresh(); });
     editor_holder_->layout()->addWidget(editor_);
+    // Tab reaches it where it is shown, after the profile's buttons: a widget
+    // added to a window goes last in its focus chain, after the lists.
+    editor_->follow_in_tab_order(save_new_button_);
     // From preset: those with a condition on this video's metrics.
     QMenu* presets = preset_button_->menu();
     presets->clear();

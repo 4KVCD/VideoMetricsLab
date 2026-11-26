@@ -5,6 +5,7 @@
 // Settings > Weak segments both edit with it.
 #pragma once
 
+#include <QPointer>
 #include <QWidget>
 
 #include <string>
@@ -16,6 +17,7 @@ class QComboBox;
 class QDoubleSpinBox;
 class QFormLayout;
 class QLabel;
+class QPushButton;
 class QSpinBox;
 class QVBoxLayout;
 
@@ -55,6 +57,10 @@ public:
     // A field under its label where the two do not fit side by side (the
     // Worst Frames tab's narrow left column).
     void wrap_long_options();
+    // Tab reaches the editor's controls right after `before`, in the order
+    // they are shown (the rows, Add condition, the options), as rows come
+    // and go. Without it, they keep that order among themselves only.
+    void follow_in_tab_order(QWidget* before);
 
 signals:
     // A condition or option changed.
@@ -72,6 +78,9 @@ private:
     void remove_condition(QWidget* row);
     WeakCondition starting_condition(const std::string& key) const;
     void edited();
+    // The controls in the order shown, after tab_before_: a widget made or
+    // added later goes last in its window's focus chain, whatever its place.
+    void order_tabs();
 
     std::vector<std::string> keys_;
     bool at_least_one_;
@@ -79,10 +88,13 @@ private:
     std::vector<ConditionRow> conditions_;
     QVBoxLayout* condition_layout_ = nullptr;
     QLabel* none_ = nullptr;  // shown while there is no condition
+    QPushButton* add_button_ = nullptr;  // Add condition, under the rows
     QComboBox* combine_combo_ = nullptr;
     QSpinBox* min_frames_spin_ = nullptr;
     QSpinBox* merge_frames_spin_ = nullptr;
     QFormLayout* form_ = nullptr;
+    std::vector<QWidget*> option_fields_;  // add_option_row's
+    QPointer<QWidget> tab_before_;
     bool quiet_ = false;  // set_rules: no changed()
 };
 
