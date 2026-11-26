@@ -66,7 +66,7 @@ inline bool is_vship_fast_id(std::string_view id) {
 // which every decoder adds alike, is recorded by no score (its mark is
 // metric_cache.cpp's): film_grain_av1 is only what the window compares outside
 // Windows (film_grain_route_identity).
-inline constexpr std::string_view film_grain_h274 = "h274-vvdec-v1";
+inline constexpr std::string_view film_grain_h274 = "h274-vvdec-v2";  // v2: each picture's own grain seed
 inline constexpr std::string_view film_grain_afgs1 = "afgs1-ffmpeg-v1";
 inline constexpr std::string_view film_grain_av1 = "av1-v1";
 inline constexpr std::string_view film_grain_av2 = "av2-dav2d-v1";

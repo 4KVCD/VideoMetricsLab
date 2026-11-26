@@ -7,7 +7,7 @@
 # VideoToolbox's decoding for H.264, HEVC, VP9, AV1, MPEG-2 and ProRes
 # instead of Direct3D 11's, NEON's assembly and POSIX threads, and the same
 # one external library: Fraunhofer HHI's VVC decoder VVdeC (master pinned by
-# commit with 4KVCD's pull requests, scripts/patches/vvdec), linked into
+# commit with 4KVCD's film grain fix, scripts/patches/vvdec), linked into
 # libavcodec as the decoder "libvvdec" (scripts/patches/ffmpeg). Into
 # resources/tools/ffmpeg:
 #
@@ -33,8 +33,8 @@ set -euo pipefail
 version="9.0.2"
 sha256="8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e"
 deployment_target="14.4"
-# As scripts/build_ffmpeg_decoders.ps1's: VVdeC's master on 2026-10-28.
-vvdec_commit="17e0f2f2089c5c0553f1bfc486b1b7aa551e7819"
+# As scripts/build_ffmpeg_decoders.ps1's: VVdeC's master on 2026-11-24.
+vvdec_commit="68032b8060fd5cbdaa9533788803752d2bdd31db"
 decoders="h264,hevc,vvc,libvvdec,vp9,av1,mpeg2video,ffv1,prores,\
 aac,aac_latm,ac3,eac3,dca,truehd,mlp,flac,opus,vorbis,mp3float,mp2float,alac,wmav1,wmav2,wmapro,\
 pcm_s16le,pcm_s24le,pcm_s32le,pcm_f32le,pcm_bluray,pcm_dvd"
@@ -61,8 +61,8 @@ tar -xJf "$work/ffmpeg-$version.tar.xz" -C "$work"
 # optimisation and with its warnings not taken for errors, as on Windows.
 git -c advice.detachedHead=false clone --quiet https://github.com/fraunhoferhhi/vvdec.git "$work/vvdec"
 git -C "$work/vvdec" -c advice.detachedHead=false checkout --quiet "$vvdec_commit"
-vvdec_version="$(git -C "$work/vvdec" describe --tags --always)+4kvcd-prs"
-git -C "$work/vvdec" apply "$project/scripts/patches/vvdec/4kvcd-pull-requests.patch"
+vvdec_version="$(git -C "$work/vvdec" describe --tags --always)+fg-seed"
+git -C "$work/vvdec" apply "$project/scripts/patches/vvdec/film-grain-seed.patch"
 cmake -S "$work/vvdec" -B "$work/vvdec/build" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
     -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment_target" \
     -DVVDEC_LIBRARY_ONLY=ON -DVVDEC_ENABLE_LINK_TIME_OPT=OFF -DVVDEC_ENABLE_WERROR=OFF \

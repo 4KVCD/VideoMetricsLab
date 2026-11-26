@@ -214,7 +214,7 @@ $vvdecVulkan = Join-Path $appFiles 'native/vvdecvk_frames.dll'
 if (-not (Test-Path $vvdecVulkan)) {
     throw 'resources/native has no vvdecvk_frames.dll: build it with scripts/build_vvdecvk_frames.ps1'
 }
-$vvdecVulkanCommit = 'e2a88e3901784ffa2a8ed1469c34746a6ddf00a6'  # vvdec-vulkan's release v1.2.3
+$vvdecVulkanCommit = '6d36a13319f2a080f94746d9971ec3b6be5b30c7'  # vvdec-vulkan's release v1.2.4
 $module = (Get-FileHash (Join-Path $projectDirectory 'native/vvdecvk_frames.cpp') -Algorithm SHA256).Hash
 $builtFrom = Get-Content "$vvdecVulkan.source" -ErrorAction SilentlyContinue
 if ($builtFrom -ne "$vvdecVulkanCommit $module") {

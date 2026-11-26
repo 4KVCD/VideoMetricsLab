@@ -1,0 +1,216 @@
+diff --git a/source/Lib/CommonLib/Picture.cpp b/source/Lib/CommonLib/Picture.cpp
+index dbd1517..2416c92 100644
+--- a/source/Lib/CommonLib/Picture.cpp
++++ b/source/Lib/CommonLib/Picture.cpp
+@@ -152,6 +152,7 @@ void Picture::resetForUse( int _layerId )
+   layerId             = _layerId;
+   eNalUnitType        = NAL_UNIT_INVALID;
+   bits                = 0;
++  grainSeed           = 0;
+   rap                 = 0;
+   userData            = nullptr;
+   decodingOrderNumber = 0;
+diff --git a/source/Lib/CommonLib/Picture.h b/source/Lib/CommonLib/Picture.h
+index e71e919..c76042e 100644
+--- a/source/Lib/CommonLib/Picture.h
++++ b/source/Lib/CommonLib/Picture.h
+@@ -237,6 +237,7 @@ public:
+   int         layerId      = NOT_VALID;
+   NalUnitType eNalUnitType = NAL_UNIT_INVALID;
+   uint32_t    bits         = 0;   // input nal bit count
++  uint32_t    grainSeed    = 0;   // film grain seed from the POC LSB and the slice NAL units: this picture's data only
+   bool        rap          = 0;   // random access point flag
+   void       *userData     = nullptr;      ///< opaque user data
+   int         decodingOrderNumber = 0;
+diff --git a/source/Lib/DecoderLib/DecLibParser.cpp b/source/Lib/DecoderLib/DecLibParser.cpp
+index 6301edd..e8fc21b 100644
+--- a/source/Lib/DecoderLib/DecLibParser.cpp
++++ b/source/Lib/DecoderLib/DecLibParser.cpp
+@@ -49,6 +49,7 @@ POSSIBILITY OF SUCH DAMAGE.
+ #include "UnitTools.h"
+ #include "Utilities/ThreadPool.h"
+ 
++#include <cstring>
+ #include <unordered_map>
+ #include <utility>
+ 
+@@ -76,6 +77,28 @@ extern __itt_string_handle* itt_handle_start;
+ 
+ static const int INIT_POC = -MAX_INT;
+ 
++// Folds a slice NAL unit and its picture's POC LSB into the picture's film grain seed (FNV-1a, on 8-byte words for
++// speed), so the seed depends only on the picture's own coded data: the POC MSB is left out because it depends on
++// where decoding started. The POC LSB is folded in explicitly because the picture header may be a NAL unit of its own.
++static uint32_t hashSliceNalu( uint32_t seed, int pocLsb, const AlignedByteVec& nalu )
++{
++  constexpr uint64_t FNV_PRIME = 0x100000001b3;
++
++  uint64_t hash = ( 0xcbf29ce484222325 ^ seed ^ ( uint64_t( pocLsb ) << 32 ) ) * FNV_PRIME;
++  size_t   pos  = 0;
++  for( ; pos + 8 <= nalu.size(); pos += 8 )
++  {
++    uint64_t word;
++    memcpy( &word, &nalu[pos], 8 );
++    hash = ( hash ^ word ) * FNV_PRIME;
++  }
++  for( ; pos < nalu.size(); pos++ )
++  {
++    hash = ( hash ^ nalu[pos] ) * FNV_PRIME;
++  }
++  return uint32_t( hash ^ ( hash >> 32 ) );
++}
++
+ DecLibParser::~DecLibParser()
+ {
+   m_prefixSEINALUs.clear();
+@@ -752,6 +775,7 @@ bool DecLibParser::xDecodeSliceMain( InputNALUnit& nalu )
+   m_pcParsePic->rap              = nalu.m_rap;
+   m_pcParsePic->userData         = nalu.m_userData;
+   m_pcParsePic->bits            += nalu.m_bits + m_nonVCLbits;
++  m_pcParsePic->grainSeed        = hashSliceNalu( m_pcParsePic->grainSeed, pcSlice->getPicHeader()->getPocLsb(), nalu.getBitstream().getFifo() );
+   m_pcParsePic->layerId          = nalu.m_nuhLayerId;
+   m_pcParsePic->subLayerNonReferencePictureDueToSTSA = false;
+ 
+diff --git a/source/Lib/FilmGrain/FilmGrain.cpp b/source/Lib/FilmGrain/FilmGrain.cpp
+index 90dce35..2eb440d 100644
+--- a/source/Lib/FilmGrain/FilmGrain.cpp
++++ b/source/Lib/FilmGrain/FilmGrain.cpp
+@@ -607,11 +607,6 @@ static void get_chroma_subsampling( vvdecColorFormat fmt, int& subx, int& suby )
+   }
+ }
+ 
+-void FilmGrain::set_seed( uint32_t seed )
+-{
+-  m_line_rnd = m_line_rnd_up = seed;
+-}
+-
+ /** Initialize "hardware" interface from FGS SEI parameters, for the chroma format m_colorFormat */
+ void FilmGrain::init_sei()
+ {
+@@ -843,34 +838,18 @@ void FilmGrain::updateFGC( vvdecSEIFilmGrainCharacteristics* fgc )
+ 
+   m_fgsReceived = true;
+   init_sei();
+-
+-  //  if (!m_bFgs)
+-  //    // TODO: get something random
+-  //      // TODO: make seed also impact the pattern gen
+-  //    set_seed(uint32_t seed);
+ }
+ 
+-void FilmGrain::prepareBlockSeeds( int width, int height )
++void FilmGrain::prepareBlockSeeds( int width, int height, uint32_t pictureSeed )
+ {
+-  m_line_seeds.resize( ( height + 15 ) / 16 );
+-
+-  m_prev_frame_line_rnd_up = m_line_rnd_up;
++  // prng() never leaves 0, which would give every block the same pattern offset
++  uint32_t rnd = pictureSeed ? pictureSeed : 0xdeadbeef;
+ 
+-  uint32_t rnd = 0;
+-  for( int y = 0; y < m_line_seeds.size(); ++y )
++  // Each line of 16x16 blocks starts where the line above left the random generator
++  m_line_seeds.resize( ( height + 15 ) / 16 );
++  for( uint32_t& lineSeed: m_line_seeds )
+   {
+-    // Generate / backup / restore per-line random seeds (needed to make multi-line blocks)
+-    if( y != 0 )
+-    {
+-      // new line of blocks
+-      m_line_rnd_up = m_line_rnd;
+-      m_line_rnd    = rnd;
+-    }
+-
+-    m_line_seeds[y] = m_line_rnd;
+-
+-    // Crank random generator
+-    rnd = m_line_rnd;
++    lineSeed = rnd;
+     for( int x = 0; x < ( width + 15 ) / 16; ++x )
+     {
+       rnd = prng( rnd );
+@@ -899,7 +878,8 @@ void FilmGrain::setColorFormat( vvdecColorFormat fmt )
+ 
+ void FilmGrain::add_grain_line( void* Y, void* U, void* V, int y, int width )
+ {
+-  uint32_t rnd_up = y < 16 ? m_prev_frame_line_rnd_up : m_line_seeds[y / 16 - 1];
++  // The first line of blocks has no line above: add_grain_block blends no upper block there
++  uint32_t rnd_up = m_line_seeds[y < 16 ? 0 : y / 16 - 1];
+   uint32_t rnd    = m_line_seeds[y / 16];
+ 
+   int16_t grain[3][32];
+diff --git a/source/Lib/FilmGrain/FilmGrain.h b/source/Lib/FilmGrain/FilmGrain.h
+index 4c2979f..a05c41e 100644
+--- a/source/Lib/FilmGrain/FilmGrain.h
++++ b/source/Lib/FilmGrain/FilmGrain.h
+@@ -89,10 +89,6 @@ class FilmGrain
+ {
+   std::unique_ptr<FilmGrainImpl> m_impl;
+ 
+-  uint32_t m_line_rnd               = 0xdeadbeef;
+-  uint32_t m_line_rnd_up            = 0xdeadbeef;
+-  uint32_t m_prev_frame_line_rnd_up = 0xdeadbeef;
+-
+   std::vector<uint32_t> m_line_seeds;
+   fgs_sei               fgs;   // as signalled; init_sei adapts the chroma values to the chroma format
+   bool                  m_fgsReceived = false;
+@@ -107,12 +103,13 @@ public:
+   void updateFGC( vvdecSEIFilmGrainCharacteristics* fgc );
+   void setDepth( int depth ) { m_impl->set_depth( depth ); }
+   void setColorFormat( vvdecColorFormat fmt );
+-  void prepareBlockSeeds( int width, int height );
++  // pictureSeed: from the picture's own coded data (Picture::grainSeed), so its grain does not depend on the
++  // pictures decoded before it
++  void prepareBlockSeeds( int width, int height, uint32_t pictureSeed );
+ 
+   void add_grain_line( void* Y, void* U, void* V, int y, int width );
+ 
+ private:
+-  void set_seed( uint32_t seed );
+   void init_sei();
+ };
+ 
+diff --git a/source/Lib/vvdec/vvdecimpl.cpp b/source/Lib/vvdec/vvdecimpl.cpp
+index adaf5cf..c345f82 100644
+--- a/source/Lib/vvdec/vvdecimpl.cpp
++++ b/source/Lib/vvdec/vvdecimpl.cpp
+@@ -901,7 +901,7 @@ void VVDecImpl::xUpdateFGC( vvdecSEI* s )
+   m_filmGrainCharacteristicsState = sei->filmGrainCharacteristicsPersistenceFlag ? FgcPersist : FgcDontPersist;
+ }
+ 
+-void VVDecImpl::xAddGrain( vvdecFrame* frame )
++void VVDecImpl::xAddGrain( vvdecFrame* frame, uint32_t seed )
+ {
+   if( m_filmGrainCharacteristicsState == FgcNone )
+   {
+@@ -910,7 +910,7 @@ void VVDecImpl::xAddGrain( vvdecFrame* frame )
+ 
+   m_filmGrainSynth->setDepth( frame->bitDepth );
+   m_filmGrainSynth->setColorFormat( frame->colorFormat );
+-  m_filmGrainSynth->prepareBlockSeeds( frame->planes[0].width, frame->planes[0].height );
++  m_filmGrainSynth->prepareBlockSeeds( frame->planes[0].width, frame->planes[0].height, seed );
+ 
+   struct GrainTaskData
+   {
+@@ -1206,7 +1206,7 @@ int VVDecImpl::xAddPicture( Picture* pcPic )
+   // Grain synthesis
+   if( m_enableFilmGrain && m_filmGrainCharacteristicsState != FgcNone )
+   {
+-    xAddGrain( &cFrame );
++    xAddGrain( &cFrame, pcPic->grainSeed );
+   }
+ 
+   m_rcFrameList.emplace_back( cFrame, bCreateStorage ? nullptr : pcPic );
+diff --git a/source/Lib/vvdec/vvdecimpl.h b/source/Lib/vvdec/vvdecimpl.h
+index fce4636..b092534 100644
+--- a/source/Lib/vvdec/vvdecimpl.h
++++ b/source/Lib/vvdec/vvdecimpl.h
+@@ -183,7 +183,7 @@ private:
+                                      bool               origStride = false );
+ 
+   void xUpdateFGC                  ( vvdecSEI *sei );
+-  void xAddGrain                   ( vvdecFrame *frame );
++  void xAddGrain                   ( vvdecFrame *frame, uint32_t seed );
+ 
+   static int xRetrieveNalStartCode ( unsigned char *pB, int iZerosInStartcode );
+   static int xConvertPayloadToRBSP ( const uint8_t* payload, size_t payloadLen, InputBitstream* bitstream, bool isVclNalUnit );

@@ -27,14 +27,14 @@
 # (the Opus decoder resamples).
 #
 # One external library: Fraunhofer HHI's VVC decoder VVdeC, its master
-# pinned by commit, with the 21 pull requests of 4KVCD's that VVdeC has not
-# merged yet (scripts/patches/vvdec/4kvcd-pull-requests.patch: #430-#434,
-# #436-#440, #443, #445, #447, #451-#458, merged in that order; the intra
-# prediction PRs' additions to IntraPredX86.h placed whole by hand). It is
-# built here as a static library with the same compiler and linked into
-# libavcodec (its C++ runtime and threads statically too) as the decoder
-# "libvvdec" (scripts/patches/ffmpeg: libvvdec.c, and libvvdec.patch, which
-# registers it). FFmpeg's own VVC decoder stays the default for VVC;
+# pinned by commit, with 4KVCD's film grain fix that VVdeC has not merged yet
+# (scripts/patches/vvdec/film-grain-seed.patch, pull request #486: each
+# picture's grain from its own coded data, the same as vvdec-vulkan's, so
+# the grain does not change with where decoding starts). It is built here
+# as a static library with the same compiler and linked into libavcodec
+# (its C++ runtime and threads statically too) as the decoder "libvvdec"
+# (scripts/patches/ffmpeg: libvvdec.c, and libvvdec.patch, which registers
+# it). FFmpeg's own VVC decoder stays the default for VVC;
 # the app asks for libvvdec by name. The DLLs and headers are committed, as
 # libvmaf-fast's are: building the app does not run this, only updating them
 # does.
@@ -46,9 +46,9 @@ param(
     [string]$Version = '9.0.2',
     [string]$Sha256 = '8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e',
     [string]$Archive = '',  # a copy of the source archive on disk, kept in the downloads folder instead of downloading it
-    # VVdeC's master on 2026-10-28 (3.3.0-dev), as Brian chose: master, not its last
-    # release, with 4KVCD's open pull requests (see above).
-    [string]$VvdecCommit = '17e0f2f2089c5c0553f1bfc486b1b7aa551e7819'
+    # VVdeC's master on 2026-11-24 (v3.3.0-4): master, not its last release,
+    # with 4KVCD's open pull request (see above).
+    [string]$VvdecCommit = '68032b8060fd5cbdaa9533788803752d2bdd31db'
 )
 $ErrorActionPreference = 'Stop'
 $projectDirectory = Split-Path $PSScriptRoot -Parent
@@ -102,9 +102,9 @@ Invoke-Program { git -c advice.detachedHead=false clone --quiet https://github.c
 if ($LASTEXITCODE -ne 0) { throw 'cloning VVdeC failed' }
 Invoke-Program { git -C $vvdecSource -c advice.detachedHead=false checkout --quiet $VvdecCommit }
 if ($LASTEXITCODE -ne 0) { throw "VVdeC has no commit $VvdecCommit" }
-$vvdecVersion = (& git -C $vvdecSource describe --tags --always).Trim() + '+4kvcd-prs'
-Invoke-Program { git -C $vvdecSource apply (Join-Path $PSScriptRoot 'patches/vvdec/4kvcd-pull-requests.patch') }
-if ($LASTEXITCODE -ne 0) { throw "applying 4KVCD's pull requests to VVdeC failed" }
+$vvdecVersion = (& git -C $vvdecSource describe --tags --always).Trim() + '+fg-seed'
+Invoke-Program { git -C $vvdecSource apply (Join-Path $PSScriptRoot 'patches/vvdec/film-grain-seed.patch') }
+if ($LASTEXITCODE -ne 0) { throw "applying 4KVCD's film grain fix to VVdeC failed" }
 Invoke-Program {
     cmake -S $vvdecSource -B (Join-Path $vvdecSource 'build') -G 'MinGW Makefiles' -DCMAKE_BUILD_TYPE=Release `
         -DBUILD_SHARED_LIBS=OFF -DVVDEC_LIBRARY_ONLY=ON -DVVDEC_ENABLE_LINK_TIME_OPT=OFF -DVVDEC_ENABLE_WERROR=OFF `
