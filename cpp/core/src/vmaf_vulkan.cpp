@@ -121,6 +121,8 @@ VulkanEngine::VulkanEngine(const std::filesystem::path& path)
       v1_speed_scores(optional_function<decltype(v1_speed_scores)>(library, "vv_v1_speed_scores")),
       v1_ciede(optional_function<decltype(v1_ciede)>(library, "vv_v1_ciede")),
       v1_ciede_scores(optional_function<decltype(v1_ciede_scores)>(library, "vv_v1_ciede_scores")),
+      v1_ms_ssim(optional_function<decltype(v1_ms_ssim)>(library, "vv_v1_ms_ssim")),
+      v1_ms_ssim_scores(optional_function<decltype(v1_ms_ssim_scores)>(library, "vv_v1_ms_ssim_scores")),
       submit_v1(optional_function<decltype(submit_v1)>(library, "vv_submit_v1")),
       chroma_staging(optional_function<decltype(chroma_staging)>(library, "vv_chroma_staging")),
       shared_chroma(optional_function<decltype(shared_chroma)>(library, "vv_shared_chroma")),

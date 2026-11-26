@@ -719,13 +719,15 @@ PairScores CpuScorer::finish() {
             result.by_metric.emplace_back(metric, std::move(column));  // to 6 decimals already
             continue;
         }
-        const auto gpu_column = on_gpu.find(metric);
-        if (gpu_column != on_gpu.end()) {
+        const bool metric_on_gpu = gpu_ && has(gpu_->metrics(), metric);
+        if (metric_on_gpu) {
             result.features_on_gpu.push_back(metric);
         }
         const auto read = [&](std::string_view feature_name, unsigned frame) {
-            if (gpu_column != on_gpu.end()) {
-                return gpu_column->second.at(frame / step_);
+            if (metric_on_gpu) {
+                // The GPU's columns by libvmaf's feature names, CAMBI's as "cambi" (libvmaf's name comes from its
+                // options: cambi_feature).
+                return on_gpu.at(metric == "cambi" ? metric : std::string(feature_name)).at(frame / step_);
             }
             const std::string name(feature_name);
             double value = 0;

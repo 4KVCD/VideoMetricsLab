@@ -130,7 +130,7 @@ void add_cpu_units(std::vector<MetricUnit>& units, const TaskSnapshot& task) {
         }
     }
     const std::vector<std::string>& keys = task.cpu_keys.empty() ? task.metric_keys : task.cpu_keys;
-    // Those the GPU calculates in the same pass (CIEDE2000 and CAMBI, as its
+    // Those the GPU calculates in the same pass (CIEDE2000, CAMBI and MS-SSIM, as its
     // CPU scorer said: gpu_keys) are GPU metrics, with the pass's figures.
     std::vector<std::string> on_cpu;
     std::vector<std::string> on_gpu;

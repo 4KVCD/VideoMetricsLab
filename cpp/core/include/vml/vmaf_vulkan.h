@@ -94,6 +94,11 @@ struct VulkanEngine {
     // 45 - 20 log10(dE00); nullptr in an engine before libvmaf-fast b0927d4b.
     int (*v1_ciede)(VulkanContext* context);
     int (*v1_ciede_scores)(VulkanContext* context, double* out, unsigned frames);
+    // MS-SSIM of host frames (`planes` 1: the luma, from submit; 3: Y, Cb and
+    // Cr, from submit_v1, 4:2:0) and each plane's scores (0 Y, 1 Cb, 2 Cr), as
+    // libvmaf's float_ms_ssim; nullptr in an engine before libvmaf-fast 456b9065.
+    int (*v1_ms_ssim)(VulkanContext* context, int planes);
+    int (*v1_ms_ssim_scores)(VulkanContext* context, double* out, unsigned frames, int plane);
     int (*submit_v1)(VulkanContext* context, const std::uint8_t* const* planes, const std::ptrdiff_t* strides,
                      int score);
     int (*chroma_staging)(VulkanContext* context, std::uint8_t** planes, std::uint32_t* stride);

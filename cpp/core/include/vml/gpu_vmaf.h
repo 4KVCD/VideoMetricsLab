@@ -125,7 +125,7 @@ struct GpuPlan {
     int threads = 0;     // the CPU extractors' libvmaf threads
     int frame_rate = 0;  // XPSNR's, in whole frames per second
     CambiInput cambi;    // CAMBI's test video (libvmaf_cpu.h)
-    // The GPU the CPU metrics' CIEDE2000 and CAMBI go on (CpuScorer's `gpu`:
+    // The GPU the CPU metrics' CIEDE2000, CAMBI and MS-SSIM go on (CpuScorer's `gpu`:
     // Vulkan's number, -1 for the one VMAF runs on) where the Vulkan engine
     // scores this PC's GPU VMAF, or nothing (cpu_plan).
     std::optional<int> extra_gpu;
@@ -238,7 +238,7 @@ void add_beside(PairScores& scores, std::optional<BesideScorer>& beside);
 
 // The GPU's turn: one GPU pass (VMAF, NEG and VMAF v1 on the GPU, Vship's
 // metrics) at a time in this process (the Python app's gpu.GPU_PASS). The
-// lighter GPU work of a CPU task (HDR VMAF's features, CIEDE2000 and CAMBI
+// lighter GPU work of a CPU task (HDR VMAF's features, CIEDE2000, CAMBI and MS-SSIM
 // of the CPU's metrics) does not take it and runs beside a pass.
 std::timed_mutex& gpu_pass();
 

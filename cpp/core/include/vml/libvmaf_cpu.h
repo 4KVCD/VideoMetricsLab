@@ -117,7 +117,7 @@ std::string cpu_library_build();
 // Frames are given packed as FFmpeg's rawvideo writes them (add), as planes
 // wherever they are (add_planes), or as a decoder's pictures (add_decoded).
 // Told, as a CPU scorer starts, which of its `metrics` the GPU calculates
-// (`on_gpu`: CIEDE2000 and CAMBI where it can, gpu_metrics_of; empty where
+// (`on_gpu`: CIEDE2000, CAMBI and MS-SSIM where it can, gpu_metrics_of; empty where
 // none), for the run line (StatusKind::metrics_on_gpu).
 using GpuMetricsReport =
     std::function<void(const std::vector<std::string>& metrics, const std::vector<std::string>& on_gpu)>;
@@ -128,7 +128,7 @@ public:
     // on `threads` libvmaf threads (0: libvmaf's own choice). `frame_rate`
     // is XPSNR's, as FFmpeg's filter takes it: whole frames per second.
     // `cambi`: CAMBI's test video. With `gpu` (Vulkan's number for the GPU,
-    // -1 for the one VMAF runs on), CIEDE2000 and CAMBI are calculated there
+    // -1 for the one VMAF runs on), CIEDE2000, CAMBI and MS-SSIM are calculated there
     // where it can (gpu_cpu_metrics.h), from the same pictures; else, and
     // where the GPU cannot, by libvmaf. `vmaf_model`: the run's VMAF model
     // (its model= value), for VMAF YUV's U and V, which go on `gpu` too
@@ -185,7 +185,7 @@ public:
     std::vector<std::string> gpu_metrics() const;
 
 private:
-    // Starts CIEDE2000 and CAMBI on GPU `gpu` where it can (gpu_), and sets
+    // Starts CIEDE2000, CAMBI and MS-SSIM on GPU `gpu` where it can (gpu_), and sets
     // libvmaf_metrics_. `cambi_with`: CAMBI's libvmaf options.
     void start_gpu(int width, int height, int bit_depth, std::optional<int> gpu,
                    const std::vector<std::pair<std::string, std::string>>& cambi_with);
@@ -209,7 +209,7 @@ private:
     const Libvmaf& library_;
     std::vector<std::string> metrics_;
     std::vector<std::string> libvmaf_metrics_;  // those of metrics_ libvmaf calculates; the GPU the others
-    std::unique_ptr<GpuMetricsScorer> gpu_;     // CIEDE2000 and CAMBI on the GPU, or nullptr
+    std::unique_ptr<GpuMetricsScorer> gpu_;     // CIEDE2000, CAMBI and MS-SSIM on the GPU, or nullptr
     std::unique_ptr<ChromaVmaf> chroma_vmaf_;   // VMAF YUV's U and V, or nullptr
     std::string cambi_feature_;  // CAMBI's score's name, which libvmaf builds from its options
     unsigned step_ = 1;

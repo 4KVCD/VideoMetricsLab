@@ -815,7 +815,7 @@ ParsedScores score_decoded_here(const RunFrames& run, const VmafOptions& options
 ParsedScores score_plan(const RunFrames& run, const VmafOptions& options, const GpuPlan& plan,
                         const ProgressCallback& on_progress, const StatusCallback& on_status);
 
-// score_plan, without making the pass again for CIEDE2000 and CAMBI.
+// score_plan, without making the pass again for CIEDE2000, CAMBI and MS-SSIM.
 ParsedScores score_plan_as_planned(const RunFrames& run, const VmafOptions& options, const GpuPlan& plan,
                                    const ProgressCallback& on_progress, const StatusCallback& on_status) {
     // A video whose size changes is decoded by FFmpeg, which scales each of
@@ -1236,7 +1236,7 @@ ParsedScores score_on_gpu(const RunFrames& run, const VmafOptions& options, cons
     }
     std::string beside;
     if (!plan.beside.empty()) {
-        // CIEDE2000 and CAMBI may go to the GPU with one given them, VMAF YUV's U and V on the Vulkan engine's
+        // CIEDE2000, CAMBI and MS-SSIM may go to the GPU with one given them, VMAF YUV's U and V on the Vulkan engine's
         // (cpu_plan); libvmaf on the CPU scores the others, HDR VMAF's on threads of its own (log_hdr_vmaf).
         const std::vector<std::string> maybe_gpu =
             may_run_on_gpu(plan.beside, plan.extra_gpu.has_value(), plan.vmaf_on_vulkan);
@@ -1738,7 +1738,8 @@ bool shares_decode(const VideoInfo& source, const VideoInfo& test, const VmafOpt
 namespace {
 
 // Whether scoring `plan` opens the Vulkan engine: VMAF on it, VMAF v1 (Vulkan's on every GPU), HDR VMAF's features
-// on the GPU, or CIEDE2000, CAMBI or VMAF YUV's U and V on it (extra_gpu, set only for those).
+// on the GPU, or CIEDE2000, CAMBI, MS-SSIM or VMAF YUV's U and V on it (extra_gpu, set only
+// for those).
 bool plan_opens_vulkan(const GpuPlan& plan) {
     const std::vector<std::string> keys = plan_keys(plan);
     return plan.backend == "vulkan" || plan.extra_gpu || plan.hdr_gpu ||
@@ -1798,7 +1799,7 @@ nlohmann::json scoring_task(const nlohmann::json& request, const std::filesystem
 }
 
 bool follows_vulkan_engine(std::string_view key) {
-    return key == "cambi" || key == "ciede2000" || key == "vmaf_yuv" || key == vmaf_u_key || key == vmaf_v_key ||
+    return engine_takes_cpu_metric(key) || key == "vmaf_yuv" || key == vmaf_u_key || key == vmaf_v_key ||
            key == "vmaf_hdr";
 }
 
@@ -1889,10 +1890,10 @@ MetricProvenance run_provenance(const std::string& key, const std::string& model
         // The same request as FFmpeg's libvmaf (the scores agree to
         // within 4e-5), made on the GPU by the bundled build: by its
         // CUDA code or the Vulkan port of it, and VMAF v1 with Vulkan on
-        // every GPU, as HDR VMAF's features (its pictures converted by libvmaf on the CPU), CIEDE2000 and
-        // CAMBI (VMAF v1's engine without VMAF's features); VMAF YUV's U and V
+        // every GPU, as HDR VMAF's features (its pictures converted by libvmaf on the CPU), CIEDE2000,
+        // CAMBI and MS-SSIM (VMAF v1's engine without VMAF's features); VMAF YUV's U and V
         // on VMAF's Vulkan engine, beside VMAF there (ChromaVmaf).
-        const bool v1_engine = key == "vmaf_v1" || key == "vmaf_hdr" || key == "ciede2000" || key == "cambi";
+        const bool v1_engine = key == "vmaf_v1" || key == "vmaf_hdr" || engine_takes_cpu_metric(key);
         const bool chroma_vmaf = key == "vmaf_yuv_u" || key == "vmaf_yuv_v";
         const std::string backend = v1_engine || chroma_vmaf ? "vulkan" : gpu_backend;
         provenance.implementation = "libvmaf/" + backend;
@@ -1920,12 +1921,12 @@ void insert_keys(std::set<std::string, std::less<>>& keys, const GpuPlan& plan) 
     }
 }
 
-// Files the CPU metrics the GPU calculated (CIEDE2000, CAMBI and VMAF YUV's U and V, CpuScorer's features_on_gpu)
-// under the GPU.
+// Files the CPU metrics the GPU calculated (engine_takes_cpu_metric's and VMAF YUV's U and V, CpuScorer's
+// features_on_gpu) under the GPU.
 void file_gpu_metrics(RunScores& scores) {
     for (const ParsedScores& part : scores.parts) {
         for (const std::string& key : part.features_on_gpu) {
-            if (key == "ciede2000" || key == "cambi" || key == "vmaf_yuv_u" || key == "vmaf_yuv_v") {
+            if (engine_takes_cpu_metric(key) || key == "vmaf_yuv_u" || key == "vmaf_yuv_v") {
                 scores.cpu_keys.erase(key);
                 scores.gpu_keys.insert(key);
             }
@@ -1970,7 +1971,8 @@ EnginePlace run_engine_place(const RunFrames& run) {
 }
 
 // The plan for the run's CPU metrics in the app (cpu_metrics_plan).
-// VMAF YUV's U and V are scored with the run's VMAF model. They, CIEDE2000 and CAMBI go to the GPU VMAF runs on
+// VMAF YUV's U and V are scored with the run's VMAF model. They, CIEDE2000, CAMBI and MS-SSIM (with MS-SSIM YUV)
+// go to the GPU VMAF runs on
 // where the Vulkan engine scores VMAF there (CpuScorer falls back to libvmaf where the GPU cannot take them): with
 // the GPU there they took a fraction of the time and memory libvmaf takes on the CPU. On a GPU whose VMAF is
 // libvmaf's CUDA code the Vulkan engine's would not be checked, so they stay on the CPU there.
@@ -1985,12 +1987,11 @@ std::optional<GpuPlan> cpu_plan(const RunFrames& run, const VmafOptions& options
     if (chroma_vmaf) {
         plan->vmaf_model = run_vmaf_model(options, run.width, run.height);
     }
-    // What the engine's place serves in this plan: U and V (vmaf_on_vulkan), CIEDE2000 and CAMBI (extra_gpu). VMAF
-    // YUV with its Y alone needs neither.
-    const bool cie_cambi = std::any_of(plan->models.begin(), plan->models.end(), [](const auto& model) {
-        return model.first == "ciede2000" || model.first == "cambi";
-    });
-    if (options.vmaf_on_gpu && (chroma_vmaf || cie_cambi)) {
+    // What the engine's place serves in this plan: U and V (vmaf_on_vulkan), engine_takes_cpu_metric's
+    // (extra_gpu). VMAF YUV with its Y alone needs neither.
+    const bool engine_metrics = std::any_of(plan->models.begin(), plan->models.end(),
+                                            [](const auto& model) { return engine_takes_cpu_metric(model.first); });
+    if (options.vmaf_on_gpu && (chroma_vmaf || engine_metrics)) {
         if (const EnginePlace place = run_engine_place(run); place.on_engine) {
             plan->vmaf_on_vulkan = chroma_vmaf;
             plan->extra_gpu = place.device;
@@ -2141,7 +2142,7 @@ ParsedScores take_metrics(ParsedScores& scores, const std::vector<std::string>& 
     return taken;
 }
 
-// The GPU for the CPU metrics' CIEDE2000 and CAMBI (cpu.extra_gpu) when they are scored beside `pass`: the
+// The GPU for the CPU metrics' CIEDE2000, CAMBI and MS-SSIM (cpu.extra_gpu) when they are scored beside `pass`: the
 // GPU VMAF's own on Vulkan, else the one VMAF would run on.
 std::optional<int> beside_gpu(const GpuPlan& cpu, const GpuPlan& pass) {
     if (cpu.extra_gpu && pass.backend == "vulkan" && pass.device >= 0) {
@@ -2294,7 +2295,7 @@ std::variant<GpuPlan, std::string> hdr_plan(const RunFrames& run, const VmafOpti
         // Its features on VMAF v1's Vulkan engine, on the GPU VMAF runs on, where the Vulkan engine scores VMAF
         // there (HdrScorer falls back to the CPU where it cannot). Where the engine failed its check, or VMAF is
         // libvmaf's CUDA code, it is not checked on this GPU: the features stay on the CPU, as the run's plan
-        // counts them (heavy_cpu_unit), as do CIEDE2000 and CAMBI (cpu_plan).
+        // counts them (heavy_cpu_unit), as do CIEDE2000, CAMBI and MS-SSIM (cpu_plan).
         if (const EnginePlace place = run_engine_place(run); place.on_engine) {
             plan.hdr_gpu = place.device;
         }
