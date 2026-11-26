@@ -37,6 +37,7 @@
 #include <QStyle>
 #include <QStyleOption>
 #include <QTabWidget>
+#include <QTableWidget>
 #include <QWidget>
 #include <QWindow>
 
@@ -51,6 +52,7 @@
 #include "main_window.h"
 #include "quick_save.h"
 #include "theme.h"
+#include "widgets.h"
 
 namespace vml::app {
 namespace {
@@ -504,6 +506,43 @@ TEST_F(Appearance, ModernMocha) {
     EXPECT_EQ(QApplication::palette().color(QPalette::Base), theme::modern_colour("card", true));
     EXPECT_NE(theme::modern_colour("card", true), QColor("#251c16"));
     EXPECT_NE(QApplication::palette().color(QPalette::Accent), theme::mocha_accent());  // the system's again
+}
+
+// The Videos table's metric headings are on two lines where that makes
+// them narrower, and every metric column is as wide as its heading needs,
+// hidden ones too: Qt sizes a hidden section as 0 wide, so a column shown
+// later kept 78 px and its heading was cut at both ends.
+TEST_F(Appearance, MetricHeadingsFitTheirColumns) {
+    QTableWidget* table = nullptr;
+    for (QTableWidget* candidate : window_->findChildren<QTableWidget*>()) {
+        if (candidate->columnCount() == column_count) {
+            table = candidate;
+        }
+    }
+    ASSERT_NE(table, nullptr);
+    window_->fit_to_style();
+    const auto* header = dynamic_cast<const CheckableHeaderView*>(table->horizontalHeader());
+    ASSERT_NE(header, nullptr);
+    int tallest = 0;
+    for (const MetricColumn& item : metric_columns()) {
+        const QSize needed = header->content_size(item.column);
+        // Shown, a hidden column has the width it was given while hidden
+        // (Qt says 0 for it until then).
+        const bool hidden = table->isColumnHidden(item.column);
+        table->setColumnHidden(item.column, false);
+        EXPECT_GE(table->columnWidth(item.column), needed.width())
+            << table->horizontalHeaderItem(item.column)->text().toStdString();
+        table->setColumnHidden(item.column, hidden);
+        tallest = std::max(tallest, needed.height());
+    }
+    EXPECT_GE(header->minimumHeight(), tallest);  // as tall as the tallest heading, shown or not
+    QString long_heading;  // "PSNR YUV MSE (dB)", on two lines
+    for (const MetricColumn& item : metric_columns()) {
+        if (std::string_view(item.key) == "psnr_yuv_mse") {
+            long_heading = table->horizontalHeaderItem(item.column)->text();
+        }
+    }
+    EXPECT_EQ(long_heading.count(QLatin1Char('\n')), 1) << long_heading.toStdString();
 }
 
 // Light's looks: Dim's and Desert's colours in place of Light's, Desert's

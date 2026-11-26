@@ -1223,12 +1223,20 @@ void MainWindow::build_test_table() {
     }
     connect(metric_header_, &CheckableHeaderView::sectionToggled, this,
             [this](int column, bool checked) { on_metric_column_toggled(column, checked); });
-    const auto header_of = [](const char* key) {
-        return QStringLiteral("   ") + qt_text(metric_definition(key).table_header);
+    // The centred headings on two lines where that makes them narrower, so a
+    // long name takes less of the row's width (measured in the header's bold,
+    // as Qt measures a heading). The checkbox's room on both sides is in the
+    // header's size (CheckableHeaderView::sectionSizeFromContents).
+    QFont heading_font = metric_header_->font();
+    heading_font.setBold(true);
+    const QFontMetrics heading_metrics(heading_font);
+    const auto two_lines = [&heading_metrics](const QString& text) { return two_line_heading(text, heading_metrics); };
+    const auto header_of = [&two_lines](const char* key) {
+        return two_lines(qt_text(metric_definition(key).table_header));
     };
     distorted_table_->setHorizontalHeaderLabels({
-        "", app::tr("File name"), app::tr("Media info"), app::tr("Black bars"), app::tr("Scaling"),
-        app::tr("Approx. bitrate"), header_of("psnr"), header_of("ssim"), header_of("vmaf"), header_of("xpsnr"),
+        "", app::tr("File name"), app::tr("Media info"), two_lines(app::tr("Black bars")), app::tr("Scaling"),
+        two_lines(app::tr("Approx. bitrate")), header_of("psnr"), header_of("ssim"), header_of("vmaf"), header_of("xpsnr"),
         header_of("vmaf_neg"), header_of("ssimulacra2"), header_of("butteraugli"), header_of("cvvdp"),
         header_of("vmaf_v1"), header_of("vmaf_hdr"), header_of("psnr_yuv"), header_of("psnr_yuv_mse"),
         header_of("ssim_yuv"), header_of("ms_ssim"), header_of("ms_ssim_yuv"), header_of("psnr_hvs"),
@@ -1354,22 +1362,28 @@ void MainWindow::build_test_table() {
 }
 
 void MainWindow::fit_table_columns() {
-    QHeaderView* header = distorted_table_->horizontalHeader();
     // Never narrower than the heading needs: an empty table would clip its
-    // headings ("Video bitrate" at 65 px showed as "'ideo bitrat").
+    // headings ("Video bitrate" at 65 px showed as "'ideo bitrat"). Measured
+    // for hidden columns too: Qt's size hint of a hidden section is 0, so the
+    // metrics hidden at first, shown later, kept a guessed width and their
+    // headings were cut at both ends.
     std::map<int, int> starting_widths{
         {col_remove, 26}, {col_graph, 26}, {col_check, 28}, {col_info, 150}, {col_black_bars, 78}, {col_scaling, 90}, {col_bitrate, 65},
     };
     for (const MetricColumn& item : metric_columns()) {
-        const bool wide = item.column == col_psnr || item.column == col_xpsnr || item.column == col_psnr_yuv ||
-                          item.column == col_psnr_yuv_mse ||
-                          item.column == col_psnr_hvs || item.column == col_ciede2000 ||
-                          item.column == col_ssimulacra2 || item.column == col_butteraugli;
-        starting_widths[item.column] = wide ? 110 : 78;
+        starting_widths[item.column] = 78;
     }
     for (const auto& [column, width] : starting_widths) {
-        distorted_table_->setColumnWidth(column, std::max(width, header->sectionSizeHint(column)));
+        distorted_table_->setColumnWidth(column, std::max(width, metric_header_->content_size(column).width()));
     }
+    // As tall as the tallest heading, hidden ones included: Qt's own height
+    // counts only the shown ones, so showing a two-line heading would make
+    // the header grow under the user.
+    int height = 0;
+    for (int column = 0; column < distorted_table_->columnCount(); ++column) {
+        height = std::max(height, metric_header_->content_size(column).height());
+    }
+    metric_header_->setMinimumHeight(height);
 }
 
 // The buttons under the table, and Highlight best/worst. Returns the

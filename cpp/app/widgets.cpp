@@ -59,6 +59,22 @@ constexpr int min_fill_characters = 24;
 
 }  // namespace
 
+QString two_line_heading(const QString& text, const QFontMetrics& metrics) {
+    QString best = text;
+    int best_width = metrics.horizontalAdvance(text);
+    for (qsizetype space = text.indexOf(QLatin1Char(' ')); space >= 0;
+         space = text.indexOf(QLatin1Char(' '), space + 1)) {
+        const QString first = text.left(space);
+        const QString second = text.mid(space + 1);
+        const int wider = std::max(metrics.horizontalAdvance(first), metrics.horizontalAdvance(second));
+        if (wider < best_width) {
+            best_width = wider;
+            best = first + QLatin1Char('\n') + second;
+        }
+    }
+    return best;
+}
+
 // ----------------------------------------------------------- CheckableHeaderView
 
 CheckableHeaderView::CheckableHeaderView(const QMap<int, bool>& checkable, QWidget* parent)

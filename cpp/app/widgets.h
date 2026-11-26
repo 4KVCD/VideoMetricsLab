@@ -4,6 +4,7 @@
 #pragma once
 
 #include <QFont>
+#include <QFontMetrics>
 #include <QHeaderView>
 #include <QItemSelectionModel>
 #include <QLabel>
@@ -28,6 +29,12 @@ class QMimeData;
 
 namespace vml::app {
 
+// A column heading on two lines where that makes it narrower: `text` split at
+// the space that makes its wider line the narrowest, in `metrics` ("PSNR YUV
+// avg. MSE (6:1:1)" -> "PSNR YUV avg.\nMSE (6:1:1)"); unchanged without a
+// space. Qt's header measures and draws the two lines itself.
+QString two_line_heading(const QString& text, const QFontMetrics& metrics);
+
 // A horizontal header where chosen sections have a checkbox, as FFMetrics'
 // PSNR, SSIM and XPSNR columns do, so that which metrics are calculated is
 // set right above the column the results go in. `checkable` maps a section's
@@ -46,6 +53,9 @@ public:
     // Where this section's checkbox is drawn, in viewport coordinates: the
     // geometry paintSection uses, so what can be clicked is what is seen.
     QRect section_indicator_rect(int section) const;
+    // The size a section's heading and its checkbox need, hidden sections
+    // included (Qt's sectionSizeHint is 0 for those).
+    QSize content_size(int section) const { return sectionSizeFromContents(section); }
 
 signals:
     void sectionToggled(int section, bool checked);
