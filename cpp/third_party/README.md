@@ -2,7 +2,8 @@
 
 Vendored, so that a build needs no download. GoogleTest, nlohmann/json and
 miniz were downloaded once, with Brian's OK, and checked against the SHA-256
-their projects publish. Highway, whose project publishes a PGP signature
+their projects publish. SQLite was downloaded once from sqlite.org and
+checked against the SHA3-256 its download page publishes. Highway, whose project publishes a PGP signature
 instead, was checked against that: a good signature by its maintainer's key
 (Jan Wassenberg, 14D8 27B2 2124 EB2F E748 C3B6 EE0F 9065 BCB8 B678, since
 expired). libvmaf-fast's headers are copied from that
@@ -15,6 +16,7 @@ project's own repository at the commit of the release the app ships.
 | [libvmaf-fast](https://github.com/4KVCD/libvmaf-fast) | v1.3 | Calling the libvmaf the app ships (`resources/tools/libvmaf`): its functions and structures | BSD-2-Clause-Patent (`libvmaf-fast/LICENSE`) | `libvmaf/include/libvmaf/*.h` and `LICENSE` at commit `28776652` (tag `libvmaf-fast-v1.3`), the same files as v1's (`867efb83`), v1.1's (`994b1814`) and v1.2's (`71b7b9be`) | Not downloaded; each file's is below |
 | [Highway](https://github.com/google/highway) | 1.2.0 | The SIMD code of the app's SSIMULACRA2 and Butteraugli engines (`core/src/ssimulacra2_kernels.cpp`, `core/src/butteraugli_kernels.cpp`), one build per CPU type, chosen when the app runs | Apache 2.0 or BSD 3-Clause (`highway/LICENSE`, `highway/LICENSE-BSD3`) | `highway-1.2.0.tar.gz` (2,233,645 bytes) from the 1.2.0 release, the version libjxl 0.12.0 builds with | `58e9d5d41d6573ad15245ad76aec53a69499ca7480c092d899c4424812ed906f` |
 | [miniz](https://github.com/richgel999/miniz) | 3.1.2 | The saved scores' .npz files: zip archives of deflated numpy arrays (`core/npz.h`) | MIT (`miniz/LICENSE`) | `miniz-3.1.2.zip` (101,958 bytes) from the 3.1.2 release | `f0446d863f9c19926ad9483c523fdc42e42b8d4a6a431d27e09d49c79a140d9a` |
+| [SQLite](https://sqlite.org) | 3.54.1 | The saved results' index (`core/saved_index.h`): one database the window and `vml-cli` share | Public domain (the notice at the top of `sqlite3.c`; no licence file) | `sqlite-amalgamation-3540100.zip` (2,990,966 bytes) from sqlite.org's download page | SHA3-256 (what sqlite.org publishes): `92281c86e2957f9b9305890f9ac04204caa7b677cc868dc326d942689df28e30` |
 
 Only what a build needs is kept: of GoogleTest, the `googletest` folder's
 `CMakeLists.txt`, `cmake`, `include` and `src` (no Google Mock, samples,
@@ -25,7 +27,10 @@ miniz, the release's single source file, its header and its licence (not
 its examples, change log or readme); of Highway, its two licences and the
 41 files of `hwy`: its headers and the four sources the build compiles
 (`abort.cc`, `per_target.cc`, `print.cc`, `targets.cc`), each identical to the file in `highway-1.2.0.tar.gz` (no contrib, tests,
-docs or build files). miniz is built without its file
+docs or build files). Of SQLite, the
+amalgamation's `sqlite3.c` and `sqlite3.h` (not its shell or extension
+header), built with the options SQLite recommends for an app that loads no
+extensions (CMakeLists.txt). miniz is built without its file
 functions (`MINIZ_NO_STDIO`): the app reads and writes the files itself, so
 that a path with any characters works on Windows. In a Release build with
 MSVC, what the app uses of it (reading and writing zip files, deflate both
@@ -38,6 +43,13 @@ miniz's files, each identical to the file in `miniz-3.1.2.zip`:
 | `miniz.c` | `e2c1aeb66eef9191d8c3feb164db2def2335a61d039bf04ed849f6b042433b30` |
 | `miniz.h` | `b53b62ed122e559b8f679e3cb787a0b0035fe87a58f909da0e44931678f4e85f` |
 | `LICENSE` | `0115478d567121238cf6cc1c0c361926cf07a49d9e4c9e66da97fac6a01646b3` |
+
+SQLite's files, each identical to the file in `sqlite-amalgamation-3540100.zip`:
+
+| File | SHA-256 |
+| --- | --- |
+| `sqlite3.c` | `0c657666d819f261cc4007526ad57e1669de9949df7a8ea847aa284a2bf0ee52` |
+| `sqlite3.h` | `d6c84557261893439b341d2e6c35187ae3ea24fbfd843ad94616f72d89242b8c` |
 
 libvmaf-fast's files, each identical to the file at `28776652` (and at `71b7b9be`):
 
@@ -57,6 +69,6 @@ has the same headers as long as the fork has not changed them since:
 `git diff 28776652 HEAD -- libvmaf/include` in the fork shows whether it
 has.
 
-nlohmann/json, miniz and Highway are compiled into the app, so they belong in the
+nlohmann/json, miniz, Highway and SQLite are compiled into the app, so they belong in the
 app's `docs/THIRD_PARTY.md` once the C++ app ships. GoogleTest is only in the
 tests. libvmaf itself already ships with the app and is listed there.
