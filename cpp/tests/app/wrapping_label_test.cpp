@@ -44,11 +44,16 @@ TEST(WrappingLabel, GrowsToItsTextAndKeepsItsHeightUntilCleared) {
     const int margins = window.width() - label->width();
     window.resize(label->fontMetrics().horizontalAdvance(QStringLiteral("PSNR-HVS")) + margins, 300);
     QApplication::processEvents();
+    // One line or more, told apart at half a line: a line of the joined text
+    // can be a pixel taller than an empty one where the joining characters
+    // come from another font (Qt's offscreen "Sans Serif" on macOS: 16 px
+    // against 15).
+    const int one_and_a_half_lines = one_line + label->fontMetrics().lineSpacing() / 2;
     label->set_text(score);
-    EXPECT_GT(label->height(), one_line);  // free to break, it does
+    EXPECT_GT(label->height(), one_and_a_half_lines);  // free to break, it does
     label->clear_text();
     label->set_text(WrappingLabel::unbroken(score));
-    EXPECT_EQ(label->height(), one_line);
+    EXPECT_LT(label->height(), one_and_a_half_lines);
     EXPECT_EQ(label->full_text(), score);
 }
 
