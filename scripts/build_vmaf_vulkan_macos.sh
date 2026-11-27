@@ -12,7 +12,7 @@
 # committed (.gitignore): the release script runs this.
 set -euo pipefail
 
-commit="ef89c2ffc851c9549a1e637344572a7751d37723"  # libvmaf-fast macos-port with fast 91c5553a merged, 2026-11-24
+commit="94f5513834461651e58c414e3386a1fee9104dd1"  # libvmaf-fast macos-port with fast 89788dd5 (MS-SSIM) and 9c7ff2f4 (vv_memory) merged, MS-SSIM's shaders built for MoltenVK, 2026-11-27
 
 project="$(cd "$(dirname "$0")/.." && pwd)"
 target="$project/resources/tools/vmaf_vulkan"
