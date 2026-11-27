@@ -327,26 +327,18 @@ TEST(Libvmaf, CambiWithItsOptionsAndCiedeOfIdenticalPicturesAreScored) {
 // engine's chroma planes are larger than libvmaf's), MS-SSIM at any size
 // unless MS-SSIM YUV stays on the CPU (which calculates its luma anyway),
 // CAMBI unless its test video is scored at another size or bit depth (options
-// the GPU does not take); PQ goes. No MS-SSIM on macOS (ms_ssim_on_gpu).
+// the GPU does not take); PQ goes.
 TEST(Libvmaf, OnlyTheCpuMetricsTheGpuCalculatesAsLibvmafGoToIt) {
     using Options = std::vector<std::pair<std::string, std::string>>;
     using Keys = std::vector<std::string>;
-    const auto and_ms_ssim = [](Keys keys, const Keys& ms_ssim) {
-        if (ms_ssim_on_gpu) {
-            keys.insert(keys.end(), ms_ssim.begin(), ms_ssim.end());
-        }
-        return keys;
-    };
     const Keys metrics{"psnr", "ciede2000", "ms_ssim", "cambi"};
-    EXPECT_EQ(gpu_metrics_of(metrics, false, Options{{"eotf", "pq"}}),
-              and_ms_ssim({"ciede2000", "cambi"}, {"ms_ssim"}));
-    EXPECT_EQ(gpu_metrics_of(metrics, true, {}), and_ms_ssim({"cambi"}, {"ms_ssim"}));
-    EXPECT_EQ(gpu_metrics_of(metrics, false, Options{{"enc_bitdepth", "8"}}),
-              and_ms_ssim({"ciede2000"}, {"ms_ssim"}));
+    EXPECT_EQ(gpu_metrics_of(metrics, false, Options{{"eotf", "pq"}}), (Keys{"ciede2000", "cambi", "ms_ssim"}));
+    EXPECT_EQ(gpu_metrics_of(metrics, true, {}), (Keys{"cambi", "ms_ssim"}));
+    EXPECT_EQ(gpu_metrics_of(metrics, false, Options{{"enc_bitdepth", "8"}}), (Keys{"ciede2000", "ms_ssim"}));
     EXPECT_EQ(gpu_metrics_of(metrics, false, Options{{"enc_height", "1080"}, {"enc_width", "1920"}}),
-              and_ms_ssim({"ciede2000"}, {"ms_ssim"}));
+              (Keys{"ciede2000", "ms_ssim"}));
     const Keys yuv{"psnr", "ms_ssim", "ms_ssim_yuv", "ms_ssim_yuv_u"};
-    EXPECT_EQ(gpu_metrics_of(yuv, false, {}), and_ms_ssim({}, {"ms_ssim", "ms_ssim_yuv", "ms_ssim_yuv_u"}));
+    EXPECT_EQ(gpu_metrics_of(yuv, false, {}), (Keys{"ms_ssim", "ms_ssim_yuv", "ms_ssim_yuv_u"}));
     EXPECT_TRUE(gpu_metrics_of(yuv, true, {}).empty());
     EXPECT_TRUE(gpu_metrics_of({"psnr", "ssim", "psnr_hvs"}, false, {}).empty());
 }

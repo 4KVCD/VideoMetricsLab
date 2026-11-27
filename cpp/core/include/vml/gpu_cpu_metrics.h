@@ -19,27 +19,18 @@
 
 namespace vml {
 
-// Whether MS-SSIM and MS-SSIM YUV have their GPU route. Not on macOS, where
-// MoltenVK ran it about 8x slower than the CPU (an M1 Pro: 2.13 against 16.9
-// fps at 4K, 8.46 against 62.95 at 1080p).
-#ifdef __APPLE__
-inline constexpr bool ms_ssim_on_gpu = false;
-#else
-inline constexpr bool ms_ssim_on_gpu = true;
-#endif
-
 // Which of `metrics` (CpuScorer's keys) the GPU may calculate: CIEDE2000
 // and MS-SSIM YUV with its planes unless the size is odd (the engine copies
 // chroma planes (w + 1) / 2 x (h + 1) / 2, libvmaf's pictures hold w / 2 x
 // h / 2), MS-SSIM unless MS-SSIM YUV stays on the CPU (libvmaf calculates its
 // luma in the same pass), and CAMBI where the GPU takes all of its libvmaf
 // options (`cambi_options`: not a test video scored at another size or bit
-// depth). MS-SSIM and MS-SSIM YUV only where ms_ssim_on_gpu.
+// depth).
 std::vector<std::string> gpu_metrics_of(const std::vector<std::string>& metrics, bool odd_size,
                                         const std::vector<std::pair<std::string, std::string>>& cambi_options);
 
 // Whether `key` is one of the CPU metrics the Vulkan engine may calculate (gpu_metrics_of): CIEDE2000, CAMBI,
-// MS-SSIM, and MS-SSIM YUV with its planes (those two where ms_ssim_on_gpu).
+// MS-SSIM, and MS-SSIM YUV with its planes.
 bool engine_takes_cpu_metric(std::string_view key);
 
 // Which of `keys` (CpuScorer's) may go to the GPU, in `keys`' order: gpu_metrics_of's with `extra_gpu_offered` (the
