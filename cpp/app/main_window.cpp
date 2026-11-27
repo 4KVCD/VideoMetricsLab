@@ -307,12 +307,8 @@ MainWindow::MainWindow() {
         QMetaObject::invokeMethod(this, [this] { on_vship_checked(); }, Qt::QueuedConnection);
     });
     // The saved scores' lookups (restore_open_videos' first of them) know a
-    // remuxed reference from the start: with the tools Settings name now,
-    // set again wherever the tools are checked (check_ffmpeg).
-    const std::string ffmpeg = find_tool("ffmpeg", settings_);
-    const std::string ffprobe = find_tool("ffprobe", settings_);
-    set_video_fingerprinter(fingerprinter_using(ffmpeg, ffprobe));
-    use_stream_fingerprinter(ffmpeg, ffprobe);
+    // remuxed reference from the start: check_ffmpeg, above, gave them the
+    // tools Settings name now.
     restore_open_videos();
     on_table_selection_changed();
 }

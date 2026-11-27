@@ -25,6 +25,7 @@
 #include "vml/analysis_request.h"
 #include "vml/cancel.h"
 #include "vml/cvvdp.h"
+#include "vml/ffprobe.h"
 #include "vml/results.h"
 #include "vml/video.h"
 
@@ -139,10 +140,12 @@ protected:
 
 private:
     // A video whose rate is sampled once every video has been read, with the
-    // size and time its file had when it was read.
+    // size and time its file had when it was read and what ffprobe read of
+    // it then, so that the sample does not read its streams again.
     struct RateToSample {
         std::filesystem::path file;
         std::pair<std::uintmax_t, std::optional<long long>> stamp;
+        ProbeForRateSample read;
     };
 
     void look_up(const QString& path);

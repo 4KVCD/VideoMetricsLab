@@ -823,17 +823,15 @@ bool needs_rate_sample(const VideoInfo& info) {
     return (info.bit_rate_whole_file || info.bit_rate_estimated) && !info.is_raw_stream();
 }
 
-std::optional<VideoInfo> sampled_video_rate(const std::filesystem::path& path, const std::string& ffprobe,
-                                            const CancelToken& cancel) {
+std::optional<VideoInfo> sampled_video_rate(const std::filesystem::path& path, const ProbeForRateSample& read,
+                                            const std::string& ffprobe, const CancelToken& cancel) {
     if (is_av2_file(path)) {
         return std::nullopt;  // ffprobe cannot read AV2
     }
     try {
-        const std::string probe = format_and_streams(path, ffprobe, cancel);
-        const std::optional<std::string> writer = matroska_writing_app(path);
-        const VideoInfo info = video_info_from_probe(path, probe, std::nullopt, writer);
+        const VideoInfo info = video_info_from_probe(path, read.probe, std::nullopt, read.writer);
         if (const std::optional<PacketSample> sample = sampled_packets(path, info.bit_rate, ffprobe, cancel)) {
-            return video_info_from_probe(path, probe, sample, writer);
+            return video_info_from_probe(path, read.probe, sample, read.writer);
         }
     } catch (const ProbeError&) {
         // The file changed or went since it was read: its rate stays.
@@ -842,7 +840,7 @@ std::optional<VideoInfo> sampled_video_rate(const std::filesystem::path& path, c
 }
 
 VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffprobe, const CancelToken& cancel,
-                      RateSample rate_sample) {
+                      RateSample rate_sample, ProbeForRateSample* for_sample) {
     if (is_av2_file(path)) {
         return probe_av2(path, cancel);  // ffprobe cannot read AV2
     }
@@ -857,6 +855,8 @@ VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffpr
         if (const std::optional<PacketSample> sample = sampled_packets(path, info.bit_rate, ffprobe, cancel)) {
             info = video_info_from_probe(path, probe, sample, writer);
         }
+    } else if (for_sample != nullptr && needs_rate_sample(info)) {
+        *for_sample = {probe, writer};
     }
     if (stamped_in_decoding_order(info, probe, ffprobe, cancel)) {
         throw ProbeError(text(path) +

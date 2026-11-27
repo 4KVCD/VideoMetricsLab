@@ -5,6 +5,8 @@
 #include <chrono>
 #include <filesystem>
 #include <future>
+#include <map>
+#include <mutex>
 #include <regex>
 #include <sstream>
 #include <string>
@@ -122,7 +124,10 @@ std::vector<std::filesystem::path> mac_preferred_ffmpeg_folders() {
 }
 #endif
 
-std::string find_tool(std::string_view name, const Settings& settings) {
+namespace {
+
+// find_tool's search, without what it remembers.
+std::string locate_tool(std::string_view name, const Settings& settings) {
     const std::string program = platform::executable_name(name);
     if (const std::optional<std::filesystem::path> folder = settings.ffmpeg_dir_path()) {
         if (const std::filesystem::path candidate = *folder / platform::path_from_text(program); is_file(candidate)) {
@@ -145,6 +150,40 @@ std::string find_tool(std::string_view name, const Settings& settings) {
         }
     }
     return std::string(name);
+}
+
+// What find_tool found, by the tool's name and the Settings folder it was
+// looked for with: each search goes through every folder on the PATH, and
+// the window starts a reading of videos with both tools each time videos
+// are added. Kept until the tools are checked again (check_tools).
+struct FoundTools {
+    std::mutex mutex;
+    std::map<std::pair<std::string, std::string>, std::string> paths;
+};
+
+FoundTools& found_tools() {
+    static FoundTools found;
+    return found;
+}
+
+}  // namespace
+
+std::string find_tool(std::string_view name, const Settings& settings) {
+    FoundTools& found = found_tools();
+    std::pair<std::string, std::string> key{std::string(name), settings.ffmpeg_dir};
+    {
+        const std::scoped_lock lock(found.mutex);
+        if (const auto known = found.paths.find(key);
+            known != found.paths.end() && is_file(platform::path_from_text(known->second))) {
+            return known->second;  // still there
+        }
+    }
+    std::string path = locate_tool(name, settings);
+    if (path != name) {  // a tool not found is looked for again: it may be installed meanwhile
+        const std::scoped_lock lock(found.mutex);
+        found.paths[std::move(key)] = path;
+    }
+    return path;
 }
 
 std::optional<std::vector<int>> parse_version(std::string_view version_output) {
@@ -226,6 +265,13 @@ ToolStatus check_tool(std::string_view name, const Settings& settings) {
 }
 
 ToolsStatus check_tools(const Settings& settings) {
+    // Looked for afresh: a check follows a change of the tools (Settings'
+    // folder, a tool installed or pointed at).
+    {
+        FoundTools& found = found_tools();
+        const std::scoped_lock lock(found.mutex);
+        found.paths.clear();
+    }
     // Both at once: the window waits for them as it opens, and each may take
     // up to tool_check_timeout.
     std::future<ToolStatus> ffprobe =

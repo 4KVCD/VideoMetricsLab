@@ -73,8 +73,17 @@ VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffpr
 // is the file's, or the file's less the audio's stated rates (marked as an
 // estimate either way), until sampled_video_rate gives it.
 enum class RateSample { now, later };
+// What sampled_video_rate takes of a video's reading with RateSample::later:
+// ffprobe's report of its format and streams and its Matroska writing app,
+// so that the sample reads only the packets, not the file's streams again.
+struct ProbeForRateSample {
+    std::string probe;
+    std::optional<std::string> writer;
+};
+// `for_sample`: where given, filled for sampled_video_rate when the video
+// needs_rate_sample (RateSample::later).
 VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffprobe, const CancelToken& cancel,
-                      RateSample sample = RateSample::now);
+                      RateSample sample = RateSample::now, ProbeForRateSample* for_sample = nullptr);
 
 // Whether a video read with RateSample::later has a better rate to be had
 // from sampled_video_rate: its own rate is not stated, and it is not a raw
@@ -83,10 +92,10 @@ bool needs_rate_sample(const VideoInfo& info);
 
 // The video's details with the rate RateSample::now gives (only the rate is
 // meant to be taken from them: VideoInfo::take_bit_rate), or nothing where the
-// packets cannot be read and the rate stays as it was. Throws Cancelled once
-// cancelled.
-std::optional<VideoInfo> sampled_video_rate(const std::filesystem::path& path, const std::string& ffprobe,
-                                            const CancelToken& cancel);
+// packets cannot be read and the rate stays as it was. `read`: from the
+// video's probe_video. Throws Cancelled once cancelled.
+std::optional<VideoInfo> sampled_video_rate(const std::filesystem::path& path, const ProbeForRateSample& read,
+                                            const std::string& ffprobe, const CancelToken& cancel);
 
 // The frame rate a raw stream of `codec_name` stores in its headers, given
 // what ffprobe reports of it (r_frame_rate) when told to read the stream at a

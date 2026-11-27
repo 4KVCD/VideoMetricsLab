@@ -42,7 +42,8 @@ inline const std::vector<int> minimum_ffmpeg_version{9};
 // in common install folders (a newly installed winget package is not on the
 // PATH of programs already running; on macOS, Homebrew's folder is not on the
 // PATH of an app the Finder opens); else the bare name, in case it is on the
-// PATH by the time it runs.
+// PATH by the time it runs. What it finds is remembered (while the file is
+// there) until the tools are next checked (check_tools). Thread-safe.
 std::string find_tool(std::string_view name, const Settings& settings);
 
 // On macOS, the folders find_tool looks in after the PATH, separated by ':',

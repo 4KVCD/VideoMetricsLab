@@ -69,12 +69,13 @@ void ProbeWorker::run() {
             const auto stamp = file_stamp(file);
             // The rate's sample waits until every video has been read: a
             // row's details, and the saved scores' lookup, do not wait for it.
-            result.info = probe_video(file, ffprobe_, cancel_, RateSample::later);
+            ProbeForRateSample for_sample;
+            result.info = probe_video(file, ffprobe_, cancel_, RateSample::later, &for_sample);
             if (result.info->is_raw_stream()) {
                 result.info = raw_stream_as_found(*std::move(result.info), ffprobe_, cancel_);
             }
             if (scan_ == StreamScan::every_codec && needs_rate_sample(*result.info)) {
-                rates_to_sample.push_back({file, stamp});
+                rates_to_sample.push_back({file, stamp, std::move(for_sample)});
             }
             if (!ffmpeg_.empty() &&
                 (scan_ == StreamScan::every_codec || ascii_lower(result.info->codec_name) == "h264")) {
@@ -104,7 +105,7 @@ void ProbeWorker::estimate_rates(const std::vector<RateToSample>& videos) {
             return;
         }
         try {
-            std::optional<VideoInfo> estimate = sampled_video_rate(video.file, ffprobe_, cancel_);
+            std::optional<VideoInfo> estimate = sampled_video_rate(video.file, video.read, ffprobe_, cancel_);
             if (estimate && file_stamp(video.file) == video.stamp) {
                 emit rate_estimated({*std::move(estimate)});
             }
