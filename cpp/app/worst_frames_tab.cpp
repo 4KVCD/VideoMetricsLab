@@ -647,6 +647,15 @@ void WorstFramesTab::set_videos(std::vector<WeakFramesVideo> videos) {
                    return score_samples(video.result->metric_results, std::string(m.key)).has_value();
                });
     });
+    // The lines listed already, each with the same result and names (the
+    // tab opened again with nothing new): the list, the chosen video and
+    // its lists stay as they are, not built again (30 ms with 41 videos).
+    const auto same_line = [](const WeakFramesVideo& a, const WeakFramesVideo& b) {
+        return a.identity == b.identity && a.result == b.result && a.label == b.label && a.shown == b.shown;
+    };
+    if (!videos_.empty() && std::equal(videos.begin(), videos.end(), videos_.begin(), videos_.end(), same_line)) {
+        return;
+    }
     std::set<std::string> listed;  // the lines listed before
     for (const WeakFramesVideo& video : videos_) {
         listed.insert(video.identity);
