@@ -242,7 +242,9 @@ void MainWindow::apply_metric_selection(const std::vector<int>& rows, int column
         // Saved as the default too, the same setting as Settings > Default
         // metrics.
         *settings_.default_compute(key) = checked;
-        settings_panel_->show_default_metric(key, checked);
+        if (settings_panel_ != nullptr) {
+            settings_panel_->show_default_metric(key, checked);
+        }
         save_settings();
     }
     reload_saved_scores(rows);

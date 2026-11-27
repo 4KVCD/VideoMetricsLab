@@ -1,5 +1,6 @@
 // The window's side of the Video Compare tab: which pairs it lists, and where
 // black bars found are kept.
+#include <QTimer>
 #include <QtGlobal>
 
 #include <algorithm>
@@ -47,6 +48,7 @@ void MainWindow::sync_frame_compare() {
     // before a feature-length calculation. Metric Graphs lists its lines in
     // the table's order too: called after every change to the rows, this
     // keeps both in step with it.
+    frame_compare_sync_due_ = false;
     std::vector<FrameComparisonEntry> entries;
     std::vector<std::string> graph_order;
     for (const std::shared_ptr<RowData>& row_data : rows_) {
@@ -60,6 +62,18 @@ void MainWindow::sync_frame_compare() {
     frame_compare_panel_->set_runs(std::move(entries));
     graph_panel_->set_order(std::move(graph_order));
     open_videos_changed();  // the rows removed, reordered or given a new reference
+}
+
+void MainWindow::sync_frame_compare_soon() {
+    if (frame_compare_sync_due_) {
+        return;
+    }
+    frame_compare_sync_due_ = true;
+    QTimer::singleShot(0, this, [this] {
+        if (frame_compare_sync_due_) {
+            sync_frame_compare();
+        }
+    });
 }
 
 std::optional<FrameComparisonEntry> MainWindow::frame_comparison_entry(const RowData& row_data) const {

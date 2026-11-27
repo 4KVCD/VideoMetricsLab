@@ -129,14 +129,18 @@ void MainWindow::build_export_panel() {
         if (!chosen.isEmpty()) {
             settings_.export_dir = platform::path_text(path_of(chosen));
             save_settings();
-            settings_panel_->show_export_choices();
+            if (settings_panel_ != nullptr) {
+                settings_panel_->show_export_choices();
+            }
         }
         export_panel_->open_under(tab_export_button_);
     };
     export_panel_->choices_changed = [this] {
         // The panel's ticks are Settings' Exports include itself.
         save_settings();
-        settings_panel_->show_export_choices();
+        if (settings_panel_ != nullptr) {
+            settings_panel_->show_export_choices();
+        }
     };
     export_panel_->tab_save = [this] { return tab_save(); };
     export_panel_->export_videos = [this](bool selection) { export_from_panel(selection); };

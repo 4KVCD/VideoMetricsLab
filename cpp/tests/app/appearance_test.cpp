@@ -424,7 +424,7 @@ TEST_F(Appearance, DropDownsInModern) {
     EXPECT_GE(chevron, arrow.left() + 2);
     EXPECT_EQ(drawn.pixelColor(arrow.center().x(), arrow.top() + 1), background);
     // Its icon: painted, sharp at any scale, in the colour its name gives.
-    const QPixmap red = QIcon(QStringLiteral("chevron-down-ff0000.vmlchevron")).pixmap(QSize(20, 12), 1.5);
+    const QPixmap red = QIcon(QStringLiteral(":/chevron-down-ff0000.vmlchevron")).pixmap(QSize(20, 12), 1.5);
     ASSERT_FALSE(red.isNull());
     const QImage red_image = red.toImage();
     EXPECT_EQ(red_image.pixelColor(red_image.width() / 2, red_image.height() * 3 / 4).red(), 255);

@@ -1635,8 +1635,12 @@ void RemoveMarkDelegate::track_hover(QAbstractItemView* view) {
     view->viewport()->setMouseTracking(true);
 }
 
-QSize RemoveMarkDelegate::sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const {
-    return {mark + 12, std::max(mark + 6, QStyledItemDelegate::sizeHint(option, index).height())};
+QSize RemoveMarkDelegate::sizeHint(const QStyleOptionViewItem& option, const QModelIndex&) const {
+    // The cell's text, never drawn, is not measured either: Metric Graphs'
+    // "✕" (Segoe UI has no such letter) sent Qt through the PC's fonts for
+    // one, a quarter of a second the first time and some 20 MB. A line of
+    // the cell's font is as tall as the text was.
+    return {mark + 12, std::max(mark + 6, option.fontMetrics.height())};
 }
 
 bool RemoveMarkDelegate::helpEvent(QHelpEvent* event, QAbstractItemView* view, const QStyleOptionViewItem& option,

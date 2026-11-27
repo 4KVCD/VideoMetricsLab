@@ -1073,8 +1073,11 @@ QColor modern_colour(const char* name, bool dark) {
 namespace {
 // The style sheet's image for a chevron pointing `up` or down in `colour`:
 // painted by the app's own icon engine (chevron_icons.cpp), not a file.
+// Named in the app's resources (":/"), where no file is looked for on disk:
+// a plain name sent Qt looking for it there under each image suffix, for
+// every rule naming it, as the window was styled.
 QString chevron_icon(bool up, const QColor& colour) {
-    return QStringLiteral("chevron-%1-%2.vmlchevron").arg(up ? "up" : "down", colour.name(QColor::HexRgb).mid(1));
+    return QStringLiteral(":/chevron-%1-%2.vmlchevron").arg(up ? "up" : "down", colour.name(QColor::HexRgb).mid(1));
 }
 }  // namespace
 

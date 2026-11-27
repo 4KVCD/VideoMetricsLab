@@ -95,6 +95,7 @@ class Notifier;
 class OptionsPanel;
 class QuietTabWidget;
 class RunWorker;
+class ScrollingPage;
 class SettingsPanel;
 class UpdateOffer;
 class TitleBar;
@@ -382,9 +383,17 @@ private:
     // in the table keep what they were given.
     void on_default_settings_changed();
 
+    // The Settings tab's panel, built the first time it is wanted: its tab
+    // opened, one of its sections asked for, or a theme chosen in the title
+    // bar. Its hundreds of controls took a tenth of the window's start-up.
+    SettingsPanel& settings_panel();
+
     // ------------------------------------------------------- Video Compare
     // Makes Video Compare list every row it can show, scored or not.
     void sync_frame_compare();
+    // The same, once the events already queued have been handled: saved
+    // scores arrive a row at a time, and each sync goes over every row.
+    void sync_frame_compare_soon();
     // A row's entry in Video Compare; nothing while it cannot be shown.
     std::optional<FrameComparisonEntry> frame_comparison_entry(const RowData& row_data) const;
     // Keeps the black bars found in the saved scores' folder now named.
@@ -916,6 +925,7 @@ private:
     int run_number_ = 0;  // counts runs: a run's saved-scores folders, told later, are its own (set_run_ui_active)
     bool defaults_changed_in_run_ = false;  // Settings' defaults changed during a run: applied as it ends
     bool closing_ = false;
+    bool frame_compare_sync_due_ = false;  // sync_frame_compare_soon asked, not yet done
     // Since the window was first asked to close: a notification still being
     // sent holds the close this long at most (notification_close_wait_ms).
     QElapsedTimer close_clock_;
@@ -1097,7 +1107,10 @@ private:
     bool run_waits_for_saved_scores_ = false;
     // The Settings tab, and the latest check of FFmpeg, which it shows.
     SavedResultsPanel* saved_results_panel_ = nullptr;
+    // Built when first wanted (settings_panel()): nullptr until then. What
+    // only shows the settings in it waits, as building it reads them.
     SettingsPanel* settings_panel_ = nullptr;
+    ScrollingPage* settings_page_ = nullptr;
     ToolsStatus tools_status_;
     // The rows ticked when the run started, those already scored too: their
     // results go to the graph when it ends.

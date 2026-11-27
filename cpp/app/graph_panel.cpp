@@ -25,6 +25,7 @@
 #include <limits>
 #include <set>
 #include <tuple>
+#include <utility>
 
 #include "chart.h"
 #include "export_image.h"
@@ -526,6 +527,21 @@ bool MetricPage::erase_curves(const std::vector<int>& series_ids) {
     return true;
 }
 
+void MetricPage::end_batch() {
+    if (--batch_depth_ > 0) {
+        return;
+    }
+    if (std::exchange(fit_due_, false)) {
+        fit_hover_label();
+    }
+    if (std::exchange(difference_due_, false)) {
+        refresh_difference();
+    }
+    if (std::exchange(highlight_due_, false)) {
+        refresh_highlight();
+    }
+}
+
 void MetricPage::renumber(const std::map<int, int>& renumbered) {
     std::map<int, MetricCurve> curves;
     for (auto& [id, curve] : curves_) {
@@ -582,6 +598,10 @@ std::optional<std::pair<int, int>> MetricPage::difference_pair() const {
 }
 
 void MetricPage::refresh_difference() {
+    if (batch_depth_ > 0) {
+        difference_due_ = true;
+        return;
+    }
     const auto pair = difference_on_ ? difference_pair() : std::nullopt;
     if (!pair) {
         chart_->set_band(std::nullopt);
@@ -607,6 +627,10 @@ void MetricPage::refresh_highlight() {
     // From the shown lines with points among the frames, together: the runs
     // of one video share its times, a shorter line reaches only part of the
     // range, and a subsampled one without a point there is passed over.
+    if (batch_depth_ > 0) {
+        highlight_due_ = true;
+        return;
+    }
     std::optional<std::pair<double, double>> seconds;
     if (selected_frames_) {
         for (const auto& [id, curve] : curves_) {
@@ -659,6 +683,10 @@ void MetricPage::fit_hover_label() {
     // The readout sized to the widest and tallest text it can show, from the
     // lines now: fixed, it cut off long names; sized at each hover, it laid
     // the tab out again each time.
+    if (batch_depth_ > 0) {
+        fit_due_ = true;
+        return;
+    }
     refresh_readout_layout();
     rows_ = readout_rows();
     const QFontMetrics metrics(readout_font_);
@@ -1318,8 +1346,7 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     // The tabs and the statistics' means in the metrics' new order.
     connect(&metric_order_signal(), &MetricOrderSignal::changed, this, [this] {
         if (!entries_.empty()) {
-            select_available_metric();
-            refresh_stats_table();
+            view_changed();
         }
     });
     connect(colors_, &VideoColors::changed, this,
@@ -1509,6 +1536,7 @@ void GraphPanel::build_current_page() {
     tabs_->setCurrentIndex(index);
     tabs_->blockSignals(blocked);
     // The runs already shown: lines are added only to the pages there are.
+    const MetricPage::Batch batch(*page);
     for (const auto& [id, entry] : entries_) {
         page->set_curve(id, entry);
     }
@@ -1516,10 +1544,7 @@ void GraphPanel::build_current_page() {
 
 void GraphPanel::set_preferred_metric(const std::string& key) {
     preferred_metric_ = find_metric(key) != nullptr ? key : "vmaf";
-    if (select_available_metric()) {
-        refresh_stats_table();
-        refresh_page_controls();
-    }
+    view_changed();
 }
 
 void GraphPanel::update_metric_hint() {
@@ -1817,9 +1842,11 @@ void GraphPanel::on_video_color_changed(const QString& path_key, const QColor& c
             for (const auto& [key, page] : pages_) {
                 page->chart().set_series_color(id, color);
             }
-            QTableWidgetItem* item = series_name_item(entry);
-            item->setData(Qt::UserRole, id);
-            stats_table_->setItem(row, 0, item);
+            if (!view_stale_) {  // a table behind the lines is filled again from them (refresh_view)
+                QTableWidgetItem* item = series_name_item(entry);
+                item->setData(Qt::UserRole, id);
+                stats_table_->setItem(row, 0, item);
+            }
         }
         ++row;
     }
@@ -1952,26 +1979,56 @@ bool GraphPanel::add_series(const Run& run) {
         existing.name = name;
         existing.means = metric_means(*run.result);
         existing.identical = identical_frame_counts(*run.result);
-        for (const auto& [key, page] : pages_) {
-            page->set_curve(id, existing);
-        }
+        existing.drawn = false;  // drawn again on the pages by refresh_view
         return true;
     }
     const int id = next_id_++;
     SeriesEntry entry{run.result, label, color, true, identity, metric_means(*run.result),
                       identical_frame_counts(*run.result)};
-    for (const auto& [key, page] : pages_) {
-        page->set_curve(id, entry);
-    }
     entry.name = name;
     entries_.emplace(id, std::move(entry));
     return true;
 }
 
 void GraphPanel::series_changed() {
+    // The lines' order and names at once, as runs() gives them; the view
+    // that shows them may wait.
     apply_order();
-    select_available_metric();
     refresh_shown_names();
+    view_changed();
+}
+
+void GraphPanel::view_changed() {
+    view_stale_ = true;
+    if (isVisible()) {
+        refresh_view();
+    }
+}
+
+void GraphPanel::refresh_view() {
+    // Hidden, the tab leaves all of this for when it is shown: at start-up,
+    // each saved result found laid the table out again and sized every
+    // page's readout for every line (more than a fifth of the window's
+    // start-up with 41 videos).
+    if (!view_stale_) {
+        return;
+    }
+    view_stale_ = false;
+    for (const auto& [key, page] : pages_) {
+        const MetricPage::Batch batch(*page);
+        for (const auto& [id, entry] : entries_) {
+            if (entry.drawn) {
+                page->set_label(id, shown_label(entry));
+            } else {
+                page->set_curve(id, entry);
+            }
+        }
+    }
+    for (auto& [id, entry] : entries_) {
+        entry.drawn = true;
+    }
+    // After the lines: a page this builds draws every line itself.
+    select_available_metric();
     refresh_stats_table();
     refresh_page_controls();
     // A readout shown tells the lines as they are now, a line added or given
@@ -1981,10 +2038,15 @@ void GraphPanel::series_changed() {
     }
 }
 
+void GraphPanel::showEvent(QShowEvent* event) {
+    QWidget::showEvent(event);
+    refresh_view();
+}
+
 void GraphPanel::set_order(std::vector<std::string> identities) {
     order_ = std::move(identities);
     if (apply_order()) {
-        refresh_stats_table();
+        view_changed();
     }
 }
 
@@ -2100,16 +2162,14 @@ void GraphPanel::remove_runs(const std::vector<int>& series_ids, bool suppress) 
             page->set_selected_frames(std::nullopt);
         }
     }
-    select_available_metric();
     refresh_shown_names();
-    refresh_stats_table();
-    refresh_page_controls();
+    view_changed();
 }
 
 void GraphPanel::set_video_name_rule(const VideoNameRule& rule) {
     name_rule_ = rule;
     refresh_shown_names();
-    refresh_stats_table();
+    view_changed();
 }
 
 void GraphPanel::refresh_shown_names() {
@@ -2126,9 +2186,6 @@ void GraphPanel::refresh_shown_names() {
         entry.shown = entry.name.isEmpty() || entry.label == entry.name
                           ? name
                           : app::tr("{name} (without film grain)", {{"name", name}});
-        for (const auto& [key, page] : pages_) {
-            page->set_label(id, entry.shown);
-        }
     }
 }
 
@@ -2150,7 +2207,7 @@ void GraphPanel::set_visible(int series_id, bool visible) {
     }
 }
 
-void GraphPanel::refresh_theme() { refresh_stats_table(); }
+void GraphPanel::refresh_theme() { view_changed(); }
 
 bool GraphPanel::wait_until_file_writes_idle(std::chrono::milliseconds timeout) {
     return file_writes_->wait_until_idle(timeout);
@@ -2307,6 +2364,7 @@ QString GraphPanel::export_title() const {
 
 QPixmap GraphPanel::render_export_image(const QString& title) {
     // The chart with its title, and the lines' statistics keyed by colour.
+    refresh_view();  // drawn while the tab is hidden too (the tab bar's Export panel)
     return export_image(pages_.at(std::string(current_metric().key))->chart(),
                         title.isEmpty() ? export_title() : title, export_table(), font(),
                         export_colours ? export_colours() : theme::chart_colours(false));
@@ -2315,6 +2373,7 @@ QPixmap GraphPanel::render_export_image(const QString& title) {
 QPixmap GraphPanel::render_export_image(const std::string& key, const std::vector<std::string>& identities,
                                         QSize size) {
     // Only a metric with a tab: one a line has scores of (scored_metrics).
+    refresh_view();  // drawn while the tab is hidden too (graph_bundle.h)
     const auto metric = std::find_if(shown_metrics_.begin(), shown_metrics_.end(),
                                      [&key](const MetricDefinition* each) { return each->key == key; });
     if (metric == shown_metrics_.end()) {
@@ -2576,7 +2635,8 @@ std::optional<std::pair<int, int>> GraphPanel::shown_difference_pair() const {
     return page == pages_.end() ? std::nullopt : page->second->difference_pair();
 }
 
-std::vector<std::string> GraphPanel::selected_identities() const {
+std::vector<std::string> GraphPanel::selected_identities() {
+    refresh_view();  // the table's rows as the lines are now
     std::set<int> rows;
     for (const QModelIndex& index : stats_table_->selectionModel()->selectedIndexes()) {
         rows.insert(index.row());

@@ -35,7 +35,7 @@ void MainWindow::on_tab_changed(int index) {
     } else if (index == tab_saved_results) {
         saved_results_panel_->refresh();
     } else if (index == tab_settings) {
-        settings_panel_->refresh_status();
+        settings_panel().refresh_status();  // built the first time it is opened
     }
     // Its save icons greyed or not for what it shows now: what they save
     // may have changed while another tab was open.

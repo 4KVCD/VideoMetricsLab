@@ -380,7 +380,7 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
     const std::shared_ptr<CompletedRun>& shown = row_data.completed_run;
     graph_panel_->add_run({std::shared_ptr<const ComparisonResult>(shown, &shown->result), shown->label,
                            shown->graph_identity, previous == nullptr});
-    sync_frame_compare();
+    sync_frame_compare_soon();
 }
 
 void MainWindow::on_other_displays_found(int generation, const OtherDisplaysFound& found) {

@@ -427,7 +427,9 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         if (answer->dont_ask_again) {
             settings_.confirm_close_during_run = false;
             save_settings();
-            settings_panel_->show_confirm_close();
+            if (settings_panel_ != nullptr) {
+                settings_panel_->show_confirm_close();
+            }
         }
     }
     // Don't close while background work still writes into the widgets: it
@@ -777,7 +779,9 @@ void MainWindow::build_ui() {
         store_segment_profile(settings_, profile, rules);
         save_settings();
         worst_tab_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
-        settings_panel_->show_weak_segment_rules();
+        if (settings_panel_ != nullptr) {
+            settings_panel_->show_weak_segment_rules();
+        }
     });
     connect(worst_tab_, &WorstFramesTab::count_changed, this, [this](int count) {
         settings_.graph_worst_frames = count;
@@ -904,27 +908,6 @@ void MainWindow::build_ui() {
     bd_rate_panel_->export_report = report;
     bd_rate_panel_->quick_saves = quick_saves;
     tabs_->addTab(new ScrollingPage(bd_rate_panel_), app::tr("BD-rate"));
-    settings_panel_ = new SettingsPanel(settings_, *file_writes_, [this] { return tools_status_; }, dialogs_);
-    settings_panel_->notify = [this](const QString& text, ExportIndicator::Note kind) {
-        export_indicator_->show_note(text, kind);
-    };
-    settings_panel_->report_export = [this](const ExportOutcome& outcome) { export_indicator_->show_outcome(outcome); };
-    connect(settings_panel_, &SettingsPanel::restart_needed, this, [this](const QString& what) { offer_restart(what); });
-    connect(settings_panel_, &SettingsPanel::defaults_changed, this, [this] { on_default_settings_changed(); });
-    connect(settings_panel_, &SettingsPanel::decoded_videos_changed, frame_compare_panel_,
-            &FrameComparePanel::set_decoded_videos);
-    connect(settings_panel_, &SettingsPanel::ffmpeg_folder_changed, this, [this] { check_ffmpeg(false); });
-    connect(settings_panel_, &SettingsPanel::saved_results_cleared, this, [this] { on_saved_results_cleared(); });
-    connect(settings_panel_, &SettingsPanel::video_names_changed, this, [this] {
-        graph_panel_->set_video_name_rule(video_name_rule(settings_));
-        frame_compare_panel_->set_video_name_rule(video_name_rule(settings_));
-        if (tabs_->currentWidget() == worst_tab_) {
-            sync_worst_frames();  // else when it is next opened
-        }
-    });
-    connect(settings_panel_, &SettingsPanel::weak_segment_rules_changed, this, [this] {
-        worst_tab_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
-    });
     saved_results_panel_ = new SavedResultsPanel(settings_, dialogs_, *file_writes_);
     saved_results_panel_->quick_formats = [this] { return quick_formats(settings_); };
     // The Videos tab's own check of a saved score, with the settings as a new
@@ -1010,24 +993,61 @@ void MainWindow::build_ui() {
             [this](SavedResultsPanel::Export kind, const std::vector<LoadedSavedResult>& results) {
                 export_saved_results(kind, results);
             });
-    connect(saved_results_panel_, &SavedResultsPanel::deleted, this, [this] { settings_panel_->refresh_status(); });
+    connect(saved_results_panel_, &SavedResultsPanel::deleted, this, [this] {
+        if (settings_panel_ != nullptr) {
+            settings_panel_->refresh_status();
+        }
+    });
     connect(saved_results_panel_, &SavedResultsPanel::columns_changed, this, [this] {
         settings_.saved_results_column_widths = saved_results_panel_->column_widths();
         settings_.saved_results_hidden_columns = saved_results_panel_->hidden_columns();
         save_settings();
     });
-    connect(settings_panel_, &SettingsPanel::saved_scores_changed, saved_results_panel_,
-            &SavedResultsPanel::scores_settings_changed);
     tabs_->addTab(new ScrollingPage(saved_results_panel_), app::tr("Saved Results"));
-    auto* settings_page = new ScrollingPage(settings_panel_);
-    tabs_->addTab(settings_page, app::tr("Settings"));
-    connect(saved_results_panel_, &SavedResultsPanel::scores_settings_requested, this, [this, settings_page] {
-        tabs_->setCurrentWidget(settings_page);
-        settings_panel_->show_saved_results_section();
+    settings_page_ = new ScrollingPage(new QWidget);  // the panel put in when first wanted (settings_panel())
+    tabs_->addTab(settings_page_, app::tr("Settings"));
+    connect(saved_results_panel_, &SavedResultsPanel::scores_settings_requested, this, [this] {
+        settings_panel().show_saved_results_section();
+        tabs_->setCurrentWidget(settings_page_);
     });
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
     build_tab_corner();
     make_title_buttons();
+}
+
+SettingsPanel& MainWindow::settings_panel() {
+    if (settings_panel_ != nullptr) {
+        return *settings_panel_;
+    }
+    settings_panel_ = new SettingsPanel(settings_, *file_writes_, [this] { return tools_status_; }, dialogs_);
+    settings_panel_->notify = [this](const QString& text, ExportIndicator::Note kind) {
+        export_indicator_->show_note(text, kind);
+    };
+    settings_panel_->report_export = [this](const ExportOutcome& outcome) { export_indicator_->show_outcome(outcome); };
+    connect(settings_panel_, &SettingsPanel::restart_needed, this, [this](const QString& what) { offer_restart(what); });
+    connect(settings_panel_, &SettingsPanel::defaults_changed, this, [this] { on_default_settings_changed(); });
+    connect(settings_panel_, &SettingsPanel::decoded_videos_changed, frame_compare_panel_,
+            &FrameComparePanel::set_decoded_videos);
+    connect(settings_panel_, &SettingsPanel::ffmpeg_folder_changed, this, [this] { check_ffmpeg(false); });
+    connect(settings_panel_, &SettingsPanel::saved_results_cleared, this, [this] { on_saved_results_cleared(); });
+    connect(settings_panel_, &SettingsPanel::video_names_changed, this, [this] {
+        graph_panel_->set_video_name_rule(video_name_rule(settings_));
+        frame_compare_panel_->set_video_name_rule(video_name_rule(settings_));
+        if (tabs_->currentWidget() == worst_tab_) {
+            sync_worst_frames();  // else when it is next opened
+        }
+    });
+    connect(settings_panel_, &SettingsPanel::weak_segment_rules_changed, this, [this] {
+        worst_tab_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
+    });
+    connect(settings_panel_, &SettingsPanel::saved_scores_changed, saved_results_panel_,
+            &SavedResultsPanel::scores_settings_changed);
+    // Built from the settings as they are now; a run under way locks what it
+    // uses, as set_run_ui_active does for a panel built already.
+    settings_panel_->set_run_active(run_active_);
+    settings_page_->setWidget(settings_panel_);  // the placeholder deleted
+    settings_panel_->setAutoFillBackground(false);  // the tab's pane behind it, as ScrollingPage makes its page
+    return *settings_panel_;
 }
 
 void MainWindow::show_theme_in_title() {
@@ -1065,11 +1085,11 @@ void MainWindow::make_title_buttons() {
     connect(title_buttons_, &TitleButtons::progress_clicked, this, [this] { tabs_->setCurrentIndex(0); });
     connect(title_buttons_, &TitleButtons::progress_tooltip_wanted, this, [this] { show_progress_badge(); });
     connect(title_buttons_, &TitleButtons::theme_chosen, this, [this](const QString& value) {
-        settings_panel_->choose_theme(value);
+        settings_panel().choose_theme(value);
         show_theme_in_title();
     });
     connect(title_buttons_, &TitleButtons::look_chosen, this, [this](bool dark, const QString& value) {
-        settings_panel_->choose_look(dark, value);
+        settings_panel().choose_look(dark, value);
         show_theme_in_title();
     });
     connect(title_buttons_, &TitleButtons::theme_menu_opening, this, [this] { show_theme_in_title(); });
@@ -1794,7 +1814,9 @@ void MainWindow::on_ffmpeg_downloaded(const std::filesystem::path& folder) {
         return;
     }
     settings_.ffmpeg_dir = trial.ffmpeg_dir;
-    settings_panel_->show_ffmpeg_folder(QString::fromStdString(settings_.ffmpeg_dir));
+    if (settings_panel_ != nullptr) {
+        settings_panel_->show_ffmpeg_folder(QString::fromStdString(settings_.ffmpeg_dir));
+    }
     tools_status_ = status;
     // A remuxed or moved reference, and a remuxed test video, keep their
     // saved scores (file_fingerprint.h).
@@ -1856,7 +1878,9 @@ bool MainWindow::on_locate_ffmpeg() {
     }
     // Kept as the Settings tab's folder: the one place it is kept.
     settings_.ffmpeg_dir = platform::path_text(directory);
-    settings_panel_->show_ffmpeg_folder(QString::fromStdString(settings_.ffmpeg_dir));
+    if (settings_panel_ != nullptr) {
+        settings_panel_->show_ffmpeg_folder(QString::fromStdString(settings_.ffmpeg_dir));
+    }
     if (const std::optional<std::string> problem = settings_.save()) {
         show_status(tr_message(QString::fromStdString(*problem)));
         return false;

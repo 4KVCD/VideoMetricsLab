@@ -243,7 +243,9 @@ bool MainWindow::settle_film_grain(const std::vector<int>& checked) {
             // The other videos without a choice take it too, unchecked ones included.
             settings_.film_grain_default = answer->with ? "with" : "without";
             save_settings();
-            settings_panel_->show_film_grain_default();
+            if (settings_panel_ != nullptr) {
+                settings_panel_->show_film_grain_default();
+            }
             const std::vector<std::filesystem::path> others = apply_film_grain_default();
             append(changed, others);
         }
@@ -675,7 +677,9 @@ void MainWindow::set_run_ui_active(bool active) {
     options_panel_->setEnabled(!active && !panel_target_rows_.empty());
     // Settings stays open: only what the run uses is locked there, and the
     // panel says so.
-    settings_panel_->set_run_active(active);
+    if (settings_panel_ != nullptr) {
+        settings_panel_->set_run_active(active);
+    }
     run_button_->setEnabled(!active);
     pause_button_->setEnabled(active);
     cancel_button_->setEnabled(active);

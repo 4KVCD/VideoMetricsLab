@@ -86,6 +86,10 @@ struct SeriesEntry {
     // (video_names.h). Empty until the panel sets it.
     QString name{};
     QString shown{};
+    // Whether the pages show this result: a line added or given a new result
+    // is drawn when the panel's view is brought up to date
+    // (GraphPanel::refresh_view).
+    bool drawn = false;
 };
 
 // The label the window shows for the line (SeriesEntry::shown, else its label).
@@ -135,10 +139,24 @@ public:
     // panel's order (GraphPanel::apply_order).
     void renumber(const std::map<int, int>& renumbered);
     void set_visible(int series_id, bool visible);
-    // The line's name as shown changed (GraphPanel::refresh_shown_names).
+    // The line's name as shown changed (GraphPanel::refresh_view).
     void set_label(int series_id, const QString& label);
     const MetricCurve* curve(int series_id) const;
     const std::map<int, MetricCurve>& curves() const { return curves_; }
+
+    // Changes to several lines at once: while one lasts, the readout is
+    // sized and the difference and the highlight drawn once, when it ends,
+    // not at each line (each sizing measures every line's readout text).
+    class Batch {
+    public:
+        explicit Batch(MetricPage& page) : page_(page) { ++page_.batch_depth_; }
+        ~Batch() { page_.end_batch(); }
+        Batch(const Batch&) = delete;
+        Batch& operator=(const Batch&) = delete;
+
+    private:
+        MetricPage& page_;
+    };
 
     // The pointer at time `x`, value `y`: the frames to report, and the
     // crosshair on the moment chosen.
@@ -189,6 +207,8 @@ private:
     friend class GraphPanelTest;  // the graph's tests (tests/app)
 
     bool erase_curves(const std::vector<int>& series_ids);
+    // A Batch ending: what it put off, done once the last one on the page ends.
+    void end_batch();
     void set_frame_curve(int series_id, const SeriesEntry& entry);
     void set_timeline_curve(int series_id, const SeriesEntry& entry);
     void refresh_difference();
@@ -244,6 +264,11 @@ private:
     QString placeholder_;
     std::map<int, MetricCurve> curves_;  // by series, only lines with data
     bool difference_on_ = false;
+    // Batches open, and what they put off until the last ends.
+    int batch_depth_ = 0;
+    bool fit_due_ = false;
+    bool difference_due_ = false;
+    bool highlight_due_ = false;
     std::optional<std::pair<int, int>> selected_frames_;
     QString hover_text_;
     // What the readout shows, for refresh_readout: nothing (the hint), the
@@ -370,7 +395,7 @@ public:
     std::function<bool(const std::string& identity)> video_exportable;
     // The identities of the lines selected in the statistics table, in its
     // order (the tab bar's Export panel's "the selected videos").
-    std::vector<std::string> selected_identities() const;
+    std::vector<std::string> selected_identities();
     // The statistics' save icon, the tab's own one-click save.
     SaveButton* stats_save() const { return stats_save_; }
     // The identities of the Videos tab's rows' lines: those removed with
@@ -399,6 +424,10 @@ signals:
     // Lines were added or removed (at refresh_restore_button): the Videos
     // tab's send marks are drawn again.
     void lines_changed();
+
+protected:
+    // Brings the view up to date with the lines changed while hidden.
+    void showEvent(QShowEvent* event) override;
 
 private:
     friend class GraphPanelTest;  // the graph's tests (tests/app)
@@ -440,11 +469,17 @@ private:
     void on_stats_item_changed(QTableWidgetItem* item);
     bool add_series(const Run& run);
     void series_changed();
+    // The lines changed in a way the view shows: brought up to date now if
+    // the tab is on screen, else when it is shown (showEvent) or read.
+    void view_changed();
+    // The pages, the table and the readouts brought up to date with the
+    // lines, once for every change since the last time.
+    void refresh_view();
     bool apply_order();
     void set_visible(int series_id, bool visible);
     void refresh_stats_table();
-    // Every line's SeriesEntry::shown, from the lines there now, and the
-    // pages' lines named so.
+    // Every line's SeriesEntry::shown, from the lines there now (the pages
+    // take it in refresh_view).
     void refresh_shown_names();
     std::pair<std::vector<QString>, std::vector<std::tuple<QString, QColor, std::vector<QString>>>> export_table();
     void on_add_saved_run();
@@ -512,6 +547,8 @@ private:
     std::string preferred_metric_ = "vmaf";
     bool selecting_available_metric_ = false;
     bool populating_stats_ = false;  // the table is being filled: its edits are not the user's
+    // The pages, table and readouts are behind the lines (view_changed).
+    bool view_stale_ = false;
     FileWrites* file_writes_ = nullptr;
     // The save icons of the statistics' card and the graph's (issue #224).
     SaveButton* stats_save_ = nullptr;

@@ -24,6 +24,7 @@
 #include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListView>
 #include <QMenu>
 #include <QPainter>
 #include <QPixmap>
@@ -1046,6 +1047,15 @@ QGroupBox* SettingsPanel::build_window_box() {
     // Each language in its own name, so it can be found by someone who
     // cannot read the one the window is in.
     language = new QComboBox;
+    // Its list laid out with the first name's size for every name: put in
+    // its box, the combo box's font changes and Qt lays the list out again,
+    // which measured every name and so looked for the Chinese, Japanese,
+    // Korean and Thai fonts too (see below): a quarter of a second the first
+    // time and some 20 MB, as the Settings tab was first opened. They are
+    // looked for when the list is first opened.
+    if (auto* names = qobject_cast<QListView*>(language->view())) {
+        names->setUniformItemSizes(true);
+    }
     const QString windows = windows_language();
     QString windows_name = "English";
     for (const Language& item : languages()) {
