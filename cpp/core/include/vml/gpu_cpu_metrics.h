@@ -19,6 +19,8 @@
 
 namespace vml {
 
+class GpuFrameStream;  // gpu_frames.h
+
 // Which of `metrics` (CpuScorer's keys) the GPU may calculate: CIEDE2000
 // and MS-SSIM YUV with its planes unless the size is odd (the engine copies
 // chroma planes (w + 1) / 2 x (h + 1) / 2, libvmaf's pictures hold w / 2 x
@@ -65,9 +67,16 @@ public:
     // `metrics` from gpu_metrics_of; `device` is Vulkan's number for the GPU,
     // -1 for the one VMAF would run on (chosen_vulkan_device). A metric the
     // engine does not start is left out (metrics()). Throws VmafVulkanError
-    // when it starts none.
+    // when it starts none. With `shared` (the test video's decoder, which
+    // shares its GPU memory with the source's) and metrics that read only the
+    // luma (MS-SSIM, CAMBI), the decoders copy the pairs' luma planes on the
+    // GPU into the engine's memory, which `shared` imports (SharedSlots,
+    // takes_shared): the pictures never go through system memory. Where the
+    // import fails, the pairs go through system memory as without it (the log
+    // says why).
     GpuMetricsScorer(int width, int height, int bit_depth, int device, std::vector<std::string> metrics,
-                     const std::vector<std::pair<std::string, std::string>>& cambi_options);
+                     const std::vector<std::pair<std::string, std::string>>& cambi_options,
+                     GpuFrameStream* shared = nullptr);
     ~GpuMetricsScorer();
     GpuMetricsScorer(const GpuMetricsScorer&) = delete;
     GpuMetricsScorer& operator=(const GpuMetricsScorer&) = delete;
@@ -100,6 +109,17 @@ public:
     // the test video's go, each to be written packed (width x sample bytes a
     // row), as a decoder downloads it.
     void add_decoded(const std::function<void(std::uint8_t* reference, std::uint8_t* distorted)>& write);
+
+    // Whether the decoders' pictures reach the engine on the GPU (the
+    // constructor's `shared`): the pairs are then given only to add_shared
+    // (add, add_luma and add_decoded throw std::logic_error).
+    bool takes_shared() const;
+
+    // Scores one more pair (takes_shared) held by the decoders: each copies
+    // its luma plane on the GPU into the engine's next slot (the source's
+    // only where it is read: not for CAMBI alone), then the pair is
+    // committed.
+    void add_shared(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot);
 
     // The values for the pairs given, in order, by libvmaf's feature names:
     // "ciede2000" as libvmaf's 45 - 20 log10(dE00) (+infinity for identical

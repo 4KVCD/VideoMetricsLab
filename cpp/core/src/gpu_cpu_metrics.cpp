@@ -5,9 +5,12 @@
 #include <cstdint>
 #include <iterator>
 #include <optional>
+#include <stdexcept>
 
 #include "vml/app_log.h"
 #include "vml/chroma_vmaf.h"
+#include "vml/geometry.h"
+#include "vml/gpu_frames.h"
 #include "vml/metrics.h"
 #include "vml/vmaf_v1_gpu.h"
 #include "vml/vmaf_vulkan.h"
@@ -114,6 +117,8 @@ struct GpuMetricsScorer::State {
     std::size_t luma_row_bytes = 0;
     std::size_t luma_bytes = 0;
     std::array<std::vector<std::uint8_t>, 2> packed;
+    // The slots' memory the decoders copy the luma planes into, where they share it (takes_shared).
+    std::optional<SharedSlots> shared;
 
     void check(int error, const std::string& what) const { check_vulkan(engine, error, what); }
     // A call for the pair being scored: the words for what failed are made only when it does, not on every pair.
@@ -126,14 +131,22 @@ struct GpuMetricsScorer::State {
     bool reads_chroma() const { return has(metrics, "ciede2000") || ms_ssim_planes == 3; }
 
     ~State() {
+        shared.reset();  // the decoder's imports go back before the context that allocated them
         if (gpu != nullptr) {
             engine.destroy(gpu);  // waits for its frames
+        }
+    }
+    // A pair given the way a context without `shared` takes it.
+    void require_unshared() const {
+        if (shared) {
+            throw std::logic_error("a pair in system memory for a GPU scorer that takes the decoders' pictures");
         }
     }
 };
 
 GpuMetricsScorer::GpuMetricsScorer(int width, int height, int bit_depth, int device, std::vector<std::string> metrics,
-                                   const std::vector<std::pair<std::string, std::string>>& cambi_options)
+                                   const std::vector<std::pair<std::string, std::string>>& cambi_options,
+                                   GpuFrameStream* shared)
     : state_(std::make_unique<State>()) {
     State& s = *state_;
     s.luma_row_bytes = static_cast<std::size_t>(width) * bytes_per_sample(bit_depth);
@@ -149,12 +162,20 @@ GpuMetricsScorer::GpuMetricsScorer(int width, int height, int bit_depth, int dev
         }
         device = chosen->index;
     }
-    s.check(engine.create_v1(&s.gpu, device, width, height, bit_depth,
-                             vulkan_context_flags(false, false) | vulkan_no_vmaf_features_flags,
-                             unused_adm_motion.data()),
-            "Starting Vulkan");
+    const auto create = [&](bool sharing) {
+        return engine.create_v1(&s.gpu, device, width, height, bit_depth,
+                                vulkan_context_flags(sharing, false) | vulkan_no_vmaf_features_flags,
+                                unused_adm_motion.data());
+    };
+    // The decoders' pictures on the GPU only for metrics that read nothing
+    // but the luma: CIEDE2000's and MS-SSIM YUV's chroma go through system
+    // memory (submit_v1). Not at an odd size, as V1Scorer's hand-over.
+    const bool luma_only = !has(metrics, "ciede2000") && std::none_of(metrics.begin(), metrics.end(), of_ms_ssim_yuv);
     // Each metric the engine refuses (one it lacks, or cambi.c refusing the
     // options or the size) is left to libvmaf. `keys` are started together.
+    // In a shared context a refusal is only noted (`refused`): the context is
+    // then made again without sharing, which may start it.
+    std::string refused;
     const auto start = [&](std::vector<std::string> keys, auto&& begin) {
         std::erase_if(keys, [&](const std::string& key) { return !has(metrics, key); });
         if (keys.empty()) {
@@ -165,31 +186,78 @@ GpuMetricsScorer::GpuMetricsScorer(int width, int height, int bit_depth, int dev
             s.metrics.insert(s.metrics.end(), keys.begin(), keys.end());
             return true;
         }
-        logger.warning(metric_labels(keys, " and ") + " on the CPU: the GPU did not start " +
-                       (keys.size() == 1 ? "it" : "them") + " (" +
-                       (code == unsupported_options ? std::string("options it does not take")
-                                                    : std::string(engine.error())) +
-                       ")");
+        const std::string why =
+            code == unsupported_options ? std::string("options it does not take") : std::string(engine.error());
+        if (s.shared) {
+            if (refused.empty()) {
+                refused = metric_labels(keys, " and ") + ": " + why;
+            }
+        } else {
+            logger.warning(metric_labels(keys, " and ") + " on the CPU: the GPU did not start " +
+                           (keys.size() == 1 ? "it" : "them") + " (" + why + ")");
+        }
         return false;
     };
-    start({"ciede2000"}, [&] {
-        return engine.v1_ciede != nullptr && engine.v1_ciede_scores != nullptr ? engine.v1_ciede(s.gpu)
-                                                                               : unsupported_options;
-    });
-    start({"cambi"}, [&] {
-        const std::optional<std::array<double, 9>> values = cambi_gpu_values(cambi_options);
-        return engine.v1_cambi != nullptr && engine.v1_cambi_scores != nullptr && values
-                   ? engine.v1_cambi(s.gpu, values->data())
-                   : unsupported_options;
-    });
     // MS-SSIM and MS-SSIM YUV share the luma's scales.
     const int ms_ssim_planes = std::any_of(metrics.begin(), metrics.end(), of_ms_ssim_yuv) ? 3 : 1;
-    if (start({"ms_ssim", "ms_ssim_yuv", "ms_ssim_yuv_y", "ms_ssim_yuv_u", "ms_ssim_yuv_v"}, [&] {
-            return engine.v1_ms_ssim != nullptr && engine.v1_ms_ssim_scores != nullptr
-                       ? engine.v1_ms_ssim(s.gpu, ms_ssim_planes)
+    const auto start_all = [&] {
+        start({"ciede2000"}, [&] {
+            return engine.v1_ciede != nullptr && engine.v1_ciede_scores != nullptr ? engine.v1_ciede(s.gpu)
+                                                                                   : unsupported_options;
+        });
+        start({"cambi"}, [&] {
+            const std::optional<std::array<double, 9>> values = cambi_gpu_values(cambi_options);
+            return engine.v1_cambi != nullptr && engine.v1_cambi_scores != nullptr && values
+                       ? engine.v1_cambi(s.gpu, values->data())
                        : unsupported_options;
-        })) {
-        s.ms_ssim_planes = ms_ssim_planes;
+        });
+        if (start({"ms_ssim", "ms_ssim_yuv", "ms_ssim_yuv_y", "ms_ssim_yuv_u", "ms_ssim_yuv_v"}, [&] {
+                return engine.v1_ms_ssim != nullptr && engine.v1_ms_ssim_scores != nullptr
+                           ? engine.v1_ms_ssim(s.gpu, ms_ssim_planes)
+                           : unsupported_options;
+            })) {
+            s.ms_ssim_planes = ms_ssim_planes;
+        }
+    };
+    if (shared != nullptr && luma_only && !is_odd_size(width, height)) {
+        // A VMAF v1 context made with vulkan_shared_flag: the engine's passes
+        // read the planes where the decoders copy them (its `direct`), with no
+        // copy of their own.
+        if (create(true) != 0) {
+            const char* said = engine.error();
+            refused = said != nullptr ? said : "";
+        } else {
+            try {
+                s.shared.emplace(engine, s.gpu, *shared);
+            } catch (const LibvmafError& error) {  // VmafVulkanError among them
+                refused = error.what();
+                engine.destroy(s.gpu);
+                s.gpu = nullptr;
+            }
+        }
+        if (s.shared) {
+            start_all();
+            if (s.metrics.size() != metrics.size()) {
+                // A metric the engine does not calculate from shared memory
+                // (an older engine's MS-SSIM): all through system memory.
+                s.metrics.clear();
+                s.ms_ssim_planes = 0;
+                s.shared.reset();  // the decoder's imports go back before the context
+                engine.destroy(s.gpu);
+                s.gpu = nullptr;
+            }
+        }
+        if (s.shared) {
+            logger.info(metric_labels(metrics, " and ") +
+                        " on the GPU: the decoders' pictures copied on the GPU into its memory");
+        } else {
+            logger.info(metric_labels(metrics, " and ") + " on the GPU: the frames go through system memory (" +
+                        refused + ")");
+        }
+    }
+    if (s.gpu == nullptr) {
+        s.check(create(false), "Starting Vulkan");
+        start_all();
     }
     if (s.metrics.empty()) {
         throw VmafVulkanError("the GPU started none of " + std::to_string(metrics.size()) + " metrics");
@@ -206,6 +274,7 @@ bool GpuMetricsScorer::reads_reference() const {
 
 void GpuMetricsScorer::add(const VmafPicture& reference, const VmafPicture& distorted) {
     State& s = *state_;
+    s.require_unshared();
     const auto plane = [](const VmafPicture& picture, int index) {
         return static_cast<const std::uint8_t*>(picture.data[index]);
     };
@@ -237,12 +306,14 @@ bool GpuMetricsScorer::takes_luma_alone() const {
 
 void GpuMetricsScorer::add_luma(Plane reference, Plane distorted) {
     State& s = *state_;
+    s.require_unshared();
     s.check_pair(s.engine.submit(s.gpu, reference.data, reference.stride, distorted.data, distorted.stride, 1));
     ++s.count;
 }
 
 void GpuMetricsScorer::add_decoded(const std::function<void(std::uint8_t*, std::uint8_t*)>& write) {
     State& s = *state_;
+    s.require_unshared();
     std::uint8_t* reference_plane = nullptr;
     std::uint8_t* distorted_plane = nullptr;
     std::uint32_t stride = 0;
@@ -261,6 +332,25 @@ void GpuMetricsScorer::add_decoded(const std::function<void(std::uint8_t*, std::
         copy_packed_rows(s.packed[0].data(), s.luma_row_bytes, rows, reference_plane, stride);
         copy_packed_rows(s.packed[1].data(), s.luma_row_bytes, rows, distorted_plane, stride);
     }
+    s.check_pair(s.engine.commit(s.gpu, 1));
+    ++s.count;
+}
+
+bool GpuMetricsScorer::takes_shared() const { return state_->shared.has_value(); }
+
+void GpuMetricsScorer::add_shared(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test,
+                                  int test_slot) {
+    State& s = *state_;
+    if (!s.shared) {
+        throw std::logic_error("a decoder's pictures for a GPU scorer that shares no memory with it");
+    }
+    // Waits for the slot, then the copies, each done before it returns (no
+    // decoder timeline to wait for: vvdec-vulkan's pictures do not come here).
+    const SharedSlots::Next next = s.shared->next();
+    if (reads_reference()) {
+        reference.copy_luma(reference_slot, next.reference, next.pitch);
+    }
+    test.copy_luma(test_slot, next.distorted, next.pitch);
     s.check_pair(s.engine.commit(s.gpu, 1));
     ++s.count;
 }

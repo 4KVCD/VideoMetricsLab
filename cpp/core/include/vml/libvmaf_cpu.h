@@ -135,11 +135,17 @@ public:
     // where `vmaf_on_vulkan` (the Vulkan engine scores this PC's GPU VMAF),
     // copied there from `chroma_from_decoders` where it can (ChromaVmaf's
     // add_decoded), so that the pictures add_decoded downloads need no
-    // chroma for them. Throws LibvmafError.
+    // chroma for them. `shared_decoder`: the test video's decoder, which
+    // shares its GPU memory with the source's, given where the pairs come
+    // only to add_decoded and nothing else imports the decoders' memory;
+    // where the GPU alone scores the pairs, from their luma alone (MS-SSIM,
+    // CAMBI), it copies them on the GPU into the engine's memory
+    // (GpuMetricsScorer's `shared`). Throws LibvmafError.
     CpuScorer(int width, int height, int bit_depth, std::vector<std::string> metrics, int n_subsample = 1,
               int threads = 0, int frame_rate = 0, const CambiInput& cambi = {},
               std::optional<int> gpu = std::nullopt, const std::string& vmaf_model = {},
-              bool vmaf_on_vulkan = false, std::optional<ChromaFromDecoders> chroma_from_decoders = std::nullopt);
+              bool vmaf_on_vulkan = false, std::optional<ChromaFromDecoders> chroma_from_decoders = std::nullopt,
+              GpuFrameStream* shared_decoder = nullptr);
     ~CpuScorer() override;
     CpuScorer(const CpuScorer&) = delete;
     CpuScorer& operator=(const CpuScorer&) = delete;
@@ -167,7 +173,8 @@ public:
     // add_planes throw std::logic_error). Where the GPU alone reads a pair, and only its two luma planes
     // (luma_to_gpu_alone), and neither decoder is NVIDIA's, no picture is taken: the decoders write the luma planes
     // straight into the engine's memory (the software decoder's copied from where it holds them), which halves the
-    // copies on this thread.
+    // copies on this thread. Where the engine shares its memory with the decoders (GpuMetricsScorer::takes_shared),
+    // they copy the luma planes there on the GPU, and nothing goes through system memory.
     void add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot);
 
     // add_decoded, giving `also` the pair's two luma planes (the source's,
@@ -189,9 +196,9 @@ public:
 
 private:
     // Starts CIEDE2000, CAMBI and MS-SSIM on GPU `gpu` where it can (gpu_), and sets
-    // libvmaf_metrics_. `cambi_with`: CAMBI's libvmaf options.
+    // libvmaf_metrics_. `cambi_with`: CAMBI's libvmaf options. `shared_decoder`: the constructor's.
     void start_gpu(int width, int height, int bit_depth, std::optional<int> gpu,
-                   const std::vector<std::pair<std::string, std::string>>& cambi_with);
+                   const std::vector<std::pair<std::string, std::string>>& cambi_with, GpuFrameStream* shared_decoder);
     VmafPicture take_picture();
     void give_back(VmafPicture& reference, VmafPicture& distorted);
     void score(VmafPicture& reference, VmafPicture& distorted);
@@ -208,7 +215,8 @@ private:
     // Whether the GPU alone reads a pair, from its two luma planes (MS-SSIM, with CAMBI or not): libvmaf's pictures
     // are then skipped (add_planes gives it the planes, add_decoded_luma the decoders' downloads).
     bool luma_to_gpu_alone() const;
-    // add_decoded where luma_to_gpu_alone: the luma planes go straight into the engine's memory.
+    // add_decoded where luma_to_gpu_alone, or the engine takes the decoders' pictures (GpuMetricsScorer::
+    // takes_shared): the luma planes go straight into the engine's memory.
     void add_decoded_luma(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot);
     // Copies the planes the pictures hold into the picture.
     void fill(VmafPicture& picture, const FramePlanes& frame) const;
