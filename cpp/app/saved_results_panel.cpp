@@ -1345,10 +1345,8 @@ void SavedResultsPanel::delete_selected() {
     update_buttons();
     file_writes_.submit(app::tr("delete saved results"),
                         [folder = base(), chosen = std::move(chosen), deleting = deleting_] {
-                            for (const SavedComparison& saved : chosen) {
-                                if (!delete_saved_comparison(folder, saved)) {
-                                    ++deleting->failed;
-                                }
+                            for (const bool gone : delete_saved_comparisons(folder, chosen)) {
+                                deleting->failed += gone ? 0 : 1;
                             }
                             deleting->done = true;
                         });

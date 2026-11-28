@@ -246,6 +246,14 @@ sqlite3* open_database(const std::filesystem::path& base) {
     std::unique_ptr<sqlite3, int (*)(sqlite3*)> owned(db, sqlite3_close_v2);
     check(db, opened);
     sqlite3_busy_timeout(db, busy_ms);
+    // Closed without a checkpoint: each use opens and closes it (an open
+    // handle would keep the folder from being deleted), and a checkpoint at
+    // each close waits for the disk twice. On a VM runner's disk that was
+    // 30 ms a close, two per save: a save took 77 ms, not 23, and deleting
+    // 100 comparisons 3.9 s, not 0.5. The log is left beside the file and
+    // written back as it grows (SQLite's automatic checkpoint, every 1,000
+    // pages); a commit in it waits for no disk (synchronous=NORMAL).
+    sqlite3_db_config(db, SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, 1, nullptr);
     // The write-ahead log: readers never wait for a writer, and a crash
     // loses no committed write. It needs memory shared on one computer:
     // on a network drive, a rollback journal.
@@ -529,15 +537,26 @@ void changing(const std::filesystem::path& folder) {
     }
 }
 
-void changed(const std::filesystem::path& folder) {
-    const std::unique_ptr<Index> index = index_of(folder.parent_path().parent_path(), false);
+void changed(const std::filesystem::path& folder) { changed(std::vector<std::filesystem::path>{folder}); }
+
+void changed(const std::vector<std::filesystem::path>& folders) {
+    if (folders.empty()) {
+        return;
+    }
+    const std::unique_ptr<Index> index = index_of(folders.front().parent_path().parent_path(), false);
     if (!index) {
         return;
     }
-    const std::optional<ReadFolder> read = read_folder(folder);
+    std::vector<std::optional<ReadFolder>> read;
+    read.reserve(folders.size());
+    for (const std::filesystem::path& folder : folders) {
+        read.push_back(read_folder(folder));
+    }
     try {
         Transaction transaction(index->db);
-        write_folder(index->db, platform::path_text(folder.filename()), read);
+        for (std::size_t i = 0; i < folders.size(); ++i) {
+            write_folder(index->db, platform::path_text(folders[i].filename()), read[i]);
+        }
         transaction.commit();
     } catch (const std::exception& failed) {
         warn(failed);

@@ -146,6 +146,11 @@ std::map<std::string, std::filesystem::path> saved_scores_by_rule(const SavedCom
 // at the next delete.
 bool delete_saved_comparison(const std::filesystem::path& base, const SavedComparison& comparison);
 
+// Deletes each, as delete_saved_comparison does, the index brought up to
+// date once for them all: whether each is gone, in the list's order.
+std::vector<bool> delete_saved_comparisons(const std::filesystem::path& base,
+                                           const std::vector<SavedComparison>& comparisons);
+
 // Deletes the comparisons under `base` last saved (their newest file's time)
 // from `from` up to, not including, `to` (none: no bound on that side), each
 // as delete_saved_comparison does: every one cache_summary counts, those

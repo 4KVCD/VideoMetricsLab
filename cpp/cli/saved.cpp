@@ -430,8 +430,14 @@ int saved(const SavedArguments& arguments, const Settings& settings) {
     }
     bool ok = true;
     if (deleting) {
+        std::vector<SavedComparison> chosen;
         for (const SavedComparison* comparison : named) {
-            if (delete_saved_comparison(folder, *comparison)) {
+            chosen.push_back(*comparison);
+        }
+        const std::vector<bool> gone = delete_saved_comparisons(folder, chosen);
+        for (std::size_t i = 0; i < named.size(); ++i) {
+            const SavedComparison* comparison = named[i];
+            if (gone[i]) {
                 print_results("Deleted " + saved_id(*comparison).substr(0, 12) + ": " + name_of(comparison->distorted) +
                               " against " + name_of(comparison->source) + "\n");
             } else {

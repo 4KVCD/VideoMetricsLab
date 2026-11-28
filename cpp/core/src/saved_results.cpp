@@ -402,13 +402,17 @@ std::map<std::string, std::filesystem::path> saved_scores_by_rule(const SavedCom
     return chosen;
 }
 
-bool delete_saved_comparison(const std::filesystem::path& base, const SavedComparison& comparison) {
+namespace {
+
+// delete_saved_comparison's work, the index left to the caller: the folder
+// gone from v2 (nothing where it was not).
+std::optional<std::filesystem::path> delete_one(const std::filesystem::path& base, const SavedComparison& comparison) {
     // Only a comparison's own folder, directly under v2: never more.
     std::error_code error;
     const std::filesystem::path v2 = std::filesystem::weakly_canonical(base / "v2", error);
     const std::filesystem::path folder = std::filesystem::weakly_canonical(comparison.folder, error);
     if (error || folder.parent_path() != v2 || !std::filesystem::exists(folder / "context.json", error)) {
-        return false;
+        return std::nullopt;
     }
     // Moved aside first, whole or not at all, then deleted: deleted where it
     // is, file by file, a file open without leave to delete it (a details
@@ -431,7 +435,7 @@ bool delete_saved_comparison(const std::filesystem::path& base, const SavedCompa
     std::error_code ignored;
     const std::filesystem::file_type aside_type = std::filesystem::symlink_status(aside, ignored).type();
     if (aside_type != std::filesystem::file_type::directory && aside_type != std::filesystem::file_type::not_found) {
-        return false;
+        return std::nullopt;
     }
     ignored.clear();
     std::filesystem::directory_iterator left(aside, ignored);
@@ -448,12 +452,34 @@ bool delete_saved_comparison(const std::filesystem::path& base, const SavedCompa
         std::filesystem::rename(folder, moved, error);
     }
     if (error) {
-        return false;  // refused (one of its files in use): nothing of it deleted
+        return std::nullopt;  // refused (one of its files in use): nothing of it deleted
     }
     saved_comparison_deleted(folder);  // gone from v2: the kept listing reads it again
-    saved_index::changed(folder);
     std::filesystem::remove_all(moved, ignored);
-    return true;
+    return folder;
+}
+
+}  // namespace
+
+bool delete_saved_comparison(const std::filesystem::path& base, const SavedComparison& comparison) {
+    return delete_saved_comparisons(base, {comparison}).front();
+}
+
+std::vector<bool> delete_saved_comparisons(const std::filesystem::path& base,
+                                           const std::vector<SavedComparison>& comparisons) {
+    // The index told once, after all of them: should the process end before
+    // that, the next listing drops what is gone from v2 (it reads v2's names).
+    std::vector<bool> gone;
+    std::vector<std::filesystem::path> folders;
+    for (const SavedComparison& comparison : comparisons) {
+        std::optional<std::filesystem::path> folder = delete_one(base, comparison);
+        gone.push_back(folder.has_value());
+        if (folder) {
+            folders.push_back(std::move(*folder));
+        }
+    }
+    saved_index::changed(folders);
+    return gone;
 }
 
 ClearedResults delete_saved_between(const std::filesystem::path& base,
@@ -462,16 +488,18 @@ ClearedResults delete_saved_between(const std::filesystem::path& base,
     // The comparisons Settings counted and said would go (cache_summary): every
     // folder with a context.json, one this app can't read among them, which
     // list_saved_comparisons leaves out.
-    ClearedResults done;
+    std::vector<SavedComparison> chosen;
     for (const CacheSummary::Comparison& comparison : cache_summary(base).saved) {
         if ((from && comparison.saved < *from) || (to && comparison.saved >= *to)) {
             continue;
         }
         SavedComparison folder;
         folder.folder = comparison.folder;
-        if (delete_saved_comparison(base, folder)) {
-            ++done.removed;
-        }
+        chosen.push_back(std::move(folder));
+    }
+    ClearedResults done;
+    for (const bool gone : delete_saved_comparisons(base, chosen)) {
+        done.removed += gone ? 1 : 0;
     }
     return done;
 }

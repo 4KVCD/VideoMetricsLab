@@ -77,6 +77,10 @@ void changing(const std::filesystem::path& folder);
 // The comparison in `folder` changed (saved, scores added or deleted, its
 // files recorded) or is gone: read again into the index now.
 void changed(const std::filesystem::path& folder);
+// The same for several folders of one base, in one transaction (a Delete of
+// many: one each was 25 ms a comparison on a VM runner's disk, most of it
+// opening and committing).
+void changed(const std::vector<std::filesystem::path>& folders);
 
 // Reads every folder under `base` into the index again, as a first listing
 // does: Settings' Rebuild. How many comparisons it holds then, or nothing

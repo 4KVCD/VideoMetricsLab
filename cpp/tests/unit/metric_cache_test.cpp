@@ -1141,6 +1141,36 @@ TEST(MetricCache, TheSavedResultsIndexFollowsTheFolders) {
     EXPECT_EQ(scores_of(third), std::stoul(scores) + 1);
 }
 
+// A Delete of many tells the index once for them all (one transaction, not
+// one each: 25 ms a comparison on a VM runner's disk); what it lists after
+// is what is left, read from the index.
+TEST(MetricCache, ManySavedComparisonsAreDeletedAtOnce) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    const AnalysisRequest request = request_from(stored);
+    const std::filesystem::path cache = folder / "cache";
+    touch(folder / "s.mp4", "s");
+    for (const char* name : {"a.mp4", "b.mp4", "c.mp4"}) {
+        touch(folder / name, name);
+        ComparisonResult result = test::result_from(stored.at("result"));
+        result.source = folder / "s.mp4";
+        result.distorted = folder / name;
+        store_result(cache, result.source, result.distorted, request.recipe, result, name, request.metrics);
+    }
+    std::vector<SavedComparison> list = list_saved_comparisons(cache);
+    ASSERT_EQ(list.size(), 3U);
+    ASSERT_TRUE(std::filesystem::exists(saved_index::file(cache)));
+    SavedComparison outside;
+    outside.folder = folder / "elsewhere";  // not one of v2's: refused, the rest deleted
+    const std::vector<bool> gone = delete_saved_comparisons(cache, {list[0], outside, list[2]});
+    EXPECT_EQ(gone, std::vector<bool>({true, false, true}));
+    const std::optional<std::vector<IndexedComparison>> indexed = saved_index::comparisons(cache);
+    ASSERT_TRUE(indexed.has_value());
+    ASSERT_EQ(indexed->size(), 1U);
+    EXPECT_EQ(indexed->front().name, platform::path_text(list[1].folder.filename()));
+    EXPECT_EQ(list_saved_comparisons(cache).size(), 1U);
+}
+
 // The index made again: by Rebuild, which reads every folder again with
 // what another program changed inside one, and on its own where its file is
 // damaged (it holds nothing the folders do not).
