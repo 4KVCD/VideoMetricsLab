@@ -268,6 +268,16 @@ TEST_F(GraphPanelTest, ShowsTheRunsAsThePythonApp) {
                     << "row " << row << ", column " << column;
             }
         }
+        // The selected metric's statistics, Median to the last before the
+        // remove column, are bold, as its mean is.
+        const auto median = std::find(headers.begin(), headers.end(), "Median");
+        ASSERT_NE(median, headers.end());
+        for (int column = static_cast<int>(median - headers.begin()); column < stats.columnCount() - 1; ++column) {
+            for (int row = 0; row < stats.rowCount(); ++row) {
+                const QTableWidgetItem* cell = stats.item(row, column);
+                EXPECT_TRUE(cell != nullptr && cell->font().bold()) << "row " << row << ", " << headers[column];
+            }
+        }
         EXPECT_EQ((std::vector<int>{frame_spin(panel).minimum(), frame_spin(panel).maximum()}),
                   item.at("frame_range").get<std::vector<int>>());
         for (const nlohmann::json& case_ : item.at("readouts")) {

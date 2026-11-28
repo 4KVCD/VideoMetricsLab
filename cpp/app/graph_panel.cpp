@@ -2284,7 +2284,13 @@ void GraphPanel::refresh_stats_table() {
             cells.assign(static_cast<std::size_t>(stats_table_->columnCount() - detail_start - 1), QString());
         }
         for (std::size_t i = 0; i < cells.size(); ++i) {
-            stats_table_->setItem(row, detail_start + static_cast<int>(i), number_item(cells[i]));
+            // Bold as the selected metric's mean is: they are its statistics,
+            // set apart from the other metrics' means.
+            QTableWidgetItem* item = number_item(cells[i]);
+            QFont font = item->font();
+            font.setBold(true);
+            item->setFont(font);
+            stats_table_->setItem(row, detail_start + static_cast<int>(i), item);
         }
         // A plain item, handled by cellClicked: a button in the cell would be
         // drawn over the first column before the widths settled.
