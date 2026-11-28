@@ -5533,9 +5533,9 @@
   },
   {
    "key": "psnr_hvs",
-   "label": "PSNR-HVS-M",
+   "label": "PSNR-HVS-M (8:1:1)",
    "short_label": "PSNR-HVS-M",
-   "table_header": "PSNR-HVS-M",
+   "table_header": "PSNR-HVS-M (8:1:1)",
    "axis_label": "PSNR-HVS-M (dB)",
    "value_format": "{:.2f}",
    "value_suffix": " dB",

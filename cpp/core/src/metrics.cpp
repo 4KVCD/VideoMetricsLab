@@ -126,9 +126,10 @@ const std::array<MetricDefinition, 34> registry{{
      arithmetic, std::nullopt, {}, bool_option("compute_ms_ssim_yuv_v"), {}, 0, "ms_ssim_yuv"},
     // PSNR-HVS-M (Ponomarenko et al. 2007, Xiph's code): PSNR of the
     // contrast-masked, contrast-sensitivity-weighted DCT error of 8x8 blocks,
-    // 0.8 Y + 0.1 Cb + 0.1 Cr in the error. +infinity for an identical (or
-    // fully masked) frame, so averaged as its error.
-    {"psnr_hvs", "PSNR-HVS-M", "PSNR-HVS-M", "PSNR-HVS-M", "PSNR-HVS-M (dB)", 2, " dB", frame,
+    // 0.8 Y + 0.1 Cb + 0.1 Cr in the error (8:1:1, where the YUV metrics
+    // above weigh 6:1:1). +infinity for an identical (or fully masked) frame,
+    // so averaged as its error.
+    {"psnr_hvs", "PSNR-HVS-M (8:1:1)", "PSNR-HVS-M", "PSNR-HVS-M (8:1:1)", "PSNR-HVS-M (dB)", 2, " dB", frame,
      higher_is_better, mean_error_db, std::nullopt, {}, bool_option("compute_psnr_hvs"), {}, 0},
     {"psnr_hvs_y", "PSNR-HVS-M Y", "PSNR-HVS-M Y", "Y", "PSNR-HVS-M Y (dB)", 2, " dB", frame,
      higher_is_better, mean_error_db, std::nullopt, {}, bool_option("compute_psnr_hvs_y"), {}, 0, "psnr_hvs"},
