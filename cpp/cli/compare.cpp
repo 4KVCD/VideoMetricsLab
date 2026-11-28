@@ -58,6 +58,7 @@
 #include "vml/metrics.h"
 #include "vml/model_select.h"
 #include "vml/number_format.h"
+#include "vml/perceptual.h"
 #include "vml/platform/console.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
@@ -1025,6 +1026,20 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
         gpu_metrics_together, environment.cores, cancel);
 }
 
+// The window's warning before SSIMULACRA2 or Butteraugli on the CPU for a
+// long video (MainWindow::confirm_long_cpu_perceptual), as a note: the run
+// goes on, as nothing is asked on the command line.
+std::string long_cpu_run_note(const LongCpuRun& run) {
+    std::string metrics;
+    for (const std::string& key : run.keys) {
+        metrics += (metrics.empty() ? "" : " and ") + std::string(metric_definition(key).label);
+    }
+    const auto [count, unit] = rough_time(run.scoring_seconds);
+    return metrics + " on the CPU (no GPU found for " + (run.keys.size() == 1 ? "it" : "them") + ") for " +
+           format_hms(run.video_seconds) +
+           " of video: about " + std::to_string(count) + " " + std::string(unit) + (count == 1 ? "" : "s") +
+           " of scoring on a 24-core CPU. Not recommended for over 10 minutes; --range scores a part.";
+}
 
 // Adds the job that calculates what `video` asks for, less what is saved
 // under `cache_folder` (when `use_saved`; a saved comparison's files are
@@ -1109,6 +1124,12 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
     std::vector<MetricTask> tasks =
         plan_tasks(source, *video.info, options, video.metrics, backends, kept, share_decode, gpu_answers);
     std::optional<std::string> missing = gpu_not_yet(tasks);
+    std::vector<std::string> calculated = video.metrics;
+    std::erase_if(calculated, [&kept](const std::string& key) { return kept.has(key); });
+    if (const std::optional<LongCpuRun> run = long_cpu_run(calculated, source, *video.info, options);
+        run && !detect_vship_device(options.vship_build, gpu_probes_token()).first.has_value()) {
+        video.note(codes::long_cpu_run, long_cpu_run_note(*run));
+    }
     if (kept.empty()) {
         saved.reset();
     }

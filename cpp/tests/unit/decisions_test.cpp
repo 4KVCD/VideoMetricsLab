@@ -23,6 +23,7 @@
 #include "vml/gpu_frames.h"
 #include "vml/hardware_decoding.h"
 #include "vml/model_select.h"
+#include "vml/perceptual.h"
 #include "vml/perceptual_cpu.h"
 #include "vml/platform/system.h"
 #include "vml/vship.h"
@@ -908,6 +909,36 @@ TEST(Decisions, D3d11vaDecodesOnTheAdapterNamed) {
     EXPECT_EQ(cuda, (std::vector<std::string>{"-threads", "1", "-hwaccel", "cuda", "-hwaccel_output_format", "cuda"}));
     EXPECT_EQ(hwaccel_args("d3d11va"),
               (std::vector<std::string>{"-hwaccel", "d3d11va", "-hwaccel_output_format", "d3d11"}));
+}
+
+// The warning before SSIMULACRA2 or Butteraugli on the CPU: only over 10 minutes of the range compared, the
+// estimate of a 4K pair (0.17 s for SSIMULACRA2, 0.34 s with Butteraugli), given roughly.
+TEST(LongCpuRun, CountsTheRangeAndTheMetricsCalculated) {
+    VideoInfo video;
+    video.width = 3840;
+    video.height = 2160;
+    video.fps = 24;
+    video.duration = 3600;
+    VmafOptions options;
+    EXPECT_FALSE(long_cpu_run({"vmaf", "psnr"}, video, video, options));
+    const std::optional<LongCpuRun> both = long_cpu_run({"butteraugli", "vmaf", "ssimulacra2"}, video, video, options);
+    ASSERT_TRUE(both);
+    EXPECT_EQ(both->keys, (std::vector<std::string>{"ssimulacra2", "butteraugli"}));
+    EXPECT_DOUBLE_EQ(both->video_seconds, 3600);
+    EXPECT_NEAR(both->scoring_seconds, 3600 * 24 * 0.34, 30);  // a 4K pair: 0.34 s, within 0.1 %
+    const std::optional<LongCpuRun> one = long_cpu_run({"ssimulacra2"}, video, video, options);
+    ASSERT_TRUE(one);
+    EXPECT_NEAR(one->scoring_seconds, 3600 * 24 * 0.17, 15);
+    options.set_time_range(0, 600'000);  // 10 minutes: not long
+    EXPECT_FALSE(long_cpu_run({"ssimulacra2"}, video, video, options));
+    options.set_time_range(1'800'000, 0);  // the last 30 minutes
+    ASSERT_TRUE(long_cpu_run({"ssimulacra2"}, video, video, options));
+    EXPECT_NEAR(long_cpu_run({"ssimulacra2"}, video, video, options)->video_seconds, 1800, 1e-9);
+
+    EXPECT_EQ(rough_time(3 * 86400.0), (std::pair<long long, std::string_view>{3, "day"}));
+    EXPECT_EQ(rough_time(5.5 * 3600), (std::pair<long long, std::string_view>{6, "hour"}));  // halves to even
+    EXPECT_EQ(rough_time(4.5 * 3600), (std::pair<long long, std::string_view>{4, "hour"}));
+    EXPECT_EQ(rough_time(10), (std::pair<long long, std::string_view>{1, "minute"}));
 }
 
 }  // namespace

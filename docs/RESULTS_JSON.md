@@ -279,6 +279,7 @@ does not know as the general case (an error, a failure, a note).
 | `sdr_display` | `note_codes` | HDR video, CVVDP modelled the app's default SDR display. |
 | `near_miss_crop` | `note_codes` | The two videos' pictures were a few lines apart, and one was scaled to the other. |
 | `frame_counts` | `note_codes` | Fewer frames were compared than the videos' length should have (`frame_sync` says more). |
+| `long_cpu_run` | `note_codes` | SSIMULACRA2 or Butteraugli is calculated on the CPU (no GPU for them) over more than 10 minutes of video: many hours. The window asks first; the command line goes on. |
 
 The `bitrate` command's videos have an `error_code` too: `no_match`,
 `unreadable`, or `no_packets` (a raw YUV file, which has no encoded packets).

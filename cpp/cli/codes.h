@@ -48,5 +48,6 @@ inline constexpr const char* film_grain_left_out = "film_grain_left_out";
 inline constexpr const char* sdr_display = "sdr_display";              // HDR video, CVVDP on an SDR display
 inline constexpr const char* near_miss_crop = "near_miss_crop";        // crops a few lines apart, scaled
 inline constexpr const char* frame_counts = "frame_counts";            // fewer frames compared than expected
+inline constexpr const char* long_cpu_run = "long_cpu_run";            // SSIMULACRA2/Butteraugli on the CPU, long
 
 }  // namespace vml::cli::codes

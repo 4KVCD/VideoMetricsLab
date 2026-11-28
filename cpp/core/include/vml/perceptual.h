@@ -102,6 +102,28 @@ struct PerceptualTaskOutput {
 // CPU whatever its length.)
 inline constexpr double long_cpu_run_seconds = 10 * 60;
 
+// SSIMULACRA2 and Butteraugli on the CPU over more than long_cpu_run_seconds
+// of video (the window asks first, the command line says so): which of
+// them, the seconds of video, and a rough guide to the scoring's seconds.
+struct LongCpuRun {
+    std::vector<std::string> keys;  // "ssimulacra2", "butteraugli", in that order
+    double video_seconds = 0;
+    double scoring_seconds = 0;
+};
+
+// The long CPU run of `keys` (the metrics a run calculates, saved ones left
+// out) over `options`' range of the two videos: none where neither
+// SSIMULACRA2 nor Butteraugli is among them, or the part is no longer than
+// long_cpu_run_seconds. Whether a GPU takes them instead is the caller's to
+// know (the Vship build's GPU check).
+std::optional<LongCpuRun> long_cpu_run(const std::vector<std::string>& keys, const VideoInfo& source,
+                                       const VideoInfo& test, const VmafOptions& options);
+
+// A time to give roughly: {3, "day"}, {5, "hour"} or {40, "minute"} (days
+// from 2 days, hours from 2 hours, at least 1 minute), rounded as Python's
+// round() rounds (halves to even, as nearbyint does).
+std::pair<long long, std::string_view> rough_time(double seconds);
+
 // Throws PerceptualRunError if the two videos cannot be compared by the
 // window's rules (geometry.h's pair_problem), such as durations that do not
 // match, over `options`' range.

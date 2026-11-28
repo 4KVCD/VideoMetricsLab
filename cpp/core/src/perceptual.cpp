@@ -1,6 +1,7 @@
 #include "vml/perceptual.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "vml/crop_detect.h"
 #include "vml/geometry.h"
@@ -36,6 +37,57 @@ const std::string* failure_of(const PerceptualFailures& failures, const std::str
     const auto found =
         std::find_if(failures.begin(), failures.end(), [&key](const auto& failure) { return failure.first == key; });
     return found != failures.end() ? &found->second : nullptr;
+}
+
+namespace {
+
+// The seconds per megapixel of a compared frame pair for SSIMULACRA2, with
+// Butteraugli or without, on the CPU, measured with the app's engines on a
+// 24-core CPU (Core Ultra 9 285K), 48 pairs of a 3840x2160 (8.29 MP) video:
+// 0.34 s a pair with Butteraugli (16.2 s alone, 16.4 s with SSIMULACRA2
+// beside it), 0.17 s for SSIMULACRA2 alone (8.2 s). A rough guide, as CPUs
+// differ.
+double cpu_seconds_per_megapixel(bool butteraugli) { return (butteraugli ? 0.34 : 0.17) / 8.29; }
+
+}  // namespace
+
+std::optional<LongCpuRun> long_cpu_run(const std::vector<std::string>& keys, const VideoInfo& source,
+                                       const VideoInfo& test, const VmafOptions& options) {
+    LongCpuRun run;
+    for (const char* key : {"ssimulacra2", "butteraugli"}) {
+        if (std::find(keys.begin(), keys.end(), key) != keys.end()) {
+            run.keys.emplace_back(key);
+        }
+    }
+    if (run.keys.empty()) {
+        return std::nullopt;
+    }
+    double seconds = std::min(test.duration, source.duration);
+    if (const double fps = source.fps; fps > 0) {  // the range's part of them
+        const auto [first, end] = compared_frames(options.compared_range(), fps);
+        if (end) {
+            seconds = std::min(seconds, static_cast<double>(*end) / fps);
+        }
+        seconds -= static_cast<double>(first) / fps;
+    }
+    if (seconds <= long_cpu_run_seconds) {
+        return std::nullopt;
+    }
+    const double frames = seconds * (test.fps > 0 ? test.fps : 24.0) / std::max(1, options.n_subsample);
+    const double megapixels = static_cast<double>(test.width) * test.height / 1e6;
+    run.video_seconds = seconds;
+    run.scoring_seconds = frames * megapixels * cpu_seconds_per_megapixel(run.keys.back() == "butteraugli");
+    return run;
+}
+
+std::pair<long long, std::string_view> rough_time(double seconds) {
+    if (seconds >= 2 * 86400) {
+        return {static_cast<long long>(std::nearbyint(seconds / 86400)), "day"};
+    }
+    if (seconds >= 2 * 3600) {
+        return {static_cast<long long>(std::nearbyint(seconds / 3600)), "hour"};
+    }
+    return {std::max(1LL, static_cast<long long>(std::nearbyint(seconds / 60))), "minute"};
 }
 
 void validate_pair(const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options) {

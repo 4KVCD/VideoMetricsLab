@@ -69,27 +69,16 @@ const app_log::Logger logger("vml.main_window");
 constexpr double rate_window_seconds = 10.0;
 constexpr double rate_min_seconds = 2.0;
 
-// The seconds per megapixel of a compared frame pair for `keys` (SSIMULACRA2
-// and/or Butteraugli) on the CPU, measured with the app's engines on a 24-core
-// CPU (Core Ultra 9 285K), 48 pairs of a 3840x2160 (8.29 MP) video: 0.34 s a
-// pair with Butteraugli (16.2 s alone, 16.4 s with SSIMULACRA2 beside it),
-// 0.17 s for SSIMULACRA2 alone (8.2 s). A rough guide, as CPUs differ.
-double cpu_seconds_per_megapixel(const std::vector<std::string>& keys) {
-    const bool butteraugli = std::find(keys.begin(), keys.end(), "butteraugli") != keys.end();
-    return (butteraugli ? 0.34 : 0.17) / 8.29;
-}
-
-// "about 3 days", "about 5 hours", "about 40 minutes", rounded as Python's
-// round() rounds (halves to even, as nearbyint does).
+// "about 3 days", "about 5 hours", "about 40 minutes" (rough_time).
 QString rough_duration(double seconds) {
-    if (seconds >= 2 * 86400) {
-        return ntr("about {count} day", "about {count} days", static_cast<long long>(std::nearbyint(seconds / 86400)));
+    const auto [count, unit] = rough_time(seconds);
+    if (unit == "day") {
+        return ntr("about {count} day", "about {count} days", count);
     }
-    if (seconds >= 2 * 3600) {
-        return ntr("about {count} hour", "about {count} hours", static_cast<long long>(std::nearbyint(seconds / 3600)));
+    if (unit == "hour") {
+        return ntr("about {count} hour", "about {count} hours", count);
     }
-    return ntr("about {count} minute", "about {count} minutes",
-               std::max(1LL, static_cast<long long>(std::nearbyint(seconds / 60))));
+    return ntr("about {count} minute", "about {count} minutes", count);
 }
 
 std::function<bool(bool)>& keep_awake() {
@@ -546,39 +535,24 @@ bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<R
         if (!row_data->video_info) {
             continue;
         }
-        const VideoInfo& info = *row_data->video_info;
-        const std::vector<std::string> reusable = reusable_metric_keys(*row_data);
-        const std::vector<std::string> requested = requested_metrics(*row_data);
-        std::vector<std::string> cpu_keys;
+        std::vector<std::string> calculated = requested_metrics(*row_data);
+        std::erase_if(calculated, [reusable = reusable_metric_keys(*row_data)](const std::string& key) {
+            return contains(reusable, key);
+        });
+        const std::optional<LongCpuRun> run =
+            long_cpu_run(calculated, *source_info_, *row_data->video_info, row_data->options);
+        if (!run || vship_available(row_data->options.vship_build)) {
+            continue;  // short, or on the GPU
+        }
         QStringList cpu_metrics;
-        for (const std::string key : {"ssimulacra2", "butteraugli"}) {
-            if (contains(requested, key) && !contains(reusable, key)) {
-                cpu_keys.push_back(key);
-                cpu_metrics.append(qt_text(metric_definition(key).label));
-            }
+        for (const std::string& key : run->keys) {
+            cpu_metrics.append(qt_text(metric_definition(key).label));
         }
-        if (cpu_keys.empty() || vship_available(row_data->options.vship_build)) {
-            continue;  // on the GPU
-        }
-        double seconds = std::min(info.duration, source_info_->duration);
-        if (const double fps = source_info_->fps; fps > 0) {  // the range's part of them
-            const auto [first, end] = compared_frames(row_data->options.compared_range(), fps);
-            if (end) {
-                seconds = std::min(seconds, static_cast<double>(*end) / fps);
-            }
-            seconds -= static_cast<double>(first) / fps;
-        }
-        if (seconds <= long_cpu_run_seconds) {
-            continue;
-        }
-        const double frames = seconds * (info.fps > 0 ? info.fps : 24.0) / std::max(1, row_data->options.n_subsample);
-        const double megapixels = static_cast<double>(info.width) * info.height / 1e6;
-        const double per_megapixel = cpu_seconds_per_megapixel(cpu_keys);
         lines.append(app::tr("• {name}: {time}, {metrics} on CPU — {duration} of scoring",
                              {{"name", name_of(row_data->path)},
-                              {"time", format_hms(seconds)},
+                              {"time", format_hms(run->video_seconds)},
                               {"metrics", cpu_metrics.join(app::tr(" and "))},
-                              {"duration", rough_duration(frames * megapixels * per_megapixel)}}));
+                              {"duration", rough_duration(run->scoring_seconds)}}));
     }
     if (lines.isEmpty()) {
         return true;
