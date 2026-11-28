@@ -97,10 +97,14 @@ std::string_view vship_build_label(VshipBuild build) {
 std::filesystem::path synthetic_scale_direction_variant_path(const std::filesystem::path& distorted,
                                                              ScaleDirection direction) {
     std::filesystem::path name = distorted.stem();
-    name += direction == ScaleDirection::distorted_to_source ? " [upscale-distorted-to-source]"
-                                                            : " [downscale-source-to-distorted]";
+    name += scale_direction_variant_suffix(direction);
     name += distorted.extension();
     return distorted.parent_path() / name;
+}
+
+std::string_view scale_direction_variant_suffix(ScaleDirection direction) {
+    return direction == ScaleDirection::distorted_to_source ? " [upscale-distorted-to-source]"
+                                                            : " [downscale-source-to-distorted]";
 }
 
 std::string_view film_grain_variant_suffix(bool with_film_grain) {

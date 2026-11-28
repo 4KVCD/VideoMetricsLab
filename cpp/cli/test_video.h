@@ -89,6 +89,14 @@ struct TestVideo {
     // its file's name.
     std::string file_name;
     std::string display;      // the preset CVVDP models, when CVVDP is asked for
+    // For a file compared twice (--scale-to both, --film-grain both), as the
+    // window's "Test both directions" and film grain twin rows: the scale
+    // direction it was given in place of --scale-to's, and what its name adds
+    // to the file's for the second of the two (" [upscale-distorted-to-source]",
+    // " [without film grain]"), as the window names its row. Its film grain
+    // choice is its info's with_film_grain.
+    std::optional<ScaleDirection> scale_direction;
+    std::string variant;
     // CVVDP on each further --cvvdp-display: a TestVideo of its own for each,
     // with CVVDP alone, run as a comparison of its own.
     std::vector<TestVideo> other_displays;
@@ -115,13 +123,13 @@ struct TestVideo {
         return found != failure_codes.end() ? found->second : std::string(calculation_failed_code);
     }
 
-    // Its name as the reports give it.
+    // Its name as the reports give it: its file's, with `variant`.
     std::string name() const;
     // Its name as progress lines give it: with the display, for one of
     // another video's other displays.
     std::string label() const;
     // What its files are named after: file_name, else its file's name
-    // without the extension.
+    // without the extension, then `variant`.
     std::string file_stem() const;
 };
 

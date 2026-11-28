@@ -60,6 +60,10 @@ ResampleTarget resample_target_of_width(int width);
 std::filesystem::path synthetic_scale_direction_variant_path(const std::filesystem::path& distorted,
                                                              ScaleDirection direction);
 
+// What that path adds to the video's name: " [upscale-distorted-to-source]"
+// or " [downscale-source-to-distorted]".
+std::string_view scale_direction_variant_suffix(ScaleDirection direction);
+
 // A made-up path that stands for a second row of the same test video scored
 // with the other film grain choice ("film [without film grain].mkv"), so that
 // the video can be scored with its film grain and without it side by side.

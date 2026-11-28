@@ -229,11 +229,18 @@ std::optional<Json> difference_metrics(const std::vector<TestVideo>& videos, con
     return metrics;
 }
 
-std::string TestVideo::name() const { return name_of(path); }
+std::string TestVideo::name() const {
+    if (variant.empty()) {
+        return name_of(path);
+    }
+    return platform::path_text(path.stem()) + variant + platform::path_text(path.extension());
+}
 
 std::string TestVideo::label() const { return for_display_only ? name() + " (CVVDP on " + display + ")" : name(); }
 
-std::string TestVideo::file_stem() const { return file_name.empty() ? platform::path_text(path.stem()) : file_name; }
+std::string TestVideo::file_stem() const {
+    return (file_name.empty() ? platform::path_text(path.stem()) : file_name) + variant;
+}
 
 std::vector<Summaries> summarize(const std::vector<TestVideo>& videos) {
     std::vector<Summaries> all;

@@ -432,7 +432,7 @@ std::optional<std::string> mac_gpu_decode_refusal(const std::optional<std::strin
 #endif
 
 std::optional<bool> film_grain_choice(const CompareArguments& arguments, const Settings& settings) {
-    if (arguments.film_grain) {
+    if (arguments.film_grain && *arguments.film_grain != "both") {  // both: the default's, then the other
         return *arguments.film_grain == "with";
     }
     return film_grain_default_choice(settings.film_grain_default);
@@ -1462,6 +1462,17 @@ private:
     void leave_out_hdr_vmaf_if_not_pq(TestVideo& video) const;
     void add_colour_notes(TestVideo& video) const;
     void add_film_grain_notes(TestVideo& video) const;
+    // One way a test video is compared: --scale-to both and --film-grain
+    // both compare a file more than once.
+    struct Pairing {
+        std::optional<ScaleDirection> scale_direction;
+        std::optional<bool> with_film_grain;
+        std::string variant;  // TestVideo::variant
+    };
+    std::vector<Pairing> pairings_of(const VideoInfo& info);
+    std::optional<std::string> plan_pairing(const std::filesystem::path& path, const VideoInfo& info,
+                                            const Pairing& pairing, const std::string& ffmpeg);
+    VmafOptions options_of(const TestVideo& video) const;
     std::optional<std::string> queue_jobs(TestVideo& video, const std::string& ffmpeg);
     void queue_other_displays(TestVideo& video);
     // Whether `video`'s scores may be read from the saved scores: those it
@@ -1488,6 +1499,9 @@ private:
     bool raw_yuv_used_ = false;
     bool film_grain_used_ = false;
     bool vvc_used_ = false;
+    // Whether --scale-to both or --film-grain both compared any file twice.
+    bool scale_paired_ = false;
+    bool film_grain_paired_ = false;
     bool test_video_read_ = false;
 };
 
@@ -1549,6 +1563,58 @@ std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& 
         command_wrong = error.what();
         return std::nullopt;
     }
+    // Read once: each way it is compared is a video of its own from here.
+    const VideoInfo info = *std::move(video.info);
+    videos.pop_back();
+    for (const Pairing& pairing : pairings_of(info)) {
+        if (std::optional<std::string> missing = plan_pairing(path, info, pairing, ffmpeg)) {
+            return missing;
+        }
+    }
+    return std::nullopt;
+}
+
+// The ways `info`'s video is compared: once, or with --scale-to both a
+// video of another size also the other way, and with --film-grain both a
+// video whose grain can be scored either way also with the other choice
+// (each way of both, with both), as the window's "Test both directions"
+// and film grain twin rows: the first as --scale-to test and the film grain
+// default, named as its file, the others after it.
+std::vector<ComparisonPlanner::Pairing> ComparisonPlanner::pairings_of(const VideoInfo& info) {
+    std::vector<Pairing> pairings(1);
+    if (arguments_.scale_to == "both" && (info.width != source_.width || info.height != source_.height)) {
+        scale_paired_ = true;
+        pairings = {{ScaleDirection::source_to_distorted, std::nullopt, ""},
+                    {ScaleDirection::distorted_to_source, std::nullopt,
+                     std::string(scale_direction_variant_suffix(ScaleDirection::distorted_to_source))}};
+    }
+    if (arguments_.film_grain == "both" && film_grain_choosable(info)) {
+        film_grain_paired_ = true;
+        // The first is given its choice as it is scored now (with and no
+        // choice are the same scores), as the window's own row is.
+        const bool with = effective_film_grain(info).scoring == GrainScoring::with;
+        std::vector<Pairing> both;
+        for (const Pairing& pairing : pairings) {
+            both.push_back({pairing.scale_direction, with, pairing.variant});
+            both.push_back(
+                {pairing.scale_direction, !with, pairing.variant + std::string(film_grain_variant_suffix(!with))});
+        }
+        pairings = std::move(both);
+    }
+    return pairings;
+}
+
+// Plans `path`, read as `info`, compared one of the ways pairings_of gives.
+std::optional<std::string> ComparisonPlanner::plan_pairing(const std::filesystem::path& path, const VideoInfo& info,
+                                                           const Pairing& pairing, const std::string& ffmpeg) {
+    TestVideo& video = videos.emplace_back();
+    video.path = path;
+    video.info = info;
+    if (pairing.with_film_grain) {
+        video.info->with_film_grain = pairing.with_film_grain;
+    }
+    video.scale_direction = pairing.scale_direction;
+    video.variant = pairing.variant;
     video.source = source_;
     if (!arguments_.colour) {
         if (take_colour_tags(*video.info, source_)) {
@@ -1722,6 +1788,12 @@ std::vector<std::string> ComparisonPlanner::unused_argument_notes() const {
     }
     if (arguments_.film_grain && !film_grain_used_) {
         notes.emplace_back("--film-grain is not used: neither the reference nor any test video has film grain.");
+    } else if (arguments_.film_grain == "both" && !film_grain_paired_) {
+        notes.emplace_back("--film-grain both compared no video twice: no test video has film grain that can be "
+                           "scored both with and without it.");
+    }
+    if (arguments_.scale_to == "both" && !scale_paired_) {
+        notes.emplace_back("--scale-to both compared no video twice: every test video is the reference's size.");
     }
     if (arguments_.vvc_decoder == "gpu" && vvc_used_ && !decoder_available(vvdec_decoder)) {
         notes.emplace_back("--vvc-decoder gpu is not used: this package has no vvdec-vulkan, so VVC is decoded on the "
@@ -1730,13 +1802,22 @@ std::vector<std::string> ComparisonPlanner::unused_argument_notes() const {
     return notes;
 }
 
+// `video`'s options: the command's, in its own scale direction where it has one.
+VmafOptions ComparisonPlanner::options_of(const TestVideo& video) const {
+    VmafOptions options = row_options(arguments_, settings_, video.metrics);
+    if (video.scale_direction) {
+        options.scale_direction = *video.scale_direction;
+    }
+    return options;
+}
+
 // Queues the jobs that compare `video`, checked against the reference
 // first: its own, unless everything is saved, and CVVDP on each further
 // display. `ffmpeg` is asked which decoders this PC has, where a video may be
 // decoded on the GPU. Returns what the command line cannot do yet of its own
 // job, or nothing; throws when the two videos cannot be compared as asked.
 std::optional<std::string> ComparisonPlanner::queue_jobs(TestVideo& video, const std::string& ffmpeg) {
-    video.options = row_options(arguments_, settings_, video.metrics);
+    video.options = options_of(video);
     validate_video_pair(video.source, *video.info, video.options);
     const auto [width, height] = analysis_dimensions(video.source, *video.info, video.options);
     VmafOptions options = video.options;
@@ -1778,7 +1859,9 @@ void ComparisonPlanner::queue_other_displays(TestVideo& video) {
         other.display = displays_[display].first;
         other.for_display_only = true;
         other.save_scores = video.save_scores;
-        other.options = row_options(arguments_, settings_, other.metrics);
+        other.scale_direction = video.scale_direction;
+        other.variant = video.variant;
+        other.options = options_of(other);
         const std::size_t before = jobs.size();
         queue(other, other.source, other.options, backends_, displays_[display].second, reads_saved(other), save_,
               cache_folder_, jobs);

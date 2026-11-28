@@ -34,12 +34,13 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--model-v1 MODEL] [--model-hdr MODEL]
                                    [--black-bars {auto,source,none}]
                                    [--source-crop T:B:L:R] [--test-crop T:B:L:R]
-                                   [--scale-to {test,reference}]
+                                   [--scale-to {test,reference,both}]
                                    [--scaler {bicubic,bilinear,lanczos,spline}]
                                    [--duration SECONDS | --range START-END |
                                    --frames FIRST-LAST]
                                    [--colour {pq-bt2020,hlg-bt2020,bt709}]
-                                   [--film-grain {with,without}] [--fps RATE]
+                                   [--film-grain {with,without,both}]
+                                   [--fps RATE]
                                    [--size WIDTHxHEIGHT] [--pix-fmt FORMAT]
                                    [--cvvdp-display PRESET] [--cvvdp-fill]
                                    [--subsample N] [--threads N]
@@ -253,9 +254,11 @@ options:
                         given no crop is compared at its full frame (less
                         an odd-sized frame's odd line)
   --test-crop T:B:L:R   the same for the test videos
-  --scale-to {test,reference}
+  --scale-to {test,reference,both}
                         which video's size the other is scaled to when they
-                        differ (default: test)
+                        differ (default: test); both: a test video of
+                        another size is compared both ways, the second
+                        named "[upscale-distorted-to-source]"
   --scaler {bicubic,bilinear,lanczos,spline}
                         scaling algorithm (default: bicubic)
   --duration SECONDS    compare only the first SECONDS of each video, in
@@ -278,13 +281,15 @@ options:
                         SSIMULACRA2 and Butteraugli. Scores with colours given
                         or taken are neither read from nor saved to the saved
                         scores
-  --film-grain {with,without}
+  --film-grain {with,without,both}
                         the film grain a video's stream asks the player to
                         add: with, as players show the video, or without, the
                         coded pictures only (default: the app's; with where it
-                        asks). Grain no decoder here adds as it should
-                        (H.274's outside VVC, AFGS1 in H.264) is always left
-                        out
+                        asks); both: a test video with grain is compared
+                        with it and without it, the second named "[with
+                        film grain]" or "[without film grain]". Grain no
+                        decoder here adds as it should (H.274's outside
+                        VVC, AFGS1 in H.264) is always left out
   --fps RATE            the frame rate of a raw video stream (a .264, .265,
                         .266 or .obu file, with no container), such as
                         24000/1001, 23.976 or 60, in place of the one it
@@ -1542,7 +1547,7 @@ Parser compare_parser(CompareArguments& parsed) {
         option({"--source-crop"}, [&parsed](const std::string& value) { parsed.source_crop = crop_edges(value); }),
         option({"--test-crop"}, [&parsed](const std::string& value) { parsed.test_crop = crop_edges(value); }),
         option({"--scale-to"},
-               [&parsed](const std::string& value) { parsed.scale_to = choice(value, {"test", "reference"}); }),
+               [&parsed](const std::string& value) { parsed.scale_to = choice(value, {"test", "reference", "both"}); }),
         option({"--scaler"},
                [&parsed](const std::string& value) {
                    parsed.scaler = choice(value, {"bicubic", "bilinear", "lanczos", "spline"});
@@ -1555,7 +1560,7 @@ Parser compare_parser(CompareArguments& parsed) {
                    parsed.colour = choice(value, {"pq-bt2020", "hlg-bt2020", "bt709"});
                }),
         option({"--film-grain"},
-               [&parsed](const std::string& value) { parsed.film_grain = choice(value, {"with", "without"}); }),
+               [&parsed](const std::string& value) { parsed.film_grain = choice(value, {"with", "without", "both"}); }),
         option({"--fps"}, [&parsed](const std::string& value) { parsed.fps = frame_rate(value); }),
         option({"--size"}, [&parsed](const std::string& value) { parsed.size = picture_size(value); }),
         option({"--pix-fmt"}, [&parsed](const std::string& value) { parsed.pix_fmt = pixel_format(value); }),

@@ -65,14 +65,15 @@ struct CompareArguments {
     // CropMode::manual.
     std::optional<CropEdges> source_crop;
     std::optional<CropEdges> test_crop;
-    std::string scale_to = "test";
+    std::string scale_to = "test";  // "test", "reference" or "both" (each direction, a video of its own)
     std::string scaler = "bicubic";
     std::optional<long long> duration_ms;  // milliseconds from the start of the videos
     std::optional<std::pair<long long, long long>> range_ms;  // milliseconds; an end of 0: to the end
     // The first frame and the one past the last (--frames); an end of 0: to the end.
     std::optional<std::pair<long long, long long>> frames;
     std::optional<std::string> colour;
-    std::optional<std::string> film_grain;  // "with" or "without" (VideoInfo::with_film_grain)
+    // "with" or "without" (VideoInfo::with_film_grain), or "both" (each, a video of its own)
+    std::optional<std::string> film_grain;
     std::optional<double> fps;            // a raw YUV file's frame rate, a raw stream's in place of what it stores
     std::optional<std::string> size;      // a raw YUV file's picture size, "1920x1080"
     std::optional<std::string> pix_fmt;   // a raw YUV file's pixel format, as FFmpeg names it
