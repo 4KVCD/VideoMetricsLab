@@ -845,12 +845,6 @@
    }
   },
   {
-   "text": "Delete your preset \"{name}\"?\n\nVideos using it keep their settings.",
-   "values": {
-    "name": "<name>"
-   }
-  },
-  {
    "text": "Deleted the CVVDP preset \"{name}\".",
    "values": {
     "name": "<name>"
@@ -2378,7 +2372,6 @@
     "Decoder: Quelle: <source>",
     "Decoder: Quelle: <source>, Testvideo: <test>",
     "Dekodierung in der App fehlgeschlagen (<error>); stattdessen Dekodierung über FFmpeg…",
-    "Ihre Vorlage „<name>“ löschen?\n\nVideos, die sie verwenden, behalten ihre Einstellungen.",
     "Die CVVDP-Vorlage „<name>“ wurde gelöscht.",
     "Erkannte GPU(s): <names>",
     "Fertig in <time>.",
@@ -3085,7 +3078,6 @@
     "Декодер: исходник: <source>",
     "Декодер: исходник: <source>, тестовое видео: <test>",
     "Ошибка декодирования в приложении (<error>); декодирование через FFmpeg…",
-    "Удалить ваш пресет «<name>»?\n\nВидео, которые его используют, сохранят свои настройки.",
     "Пресет CVVDP «<name>» удалён.",
     "Найденные GPU: <names>",
     "Готово за <time>.",
@@ -3792,7 +3784,6 @@
     "وحدة فك الترميز: المصدر: <source>",
     "وحدة فك الترميز: المصدر: <source>، فيديو الاختبار: <test>",
     "فشل فك الترميز داخل التطبيق (<error>)؛ يُفك الترميز عبر FFmpeg بدلًا من ذلك…",
-    "حذف إعدادك المسبق «<name>»؟\n\nتحتفظ مقاطع الفيديو التي تستخدمه بإعداداتها.",
     "حُذف إعداد CVVDP المسبق «<name>».",
     "وحدات GPU المكتشفة: <names>",
     "اكتمل في <time>.",
@@ -4499,7 +4490,6 @@
     "デコーダー：ソース：<source>",
     "デコーダー：ソース：<source>、テスト動画：<test>",
     "アプリ内でのデコードに失敗したため（<error>）、代わりに FFmpeg でデコード中…",
-    "プリセット「<name>」を削除しますか？\n\nこれを使っている動画は設定を保持します。",
     "CVVDP プリセット「<name>」を削除しました。",
     "検出された GPU：<names>",
     "<time> で完了しました。",
@@ -5206,7 +5196,6 @@
     "解码器：源：<source>",
     "解码器：源：<source>，测试视频：<test>",
     "应用内解码失败（<error>）；改为通过 FFmpeg 解码…",
-    "要删除你的预设“<name>”吗？\n\n使用它的视频会保留其设置。",
     "已删除 CVVDP 预设“<name>”。",
     "检测到的 GPU：<names>",
     "完成，用时 <time>。",
@@ -5913,7 +5902,6 @@
     "ตัวถอดรหัส: ต้นฉบับ: <source>",
     "ตัวถอดรหัส: ต้นฉบับ: <source>, วิดีโอทดสอบ: <test>",
     "การถอดรหัสในแอปล้มเหลว (<error>) กำลังถอดรหัสผ่าน FFmpeg แทน…",
-    "ลบพรีเซ็ต \"<name>\" ของคุณหรือไม่\n\nวิดีโอที่ใช้พรีเซ็ตนี้จะคงการตั้งค่าไว้",
     "ลบพรีเซ็ต CVVDP \"<name>\" แล้ว",
     "GPU ที่ตรวจพบ: <names>",
     "เสร็จสิ้นใน <time>",

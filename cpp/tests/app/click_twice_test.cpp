@@ -4,6 +4,8 @@
 #include <gtest/gtest.h>
 
 #include <QApplication>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QPushButton>
 
 #include "click_twice.h"
@@ -45,6 +47,39 @@ TEST(ClickTwice, ArmingAnotherOrLettingGoStartsAgain) {
 
     guard.disarm();  // another decision (a run starting, another button)
     EXPECT_FALSE(guard.click(&remove, "remove"));
+}
+
+// The line beside a button (Delete profile's, Delete preset's): shown while
+// armed, gone after, and nothing in its row moves or grows as it comes and
+// goes, however long it is.
+TEST(ClickTwice, TheLineBesideMovesNothing) {
+    ClickTwice guard(nullptr);
+    QWidget row;
+    auto* layout = new QHBoxLayout(&row);
+    auto* other = new QPushButton("Rename");
+    auto* remove = new QPushButton("Delete");
+    auto* line = new QLabel;
+    guard.show_line_in(line);
+    layout->addWidget(other);
+    layout->addWidget(remove);
+    layout->addWidget(line, 1);
+    row.resize(300, row.sizeHint().height());
+    row.show();
+    const QRect other_at = other->geometry();
+    const QRect remove_at = remove->geometry();
+    const QSize size = row.size();
+    const QSize hint = row.sizeHint();
+
+    guard.click(remove, QString(200, QLatin1Char('x')));
+    QApplication::processEvents();
+    EXPECT_EQ(line->text(), QString(200, QLatin1Char('x')));
+    EXPECT_EQ(other->geometry(), other_at);
+    EXPECT_EQ(remove->geometry(), remove_at);
+    EXPECT_EQ(row.size(), size);
+    EXPECT_EQ(row.sizeHint(), hint);
+
+    guard.disarm();
+    EXPECT_TRUE(line->text().isEmpty());
 }
 
 }  // namespace

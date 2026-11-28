@@ -470,7 +470,6 @@ TEST(SettingsPanel, WeakSegmentsEditsTheProfiles) {
         return answers.takeFirst();
     };
     dialogs.alert = [&alerted](const QString& title, const QString&) { alerted = title; };
-    dialogs.ask_no_default = [](const QString&, const QString&) { return true; };
     SettingsPanel panel(settings, writes, [] { return ToolsStatus{}; }, dialogs);
     QSignalSpy changed(&panel, &SettingsPanel::weak_segment_rules_changed);
     EXPECT_EQ(panel.weak_profile->currentText(), "Default");
@@ -511,7 +510,18 @@ TEST(SettingsPanel, WeakSegmentsEditsTheProfiles) {
     EXPECT_EQ(changed.count(), told + 1);
     EXPECT_EQ(panel.weak_segments->rules().conditions.size(), 3U);
     panel.weak_profile->setCurrentIndex(1);
-    panel.delete_weak_profile();
+    // Delete is clicked twice: the first arms it, its line naming the
+    // profile; another profile picked lets go; the second click deletes.
+    panel.weak_profile_delete->click();
+    EXPECT_EQ(segment_profiles(settings).size(), 2U);
+    EXPECT_TRUE(panel.weak_profile_delete_line->text().contains("Grain"));
+    panel.weak_profile->setCurrentIndex(0);
+    EXPECT_TRUE(panel.weak_profile_delete_line->text().isEmpty());
+    panel.weak_profile->setCurrentIndex(1);
+    panel.weak_profile_delete->click();
+    EXPECT_EQ(segment_profiles(settings).size(), 2U);
+    panel.weak_profile_delete->click();
+    EXPECT_TRUE(panel.weak_profile_delete_line->text().isEmpty());
     EXPECT_EQ(segment_profiles(settings).size(), 1U);
     EXPECT_EQ(panel.weak_profile->currentText(), "Default");
 

@@ -56,6 +56,8 @@ struct SavedComparison;
 
 namespace vml::app {
 
+class ClickTwice;
+
 class MetricList;
 
 class FileWrites;
@@ -138,7 +140,10 @@ public:
     // profile in use.
     void load_weak_preset(std::string_view key);
     void rename_weak_profile();
+    // Deletes the profile in use: what Delete's second click does (it is
+    // clicked twice, as Remove all: on_weak_profile_delete_clicked).
     void delete_weak_profile();
+    void on_weak_profile_delete_clicked();
 
     // The controls, for the window's tests.
     // The sub-tabs, each a page of related boxes: General, Metrics, Weak
@@ -204,6 +209,7 @@ public:
     QComboBox* weak_profile = nullptr;
     QPushButton* weak_profile_rename = nullptr;
     QPushButton* weak_profile_delete = nullptr;
+    QLabel* weak_profile_delete_line = nullptr;  // Delete's line while it is armed, under the profile row
     SegmentRulesEditor* weak_segments = nullptr;
     QComboBox* decoded_videos = nullptr;
     QComboBox* language = nullptr;
@@ -410,6 +416,7 @@ private:
     void show_delete_scope();
     // The question, once the comparisons are read, and the deletion queued.
     void ask_and_delete(const std::vector<SavedComparison>& listed);
+    ClickTwice* weak_profile_guard_ = nullptr;  // Delete, clicked twice
     bool filling_profiles_ = false;  // fill_weak_profiles: not an edit
     // Send test's sender; the templates' edits saved a moment after typing
     // stops; the template a field is inserted into.

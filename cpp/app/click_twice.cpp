@@ -1,6 +1,8 @@
 #include "click_twice.h"
 
+#include <QLabel>
 #include <QPushButton>
+#include <QSizePolicy>
 #include <QTimer>
 
 #include "theme.h"
@@ -42,6 +44,21 @@ void ClickTwice::disarm() {
     line_.clear();
     timer_->stop();
     emit changed();
+}
+
+void ClickTwice::show_line_in(QLabel* label) {
+    label->setTextFormat(Qt::PlainText);
+    label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);  // never widens the row
+    label->setMinimumHeight(label->fontMetrics().height());               // its line kept, empty or not
+    label->setText(line_);
+    style_as_armed(label, true);
+    connect(this, &ClickTwice::changed, label, [this, label] { label->setText(line_); });
+}
+
+void ClickTwice::style_as_armed(QLabel* label, bool armed) {
+    label->setStyleSheet(armed ? QStringLiteral("QLabel { color: %1; font-weight: 600; }")
+                                     .arg(theme::color("failed").name())
+                               : QString());
 }
 
 }  // namespace vml::app
