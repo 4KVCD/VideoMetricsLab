@@ -12,6 +12,7 @@
 #include <QPushButton>
 #include <QTabBar>
 #include <QTableWidget>
+#include <QTest>
 #include <QToolButton>
 
 #include <gtest/gtest.h>
@@ -853,6 +854,44 @@ TEST(WorstFramesTab, NamesTheVideosAsMetricGraphsDoes) {
     EXPECT_EQ(videos->item(0, 0)->text(), "…CRF 20");
     EXPECT_EQ(videos->item(0, 0)->toolTip(), "Example Show - S01E03 - CRF 20");
     EXPECT_EQ(videos->item(1, 0)->text(), "b");
+}
+
+// Tab goes from the profile's buttons into the conditions, row by row,
+// then on to Add condition and the options under it, as they are shown. The
+// conditions are made anew for each video and were put last in the window's
+// focus chain, after the lists on the right, their rows after the options.
+TEST(WorstFramesTab, TabGoesThroughTheConditionsWhereTheyAreShown) {
+    Settings settings;
+    Bench bench(settings);
+    WorstFramesTab& tab = bench.tab;
+    tab.resize(1400, 900);
+    tab.show();
+    tab.activateWindow();
+    ASSERT_TRUE(QTest::qWaitForWindowActive(&tab));
+    tab.set_videos({{"row:a", "a", vmaf_result("a.mkv", std::vector<float>(30, 95.0F))}});
+    QApplication::processEvents();  // the conditions shown
+    QPushButton* save_new = nullptr;
+    for (QPushButton* button : tab.findChildren<QPushButton*>()) {
+        if (button->text() == "Save as new profile") {
+            save_new = button;
+        }
+    }
+    ASSERT_NE(save_new, nullptr);
+    save_new->setFocus(Qt::TabFocusReason);
+    QStringList order;
+    for (int step = 0; step < 6; ++step) {
+        QTest::keyClick(QApplication::focusWidget(), Qt::Key_Tab);
+        QWidget* focus = QApplication::focusWidget();
+        if (auto* button = qobject_cast<QPushButton*>(focus)) {
+            order << button->text();
+        } else if (auto* combo = qobject_cast<QComboBox*>(focus)) {
+            order << combo->currentText();
+        } else {
+            order << QString::fromLatin1(focus->metaObject()->className());
+        }
+    }
+    EXPECT_EQ(order.join(" | ").toStdString(),
+              "VMAF v0.6.1 | is below | QDoubleSpinBox | Remove | Add condition | any condition holds");
 }
 
 }  // namespace

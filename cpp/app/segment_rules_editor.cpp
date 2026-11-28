@@ -44,6 +44,7 @@ SegmentRulesEditor::SegmentRulesEditor(std::vector<std::string> keys, bool at_le
     none_->setVisible(!at_least_one_);
     layout->addWidget(none_);
     auto* add_button = new QPushButton(app::tr("Add condition"));
+    add_button_ = add_button;
     add_button->setEnabled(!keys_.empty());
     connect(add_button, &QPushButton::clicked, this, [this] {
         // The first metric no condition names yet, or the first.
@@ -86,7 +87,31 @@ SegmentRulesEditor::SegmentRulesEditor(std::vector<std::string> keys, bool at_le
     layout->addLayout(form);
 }
 
-void SegmentRulesEditor::add_option_row(const QString& label, QWidget* field) { form_->addRow(label, field); }
+void SegmentRulesEditor::add_option_row(const QString& label, QWidget* field) {
+    form_->addRow(label, field);
+    option_fields_.push_back(field);
+    order_tabs();
+}
+
+void SegmentRulesEditor::follow_in_tab_order(QWidget* before) {
+    tab_before_ = before;
+    order_tabs();
+}
+
+void SegmentRulesEditor::order_tabs() {
+    std::vector<QWidget*> order;
+    if (tab_before_ != nullptr) {
+        order.push_back(tab_before_);
+    }
+    for (const ConditionRow& row : conditions_) {
+        order.insert(order.end(), {row.metric, row.comparison, row.threshold, row.row->findChild<QPushButton*>()});
+    }
+    order.insert(order.end(), {add_button_, combine_combo_, min_frames_spin_, merge_frames_spin_});
+    order.insert(order.end(), option_fields_.begin(), option_fields_.end());
+    for (std::size_t i = 1; i < order.size(); ++i) {
+        QWidget::setTabOrder(order[i - 1], order[i]);
+    }
+}
 
 void SegmentRulesEditor::wrap_long_options() { form_->setRowWrapPolicy(QFormLayout::WrapLongRows); }
 
@@ -171,6 +196,7 @@ void SegmentRulesEditor::add_row(const WeakCondition& condition) {
     set_condition_metric(entry, condition);
     conditions_.push_back(entry);
     none_->setVisible(false);
+    order_tabs();  // made after the options: Tab reaches it where it is shown
 }
 
 void SegmentRulesEditor::set_condition_metric(ConditionRow& row, const WeakCondition& condition) {

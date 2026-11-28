@@ -1506,7 +1506,17 @@
   "Ready": "พร้อม",
   "Ready: no test videos ticked.": "พร้อม: ไม่มีวิดีโอทดสอบที่ทำเครื่องหมาย",
   "Ready: {videos}, {metrics}.": "พร้อม: {videos}, {metrics}",
-  "{low} to {high} metrics": "ตัวชี้วัด {low} ถึง {high} รายการ"
+  "{low} to {high} metrics": "ตัวชี้วัด {low} ถึง {high} รายการ",
+  "Anywhere in the window": "ที่ใดก็ได้ในหน้าต่าง",
+  "Choose the reference": "เลือกวิดีโออ้างอิง",
+  "Go to a tab": "ไปยังแท็บ",
+  "Keyboard shortcuts": "แป้นพิมพ์ลัด",
+  "Next or previous tab": "แท็บถัดไปหรือก่อนหน้า",
+  "Pause / resume": "หยุดชั่วคราว / ทำต่อ",
+  "Shortcut: {keys}": "แป้นพิมพ์ลัด: {keys}",
+  "Use the keyboard shortcuts": "ใช้แป้นพิมพ์ลัด",
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "เมื่อปิด แป้นพิมพ์ลัดในรายการ (F5, Ctrl+O, Ctrl+1 ถึง Ctrl+8 และอื่น ๆ) จะไม่ทำอะไร Tab, Ctrl+Tab และแป้นของการเปรียบเทียบวิดีโอยังใช้ได้",
+  "Next or previous section of Settings, or metric of Metric Graphs": "ส่วนถัดไปหรือก่อนหน้าของ การตั้งค่า หรือเมตริกของ กราฟเมตริก"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

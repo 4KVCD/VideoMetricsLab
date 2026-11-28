@@ -328,6 +328,8 @@ FillColumnTable::FillColumnTable(int rows, int columns, int fill_column, std::ve
                                  QWidget* parent)
     : QTableWidget(rows, columns, parent), fill_column_(fill_column), other_columns_(std::move(other_columns)) {
     connect(horizontalHeader(), &QHeaderView::sectionResized, this, &FillColumnTable::on_section_resized);
+    // Tab leaves the table for the next control; the arrows move between its cells.
+    setTabKeyNavigation(false);
 }
 
 void FillColumnTable::select_row_if_none_is(int row) {
@@ -1175,6 +1177,50 @@ void ReadoutLabel::remeasure() {
 }
 
 // --------------------------------------------------------------- QuietTabWidget
+
+namespace {
+
+// pass_ctrl_tab_up's: Ctrl+Tab ignored before the tab widget sees it goes on
+// to its parents, as a key it didn't take would; Ctrl+PgDn and Ctrl+PgUp
+// step through its tabs, round from the last to the first, as Ctrl+Tab does.
+class CtrlTabUp : public QObject {
+public:
+    explicit CtrlTabUp(QTabWidget* tabs) : QObject(tabs), tabs_(tabs) {}
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (event->type() == QEvent::KeyPress) {
+            auto* key = static_cast<QKeyEvent*>(event);
+            if ((key->key() == Qt::Key_Tab || key->key() == Qt::Key_Backtab) &&
+                key->modifiers().testFlag(Qt::ControlModifier)) {
+                key->ignore();
+                return true;
+            }
+            if ((key->key() == Qt::Key_PageDown || key->key() == Qt::Key_PageUp) &&
+                (key->modifiers() & ~Qt::KeypadModifier) == Qt::ControlModifier && tabs_->count() > 1) {
+                const int count = tabs_->count();
+                const int step = key->key() == Qt::Key_PageDown ? 1 : count - 1;
+                for (int index = (tabs_->currentIndex() + step) % count; index != tabs_->currentIndex();
+                     index = (index + step) % count) {
+                    if (tabs_->isTabEnabled(index) && tabs_->isTabVisible(index)) {
+                        tabs_->setCurrentIndex(index);
+                        break;
+                    }
+                }
+                key->accept();
+                return true;
+            }
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    QTabWidget* tabs_;
+};
+
+}  // namespace
+
+void pass_ctrl_tab_up(QTabWidget* tabs) { tabs->installEventFilter(new CtrlTabUp(tabs)); }
 
 void keep_focus_on_tab_click(QTabWidget* tabs) {
     // Before the tab changes (tabBarClicked comes first): a focus in the page

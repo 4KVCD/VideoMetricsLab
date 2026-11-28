@@ -1506,7 +1506,17 @@
   "Ready": "Pronto",
   "Ready: no test videos ticked.": "Pronto: nessun video di prova spuntato.",
   "Ready: {videos}, {metrics}.": "Pronto: {videos}, {metrics}.",
-  "{low} to {high} metrics": "da {low} a {high} metriche"
+  "{low} to {high} metrics": "da {low} a {high} metriche",
+  "Anywhere in the window": "Ovunque nella finestra",
+  "Choose the reference": "Scegli il riferimento",
+  "Go to a tab": "Vai a una scheda",
+  "Keyboard shortcuts": "Scorciatoie da tastiera",
+  "Next or previous tab": "Scheda successiva o precedente",
+  "Pause / resume": "Pausa / riprendi",
+  "Shortcut: {keys}": "Scorciatoia: {keys}",
+  "Use the keyboard shortcuts": "Usa le scorciatoie da tastiera",
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Disattivate, le scorciatoie dell'elenco (F5, Ctrl+O, da Ctrl+1 a Ctrl+8 e le altre) non fanno nulla. Tab, Ctrl+Tab e i tasti di Confronto video funzionano comunque.",
+  "Next or previous section of Settings, or metric of Metric Graphs": "Sezione successiva o precedente di Impostazioni, o metrica di Grafici metriche"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [
