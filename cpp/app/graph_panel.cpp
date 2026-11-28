@@ -1419,6 +1419,8 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     connect(swatches, &ColorSwatchDelegate::clicked, this, [this](int row) { choose_video_color(row); });
     stats_table_->setItemDelegateForColumn(0, swatches);
     remove_marks_ = new RemoveMarkDelegate(stats_table_);  // its items say their line, for the tooltip
+    // A Videos row's line has no mark: its item has no text (refresh_stats_table).
+    remove_marks_->absent = [](const QModelIndex& index) { return index.data().toString().isEmpty(); };
     RemoveMarkDelegate::track_hover(stats_table_);
     stats_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     connect(stats_table_, &QTableWidget::itemChanged, this,
@@ -1635,13 +1637,6 @@ QWidget* GraphPanel::build_action_bar() {
     auto* add_button = new QPushButton(app::tr("Import run file..."));
     connect(add_button, &QPushButton::clicked, this, [this] { on_add_saved_run(); });
     layout->addWidget(add_button);
-    // The way back for a Videos row's line removed with its table's cross
-    // (refresh_restore_button): visiting the tab leaves such lines away.
-    restore_button_ = new QPushButton(app::tr("Show removed videos"));
-    restore_button_->setToolTip(app::tr("Brings back the Videos tab's videos removed from the graph."));
-    restore_button_->setEnabled(false);
-    connect(restore_button_, &QPushButton::clicked, this, [this] { emit restore_removed_requested(); });
-    layout->addWidget(restore_button_);
     layout->addWidget(theme::separator(16));
     layout->addWidget(frame_controls_);  // made in the constructor
     layout->addWidget(theme::separator(16));
@@ -1860,8 +1855,8 @@ std::optional<int> GraphPanel::series_id_at_row(int row) const {
 }
 
 void GraphPanel::on_stats_cell_clicked(int row, int column) {
-    // The last column's mark (shown first) removes the line; a metric's mean shows its
-    // statistics.
+    // The last column's mark (shown first) removes a line of no Videos row;
+    // a metric's mean shows its statistics.
     if (is_mean_column(column)) {
         show_metric_detail(column - first_mean_column());
         return;
@@ -1869,9 +1864,18 @@ void GraphPanel::on_stats_cell_clicked(int row, int column) {
     if (column != stats_table_->columnCount() - 1) {
         return;
     }
-    if (const std::optional<int> id = series_id_at_row(row)) {
+    const std::optional<int> id = series_id_at_row(row);
+    if (id && entries_.contains(*id) && removable(entries_.at(*id).identity)) {
         remove_runs({*id});
     }
+}
+
+bool GraphPanel::removable(const std::string& identity) const {
+    if (!row_identities) {
+        return true;
+    }
+    const std::vector<std::string> rows = row_identities();
+    return std::find(rows.begin(), rows.end(), identity) == rows.end();
 }
 
 void GraphPanel::on_stats_header_clicked(int column) {
@@ -1906,7 +1910,6 @@ void GraphPanel::add_run(const Run& run) {
     if (add_series(run)) {
         series_changed();
     }
-    refresh_restore_button();
 }
 
 void GraphPanel::add_runs(const std::vector<Run>& runs) {
@@ -1917,21 +1920,6 @@ void GraphPanel::add_runs(const std::vector<Run>& runs) {
     if (changed) {
         series_changed();
     }
-    refresh_restore_button();
-}
-
-void GraphPanel::refresh_restore_button() {
-    if (restore_button_ == nullptr) {
-        return;  // before the panel is built
-    }
-    bool any = false;
-    if (row_identities && !suppressed_identities_.empty()) {
-        for (const std::string& identity : row_identities()) {
-            any = any || suppressed_identities_.contains(identity);
-        }
-    }
-    restore_button_->setEnabled(any);
-    emit lines_changed();
 }
 
 bool GraphPanel::add_series(const Run& run) {
@@ -1945,12 +1933,6 @@ bool GraphPanel::add_series(const Run& run) {
         std::error_code error;
         const std::filesystem::path absolute = std::filesystem::absolute(run.result->distorted, error);
         identity = "path:" + platform::path_text(std::filesystem::weakly_canonical(absolute, error));
-    }
-    if (suppressed_identities_.contains(identity)) {
-        if (!run.restore) {
-            return false;
-        }
-        suppressed_identities_.erase(identity);
     }
     // A test video scored without the film grain its stream asks for says so:
     // its scores are not those of the video viewers see. A film grain twin's
@@ -2087,7 +2069,7 @@ bool GraphPanel::remove_by_path(const std::filesystem::path& distorted) {
     // comparison just discarded, with no row to remove it from.
     for (const auto& [id, entry] : entries_) {
         if (same_path(entry.result->distorted, distorted)) {
-            remove_runs({id}, false);
+            remove_runs({id});
             return true;
         }
     }
@@ -2097,7 +2079,7 @@ bool GraphPanel::remove_by_path(const std::filesystem::path& distorted) {
 bool GraphPanel::remove_by_identity(const std::string& identity) {
     for (const auto& [id, entry] : entries_) {
         if (entry.identity == identity) {
-            remove_runs({id}, false);
+            remove_runs({id});
             return true;
         }
     }
@@ -2132,23 +2114,19 @@ void GraphPanel::remove_by_identities(const std::vector<std::string>& identities
             chosen.push_back(*id);
         }
     }
-    remove_runs(chosen, false);
+    remove_runs(chosen);
 }
 
-void GraphPanel::remove_runs(const std::vector<int>& series_ids, bool suppress) {
+void GraphPanel::remove_runs(const std::vector<int>& series_ids) {
     std::vector<int> removed;
     for (const int id : series_ids) {
         const auto found = entries_.find(id);
         if (found == entries_.end()) {
             continue;
         }
-        if (suppress) {
-            suppressed_identities_.insert(found->second.identity);
-        }
         entries_.erase(found);
         removed.push_back(id);
     }
-    refresh_restore_button();
     if (removed.empty()) {
         return;
     }
@@ -2232,6 +2210,12 @@ void GraphPanel::refresh_stats_table() {
     // A frame range's statistics (issue #17), or the whole video's.
     const std::optional<std::pair<int, int>> range = selected_frames();
     stats_table_->setRowCount(static_cast<int>(entries_.size()));
+    std::set<std::string> with_rows;  // the lines of Videos rows, which have no remove mark
+    if (row_identities) {
+        for (std::string& identity : row_identities()) {
+            with_rows.insert(std::move(identity));
+        }
+    }
     int row = 0;
     for (const auto& [id, entry] : entries_) {
         QTableWidgetItem* name = series_name_item(entry);
@@ -2289,10 +2273,16 @@ void GraphPanel::refresh_stats_table() {
         // A plain item, handled by cellClicked: a button in the cell would be
         // drawn over the first column before the widths settled.
         // Its text as the Python app's table had it; drawn by remove_marks_.
-        auto* remove = new QTableWidgetItem(QStringLiteral("✕"));
+        // A line of a Videos row has none: it is hidden with its tick box,
+        // and goes with its row. Its cell is there all the same, empty, so
+        // the column keeps its width.
+        auto* remove = new QTableWidgetItem;
         remove->setFlags(Qt::ItemIsEnabled);
-        remove->setToolTip(app::tr("Remove {label} from the graph", {{"label", entry.label}}));
-        remove->setData(Qt::AccessibleTextRole, remove->toolTip());
+        if (!with_rows.contains(entry.identity)) {
+            remove->setText(QStringLiteral("✕"));
+            remove->setToolTip(app::tr("Remove {label} from the graph", {{"label", entry.label}}));
+            remove->setData(Qt::AccessibleTextRole, remove->toolTip());
+        }
         stats_table_->setItem(row, stats_table_->columnCount() - 1, remove);
         ++row;
     }
@@ -2433,7 +2423,7 @@ void GraphPanel::on_add_saved_run() {
     try {
         auto [result, label] = load_run(path);
         add_run({std::make_shared<const ComparisonResult>(std::move(result)), QString::fromStdString(label),
-                 saved_run_identity(path), true});
+                 saved_run_identity(path)});
     } catch (const RunFileError& error) {
         dialogs.alert(app::tr("Failed to load run"), QString::fromStdString(error.what()));
     }
@@ -2774,7 +2764,7 @@ void GraphPanel::show_stats_menu(const QPoint& position) {
 std::vector<GraphPanel::Run> GraphPanel::runs() const {
     std::vector<Run> runs;
     for (const auto& [id, entry] : entries_) {
-        runs.push_back({entry.result, entry.label, entry.identity, true, entry.shown});
+        runs.push_back({entry.result, entry.label, entry.identity, entry.shown});
     }
     return runs;
 }

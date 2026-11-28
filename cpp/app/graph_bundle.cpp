@@ -89,7 +89,7 @@ std::vector<BundleFile> metric_graph_files(const std::vector<BundleVideo>& video
     panel.export_colours = [colours = style.colours] { return colours; };
     std::vector<GraphPanel::Run> runs;
     for (std::size_t i = 0; i < videos.size(); ++i) {
-        runs.push_back({videos[i].result, names[i], "bundle:" + std::to_string(i), true});
+        runs.push_back({videos[i].result, names[i], "bundle:" + std::to_string(i)});
     }
     panel.add_runs(runs);
     const std::vector<std::string> keys = panel.scored_metrics();

@@ -244,7 +244,7 @@ TEST_F(GraphPanelTest, ShowsTheRunsAsThePythonApp) {
     GraphPanel panel(&colors);
     panel.show();
     for (const nlohmann::json& run : reference.at("runs")) {
-        panel.add_run({shared(test::result_from(run.at("result"))), QString::fromStdString(run.at("label")), {}, true});
+        panel.add_run({shared(test::result_from(run.at("result"))), QString::fromStdString(run.at("label")), {}});
     }
     for (const nlohmann::json& item : reference.at("pages")) {
         const std::string key = item.at("key");
@@ -303,9 +303,9 @@ TEST_F(GraphPanelTest, DrawsTheDifferenceOfTwoShownLines) {
     VideoColors colors;
     GraphPanel panel(&colors);
     panel.show();
-    panel.add_runs({{shared(a), "a", {}, true},
-                    {shared(b), "b", {}, true},
-                    {shared(vmaf_result("c.mkv", {50.0F, 50.0F, 50.0F, 50.0F})), "c", {}, true}});
+    panel.add_runs({{shared(a), "a", {}},
+                    {shared(b), "b", {}},
+                    {shared(vmaf_result("c.mkv", {50.0F, 50.0F, 50.0F, 50.0F})), "c", {}}});
     MetricPage& vmaf = page(panel, "vmaf");
     QCheckBox& box = difference_box(panel);
     EXPECT_FALSE(box.isEnabled());  // three lines
@@ -349,9 +349,9 @@ TEST_F(GraphPanelTest, ExportsTheDifferenceTheBandShows) {
     VideoColors colors;
     GraphPanel panel(&colors);
     panel.show();
-    panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F, 80.0F, 70.0F})), "a (saved)", {}, true},
-                    {shared(vmaf_result("b.mkv", {85.0F, 82.0F, 60.0F})), "b (saved)", {}, true},
-                    {shared(c), "c", {}, true}});
+    panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F, 80.0F, 70.0F})), "a (saved)", {}},
+                    {shared(vmaf_result("b.mkv", {85.0F, 82.0F, 60.0F})), "b (saved)", {}},
+                    {shared(c), "c", {}}});
     page(panel, "vmaf");
     const QStringList statistics{"Statistics as CSV...", "Statistics as JSON..."};
     EXPECT_EQ(stats_menu(panel, "a (saved)"), statistics);
@@ -438,8 +438,8 @@ TEST_F(GraphPanelTest, TheStatisticsMenuOffersTheVideosExports) {
     VideoColors colors;
     GraphPanel panel(&colors);
     panel.show();
-    panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F, 80.0F})), "a", "row-a", true},
-                    {shared(vmaf_result("b.mkv", {85.0F, 75.0F})), "b", "loaded-b", true}});
+    panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F, 80.0F})), "a", "row-a"},
+                    {shared(vmaf_result("b.mkv", {85.0F, 75.0F})), "b", "loaded-b"}});
     // Before the window says what it can export: the table's own alone.
     const QStringList statistics{"Statistics as CSV...", "Statistics as JSON..."};
     EXPECT_EQ(stats_menu(panel, "a"), statistics);
@@ -489,8 +489,8 @@ TEST_F(GraphPanelTest, AFailedExportDoesNotSayItIsComplete) {
     VideoColors colors;
     GraphPanel panel(&colors);
     panel.show();
-    panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F})), "a", {}, true},
-                    {shared(vmaf_result("b.mkv", {80.0F})), "b", {}, true}});
+    panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F})), "a", {}},
+                    {shared(vmaf_result("b.mkv", {80.0F})), "b", {}}});
     page(panel, "vmaf");
     difference_box(panel).setChecked(true);
     const test::Folder folder;
@@ -514,7 +514,7 @@ TEST_F(GraphPanelTest, TheExportIsInTheColoursAskedFor) {
     VideoColors colors;
     GraphPanel panel(&colors);
     panel.show();
-    panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F, 80.0F})), "a", {}, true}});
+    panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F, 80.0F})), "a", {}}});
     page(panel, "vmaf");
     EXPECT_EQ(panel.render_export_image().toImage().pixelColor(1, 1), theme::chart_colours(false).background);
     panel.export_colours = [] { return theme::export_chart_colours("dark", "", ""); };
@@ -543,7 +543,7 @@ TEST_F(GraphPanelTest, TheReadoutPairsTheLinesByFrame) {
         VideoColors colors;
         GraphPanel panel(&colors);
         panel.show();
-        panel.add_runs({{shared(at_25), "p25", "p25", true}, {shared(at_24), "p24", "p24", true}});
+        panel.add_runs({{shared(at_25), "p25", "p25"}, {shared(at_24), "p24", "p24"}});
         MetricPage& vmaf = page(panel, "vmaf");
         vmaf.on_hover(0.8, 1000.0, entries(panel));  // every point at or below: the nearest in time, p25's frame 20
         const QString text = readout(vmaf);
@@ -558,8 +558,8 @@ TEST_F(GraphPanelTest, TheReadoutPairsTheLinesByFrame) {
     VideoColors colors;
     GraphPanel panel(&colors);
     panel.show();
-    panel.add_runs({{shared(vmaf_result("short.mkv", {80.0F, 80.0F, 80.0F})), "short", {}, true},
-                    {shared(vmaf_result("a.mkv", dip)), "a", {}, true}});
+    panel.add_runs({{shared(vmaf_result("short.mkv", {80.0F, 80.0F, 80.0F})), "short", {}},
+                    {shared(vmaf_result("a.mkv", dip)), "a", {}}});
     MetricPage& vmaf = page(panel, "vmaf");
     vmaf.chart().resize(800, 400);
     vmaf.on_hover(5 / 30.0, 60.0, entries(panel));
@@ -572,7 +572,7 @@ TEST_F(GraphPanelTest, TheReadoutPairsTheLinesByFrame) {
     // Three lines, one without a score there: no Δ of the other two.
     std::vector<float> unscored(10, 90.0F);
     unscored[5] = std::numeric_limits<float>::quiet_NaN();
-    panel.add_run({shared(vmaf_result("c.mkv", unscored)), "c", {}, true});
+    panel.add_run({shared(vmaf_result("c.mkv", unscored)), "c", {}});
     vmaf.on_hover(5 / 30.0, 60.0, entries(panel));
     EXPECT_FALSE(readout(vmaf).contains(QStringLiteral("Δ"))) << readout(vmaf).toStdString();
 }
@@ -595,8 +595,8 @@ TEST_F(GraphPanelTest, TheGraphsRightClickShowsTheFrameThereInVideoCompare) {
     VideoColors colors;
     GraphPanel panel(&colors);
     panel.show();
-    panel.add_runs({{shared(vmaf_result("short.mkv", {80.0F, 80.0F, 80.0F})), "short", "id-short", true},
-                    {shared(vmaf_result("a.mkv", dip)), "a", "id-a", true}});
+    panel.add_runs({{shared(vmaf_result("short.mkv", {80.0F, 80.0F, 80.0F})), "short", "id-short"},
+                    {shared(vmaf_result("a.mkv", dip)), "a", "id-a"}});
     QMenu menu;
     const QStringList texts = menu_at_dip(panel, menu);
     ASSERT_GE(texts.size(), 2);
@@ -613,7 +613,7 @@ TEST_F(GraphPanelTest, TheGraphsRightClickShowsTheFrameThereInVideoCompare) {
 
     GraphPanel one(&colors);
     one.show();
-    one.add_runs({{shared(vmaf_result("a.mkv", dip)), "a", "id-a", true}});
+    one.add_runs({{shared(vmaf_result("a.mkv", dip)), "a", "id-a"}});
     QMenu single;
     EXPECT_EQ(menu_at_dip(one, single).front(), QStringLiteral("Show frame 5 in Video Compare"));
 }
@@ -625,9 +625,9 @@ TEST_F(GraphPanelTest, TheReadoutFollowsTheLinesShown) {
     VideoColors colors;
     GraphPanel panel(&colors);
     panel.show();
-    panel.add_runs({{shared(vmaf_result("a.mkv", std::vector<float>(10, 90.0F))), "a", {}, true},
-                    {shared(vmaf_result("b.mkv", std::vector<float>(10, 80.0F))), "b", {}, true},
-                    {shared(vmaf_result("c.mkv", std::vector<float>(10, 70.0F))), "c", {}, true}});
+    panel.add_runs({{shared(vmaf_result("a.mkv", std::vector<float>(10, 90.0F))), "a", {}},
+                    {shared(vmaf_result("b.mkv", std::vector<float>(10, 80.0F))), "b", {}},
+                    {shared(vmaf_result("c.mkv", std::vector<float>(10, 70.0F))), "c", {}}});
     MetricPage& vmaf = page(panel, "vmaf");
     vmaf.chart().resize(800, 400);
     const auto lines_fit = [&vmaf] {
@@ -661,15 +661,15 @@ TEST_F(GraphPanelTest, TheReadoutTellsALineAddedOrRescored) {
     VideoColors colors;
     GraphPanel panel(&colors);
     panel.show();
-    panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(10, 90.0F))), "a", "row a", false});
+    panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(10, 90.0F))), "a", "row a"});
     MetricPage& vmaf = page(panel, "vmaf");
     vmaf.chart().resize(800, 400);
     vmaf.show_frame(3, entries(panel));
     ASSERT_TRUE(readout(vmaf).contains(QStringLiteral("[a]"))) << readout(vmaf).toStdString();
-    panel.add_run({shared(vmaf_result("b.mkv", std::vector<float>(10, 80.0F))), "b", "row b", false});
+    panel.add_run({shared(vmaf_result("b.mkv", std::vector<float>(10, 80.0F))), "b", "row b"});
     EXPECT_TRUE(readout(vmaf).contains(QStringLiteral("[b]"))) << readout(vmaf).toStdString();
     EXPECT_TRUE(readout(vmaf).contains(QStringLiteral("80.00"))) << readout(vmaf).toStdString();
-    panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(10, 70.0F))), "a", "row a", false});
+    panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(10, 70.0F))), "a", "row a"});
     EXPECT_TRUE(readout(vmaf).contains(QStringLiteral("70.00"))) << readout(vmaf).toStdString();
     EXPECT_FALSE(readout(vmaf).contains(QStringLiteral("90.00"))) << readout(vmaf).toStdString();
 }
@@ -691,7 +691,7 @@ TEST_F(GraphPanelTest, TheReadoutWrapsTheOtherMetricsInColumns) {
         for (const std::string& key : others) {
             add_frames(result, key, {0, 1}, {10.0F, 20.0F});
         }
-        runs.push_back({shared(std::move(result)), QString::fromLatin1(name), {}, true});
+        runs.push_back({shared(std::move(result)), QString::fromLatin1(name), {}});
     }
     VideoColors colors;
     GraphPanel panel(&colors);
@@ -750,7 +750,7 @@ TEST_F(GraphPanelTest, ALongReadoutDoesNotWidenTheTab) {
     GraphPanel panel(&colors);
     panel.show();
     const QString name(400, QLatin1Char('W'));  // far wider than the hint the readout starts with
-    panel.add_run({shared(vmaf_result(name.toStdString() + ".mkv", std::vector<float>(10, 90.0F))), name, {}, true});
+    panel.add_run({shared(vmaf_result(name.toStdString() + ".mkv", std::vector<float>(10, 90.0F))), name, {}});
     MetricPage& vmaf = page(panel, "vmaf");
     vmaf.chart().resize(800, 400);
     const auto least_width = [&vmaf] {
@@ -780,7 +780,7 @@ TEST_F(GraphPanelTest, TheReadoutsDeltaOfAnIdenticalXpsnrFrame) {
     VideoColors colors;
     GraphPanel panel(&colors);
     panel.show();
-    panel.add_runs({{shared(a), "a", {}, true}, {shared(b), "b", {}, true}});
+    panel.add_runs({{shared(a), "a", {}}, {shared(b), "b", {}}});
     MetricPage& xpsnr = page(panel, "xpsnr");
     xpsnr.show_frame(0, entries(panel));
     EXPECT_TRUE(readout(xpsnr).contains(QStringLiteral("Δ (a − b) = +0.00"))) << readout(xpsnr).toStdString();
@@ -799,7 +799,7 @@ TEST_F(GraphPanelTest, AnIdenticalXpsnrFrameIsDrawnAboveTheOthersAndKeptInTheSco
     result.metric_results.add(FrameMetricResult{"xpsnr", {0, 1, 2, 3}, {0.0, 0.1, 0.2, 0.3},
                                                 {110.0F, INFINITY, NAN, INFINITY},
                                                 current_ffmpeg_provenance("xpsnr", "9.0.1")});
-    panel.add_run({shared(std::move(result)), "a", {}, true});
+    panel.add_run({shared(std::move(result)), "a", {}});
     MetricPage& xpsnr = page(panel, "xpsnr");
     const int id = id_of(panel, "a");
     const std::span<const float> plotted = drawn(xpsnr, id).values;
@@ -822,50 +822,23 @@ TEST_F(GraphPanelTest, CvvdpsSecondsAreDrawnAtTheirMiddles) {
     ComparisonResult result = vmaf_result("a.mkv", {90, 90, 90, 90, 90, 90});
     result.metric_results.add(SequenceMetricResult{"cvvdp", 8.75, current_ffmpeg_provenance("vmaf", "9.0.1"),
                                                    {0, 3, 6}, {0.0, 1.0, 2.0}, {8.5F, 9.0F, 8.0F}});
-    panel.add_run({shared(std::move(result)), "a", {}, true});
+    panel.add_run({shared(std::move(result)), "a", {}});
     MetricPage& cvvdp = page(panel, "cvvdp");
     const std::span<const double> times = drawn(cvvdp, id_of(panel, "a")).times;
     EXPECT_EQ((std::vector<double>(times.begin(), times.end())), (std::vector<double>{0.5, 1.5, 2.5}));
 }
 
-TEST_F(GraphPanelTest, ARunHasOneLineAndOneTheUserRemovedStaysAwayUnlessAskedFor) {
+TEST_F(GraphPanelTest, ARunHasOneLine) {
     // Added again (a row's result replaced), a run's line is updated, not
-    // doubled. Removed by the user, it stays away when the window brings the
-    // graph up to date, and comes back when the user asks for the runs:
-    // Show removed videos, enabled while a row's line is removed.
+    // doubled.
     VideoColors colors;
     GraphPanel panel(&colors);
     panel.show();
-    panel.row_identities = [] { return std::vector<std::string>{"row a", "row b"}; };
-    QPushButton* restore = nullptr;
-    for (QPushButton* button : panel.findChildren<QPushButton*>()) {
-        if (button->text() == "Show removed videos") {
-            restore = button;
-        }
-    }
-    ASSERT_NE(restore, nullptr);
-    QSignalSpy asked(&panel, &GraphPanel::restore_removed_requested);
-    panel.add_run({shared(vmaf_result("a.mkv", {80, 80})), "a", "row a", false});
-    panel.add_run({shared(vmaf_result("b.mkv", {85, 85})), "b", "row b", false});
-    panel.add_run({shared(vmaf_result("a.mkv", {99, 99})), "a", "row a", false});
+    panel.add_run({shared(vmaf_result("a.mkv", {80, 80})), "a", "row a"});
+    panel.add_run({shared(vmaf_result("b.mkv", {85, 85})), "b", "row b"});
+    panel.add_run({shared(vmaf_result("a.mkv", {99, 99})), "a", "row a"});
     ASSERT_EQ(entries(panel).size(), 2u);
     EXPECT_EQ(entries(panel).at(id_of(panel, "a")).means.at("vmaf"), 99.0);
-
-    EXPECT_FALSE(restore->isEnabled());
-    panel.remove_runs({id_of(panel, "a")});
-    EXPECT_TRUE(restore->isEnabled());
-    panel.add_run({shared(vmaf_result("a.mkv", {99, 99})), "a", "row a", false});
-    EXPECT_EQ(entries(panel).size(), 1u);
-    EXPECT_TRUE(restore->isEnabled());
-    restore->click();
-    EXPECT_EQ(asked.count(), 1);
-    panel.add_run({shared(vmaf_result("a.mkv", {99, 99})), "a", "row a", true});
-    EXPECT_EQ(entries(panel).size(), 2u);
-    EXPECT_FALSE(restore->isEnabled());
-    // A line of no row (added from a file), removed: nothing to bring back.
-    panel.add_run({shared(vmaf_result("c.mkv", {70, 70})), "c", "file c", false});
-    panel.remove_runs({id_of(panel, "c")});
-    EXPECT_FALSE(restore->isEnabled());
 }
 
 // A line's remove mark is the table's first column, at the start of its row
@@ -875,8 +848,8 @@ TEST_F(GraphPanelTest, TheRemoveMarkStartsALinesRow) {
     VideoColors colors;
     GraphPanel panel(&colors);
     panel.show();
-    panel.add_run({shared(vmaf_result("a.mkv", {80, 80})), "a", {}, true});
-    panel.add_run({shared(vmaf_result("b.mkv", {85, 85})), "b", {}, true});
+    panel.add_run({shared(vmaf_result("a.mkv", {80, 80})), "a", {}});
+    panel.add_run({shared(vmaf_result("b.mkv", {85, 85})), "b", {}});
     QTableWidget& stats = table(panel);
     const int remove = stats.columnCount() - 1;
     EXPECT_EQ(stats.horizontalHeader()->logicalIndex(0), remove);
@@ -890,6 +863,35 @@ TEST_F(GraphPanelTest, TheRemoveMarkStartsALinesRow) {
     EXPECT_EQ(entries(panel).size(), 1u);
 }
 
+// Only a line of no Videos row (Import run file... here) has a remove mark:
+// a row's line is hidden with its tick box and goes with its row (issue
+// #257). Its cell is empty, and a click there removes nothing.
+TEST_F(GraphPanelTest, OnlyALineOfNoRowHasARemoveMark) {
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    panel.show();
+    panel.row_identities = [] { return std::vector<std::string>{"row a"}; };
+    panel.add_run({shared(vmaf_result("a.mkv", {80, 80})), "a", "row a"});
+    panel.add_run({shared(vmaf_result("b.mkv", {85, 85})), "b", "saved-file:b"});
+    QTableWidget& stats = table(panel);
+    const int remove = stats.columnCount() - 1;
+    ASSERT_EQ(stats.item(0, 0)->text(), "a");
+    EXPECT_TRUE(stats.item(0, remove)->text().isEmpty());
+    EXPECT_TRUE(stats.item(0, remove)->toolTip().isEmpty());
+    EXPECT_EQ(stats.item(1, remove)->toolTip(), "Remove b from the graph");
+    stats.resize(900, 200);
+    stats.show();
+    const auto click = [&stats, remove](int row) {
+        QTest::mouseClick(stats.viewport(), Qt::LeftButton, {},
+                          stats.visualRect(stats.model()->index(row, remove)).center());
+    };
+    click(0);
+    EXPECT_EQ(entries(panel).size(), 2u);
+    click(1);
+    ASSERT_EQ(entries(panel).size(), 1u);
+    EXPECT_EQ(entries(panel).begin()->second.identity, "row a");
+}
+
 TEST_F(GraphPanelTest, AnUpdatedLineKeepsItsPlace) {
     // The table lists the lines in the order they were added, and a line set
     // again (a video's run going on) keeps its place on the page too: in the
@@ -898,10 +900,10 @@ TEST_F(GraphPanelTest, AnUpdatedLineKeepsItsPlace) {
     VideoColors colors;
     GraphPanel panel(&colors);
     panel.show();
-    panel.add_run({shared(vmaf_result("a.mkv", {90, 90, 90, 90})), "a", "row a", false});
-    panel.add_run({shared(vmaf_result("b.mkv", {80, 80, 80, 80})), "b", "row b", false});
+    panel.add_run({shared(vmaf_result("a.mkv", {90, 90, 90, 90})), "a", "row a"});
+    panel.add_run({shared(vmaf_result("b.mkv", {80, 80, 80, 80})), "b", "row b"});
     MetricPage& vmaf = page(panel, "vmaf");
-    panel.add_run({shared(vmaf_result("a.mkv", {91, 91, 91, 91})), "a", "row a", false});
+    panel.add_run({shared(vmaf_result("a.mkv", {91, 91, 91, 91})), "a", "row a"});
 
     ASSERT_TRUE(vmaf.show_frame(1, entries(panel)));
     const QStringList lines = readout(vmaf).split('\n');
@@ -920,7 +922,7 @@ TEST_F(GraphPanelTest, GoToFrameMovesAZoomedGraphToTheFrame) {
     VideoColors colors;
     GraphPanel panel(&colors);
     panel.show();
-    panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(3000, 90.0F))), "a", "row a", false});
+    panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(3000, 90.0F))), "a", "row a"});
     MetricPage& vmaf = page(panel, "vmaf");
     zoom(vmaf, 10.0, 10.0);
     frame_spin(panel).setValue(2400);  // 80 s at 30 fps
@@ -937,7 +939,7 @@ TEST_F(GraphPanelTest, TheExportedPngIsTheGraphWithItsKeyedTable) {
     VideoColors colors;
     GraphPanel panel(&colors);
     panel.show();
-    panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(10, 95.0F))), "encode-a", {}, true});
+    panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(10, 95.0F))), "encode-a", {}});
     const std::filesystem::path out = folder / "graph.png";
     const QString out_text = QString::fromStdString(platform::path_text(out));
     QString suggested;
@@ -995,7 +997,7 @@ TEST_F(GraphPanelTest, TheExportedPngIsTheGraphWithItsKeyedTable) {
     EXPECT_TRUE(keyed) << "no square of the line's colour in the image";
 
     // With the lines of two test videos: after their reference.
-    panel.add_run({shared(vmaf_result("b.mkv", std::vector<float>(10, 90.0F))), "encode-b", {}, true});
+    panel.add_run({shared(vmaf_result("b.mkv", std::vector<float>(10, 90.0F))), "encode-b", {}});
     export_png(panel);
     EXPECT_EQ(suggested.toStdString(), "source_vmaf.png");
 
@@ -1030,8 +1032,8 @@ TEST_F(GraphPanelTest, ALineWithNoScoresForTheMetricShowsDashesAndExports) {
         result.metric_results.add(std::move(scores));
         return shared(std::move(result));
     };
-    panel.add_run({run("b.mkv", NAN, 44.0F), "b", {}, true});
-    panel.add_run({run("a.mkv", 90.0F, 40.0F), "a", {}, true});
+    panel.add_run({run("b.mkv", NAN, 44.0F), "b", {}});
+    panel.add_run({run("a.mkv", 90.0F, 40.0F), "a", {}});
     page(panel, "psnr");
     page(panel, "vmaf");
 
@@ -1079,8 +1081,8 @@ TEST_F(GraphPanelTest, TimesAndTheRangeReachTheLongestLine) {
     panel.show();
     FrameControls& controls = frame_controls(panel);
     // 30 fps: the first line 100 frames long (to 3.3 s), the second 200.
-    panel.add_run({shared(vmaf_result("short.mkv", std::vector<float>(100, 90.0F))), "short", "row short", false});
-    panel.add_run({shared(vmaf_result("long.mkv", std::vector<float>(200, 80.0F))), "long", "row long", false});
+    panel.add_run({shared(vmaf_result("short.mkv", std::vector<float>(100, 90.0F))), "short", "row short"});
+    panel.add_run({shared(vmaf_result("long.mkv", std::vector<float>(200, 80.0F))), "long", "row long"});
     MetricPage& vmaf = page(panel, "vmaf");
     type_time(*controls.time_edit, "0:00:05.000");
     EXPECT_EQ(frame_spin(panel).value(), 150);
@@ -1121,7 +1123,7 @@ TEST_F(GraphPanelTest, GoToTimeAndARangeOfTimes) {
     EXPECT_TRUE(controls.range_start_time->isVisibleTo(&panel));
 
     // 30 fps: frame 2400 is at 80 s, 2401 at 80.0333 s.
-    panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(3000, 90.0F))), "a", "row a", false});
+    panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(3000, 90.0F))), "a", "row a"});
     MetricPage& vmaf = page(panel, "vmaf");
     zoom(vmaf, 10.0, 10.0);
     type_time(*controls.time_edit, "1:20.017");  // frame 2400 is still shown
@@ -1141,7 +1143,7 @@ TEST_F(GraphPanelTest, GoToTimeAndARangeOfTimes) {
     GraphPanel ranged(&colors);
     ranged.show();
     FrameControls& range_controls = frame_controls(ranged);
-    ranged.add_run({range_run("a.mkv", {80, 82, 84, 86, 88, 90, 70, 60, 95, 99}), "a", {}, true});
+    ranged.add_run({range_run("a.mkv", {80, 82, 84, 86, 88, 90, 70, 60, 95, 99}), "a", {}});
     MetricPage& ranged_vmaf = page(ranged, "vmaf");
     type_time(*range_controls.range_start_time, "0:00:00.100");
     EXPECT_FALSE(ranged_vmaf.chart().highlight());  // one end: no range yet
@@ -1189,8 +1191,8 @@ TEST_F(GraphPanelTest, AFrameRangesStatisticsAndShading) {
     GraphPanel panel(&colors);
     panel.show();
     const std::vector<float> a_vmaf{80, 82, 84, 86, 88, 90, 70, 60, 95, 99};
-    panel.add_run({range_run("a.mkv", a_vmaf), "a", {}, true});
-    panel.add_run({range_run("b.mkv", {50, 51, 52}), "b", {}, true});
+    panel.add_run({range_run("a.mkv", a_vmaf), "a", {}});
+    panel.add_run({range_run("b.mkv", {50, 51, 52}), "b", {}});
     MetricPage& vmaf = page(panel, "vmaf");
     const std::vector<QStringList> whole = cell_texts(panel);
 
@@ -1243,7 +1245,7 @@ TEST_F(GraphPanelTest, AFrameRangeOnCvvdpsPageIsTheSecondsItIsIn) {
     VideoColors colors;
     GraphPanel panel(&colors);
     panel.show();
-    panel.add_run({range_run("a.mkv", {80, 82, 84, 86, 88, 90, 70, 60, 95, 99}), "a", {}, true});
+    panel.add_run({range_run("a.mkv", {80, 82, 84, 86, 88, 90, 70, 60, 95, 99}), "a", {}});
     MetricPage& cvvdp = page(panel, "cvvdp");
     range_start_spin(panel).setValue(3);
     range_end_spin(panel).setValue(7);
@@ -1300,12 +1302,12 @@ TEST_F(GraphPanelTest, TabsAndColumnsAreTheScoredMetrics) {
     // after PSNR, the registry's order, not the order lines came in.
     ComparisonResult a = vmaf_result("a.mkv", std::vector<float>(10, 90.0F));
     add_frames(a, "psnr", {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, std::vector<float>(10, 40.0F));
-    panel.add_run({shared(std::move(a)), "a", {}, true});
+    panel.add_run({shared(std::move(a)), "a", {}});
     EXPECT_EQ(shown_metrics(panel), (std::vector<std::string>{"vmaf", "psnr"}));
     EXPECT_EQ(tab_texts(), (std::vector<std::string>{"VMAF v0.6.1", "PSNR"}));
     EXPECT_EQ(means(), (std::vector<std::string>{"VMAF v0.6.1", "PSNR"}));
     EXPECT_EQ(current(), "psnr");
-    panel.add_run({range_run("b.mkv", std::vector<float>(10, 80.0F)), "b", {}, true});
+    panel.add_run({range_run("b.mkv", std::vector<float>(10, 80.0F)), "b", {}});
     EXPECT_EQ(shown_metrics(panel), panel.scored_metrics());
     EXPECT_EQ(shown_metrics(panel), (std::vector<std::string>{"vmaf", "psnr", "cvvdp"}));
     EXPECT_EQ(means(), (std::vector<std::string>{"VMAF v0.6.1", "PSNR", "CVVDP"}));
@@ -1321,7 +1323,7 @@ TEST_F(GraphPanelTest, TabsAndColumnsAreTheScoredMetrics) {
     EXPECT_EQ(means(), (std::vector<std::string>{"VMAF v0.6.1", "PSNR"}));
     EXPECT_EQ(current(), "vmaf");
     EXPECT_EQ(chosen.size(), 1u);
-    panel.add_run({range_run("b.mkv", std::vector<float>(10, 80.0F)), "b", {}, true});
+    panel.add_run({range_run("b.mkv", std::vector<float>(10, 80.0F)), "b", {}});
     EXPECT_EQ(current(), "cvvdp");
     ASSERT_NE(page(panel, "cvvdp").curve(id_of(panel, "b")), nullptr);
 
@@ -1344,9 +1346,9 @@ TEST_F(GraphPanelTest, TabsAndColumnsAreTheScoredMetrics) {
     for (const char* plane : {"psnr_yuv_y", "psnr_yuv_u", "psnr_yuv_v"}) {
         add_frames(d, plane, frames, std::vector<float>(10, 42.0F));
     }
-    panel.add_run({shared(std::move(c)), "c", {}, true});
+    panel.add_run({shared(std::move(c)), "c", {}});
     EXPECT_EQ(shown_metrics(panel), (std::vector<std::string>{"vmaf", "psnr_yuv"}));
-    panel.add_run({shared(std::move(d)), "d", {}, true});
+    panel.add_run({shared(std::move(d)), "d", {}});
     EXPECT_EQ(shown_metrics(panel),
               (std::vector<std::string>{"vmaf", "psnr_yuv", "psnr_yuv_y", "psnr_yuv_u", "psnr_yuv_v"}));
     EXPECT_EQ(means(), (std::vector<std::string>{"VMAF v0.6.1", "PSNR YUV avg. dB (6:1:1)", "PSNR Y", "PSNR U",
@@ -1364,7 +1366,7 @@ TEST_F(GraphPanelTest, AShiftDragAcrossTheGraphSelectsFrames) {
     VideoColors colors;
     GraphPanel panel(&colors);
     panel.show();
-    panel.add_run({range_run("a.mkv", {80, 82, 84, 86, 88, 90, 70, 60, 95, 99}), "a", {}, true});
+    panel.add_run({range_run("a.mkv", {80, 82, 84, 86, 88, 90, 70, 60, 95, 99}), "a", {}});
     MetricPage& vmaf = page(panel, "vmaf");
     ChartWidget& chart = vmaf.chart();
     chart.resize(800, 400);
@@ -1404,10 +1406,10 @@ TEST_F(GraphPanelTest, AHiddenPanelShowsWhatAShownOneDoesOnceShown) {
     const auto change = [](GraphPanel& panel) {
         ComparisonResult b = vmaf_result("b.mkv", {80.0F, 81.0F, 82.0F});
         add_frames(b, "psnr", {0, 1, 2}, {40.0F, 41.0F, 42.0F});
-        panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F, 91.0F, 92.0F})), "a", "a", true},
-                        {shared(b), "b", "b", true},
-                        {shared(vmaf_result("c.mkv", {70.0F, 71.0F, 72.0F})), "c", "c", true}});
-        panel.add_run({shared(vmaf_result("a.mkv", {60.0F, 61.0F, 62.0F})), "a", "a", true});  // a's new result
+        panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F, 91.0F, 92.0F})), "a", "a"},
+                        {shared(b), "b", "b"},
+                        {shared(vmaf_result("c.mkv", {70.0F, 71.0F, 72.0F})), "c", "c"}});
+        panel.add_run({shared(vmaf_result("a.mkv", {60.0F, 61.0F, 62.0F})), "a", "a"});  // a's new result
         panel.remove_by_identity("c");
         panel.set_order({"b", "a"});
     };

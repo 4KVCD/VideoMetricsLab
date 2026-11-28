@@ -1331,14 +1331,6 @@ std::optional<int> MainWindow::row_index_of_path(const std::filesystem::path& pa
     return std::nullopt;
 }
 
-bool MainWindow::line_removed(int row) const {
-    if (row < 0 || row >= static_cast<int>(rows_.size())) {
-        return false;
-    }
-    const std::shared_ptr<CompletedRun>& run = rows_[static_cast<std::size_t>(row)]->completed_run;
-    return run != nullptr && graph_panel_->removed(run->graph_identity);
-}
-
 void MainWindow::repaint_row_marks() {
     if (distorted_table_ == nullptr) {
         return;  // before the table is built

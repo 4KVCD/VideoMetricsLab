@@ -150,10 +150,8 @@ enum Column : int {
     col_vmaf_yuv_y,
     col_vmaf_yuv_u,
     col_vmaf_yuv_v,
-    // A row's remove mark and its send-to-graph mark (RemoveMarkDelegate),
-    // shown first.
+    // A row's remove mark (RemoveMarkDelegate), shown first.
     col_remove,
-    col_graph,
     column_count,
 };
 
@@ -195,7 +193,7 @@ struct CompletedRun {
     // when the rest arrives.
     bool partial = false;
     // Its line on Metric Graphs, kept by a run that replaces it to update
-    // the same line (its colour, whether it is hidden or removed stay).
+    // the same line (its colour and whether it is hidden stay).
     std::string graph_identity = new_graph_identity();
     // Its name in saved runs and the graphs: the test video's, or the one a
     // saved run or saved scores were given.
@@ -519,11 +517,8 @@ private:
     // Removes `rows` (indexes into rows_) and their CVVDP display rows, and
     // their lines from Metric Graphs: Remove selected's, a row's remove mark's.
     void remove_distorted_rows(std::set<int, std::greater<>> rows);
-    // Whether row `row` has scores whose line the user removed from Metric
-    // Graphs: its send mark brings it back.
-    bool line_removed(int row) const;
-    // The rows' marks drawn again (a run started or ended, a line removed or
-    // back), in the frozen columns' own view too.
+    // The rows' remove marks drawn again (a run started or ended), in the
+    // frozen columns' own view too.
     void repaint_row_marks();
     void on_remove_all_distorted();
     // The footer's note: Remove all's or Start over's line while one is

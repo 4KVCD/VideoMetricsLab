@@ -360,10 +360,11 @@ control's words, colour and question follow from which of the three it is:
   (`RemoveMarkDelegate`, `app/widgets.h`), drawn in the text's colour,
   heavier under the pointer, never in the danger colour; one click removes
   it, with no question. Remove selected, under the Videos table, is the same
-  for the rows selected. Beside a video's ✕, its send mark (an arrow out of
-  a box) puts its line back in Metric Graphs; a click that has nothing to
-  do says why in the tab bar's indicator (`ExportIndicator::show_note`),
-  never in a window.
+  for the rows selected. In Metric Graphs' statistics only a line with no
+  Videos row (imported there, or opened from Saved Results) has the ✕
+  (issue #257); a Videos row's line is hidden with its tick box and goes
+  with its row. Its cell is drawn empty (`RemoveMarkDelegate::absent`), so
+  the column keeps its width and place.
 - **Clears the session** (Remove all, Start over): everything in the window
   at once, still nothing on disk. The `danger` role, clicked twice
   (`ClickTwice`, "Asking and telling the user").

@@ -8,11 +8,8 @@
    them; click a column heading to sort by it, and again to reverse. The
    circled ✕ at the start of a row removes that video from the list (its
    saved scores stay, so adding it again brings them back); **Remove
-   selected** removes the rows selected. Both are locked during a run. The
-   arrow out of a box beside the ✕ shows a video's scores in Metric Graphs
-   again after its line was removed there; where its line is there already,
-   or it has no scores yet, the title bar says so, and nothing is added
-   twice.
+   selected** removes the rows selected. Both are locked during a run. A
+   video removed from the list leaves Metric Graphs too.
 2. Select the metric checkboxes in each row. Cell edits apply to selected rows;
    header checkboxes apply across rows. While there are test videos, one is
    always selected, so the Options panel always shows settings: the first one
@@ -1318,9 +1315,12 @@ The table's right-click menu has the same entries under its own export
 (**Export this video's...** or **Export the selected videos'...**).
 
 Metric Graphs has its own tab: the Videos tab no longer has a button to open
-it. A video removed from the graph with the circled ✕ at the start of its
-row in the statistics table stays away when you come back to the tab; **Show removed videos** there brings back those of the Videos
-tab.
+it. Every scored video of the Videos tab has a line there: untick its box in
+the statistics table to hide it, and tick it to show it again. A line with
+no row in the Videos tab (a run file imported with Metric Graphs' own
+**Import run file...**, or a comparison opened from Saved Results) has a
+circled ✕ at the start of its row, which removes it; a Videos row's line
+goes when its row is removed.
 
 ### Exporting graphs
 
