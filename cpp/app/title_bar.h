@@ -81,7 +81,13 @@ signals:
     // The theme menu is about to open: set_theme, with the theme saved now.
     void theme_menu_opening();
 
+protected:
+    void changeEvent(QEvent* event) override;
+
 private:
+    // The theme button's glyph at the text's size (theme::text_scale).
+    void size_glyphs();
+
     QToolButton* progress_ = nullptr;
     QProgressBar* progress_bar_ = nullptr;
     QToolButton* theme_ = nullptr;

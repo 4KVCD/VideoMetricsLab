@@ -253,6 +253,10 @@ int main(int argc, char** argv) {
                             QString::fromStdString(settings.dark_look));
     app::theme::apply_appearance(app::theme::interface_of(settings.interface_style),
                                  app::theme::accent_of(settings.accent_colour));
+    // Windows' Text size, which Qt's fonts do not follow: after the style,
+    // whose setting reads the system's fonts again, and before the window is
+    // built, which takes its sizes from the fonts.
+    app::theme::apply_text_size();
     app_log::write(app_log::Level::info, "vml.main",
                    "Theme: " + (settings.theme.empty() ? "as " + system_name : settings.theme) + " (looks " +
                        settings.light_look + ", " + settings.dark_look + ")");

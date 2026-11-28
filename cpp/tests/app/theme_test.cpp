@@ -2,8 +2,10 @@
 // an accent, the text an accent button takes, and VML Modern's style sheet.
 // Applying one changes the whole application's style, which every later
 // test in the process would inherit: that is checked in the window instead.
+#include <QApplication>
 #include <QBoxLayout>
 #include <QColor>
+#include <QFont>
 #include <QFrame>
 #include <QGroupBox>
 #include <QLabel>
@@ -83,6 +85,42 @@ TEST(Theme, TextOnAnAccentIsWhicheverReads) {
     EXPECT_EQ(theme::text_on(QColor("#ffd54f")), QColor("#141416"));
     EXPECT_EQ(theme::text_on(QColor("#1a237e")), QColor("#ffffff"));  // a deep blue: white
     EXPECT_EQ(theme::text_on(QColor("#b3261e")), QColor("#ffffff"));
+}
+
+// Issue #249: VML Modern's sizes follow the text size. The sheet's sizes of
+// 3 pixels or more grow with it, rounded; its 1- and 2-pixel lines stay thin;
+// digits that are not a size (a colour) are left alone.
+TEST(Theme, TheSheetsSizesGrowWithTheText) {
+    EXPECT_EQ(theme::scaled_sheet("QPushButton { padding: 4px 12px; border: 1px solid #a0a3px; "
+                                  "border-bottom: 2px solid #123456; margin: 3px; min-height: 18px; }",
+                                  1.5),
+              "QPushButton { padding: 6px 18px; border: 1px solid #a0a3px; "
+              "border-bottom: 2px solid #123456; margin: 5px; min-height: 27px; }");
+    EXPECT_EQ(theme::scaled_sheet("QLabel { padding: 7px; }", 1.0), "QLabel { padding: 7px; }");
+}
+
+// The text size is the application font's against the system's own at 100 %,
+// never less than 1; at twice the text, Modern's sheet (as apply_sheet sets
+// it) and containers are twice the size.
+TEST(Theme, TwiceTheTextIsTwiceModernsSizes) {
+    const QFont before = QApplication::font();
+    QFont large = before;
+#ifdef __APPLE__
+    large.setPointSizeF(26.0);
+#else
+    large.setPointSizeF(18.0);
+#endif
+    QApplication::setFont(large);
+    EXPECT_DOUBLE_EQ(theme::text_scale(), 2.0);
+    EXPECT_EQ(theme::scaled(14), 28);
+    const QString sheet = theme::scaled_sheet(theme::modern_style_sheet(false, QColor("#4f8fe8")), theme::text_scale());
+    EXPECT_TRUE(sheet.contains("border-radius: 20px; margin-top: 0; padding: 72px 24px 24px 24px;"))
+        << sheet.left(200).toStdString();
+    QFont small = before;
+    small.setPointSizeF(6.0);
+    QApplication::setFont(small);
+    EXPECT_DOUBLE_EQ(theme::text_scale(), 1.0);
+    QApplication::setFont(before);
 }
 
 TEST(Theme, ModernsStyleSheetHasEveryColourFilledIn) {
