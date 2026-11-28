@@ -1,10 +1,13 @@
 #include "vml/file_fingerprint.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
+#include <functional>
+#include <future>
 #include <vector>
 
 #include "vml/ffprobe.h"
@@ -115,6 +118,32 @@ void add_colour(Sha256& hash, const VideoInfo& info) {
     }
 }
 
+// The SHA-256 (lower-case hex) of the picture shown at `time` seconds in
+// `file`'s first video stream, decoded as stored (no scaling or conversion):
+// -ss before -i seeks and then decodes up to that time exactly. The raw
+// bytes are hashed here, as every fingerprint saved before was made (FFmpeg's
+// hash muxer, which would spare the pipe, gives another digest when run from
+// here). Nothing when it cannot be decoded, there is no picture there, or
+// `stop` ends it.
+std::optional<std::string> picture_digest(const std::string& ffmpeg, const std::filesystem::path& file, double time,
+                                          const std::function<bool()>& stop) {
+    const std::vector<std::string> command{
+        ffmpeg, "-nostdin", "-v",       "error", "-ss",  python_repr(time), "-i",    platform::path_text(file),
+        "-map", "0:v:0",    "-frames:v", "1",    "-f", "rawvideo", "-"};
+    platform::ProcessOutput out;
+    try {
+        out = platform::run_program(command, std::chrono::minutes(2), {}, stop);
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
+    if (out.exit_code != 0 || out.timed_out || out.stopped || out.standard_output.empty()) {
+        return std::nullopt;
+    }
+    Sha256 picture;
+    picture.update(out.standard_output.data(), out.standard_output.size());
+    return picture.hexdigest();
+}
+
 }  // namespace
 
 std::optional<std::string> video_fingerprint(const std::filesystem::path& file, const VideoInfo& info,
@@ -131,27 +160,32 @@ std::optional<std::string> video_fingerprint(const std::filesystem::path& file, 
     add_text(hash, python_repr(std::round(info.fps * 100.0) / 100.0));
     add_text(hash, std::to_string(static_cast<long long>(std::round(info.duration))));
     add_colour(hash, info);
+    // The pictures are decoded at once, one FFmpeg each, rather than one
+    // after another (a 4K film's five: 1.2 s instead of 4.6 s), and their
+    // digests added in their order. One that fails stops the others.
+    std::atomic<bool> failed = false;
+    const auto stop = [&cancel, &failed] { return cancel.cancelled() || failed.load(); };
+    std::vector<std::future<std::optional<std::string>>> pictures;
     for (const double time : times) {
-        // One picture, decoded as stored (no scaling or conversion), from
-        // the first video stream; -ss before -i seeks and then decodes up
-        // to that time exactly.
-        const std::vector<std::string> command{ffmpeg,   "-nostdin", "-v",      "error", "-ss",
-                                               python_repr(time), "-i", platform::path_text(file),
-                                               "-map",   "0:v:0",    "-frames:v", "1",   "-f",
-                                               "rawvideo", "-"};
-        platform::ProcessOutput out;
-        try {
-            out = platform::run_program(command, std::chrono::minutes(2), {},
-                                        [&cancel] { return cancel.cancelled(); });
-        } catch (const std::exception&) {
-            return std::nullopt;
+        pictures.push_back(std::async(std::launch::async, [&, time] {
+            std::optional<std::string> digest = picture_digest(ffmpeg, file, time, stop);
+            if (!digest) {
+                failed = true;
+            }
+            return digest;
+        }));
+    }
+    std::vector<std::string> digests;
+    for (std::future<std::optional<std::string>>& picture : pictures) {
+        if (std::optional<std::string> digest = picture.get()) {
+            digests.push_back(std::move(*digest));
         }
-        if (out.exit_code != 0 || out.timed_out || out.stopped || out.standard_output.empty()) {
-            return std::nullopt;
-        }
-        Sha256 picture;
-        picture.update(out.standard_output.data(), out.standard_output.size());
-        add_text(hash, picture.hexdigest());
+    }
+    if (failed || digests.size() != times.size()) {
+        return std::nullopt;
+    }
+    for (const std::string& digest : digests) {
+        add_text(hash, digest);
     }
     return hash.hexdigest();
 }
@@ -269,15 +303,15 @@ stream_fingerprinter_using(std::string ffmpeg, std::string ffprobe) {
     };
 }
 
-std::function<std::optional<std::string>(const std::filesystem::path&)> fingerprinter_using(std::string ffmpeg,
-                                                                                         std::string ffprobe) {
+std::function<std::optional<std::string>(const std::filesystem::path&, const CancelToken&)>
+fingerprinter_using(std::string ffmpeg, std::string ffprobe) {
     return [ffmpeg = std::move(ffmpeg), ffprobe = std::move(ffprobe)](
-               const std::filesystem::path& file) -> std::optional<std::string> {
+               const std::filesystem::path& file, const CancelToken& cancel) -> std::optional<std::string> {
         if (ffmpeg.empty() || ffprobe.empty()) {
             return std::nullopt;
         }
         try {
-            return video_fingerprint(file, probe_video(file, ffprobe), ffmpeg);
+            return video_fingerprint(file, probe_video(file, ffprobe, cancel), ffmpeg, cancel);
         } catch (const std::exception&) {
             return std::nullopt;  // not read: the file is only recognised by its path and sampled hash
         }

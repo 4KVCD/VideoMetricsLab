@@ -2094,6 +2094,52 @@ private:
     std::thread thread_;
 };
 
+// The references of the videos whose scores the run saves, each once.
+std::vector<std::filesystem::path> references_saved(const std::vector<TestVideo*>& targets,
+                                                    const std::vector<VmafJob>& jobs) {
+    std::vector<std::filesystem::path> references;
+    for (std::size_t index = 0; index < jobs.size() && index < targets.size(); ++index) {
+        const std::filesystem::path& reference = jobs[index].source_info.path;
+        if (targets[index]->save_scores && std::ranges::count(references, reference) == 0) {
+            references.push_back(reference);
+        }
+    }
+    return references;
+}
+
+// Makes the video fingerprint of each reference whose scores the run saves
+// (fingerprint_ahead) as the run starts: a save records it (identity.json),
+// and the command line saves each video's scores as it finishes, so its user
+// would otherwise wait for the reference's five decodes after the first
+// video's scores (the window saves on a queue of its own). A save asking for
+// it meanwhile waits for this one. Stops, ending the decodes under way, as
+// it goes.
+class FingerprintsAhead {
+public:
+    explicit FingerprintsAhead(std::vector<std::filesystem::path> references)
+        : thread_([this, references = std::move(references)] {
+              for (const std::filesystem::path& reference : references) {
+                  if (stop_.cancelled()) {
+                      return;
+                  }
+                  try {
+                      fingerprint_ahead(reference, stop_);
+                  } catch (const std::exception&) {  // left for the save, which meets it again
+                  }
+              }
+          }) {}
+    FingerprintsAhead(const FingerprintsAhead&) = delete;
+    FingerprintsAhead& operator=(const FingerprintsAhead&) = delete;
+    ~FingerprintsAhead() {
+        stop_.cancel();
+        thread_.join();
+    }
+
+private:
+    CancelToken stop_;  // before thread_, which uses it
+    std::thread thread_;
+};
+
 // --scores-csv: a row for each test video with a result, in the columns
 // bdrate reads (rate_encode: its sequence, its rate in kb/s and each metric's
 // score), then the test video, its reference and its --batch row's other
@@ -2755,6 +2801,8 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
         trust_gpu_decoding();  // a run of its own (distrust_gpu_decoding)
         calculate_saved_scores_of_other_bars(jobs, tools.ffmpeg.path, cancel);
         {
+            const FingerprintsAhead fingerprints_ahead(scores.save ? references_saved(targets, jobs)
+                                                                   : std::vector<std::filesystem::path>{});
             const BlackBarsAhead bars_ahead(jobs, tools.ffmpeg.path);
             run(run_environment(tools, jobs), targets, jobs, arguments.parallel.value_or(settings.parallel_jobs),
                 arguments.vship_pass ? *arguments.vship_pass == "one" : settings.gpu_metrics_together,

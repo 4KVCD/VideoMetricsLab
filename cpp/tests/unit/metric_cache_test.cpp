@@ -19,15 +19,18 @@
 
 #include <algorithm>
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <functional>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -1080,7 +1083,8 @@ TEST(MetricCache, ScoresFollowRenamedAndRemuxedFiles) {
     result.source_info.path = result.source;
     result.distorted_info.path = result.distorted;
     int fingerprinted = 0;
-    set_video_fingerprinter([&fingerprinted](const std::filesystem::path& file) -> std::optional<std::string> {
+    set_video_fingerprinter([&fingerprinted](const std::filesystem::path& file,
+                                             const CancelToken&) -> std::optional<std::string> {
         ++fingerprinted;
         // The remux holds the reference's stream; the other video another.
         const std::string name = platform::path_text(file.filename());
@@ -1177,7 +1181,7 @@ TEST(MetricCache, ASaveTakesTheReferencesRecordedFingerprint) {
     std::ofstream(saved / "identity.json") << identity.dump();
 
     int decoded = 0;
-    set_video_fingerprinter([&decoded](const std::filesystem::path&) -> std::optional<std::string> {
+    set_video_fingerprinter([&decoded](const std::filesystem::path&, const CancelToken&) -> std::optional<std::string> {
         ++decoded;
         return std::string("decoded");
     });
@@ -1190,6 +1194,68 @@ TEST(MetricCache, ASaveTakesTheReferencesRecordedFingerprint) {
     touch(folder / "s.mkv", std::string(6000, 'S'));
     store_result(cache, folder / "s.mkv", folder / "t.mkv", request.recipe, result, "t", request.metrics);
     EXPECT_EQ(decoded, 1);
+    set_video_fingerprinter(nullptr);
+}
+
+// The command line makes the reference's fingerprint as its run starts
+// (fingerprint_ahead), so that its user does not wait for it after the
+// scores: a save asking for it meanwhile waits for that one instead of
+// decoding the reference again, and one stopped by its cancel is not kept.
+TEST(MetricCache, AFingerprintBeingMadeIsWaitedForAndAStoppedOneIsNotKept) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mkv", std::string(5000, 's'));
+    touch(folder / "t.mkv", std::string(4000, 't'));
+    std::mutex mutex;
+    std::condition_variable changed;
+    int decoded = 0;
+    bool release = false;
+    set_video_fingerprinter([&](const std::filesystem::path&,
+                                const CancelToken& cancel) -> std::optional<std::string> {
+        std::unique_lock lock(mutex);
+        ++decoded;
+        changed.notify_all();
+        changed.wait(lock, [&] { return release || cancel.cancelled(); });
+        return cancel.cancelled() ? std::nullopt : std::optional<std::string>("made");
+    });
+    const auto decodes_reach = [&](int count) {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [&] { return decoded >= count; });
+    };
+
+    CancelToken stopped;
+    std::thread first([&] { fingerprint_ahead(folder / "s.mkv", stopped); });
+    decodes_reach(1);
+    {
+        const std::lock_guard lock(mutex);
+        stopped.cancel();
+    }
+    changed.notify_all();
+    first.join();
+
+    // Not kept: made again, once for two asking.
+    std::thread second([&] { fingerprint_ahead(folder / "s.mkv", CancelToken()); });
+    decodes_reach(2);
+    std::thread third([&] { fingerprint_ahead(folder / "s.mkv", CancelToken()); });
+    {
+        const std::lock_guard lock(mutex);
+        release = true;
+    }
+    changed.notify_all();
+    second.join();
+    third.join();
+    EXPECT_EQ(decoded, 2);
+
+    // The save records the one made, without decoding.
+    const AnalysisRequest request = request_from(stored);
+    ComparisonResult result = test::result_from(stored.at("result"));
+    result.source = folder / "s.mkv";
+    result.distorted = folder / "t.mkv";
+    const std::filesystem::path saved = store_result(folder / "cache", folder / "s.mkv", folder / "t.mkv",
+                                                     request.recipe, result, "t", request.metrics);
+    EXPECT_EQ(decoded, 2);
+    const nlohmann::json identity = nlohmann::json::parse(*platform::read_file(saved / "identity.json"));
+    EXPECT_EQ(identity["source"]["video"], "made");
     set_video_fingerprinter(nullptr);
 }
 

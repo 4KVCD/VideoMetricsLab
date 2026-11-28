@@ -45,11 +45,21 @@ inline constexpr int black_bars_rule_version = 3;
 std::filesystem::path default_cache_dir();
 
 // How the saved scores recognise a reference whose path changed: given a
-// file, its video_fingerprint (file_fingerprint.h), made with the tools of
-// the app or the command line. None set (the default): files are recognised
-// by their path and by their sampled_file_hash only.
-using VideoFingerprinter = std::function<std::optional<std::string>(const std::filesystem::path&)>;
+// file and what stops the decoding, its video_fingerprint
+// (file_fingerprint.h), made with the tools of the app or the command line.
+// None set (the default): files are recognised by their path and by their
+// sampled_file_hash only.
+using VideoFingerprinter =
+    std::function<std::optional<std::string>(const std::filesystem::path&, const CancelToken&)>;
 void set_video_fingerprinter(VideoFingerprinter fingerprinter);
+
+// Makes the video fingerprint of the reference `file` that saving scores of
+// it in this process will record (identity.json), unless this process has
+// it or has read it saved: the command line, whose user would otherwise wait
+// for it after the scores, starts it as its run starts. A save asking for it
+// meanwhile waits for this one rather than decode it again. Stopped by
+// `cancel`; what is stopped is not kept, and a save then makes it itself.
+void fingerprint_ahead(const std::filesystem::path& file, const CancelToken& cancel);
 
 // How the saved scores recognise a test video remuxed (raw, MKV, MP4):
 // given a file, a number of packets (0: all) and what stops the read, its

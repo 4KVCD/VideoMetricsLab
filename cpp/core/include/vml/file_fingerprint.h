@@ -89,7 +89,7 @@ stream_fingerprinter_using(std::string ffmpeg, std::string ffprobe);
 // A fingerprinter for the saved scores (set_video_fingerprinter): each file
 // probed by `ffprobe` and fingerprinted with `ffmpeg`; nothing for one that
 // cannot be read.
-std::function<std::optional<std::string>(const std::filesystem::path&)> fingerprinter_using(std::string ffmpeg,
-                                                                                         std::string ffprobe);
+std::function<std::optional<std::string>(const std::filesystem::path&, const CancelToken&)>
+fingerprinter_using(std::string ffmpeg, std::string ffprobe);
 
 }  // namespace vml

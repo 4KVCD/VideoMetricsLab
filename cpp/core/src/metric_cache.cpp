@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <fstream>
 #include <functional>
+#include <future>
 #include <utility>
 #include <iterator>
 #include <map>
@@ -1267,6 +1268,9 @@ struct KnownFiles {
     StreamFingerprinter stream_fingerprinter;
     std::map<std::string, std::optional<std::string>> sampled;
     std::map<std::string, std::optional<std::string>> video;
+    // The video fingerprints being made (video_of), by file: the answer, or
+    // none where the one making it was stopped.
+    std::map<std::string, std::shared_future<std::optional<std::optional<std::string>>>> video_pending;
     std::map<std::pair<std::string, int>, std::optional<std::string>> stream;
     // By base. A Listing's folders and list are changed only by the thread
     // that holds `listing` as well as `mutex`: that thread reads them with
@@ -1322,34 +1326,77 @@ std::optional<std::string> sampled_of(const std::filesystem::path& file) {
     return hash;
 }
 
-std::optional<std::string> video_of(const std::filesystem::path& file) {
+// The video fingerprint of `file`, made once per process: a caller asking
+// while another makes it waits for that answer (without the mutex). One
+// stopped by `cancel` is not kept; a caller that waited for it then makes it
+// itself, unless its own `cancel` stopped too.
+std::optional<std::string> video_of(const std::filesystem::path& file, const CancelToken& cancel = CancelToken()) {
     const std::string identity = file_identity(file);
     KnownFiles& known = known_files();
-    VideoFingerprinter fingerprinter;
-    {
-        const std::lock_guard lock(known.mutex);
-        if (const auto found = known.video.find(identity); found != known.video.end()) {
-            return found->second;
-        }
-        // One recorded for this file before (another comparison of the same
-        // reference): no decoding.
-        for (const auto& [base, listing] : known.recorded) {
-            for (const auto& [folder, read] : listing.folders) {
-                if (read.recorded && read.recorded->source_path == identity && !read.recorded->source_video.empty()) {
-                    known.video[identity] = read.recorded->source_video;
-                    return read.recorded->source_video;
+    while (true) {
+        VideoFingerprinter fingerprinter;
+        std::shared_future<std::optional<std::optional<std::string>>> pending;
+        std::promise<std::optional<std::optional<std::string>>> answer;
+        {
+            const std::lock_guard lock(known.mutex);
+            if (const auto found = known.video.find(identity); found != known.video.end()) {
+                return found->second;
+            }
+            // One recorded for this file before (another comparison of the
+            // same reference): no decoding.
+            for (const auto& [base, listing] : known.recorded) {
+                for (const auto& [folder, read] : listing.folders) {
+                    if (read.recorded && read.recorded->source_path == identity &&
+                        !read.recorded->source_video.empty()) {
+                        known.video[identity] = read.recorded->source_video;
+                        return read.recorded->source_video;
+                    }
                 }
             }
+            if (const auto making = known.video_pending.find(identity); making != known.video_pending.end()) {
+                pending = making->second;
+            } else {
+                fingerprinter = known.fingerprinter;
+                if (!fingerprinter) {
+                    return std::nullopt;
+                }
+                known.video_pending.emplace(identity, answer.get_future().share());
+            }
         }
-        fingerprinter = known.fingerprinter;
+        if (pending.valid()) {
+            if (const std::optional<std::optional<std::string>> made = pending.get()) {
+                return *made;
+            }
+            if (cancel.cancelled()) {
+                return std::nullopt;
+            }
+            continue;  // the one making it was stopped: made here
+        }
+        // Ends the wait of those waiting for it, whatever happens here.
+        std::optional<std::optional<std::string>> made;
+        struct Answers {
+            KnownFiles& known;
+            const std::string& identity;
+            std::promise<std::optional<std::optional<std::string>>>& answer;
+            std::optional<std::optional<std::string>>& made;
+            ~Answers() {
+                {
+                    const std::lock_guard lock(known.mutex);
+                    known.video_pending.erase(identity);
+                    if (made) {
+                        known.video[identity] = *made;
+                    }
+                }
+                answer.set_value(made);
+            }
+        } const answers{known, identity, answer, made};
+        std::optional<std::string> fingerprint = fingerprinter(file, cancel);
+        if (cancel.cancelled()) {
+            return std::nullopt;  // not kept: the next caller makes it
+        }
+        made = fingerprint;
+        return fingerprint;
     }
-    if (!fingerprinter) {
-        return std::nullopt;
-    }
-    std::optional<std::string> fingerprint = fingerprinter(file);
-    const std::lock_guard lock(known.mutex);
-    known.video[identity] = fingerprint;
-    return fingerprint;
 }
 
 // What a test video's stream fingerprint is made of: its first
@@ -1755,6 +1802,10 @@ void set_video_fingerprinter(VideoFingerprinter fingerprinter) {
     KnownFiles& known = known_files();
     const std::lock_guard lock(known.mutex);
     known.fingerprinter = std::move(fingerprinter);
+}
+
+void fingerprint_ahead(const std::filesystem::path& file, const CancelToken& cancel) {
+    video_of(file, cancel);
 }
 
 void set_stream_fingerprinter(StreamFingerprinter fingerprinter) {
