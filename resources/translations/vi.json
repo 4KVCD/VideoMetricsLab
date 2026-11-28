@@ -1494,7 +1494,6 @@
   "Change...": "Thay đổi...",
   "Export everything for these videos: results, per-frame scores, graphs, worst frames and weak segments, as Settings > Storage > Exports include says.": "Xuất mọi thứ cho các video này: kết quả, điểm từng khung hình, biểu đồ, khung hình kém nhất và đoạn yếu, theo Cài đặt > Lưu trữ > Nội dung xuất.",
   "Include": "Bao gồm",
-  "On this tab:": "Trên thẻ này:",
   "The same choices as Settings > Storage > Exports include: a change here is saved there. Graphs: always PNG.": "Cùng các lựa chọn với Cài đặt > Lưu trữ > Nội dung xuất: thay đổi ở đây được lưu ở đó. Biểu đồ: luôn là PNG.",
   "The selected video on {tab}: {name}": "Video đã chọn trên {tab}: {name}",
   "The selected videos on {tab}": "Các video đã chọn trên {tab}",

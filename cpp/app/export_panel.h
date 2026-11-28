@@ -28,7 +28,6 @@ struct Settings;
 
 namespace vml::app {
 
-class SaveButton;
 
 class ExportPanel : public PopupPanel {
     Q_OBJECT
@@ -62,8 +61,6 @@ public:
     // The ticks changed (settings' export choices): saved, and shown on
     // the Settings tab.
     std::function<void()> choices_changed;
-    // The open tab's own save icon, for the link; none on a tab without one.
-    std::function<SaveButton*()> tab_save;
     // Export: of the selection (`selection`) or of every scored video.
     std::function<void(bool selection)> export_videos;
 
@@ -82,7 +79,6 @@ public:
     QComboBox* form_combo() const { return form_; }
     QComboBox* rules_combo() const { return rules_; }
     QPushButton* export_button() const { return export_; }
-    QPushButton* tab_link() const { return tab_link_; }
     QLabel* folder_label() const { return folder_label_; }
 
 private:
@@ -99,8 +95,6 @@ private:
     QComboBox* form_ = nullptr;                  // a .zip file (true) or loose files (false)
     QComboBox* rules_ = nullptr;
     QLabel* folder_label_ = nullptr;
-    QPushButton* tab_link_ = nullptr;
-    QLabel* tab_label_ = nullptr;
     QPushButton* export_ = nullptr;
     bool filling_ = false;  // refresh is setting the controls: not the user's changes
 };

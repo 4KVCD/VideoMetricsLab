@@ -1494,7 +1494,6 @@
   "Change...": "Змінити...",
   "Export everything for these videos: results, per-frame scores, graphs, worst frames and weak segments, as Settings > Storage > Exports include says.": "Експортувати все для цих відео: результати, покадрові оцінки, графіки, найгірші кадри й слабкі ділянки, як зазначено в Налаштування > Сховище > Експорт містить.",
   "Include": "Містить",
-  "On this tab:": "На цій вкладці:",
   "The same choices as Settings > Storage > Exports include: a change here is saved there. Graphs: always PNG.": "Ті самі параметри, що в Налаштування > Сховище > Експорт містить: зміна тут зберігається там. Графіки: завжди PNG.",
   "The selected video on {tab}: {name}": "Вибране відео на вкладці {tab}: {name}",
   "The selected videos on {tab}": "Вибрані відео на вкладці {tab}",

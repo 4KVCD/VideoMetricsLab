@@ -1494,7 +1494,6 @@
   "Change...": "Cambiar...",
   "Export everything for these videos: results, per-frame scores, graphs, worst frames and weak segments, as Settings > Storage > Exports include says.": "Exportar todo para estos vídeos: resultados, puntuaciones por fotograma, gráficos, peores fotogramas y segmentos débiles, según Configuración > Almacenamiento > Las exportaciones incluyen.",
   "Include": "Incluir",
-  "On this tab:": "En esta pestaña:",
   "The same choices as Settings > Storage > Exports include: a change here is saved there. Graphs: always PNG.": "Las mismas opciones que Configuración > Almacenamiento > Las exportaciones incluyen: un cambio aquí se guarda allí. Gráficos: siempre PNG.",
   "The selected video on {tab}: {name}": "El vídeo seleccionado en {tab}: {name}",
   "The selected videos on {tab}": "Los vídeos seleccionados en {tab}",

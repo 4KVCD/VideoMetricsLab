@@ -1494,7 +1494,6 @@
   "Change...": "変更...",
   "Export everything for these videos: results, per-frame scores, graphs, worst frames and weak segments, as Settings > Storage > Exports include says.": "これらのビデオのすべてをエクスポート：結果、フレームごとのスコア、グラフ、ワーストフレーム、弱い区間。設定 > 保存場所 > エクスポートの内容 のとおりです。",
   "Include": "含める内容",
-  "On this tab:": "このタブ：",
   "The same choices as Settings > Storage > Exports include: a change here is saved there. Graphs: always PNG.": "設定 > 保存場所 > エクスポートの内容 と同じ選択です。ここでの変更はそこに保存されます。グラフ：常に PNG。",
   "The selected video on {tab}: {name}": "{tab} で選択したビデオ：{name}",
   "The selected videos on {tab}": "{tab} で選択したビデオ",

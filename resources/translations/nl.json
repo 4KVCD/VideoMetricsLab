@@ -1494,7 +1494,6 @@
   "Change...": "Wijzigen...",
   "Export everything for these videos: results, per-frame scores, graphs, worst frames and weak segments, as Settings > Storage > Exports include says.": "Alles voor deze video's exporteren: resultaten, scores per beeld, grafieken, slechtste beelden en zwakke segmenten, zoals Instellingen > Opslag > Exports bevatten aangeeft.",
   "Include": "Bevat",
-  "On this tab:": "Op dit tabblad:",
   "The same choices as Settings > Storage > Exports include: a change here is saved there. Graphs: always PNG.": "Dezelfde keuzes als Instellingen > Opslag > Exports bevatten: een wijziging hier wordt daar opgeslagen. Grafieken: altijd PNG.",
   "The selected video on {tab}: {name}": "De geselecteerde video op {tab}: {name}",
   "The selected videos on {tab}": "De geselecteerde video's op {tab}",

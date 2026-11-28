@@ -1494,7 +1494,6 @@
   "Change...": "更改...",
   "Export everything for these videos: results, per-frame scores, graphs, worst frames and weak segments, as Settings > Storage > Exports include says.": "导出这些视频的全部内容：结果、逐帧分数、图表、最差帧和弱片段，按“设置 > 存储 > 导出内容”所选。",
   "Include": "包括",
-  "On this tab:": "在此标签页：",
   "The same choices as Settings > Storage > Exports include: a change here is saved there. Graphs: always PNG.": "与“设置 > 存储 > 导出内容”相同的选项：此处的更改会保存到那里。图表：始终为 PNG。",
   "The selected video on {tab}: {name}": "{tab}中所选的视频：{name}",
   "The selected videos on {tab}": "{tab}中所选的视频",

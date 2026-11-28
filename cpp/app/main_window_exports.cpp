@@ -142,7 +142,6 @@ void MainWindow::build_export_panel() {
             settings_panel_->show_export_choices();
         }
     };
-    export_panel_->tab_save = [this] { return tab_save(); };
     export_panel_->export_videos = [this](bool selection) { export_from_panel(selection); };
 }
 
@@ -223,28 +222,6 @@ ExportPanel::Videos MainWindow::export_panel_videos() const {
         videos.all_refused = nothing_scored_text();
     }
     return videos;
-}
-
-SaveButton* MainWindow::tab_save() const {
-    // The open tab's own one-click save, its main card's save icon.
-    switch (tabs_->currentIndex()) {
-    case tab_videos:
-        return videos_save_;
-    case tab_graph:
-        return graph_panel_->stats_save();
-    case tab_worst_frames:
-        return worst_tab_->worst_save();
-    case tab_frame_compare:
-        return frame_compare_panel_->save_still_button;
-    case tab_bitrate:
-        return bitrate_panel_->graph_save;
-    case tab_bd_rate:
-        return bd_rate_panel_->table_save;
-    case tab_saved_results:
-        return saved_results_panel_->save_button();
-    default:
-        return nullptr;
-    }
 }
 
 void MainWindow::export_from_panel(bool selection) {

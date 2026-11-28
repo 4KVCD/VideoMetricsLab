@@ -1494,7 +1494,6 @@
   "Change...": "變更...",
   "Export everything for these videos: results, per-frame scores, graphs, worst frames and weak segments, as Settings > Storage > Exports include says.": "匯出這些影片的全部內容：結果、逐格分數、圖表、最差畫格和弱片段，依「設定 > 儲存空間 > 匯出內容」所選。",
   "Include": "包含",
-  "On this tab:": "在此分頁：",
   "The same choices as Settings > Storage > Exports include: a change here is saved there. Graphs: always PNG.": "與「設定 > 儲存空間 > 匯出內容」相同的選項：此處的變更會儲存到那裡。圖表：一律為 PNG。",
   "The selected video on {tab}: {name}": "{tab}中所選的影片：{name}",
   "The selected videos on {tab}": "{tab}中所選的影片",
