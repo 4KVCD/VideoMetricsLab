@@ -13,9 +13,11 @@
 #include <QString>
 
 #include <array>
+#include <functional>
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "vml/cvvdp.h"
@@ -91,6 +93,12 @@ public:
     // The VMAF GPU/CPU choice as a run would take it: CPU when there is no
     // GPU, whatever the video is set to.
     void show_vmaf_backend(bool on_gpu);
+    // CAMBI's, CIEDE2000's and MS-SSIM's GPU/CPU choices (metric_gpu_routes) as `options` set them, CPU when there
+    // is no GPU.
+    void show_metric_routes(const VmafOptions& options);
+    // Each of those rows shown only while its metric is (`listed`: shown in the table, MS-SSIM's with MS-SSIM
+    // YUV's too).
+    void show_metric_route_rows(const std::function<bool(std::string_view)>& listed);
     // Shows the selected videos' CVVDP settings: the preset they match (or
     // "Custom"), or "Automatic" when their displays all follow the reference
     // (`automatic`), the display in one line, and the resize box. `preferred`
@@ -148,6 +156,7 @@ public:
     QCheckBox* gpu_checkbox = nullptr;
     QComboBox* gpu_vendor_combo = nullptr;
     QComboBox* vmaf_backend_combo = nullptr;
+    std::array<QComboBox*, metric_gpu_routes.size()> metric_route_combos{};  // in metric_gpu_routes' order
     QComboBox* vship_build_combo = nullptr;
     QSpinBox* threads_spin = nullptr;
 
@@ -181,9 +190,11 @@ private:
     void build_metric_settings(QFormLayout* form);
     void build_cvvdp(QFormLayout* form);
     void build_performance(QFormLayout* form, const std::vector<GpuVendor>& gpu_vendors);
+    void build_metric_routes(QFormLayout* form);
 
     // Whether there is a GPU here for VMAF: without one, its choice is CPU.
     const bool vmaf_gpu_possible_;
+    QFormLayout* performance_form_ = nullptr;  // build_performance's, which holds the metric route rows
 };
 
 }  // namespace vml::app

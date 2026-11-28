@@ -383,6 +383,13 @@ std::optional<std::string> vmaf_where(const CompareArguments& arguments) {
     return arguments.cpu ? std::optional<std::string>("cpu") : std::nullopt;
 }
 
+// Whether CAMBI, CIEDE2000 or MS-SSIM is calculated on the GPU: as `own` says (--cambi-on...), else as the command
+// says VMAF is (vmaf_where), else as the app's Settings (`setting`).
+bool route_on_gpu(const std::optional<std::string>& own, const CompareArguments& arguments, bool setting) {
+    const std::optional<std::string> where = own ? own : vmaf_where(arguments);
+    return where ? *where == "gpu" : setting;
+}
+
 // The range compared (an end of 0: to the end): --frames', --range's, or
 // --duration's first milliseconds, in whole seconds where they are, as
 // the window's range (time_range_of); both 0: the whole videos.
@@ -448,6 +455,9 @@ VmafOptions row_options(const CompareArguments& arguments, const Settings& setti
     options.gpu_vendor = gpu_maker(arguments.gpu_decode);
     options.vvc_on_gpu = arguments.vvc_decoder ? *arguments.vvc_decoder == "gpu" : settings.vvc_decode_on_gpu;
     options.vmaf_on_gpu = vmaf_on ? *vmaf_on == "gpu" : settings.default_vmaf_on_gpu;
+    options.cambi_on_gpu = route_on_gpu(arguments.cambi_on, arguments, settings.default_cambi_on_gpu);
+    options.ciede2000_on_gpu = route_on_gpu(arguments.ciede2000_on, arguments, settings.default_ciede2000_on_gpu);
+    options.ms_ssim_on_gpu = route_on_gpu(arguments.ms_ssim_on, arguments, settings.default_ms_ssim_on_gpu);
     options.vship_build = vship_build(arguments, settings);
     options.n_threads = arguments.threads.value_or(0);
     options.n_subsample = arguments.subsample;
@@ -516,20 +526,21 @@ std::vector<std::future<void>> start_gpu_checks(const CompareArguments& argument
     const auto asked = [&metrics](std::string_view key) {
         return std::find(metrics.begin(), metrics.end(), key) != metrics.end();
     };
-    const std::optional<std::string> vmaf_on = vmaf_where(arguments);
-    const bool vmaf_on_gpu = vmaf_on ? *vmaf_on == "gpu" : settings.default_vmaf_on_gpu;
+    const VmafOptions options = row_options(arguments, settings, metrics);
+    const bool vmaf_on_gpu = options.vmaf_on_gpu;
     std::vector<std::future<void>> checks;
     if (asked("cvvdp") || (!arguments.cpu && (asked("ssimulacra2") || asked("butteraugli")))) {
         checks.push_back(std::async(std::launch::async,
                                     [build = vship_build(arguments, settings)] { detect_vship_device(build, gpu_probes_token()); }));
     }
-    if (vmaf_on_gpu && (asked("vmaf") || asked("vmaf_neg"))) {
+    // The Vulkan engine's check is VMAF's: for CAMBI, CIEDE2000 or MS-SSIM on the GPU too (plan_asks_vulkan_engine).
+    if ((vmaf_on_gpu && (asked("vmaf") || asked("vmaf_neg"))) || plan_asks_vulkan_engine(options, metrics)) {
         checks.push_back(std::async(std::launch::async, [] { gpu_vmaf_backend(gpu_probes_token()); }));
     }
     if (vmaf_on_gpu && asked("vmaf_v1")) {
         checks.push_back(std::async(std::launch::async, [] { v1_available(gpu_probes_token()); }));
     }
-    if (row_options(arguments, settings, metrics).gpu_decode) {
+    if (options.gpu_decode) {
         // The GPUs' decoders and FFmpeg's (0.05 to 0.25 s), asked while the
         // videos are read, not as the first video is planned
         checks.push_back(std::async(std::launch::async, [ffmpeg] { DecodingCapabilities::remembered(ffmpeg); }));
@@ -2728,6 +2739,9 @@ std::vector<std::string> options_from_settings(const CompareArguments& arguments
     };
     left_out(arguments.metrics.has_value(), "--metrics");
     left_out(arguments.vmaf_on || arguments.cpu, "--vmaf-on");
+    left_out(arguments.cambi_on || arguments.vmaf_on || arguments.cpu, "--cambi-on");
+    left_out(arguments.ciede2000_on || arguments.vmaf_on || arguments.cpu, "--ciede2000-on");
+    left_out(arguments.ms_ssim_on || arguments.vmaf_on || arguments.cpu, "--ms-ssim-on");
     left_out(arguments.vship.has_value(), "--vship");
     left_out(arguments.vship_pass.has_value(), "--vship-pass");
     left_out(arguments.film_grain.has_value(), "--film-grain");

@@ -560,6 +560,7 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
 #endif
     connect(vmaf_backend_combo, &QComboBox::currentIndexChanged, this, [this] { emit field_edited("vmaf_on_gpu"); });
     form->addRow(app::tr("VMAF compute:"), vmaf_backend_combo);
+    build_metric_routes(form);
 
     // Without a GPU there is no choice: it shows CPU, which is where VMAF is
     // calculated (see show_vmaf_backend).
@@ -681,6 +682,7 @@ void OptionsPanel::show_options(const VmafOptions& options, const std::vector<Vm
     gpu_vendor_combo->setEnabled(options.gpu_decode);
 
     show_vmaf_backend(options.vmaf_on_gpu);
+    show_metric_routes(options);
     show_vship_choice(*vship_build_combo, options.vship_build);
 
     crop_combo->setCurrentIndex(std::max(0, crop_combo->findData(static_cast<int>(options.crop_mode))));
@@ -739,6 +741,55 @@ void OptionsPanel::show_options(const VmafOptions& options, const std::vector<Vm
 
 void OptionsPanel::show_vmaf_backend(bool on_gpu) {
     vmaf_backend_combo->setCurrentIndex(on_gpu && vmaf_gpu_possible_ ? 0 : 1);
+}
+
+void OptionsPanel::build_metric_routes(QFormLayout* form) {
+    // CAMBI, CIEDE2000 and MS-SSIM have a GPU route of their own: the bundled Vulkan engine's, from the pictures
+    // the CPU metrics are given, on the GPU VMAF runs on (cpu_plan).
+    const std::array<QString, metric_gpu_routes.size()> labels{app::tr("CAMBI compute:"),
+                                                               app::tr("CIEDE2000 compute:"),
+                                                               app::tr("MS-SSIM compute:")};
+    const std::array<QString, metric_gpu_routes.size()> agreement{
+        app::tr("Its scores on the GPU are the CPU's exactly."),
+        app::tr("Its scores on the GPU agree with the CPU's to within a few millionths."),
+        app::tr("Its scores on the GPU agree with the CPU's to within a few millionths. MS-SSIM YUV follows "
+                "this choice too.")};
+    performance_form_ = form;
+    for (std::size_t i = 0; i < metric_gpu_routes.size(); ++i) {
+        auto* combo = new QComboBox;
+        combo->addItems({"GPU", "CPU"});
+        if (vmaf_gpu_possible_) {
+            combo->setToolTip(
+                app::tr("With GPU, it is calculated on the GPU by the app's Vulkan engine (on a Mac through "
+                        "MoltenVK), on the GPU VMAF runs on, whether VMAF itself is calculated on the GPU or the CPU; "
+                        "on the CPU where the GPU cannot calculate it or the GPU calculation fails. With CPU, "
+                        "libvmaf calculates it on the CPU.") +
+                " " + agreement[i] + " " + app::tr("A saved score is kept whichever is chosen."));
+        } else {  // as VMAF's: CPU, the only place
+            combo->setEnabled(false);
+            combo->setToolTip(app::tr("No GPU was found: it is calculated on the CPU."));
+        }
+        const std::string_view field = metric_gpu_routes[i].field;
+        connect(combo, &QComboBox::currentIndexChanged, this, [this, field] {
+            emit field_edited(QString::fromLatin1(field.data(), static_cast<qsizetype>(field.size())));
+        });
+        form->addRow(labels[i], combo);
+        metric_route_combos[i] = combo;
+    }
+}
+
+void OptionsPanel::show_metric_routes(const VmafOptions& options) {
+    for (std::size_t i = 0; i < metric_gpu_routes.size(); ++i) {
+        metric_route_combos[i]->setCurrentIndex(options.*metric_gpu_routes[i].on_gpu && vmaf_gpu_possible_ ? 0 : 1);
+    }
+}
+
+void OptionsPanel::show_metric_route_rows(const std::function<bool(std::string_view)>& listed) {
+    for (std::size_t i = 0; i < metric_gpu_routes.size(); ++i) {
+        const std::string_view key = metric_gpu_routes[i].key;
+        performance_form_->setRowVisible(metric_route_combos[i], listed(key) ||
+                                                                    (key == "ms_ssim" && listed("ms_ssim_yuv")));
+    }
 }
 
 void OptionsPanel::show_cvvdp(const std::vector<CvvdpSettings>& selected, const std::string& preferred,
@@ -825,6 +876,9 @@ VmafOptions OptionsPanel::read_options() const {
                              ? gpu_vendor_entries[static_cast<std::size_t>(gpu_vendor_combo->currentIndex())]
                              : GpuVendor::none;
     options.vmaf_on_gpu = vmaf_backend_combo->currentIndex() == 0;
+    for (std::size_t i = 0; i < metric_gpu_routes.size(); ++i) {
+        options.*metric_gpu_routes[i].on_gpu = metric_route_combos[i]->currentIndex() == 0;
+    }
     options.vship_build = shown_vship_choice(*vship_build_combo);
     options.crop_mode = static_cast<CropMode>(crop_combo->currentData().toInt());
     const auto edges = [](const std::array<QSpinBox*, 4>& spins) {

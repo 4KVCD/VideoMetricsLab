@@ -139,5 +139,38 @@ TEST(OptionsPanel, ManualCropsAreShownAndReadBack) {
     EXPECT_FALSE(panel.manual_crop_box->isVisibleTo(&panel));
 }
 
+// CAMBI, CIEDE2000 and MS-SSIM each have a GPU/CPU row of their own, apart
+// from VMAF's, shown while the metric is listed (MS-SSIM's for MS-SSIM YUV
+// too), and at CPU without a GPU.
+TEST(OptionsPanel, EachMetricWithAGpuRouteHasItsOwnRow) {
+    OptionsPanel panel({GpuVendor::nvidia});
+    VmafOptions mixed;
+    mixed.vmaf_on_gpu = false;
+    mixed.cambi_on_gpu = false;
+    panel.show_options(mixed, {mixed});
+    VmafOptions read = panel.read_options();
+    EXPECT_FALSE(read.vmaf_on_gpu);
+    EXPECT_FALSE(read.cambi_on_gpu);
+    EXPECT_TRUE(read.ciede2000_on_gpu);
+    EXPECT_TRUE(read.ms_ssim_on_gpu);
+    QString edited;
+    QObject::connect(&panel, &OptionsPanel::field_edited, [&edited](const QString& field) { edited = field; });
+    panel.metric_route_combos[2]->setCurrentIndex(1);  // MS-SSIM: CPU
+    EXPECT_EQ(edited, QStringLiteral("ms_ssim_on_gpu"));
+    EXPECT_FALSE(panel.read_options().ms_ssim_on_gpu);
+
+    panel.show_metric_route_rows([](std::string_view key) { return key == "ms_ssim_yuv"; });
+    EXPECT_FALSE(panel.metric_route_combos[0]->isVisibleTo(&panel));
+    EXPECT_FALSE(panel.metric_route_combos[1]->isVisibleTo(&panel));
+    EXPECT_TRUE(panel.metric_route_combos[2]->isVisibleTo(&panel));
+
+#ifndef __APPLE__  // a Mac always has its GPU
+    OptionsPanel no_gpu({});
+    no_gpu.show_options(VmafOptions{}, {VmafOptions{}});
+    EXPECT_FALSE(no_gpu.metric_route_combos[0]->isEnabled());
+    EXPECT_EQ(no_gpu.metric_route_combos[0]->currentIndex(), 1);
+#endif
+}
+
 }  // namespace
 }  // namespace vml::app

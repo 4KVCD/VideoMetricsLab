@@ -408,7 +408,8 @@ CpuScorer::CpuScorer(int width, int height, int bit_depth, std::vector<std::stri
                      int threads, int frame_rate, const CambiInput& cambi, std::optional<int> gpu,
                      const std::string& vmaf_model, bool vmaf_on_vulkan,
                      std::optional<ChromaFromDecoders> chroma_from_decoders, GpuFrameStream* shared_decoder,
-                     const std::vector<std::pair<std::string, std::string>>& vmaf_models)
+                     const std::vector<std::pair<std::string, std::string>>& vmaf_models,
+                     const std::vector<std::string>& kept_on_cpu)
     : library_(libvmaf()), metrics_(std::move(metrics)), step_(static_cast<unsigned>(std::max(1, n_subsample))) {
     threads = std::max(0, threads);
     // VMAF YUV's U and V first: whether the pictures need their planes.
@@ -429,7 +430,7 @@ CpuScorer::CpuScorer(int width, int height, int bit_depth, std::vector<std::stri
     frame_bytes_ = packed_.bytes();
     decoded_bytes_ = chroma_ ? frame_bytes_ : static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * sample_;
     const ExtractorOptions cambi_with = cambi_options(cambi, width, height, bit_depth);
-    start_gpu(width, height, bit_depth, gpu, cambi_with, shared_decoder);
+    start_gpu(width, height, bit_depth, gpu, cambi_with, shared_decoder, kept_on_cpu);
     std::erase_if(libvmaf_metrics_, [](const std::string& key) { return is_chroma_vmaf(key); });
     const CpuThreads split = cpu_threads(width, height, bit_depth, threads, libvmaf_metrics_, chroma_);
     const int pairs = split.pairs;
@@ -488,9 +489,11 @@ std::vector<std::string> CpuScorer::gpu_metrics() const {
 }
 
 void CpuScorer::start_gpu(int width, int height, int bit_depth, std::optional<int> gpu,
-                          const ExtractorOptions& cambi_with, GpuFrameStream* shared_decoder) {
+                          const ExtractorOptions& cambi_with, GpuFrameStream* shared_decoder,
+                          const std::vector<std::string>& kept_on_cpu) {
     libvmaf_metrics_ = metrics_;
-    const std::vector<std::string> wanted = gpu ? gpu_metrics_of(metrics_, odd_, cambi_with) : std::vector<std::string>{};
+    const std::vector<std::string> wanted =
+        gpu ? gpu_metrics_of(metrics_, odd_, cambi_with, kept_on_cpu) : std::vector<std::string>{};
     if (wanted.empty()) {
         return;
     }
@@ -1015,7 +1018,8 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
                              int width, int height, int bit_depth, const std::vector<std::string>& metrics,
                              int n_subsample, const FrameRange& range, long long total_frames,
                              const std::pair<std::string, std::string>& decoders, int threads, int frame_rate,
-                             const CambiInput& cambi, std::optional<int> gpu, const std::string& vmaf_model,
+                             const CambiInput& cambi, std::optional<int> gpu,
+                             const std::vector<std::string>& kept_on_cpu, const std::string& vmaf_model,
                              const std::vector<std::pair<std::string, std::string>>& vmaf_models,
                              bool vmaf_on_vulkan, const std::string& scale_algorithm, const std::string& ffmpeg,
                              const std::string& ffprobe, bool want_vvdec,
@@ -1047,7 +1051,7 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
     // Declared after the streams so that it goes first: it gives back the
     // memory their decoders page-locked, and the GPU memory they imported.
     CpuScorer scorer(width, height, bit_depth, metrics, n_subsample, threads, frame_rate, cambi, gpu, vmaf_model,
-                     vmaf_on_vulkan, std::nullopt, may_share ? &test : nullptr, vmaf_models);
+                     vmaf_on_vulkan, std::nullopt, may_share ? &test : nullptr, vmaf_models, kept_on_cpu);
     if (on_gpu_metrics) {
         on_gpu_metrics(scorer.metric_keys(), scorer.gpu_metrics());
     }

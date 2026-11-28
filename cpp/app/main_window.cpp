@@ -215,7 +215,10 @@ MainWindow::MainWindow() {
     logger.info(std::string("Settings: parallel CPU metrics ") + (settings_.parallel_jobs > 1 ? "on" : "off") +
                 ", GPU decode " + (settings_.default_gpu_decode ? "on" : "off") + ", VVC decoded on the " +
                 (settings_.vvc_decode_on_gpu ? "GPU" : "CPU") + ", VMAF v0.6.1 and NEG on " +
-                (settings_.default_vmaf_on_gpu ? "GPU" : "CPU") + ", GPU metrics " +
+                (settings_.default_vmaf_on_gpu ? "GPU" : "CPU") + ", CAMBI on " +
+                (settings_.default_cambi_on_gpu ? "GPU" : "CPU") + ", CIEDE2000 on " +
+                (settings_.default_ciede2000_on_gpu ? "GPU" : "CPU") + ", MS-SSIM on " +
+                (settings_.default_ms_ssim_on_gpu ? "GPU" : "CPU") + ", GPU metrics " +
                 (settings_.gpu_metrics_together ? "in one pass" : "one at a time") + " with " +
                 std::string(vship_build_label(default_vship_build(settings_.default_vship_build))) +
                 ", saved results " + (settings_.use_cache ? "reused" : "not reused") + " (" +
@@ -737,6 +740,7 @@ void MainWindow::build_ui() {
     // The GPUs here: the Options panel offers its GPU choices for them.
     detected_gpu_vendors_ = detected_gpu_vendors();
     options_panel_ = new OptionsPanel(detected_gpu_vendors_);
+    show_metric_route_rows();
     connect(options_panel_, &OptionsPanel::field_edited, this,
             [this](const QString& field) { on_panel_field_edited(field); });
     connect(options_panel_, &OptionsPanel::model_chosen, this, [this](int index) { on_model_changed(index); });
@@ -1629,6 +1633,9 @@ VmafOptions MainWindow::options_from_settings() const {
     VmafOptions options;
     options.gpu_decode = settings_.default_gpu_decode;
     options.vmaf_on_gpu = settings_.default_vmaf_on_gpu;
+    options.cambi_on_gpu = settings_.default_cambi_on_gpu;
+    options.ciede2000_on_gpu = settings_.default_ciede2000_on_gpu;
+    options.ms_ssim_on_gpu = settings_.default_ms_ssim_on_gpu;
     options.vship_build = default_vship_build(settings_.default_vship_build);
     settings_.take_default_metrics(options);
     return options;

@@ -593,9 +593,9 @@ std::string JobRun::task_name(std::size_t task) const {
     const bool gpu_offered = vmaf_family_on_gpu(task);
     const bool on_cpu = pool_of(task) != gpu_pool;
     std::string name = std::string(on_cpu ? "CPU" : "GPU") + " metrics (" +
-                       (on_cpu ? cpu_metrics_text(own, gpu_offered) : metric_labels(own)) + ")";
+                       (on_cpu ? cpu_metrics_text(own, job_.options, gpu_offered) : metric_labels(own)) + ")";
     if (!beside.empty()) {
-        name += " with CPU metrics (" + cpu_metrics_text(beside, gpu_offered) + ") beside them";
+        name += " with CPU metrics (" + cpu_metrics_text(beside, job_.options, gpu_offered) + ") beside them";
     }
     return name;
 }
@@ -1704,20 +1704,32 @@ std::optional<std::pair<int, int>> planned_size(const VideoInfo& source, const V
     return std::nullopt;
 }
 
+// Which of a task's metrics that have a GPU route go to the Vulkan engine (cpu_plan, hdr_plan): CAMBI, CIEDE2000
+// and MS-SSIM where `options` set them to the GPU, VMAF YUV's U and V and HDR VMAF's features where VMAF's place
+// for the task is the GPU (`vmaf_on_vulkan`), each only where the engine scores VMAF here (`engine`: or its
+// check has not answered yet). `chroma_on_gpu`: the engine takes the U and V too.
+struct TaskRoutes {
+    const VmafOptions& options;
+    bool engine = false;
+    bool vmaf_on_vulkan = false;
+    bool chroma_on_gpu = false;
+
+    bool on_vulkan(std::string_view key) const {
+        return engine_takes_cpu_metric(key) ? engine && options.on_gpu_chosen(key) : vmaf_on_vulkan;
+    }
+};
+
 // The metric `key` is part of when it is one that has a GPU route but runs on
-// the CPU, or "" for any other. Those are heavy in CPU time and memory there:
+// the CPU (`routes`), or "" for any other. Those are heavy in CPU time and memory there:
 // alone at 4K on the Core Ultra 9 285K, VMAF took 5,603 MB on the CPU, CAMBI
 // 2,233 MB and CIEDE2000 1,250 MB, the CPU-only metrics 92 to 1,684 MB. VMAF YUV's U
-// and V make one metric. `on_vulkan`: the task's CAMBI, CIEDE2000, MS-SSIM, U and V
-// and HDR VMAF's features go to the Vulkan engine (VMAF's place for the task
-// is the GPU and the engine scores VMAF here: cpu_plan,
-// hdr_plan); `chroma_on_gpu`: the engine takes the U and V too.
-std::string heavy_cpu_unit(const std::string& key, bool on_vulkan, bool chroma_on_gpu) {
+// and V make one metric.
+std::string heavy_cpu_unit(const std::string& key, const TaskRoutes& routes) {
     if (key == "vmaf" || key == "vmaf_neg" || key == "vmaf_v1") {
         return key;  // in a CPU task's keys only: the GPU's task scores them on the GPU
     }
     if (key == vmaf_u_key || key == vmaf_v_key) {
-        return on_vulkan && chroma_on_gpu ? "" : "vmaf_yuv";
+        return routes.on_vulkan(key) && routes.chroma_on_gpu ? "" : "vmaf_yuv";
     }
     // MS-SSIM on the CPU stays with the CPU-only metrics, as before its GPU route: libvmaf's helper threads split
     // its pairs (cpu_threads), and a task of its own would decode the videos again.
@@ -1725,7 +1737,7 @@ std::string heavy_cpu_unit(const std::string& key, bool on_vulkan, bool chroma_o
         return "";
     }
     if (follows_vulkan_engine(key)) {
-        return on_vulkan ? "" : key;
+        return routes.on_vulkan(key) ? "" : key;
     }
     return "";
 }
@@ -1739,11 +1751,11 @@ struct HeavySplit {
     std::vector<std::vector<std::string>> apart;
 };
 
-HeavySplit split_heavy_units(const std::vector<std::string>& keys, bool on_vulkan, bool chroma_on_gpu) {
+HeavySplit split_heavy_units(const std::vector<std::string>& keys, const TaskRoutes& routes) {
     HeavySplit split;
     std::vector<std::string> units;  // in the order they first come
     for (const std::string& key : keys) {
-        const std::string unit = heavy_cpu_unit(key, on_vulkan, chroma_on_gpu);
+        const std::string unit = heavy_cpu_unit(key, routes);
         if (unit.empty()) {
             split.kept.push_back(key);
             continue;
@@ -1769,9 +1781,9 @@ HeavySplit split_heavy_units(const std::vector<std::string>& keys, bool on_vulka
 }  // namespace
 
 bool plan_asks_vulkan_engine(const VmafOptions& options, const std::vector<std::string>& metric_keys) {
-    return options.vmaf_on_gpu &&
-           std::any_of(metric_keys.begin(), metric_keys.end(),
-                       [](const std::string& key) { return follows_vulkan_engine(key); });
+    return std::any_of(metric_keys.begin(), metric_keys.end(), [&options](const std::string& key) {
+        return follows_vulkan_engine(key) && options.on_gpu_chosen(key);
+    });
 }
 
 GpuAnswers plan_gpu_answers(const VmafOptions& options, const std::vector<std::string>& metric_keys,
@@ -1923,16 +1935,17 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
     }
     // At most one metric that has a GPU route but runs on the CPU in a task (heavy_cpu_unit): FFmpeg's task keeps
     // the first with the CPU-only metrics, the GPU's task the first beside VMAF, and each other one is calculated
-    // in a task of FFmpeg's own. The CPU's task with VMAF, NEG or v1 keeps the metrics that follow VMAF's place on
-    // the CPU (JobRun::execute_task), and so do the tasks split from it. A size not known before the run is taken
-    // for one whose U and V the engine takes (the black bars cut leave an even size).
+    // in a task of FFmpeg's own. The CPU's task with VMAF, NEG or v1 keeps VMAF YUV's U and V and HDR VMAF on the
+    // CPU (JobRun::execute_task), and so do the tasks split from it; CAMBI, CIEDE2000 and MS-SSIM go where they are
+    // set (TaskRoutes). A size not known before the run is taken for one whose U and V the engine takes (the black
+    // bars cut leave an even size).
     const bool vmaf_on_cpu = contains(ffmpeg.metric_keys, "vmaf") || contains(ffmpeg.metric_keys, "vmaf_neg") ||
                              contains(ffmpeg.metric_keys, "vmaf_v1");
-    const bool engine = options.vmaf_on_gpu && (!gpu_answers.engine || gpu_answers.engine->on_engine);
+    const bool engine = !gpu_answers.engine || gpu_answers.engine->on_engine;
     const bool chroma_on_gpu = !size || chroma_vmaf_fits_gpu(size->first, size->second, depth, options.model);
     std::vector<MetricTask> split_off;
-    const auto split = [&](std::vector<std::string>& task_keys, bool on_vulkan, bool vmaf_cpu) {
-        HeavySplit parts = split_heavy_units(task_keys, on_vulkan, chroma_on_gpu);
+    const auto split = [&](std::vector<std::string>& task_keys, bool vmaf_on_vulkan, bool vmaf_cpu) {
+        HeavySplit parts = split_heavy_units(task_keys, TaskRoutes{options, engine, vmaf_on_vulkan, chroma_on_gpu});
         task_keys = std::move(parts.kept);
         for (std::vector<std::string>& part : parts.apart) {
             MetricTask task{"ffmpeg", std::move(part)};
@@ -1943,9 +1956,9 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
         return parts.kept_heavy;
     };
     ffmpeg.vmaf_on_cpu = vmaf_on_cpu;
-    ffmpeg.heavy_cpu = split(ffmpeg.metric_keys, engine && !vmaf_on_cpu, vmaf_on_cpu);
+    ffmpeg.heavy_cpu = split(ffmpeg.metric_keys, options.vmaf_on_gpu && engine && !vmaf_on_cpu, vmaf_on_cpu);
     const std::size_t from_ffmpeg = split_off.size();
-    gpu.heavy_cpu = split(gpu.cpu_beside, engine, false);
+    gpu.heavy_cpu = split(gpu.cpu_beside, options.vmaf_on_gpu && engine, false);
     for (std::size_t task = from_ffmpeg; task < split_off.size(); ++task) {
         for (const std::string& key : split_off[task].metric_keys) {
             std::erase(gpu.metric_keys, key);  // no longer beside VMAF

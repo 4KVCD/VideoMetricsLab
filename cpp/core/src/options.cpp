@@ -202,6 +202,19 @@ bool VmafOptions::metric_enabled(std::string_view key) const {
            extra_features.end();
 }
 
+bool VmafOptions::on_gpu_chosen(std::string_view key) const {
+    if (key == "cambi") {
+        return cambi_on_gpu;
+    }
+    if (key == "ciede2000") {
+        return ciede2000_on_gpu;
+    }
+    if (key.starts_with("ms_ssim")) {  // MS-SSIM, MS-SSIM YUV and its planes
+        return ms_ssim_on_gpu;
+    }
+    return vmaf_on_gpu;
+}
+
 void VmafOptions::set_metric_enabled(std::string_view key, bool enabled) {
     const MetricDefinition& metric = metric_definition(key);
     if (!metric.ffmpeg_binding) {

@@ -84,6 +84,10 @@ struct CompareArguments {
     int subsample = 1;
     std::optional<int> threads;
     std::optional<std::string> vmaf_on;
+    // --cambi-on, --ciede2000-on, --ms-ssim-on: "gpu" or "cpu"
+    std::optional<std::string> cambi_on;
+    std::optional<std::string> ciede2000_on;
+    std::optional<std::string> ms_ssim_on;
     std::optional<std::string> vship;       // "vship-fast" or "vship" (vship_build_value)
     std::optional<std::string> vship_pass;  // "one" or "each" (Settings::gpu_metrics_together)
     bool cpu = false;

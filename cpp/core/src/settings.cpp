@@ -63,6 +63,9 @@ const std::unordered_map<std::string, Field>& fields() {
         {"default_compute_butteraugli", &Settings::default_compute_butteraugli},
         {"default_compute_cvvdp", &Settings::default_compute_cvvdp},
         {"default_vmaf_on_gpu", &Settings::default_vmaf_on_gpu},
+        {"default_cambi_on_gpu", &Settings::default_cambi_on_gpu},
+        {"default_ciede2000_on_gpu", &Settings::default_ciede2000_on_gpu},
+        {"default_ms_ssim_on_gpu", &Settings::default_ms_ssim_on_gpu},
         {"default_vship_build", &Settings::default_vship_build},
         {"film_grain_default", &Settings::film_grain_default},
         {"graph_metric", &Settings::graph_metric},
@@ -476,6 +479,14 @@ Settings Settings::load_from(const std::filesystem::path& path) {
         carry_over_result_formats(settings);
     }
     hide_new_metrics(settings);
+    // CAMBI, CIEDE2000 and MS-SSIM followed VMAF's place before they had their own.
+    for (const auto& [key, field] : {std::pair{"default_cambi_on_gpu", &Settings::default_cambi_on_gpu},
+                                     std::pair{"default_ciede2000_on_gpu", &Settings::default_ciede2000_on_gpu},
+                                     std::pair{"default_ms_ssim_on_gpu", &Settings::default_ms_ssim_on_gpu}}) {
+        if (!data.contains(key)) {
+            settings.*field = settings.default_vmaf_on_gpu;
+        }
+    }
     return settings;
 }
 
@@ -555,6 +566,9 @@ std::string Settings::text() const {
     data["default_compute_butteraugli"] = default_compute_butteraugli;
     data["default_compute_cvvdp"] = default_compute_cvvdp;
     data["default_vmaf_on_gpu"] = default_vmaf_on_gpu;
+    data["default_cambi_on_gpu"] = default_cambi_on_gpu;
+    data["default_ciede2000_on_gpu"] = default_ciede2000_on_gpu;
+    data["default_ms_ssim_on_gpu"] = default_ms_ssim_on_gpu;
     data["default_vship_build"] = default_vship_build;
     data["film_grain_default"] = film_grain_default;
     data["graph_metric"] = graph_metric;

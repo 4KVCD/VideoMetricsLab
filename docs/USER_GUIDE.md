@@ -610,6 +610,19 @@ at most 12 bits, and CIEDE2000 8, 10, 12 or 16 bits. MS-SSIM YUV, PSNR-HVS-M
 and CIEDE2000 read the chroma, so turning one on makes the decoders hand over
 whole pictures, as the 6:1:1 metrics do.
 
+CAMBI, CIEDE2000 and MS-SSIM (MS-SSIM YUV with it) are calculated on the GPU
+by the app's Vulkan engine, on the GPU VMAF runs on, whether VMAF itself is
+calculated on the GPU or the CPU. Each video's Performance section has a row
+for each of them, shown while the metric is in the list: **CAMBI compute**,
+**CIEDE2000 compute** and **MS-SSIM compute**, GPU by default and greyed out
+at CPU without a GPU. Where the GPU cannot calculate one (CAMBI of a test
+video scored at fewer bits or another size, say) or its calculation fails, it
+is calculated on the CPU. On the GPU, CAMBI gives the CPU's scores exactly,
+and CIEDE2000 and MS-SSIM agree with them to within a few millionths, so a
+saved score is reused whichever is chosen. The last choice is what newly
+added videos start with; settings saved before these rows existed start them
+where VMAF compute was.
+
 **Y, U and V of the YUV metrics**, in Add/remove metrics' Specialized section, adds
 a column for each plane (Y, U, V) beside PSNR YUV avg. dB, SSIM YUV, MS-SSIM YUV,
 PSNR-HVS-M and VMAF YUV, for the ones shown. The planes are calculated in their metric's
@@ -802,8 +815,9 @@ $run.videos[0].metrics.vmaf.score
 | `--cvvdp-display PRESET` | The display CVVDP models, by preset name. Repeat it for a CVVDP score on each display; the JSON then lists each display's name, score, display parameters and full CVVDP statistics in the video's `cvvdp_displays`. Left out: the app's default display, Automatic unless Settings name a preset: the HDR display (`30-inch 4K HDR monitor, dim room`, the official `standard_hdr_pq`) for an HDR reference (PQ or HLG), the SDR one (`30-inch 4K monitor, office`, `standard_4k`) otherwise. |
 | `--cvvdp-fill` | Scale the compared frames up to fill CVVDP's display, aspect kept, as the Options panel's **Scale the video to fill the display**. Left out: off, as the official tool (a 1080p video covers a quarter of a 4K display). These scores are saved apart. |
 | `--subsample N` | Score every N-th frame. CVVDP needs every frame. |
-| `--cpu` | Calculate on the CPU every metric that can be (CVVDP is GPU only): VMAF as with `--vmaf-on cpu`, unless `--vmaf-on` says otherwise, and SSIMULACRA2 and Butteraugli rather than on the GPU. |
+| `--cpu` | Calculate on the CPU every metric that can be (CVVDP is GPU only): VMAF, CAMBI, CIEDE2000 and MS-SSIM as with `--vmaf-on cpu` and `--cambi-on`, `--ciede2000-on` and `--ms-ssim-on cpu`, unless those say otherwise, and SSIMULACRA2 and Butteraugli rather than on the GPU. |
 | `--vmaf-on` `gpu\|cpu` | Where VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated. Left out: as the app's Options panel was last set. |
+| `--cambi-on`, `--ciede2000-on`, `--ms-ssim-on` `gpu\|cpu` | Where CAMBI, CIEDE2000 and MS-SSIM (with MS-SSIM YUV) are calculated, each apart from VMAF: on the GPU where it can, or on the CPU. A saved score is reused either way. Left out: as `--vmaf-on` or `--cpu` say, else as the app's Options panel was last set. |
 | `--vship` `vship-fast\|vship\|vship-hip\|vship-cuda` | The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU: `vship-fast`, the app's own (the window's GPU), or stock Vship: `vship` (the window's Vship Vulkan), or if Vulkan has problems `vship-hip` (AMD) or `vship-cuda` (NVIDIA). Stock Vship's three share their scores, which differ slightly from `vship-fast`'s and are saved apart. Left out: as Settings > Metrics > GPU metrics sets it. |
 | `--vship-pass one\|each` | SSIMULACRA2, Butteraugli and CVVDP in one pass per video, which decodes it once (faster only on a very powerful GPU, and needs much GPU memory), or a pass for each. The scores are the same. Left out: as Settings > Metrics > GPU metrics sets it. |
 | `--no-gpu-decode` | Decode the videos on the CPU, VVC too. |

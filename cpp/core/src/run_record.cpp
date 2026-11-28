@@ -259,6 +259,9 @@ Json settings_json(const VideoSettings& settings, const ComparisonResult* result
         perceptual[key] = backend;
     }
     json["calculated_on"] = Json{{"vmaf", options.vmaf_on_gpu ? "gpu" : "cpu"},
+                                 {"cambi", options.cambi_on_gpu ? "gpu" : "cpu"},
+                                 {"ciede2000", options.ciede2000_on_gpu ? "gpu" : "cpu"},
+                                 {"ms_ssim", options.ms_ssim_on_gpu ? "gpu" : "cpu"},
                                  {"perceptual", std::move(perceptual)},
                                  {"vship", vship_build_value(options.vship_build)},
                                  {"vship_in_use", vship_build_value(vship_build_in_use(options.vship_build))},

@@ -191,6 +191,12 @@ struct VmafOptions {
     GpuVendor gpu_vendor = GpuVendor::automatic;
     // VMAF v0.6.1, NEG and v1 on the GPU when a GPU can score them.
     bool vmaf_on_gpu = true;
+    // CAMBI, CIEDE2000 and MS-SSIM (MS-SSIM YUV with it) on the Vulkan engine's GPU where it scores them, each
+    // chosen apart from VMAF (on_gpu_chosen). Their scores agree with the CPU's, so the choice is no part of a
+    // comparison's identity.
+    bool cambi_on_gpu = true;
+    bool ciede2000_on_gpu = true;
+    bool ms_ssim_on_gpu = true;
     VshipBuild vship_build = VshipBuild::fast;
     CropMode crop_mode = CropMode::automatic;
     // The crops entered by hand, used with CropMode::manual only: what is cut
@@ -228,9 +234,25 @@ struct VmafOptions {
     // Turns one of FFmpeg's metrics on or off. Throws std::invalid_argument
     // for a metric that is not FFmpeg's.
     void set_metric_enabled(std::string_view key, bool enabled);
+    // Whether metric `key` is set to the GPU: CAMBI, CIEDE2000 and MS-SSIM (with MS-SSIM YUV and its planes) by
+    // their own choice, every other one by VMAF's (vmaf_on_gpu), which VMAF YUV and HDR VMAF follow.
+    bool on_gpu_chosen(std::string_view key) const;
 
     bool operator==(const VmafOptions&) const = default;
 };
+
+// The metrics with a GPU/CPU choice of their own (VmafOptions::on_gpu_chosen): the metric, its option's name (the
+// Options panel's field; Settings keeps the default as default_<field>), and the option.
+struct MetricGpuRoute {
+    std::string_view key;
+    std::string_view field;
+    bool VmafOptions::*on_gpu;
+};
+inline constexpr std::array<MetricGpuRoute, 3> metric_gpu_routes{{
+    {"cambi", "cambi_on_gpu", &VmafOptions::cambi_on_gpu},
+    {"ciede2000", "ciede2000_on_gpu", &VmafOptions::ciede2000_on_gpu},
+    {"ms_ssim", "ms_ssim_on_gpu", &VmafOptions::ms_ssim_on_gpu},
+}};
 
 // The metrics switched on by a compute_<key> field of their own (VMAF, VMAF
 // NEG, XPSNR, CAMBI ...), in the registry's order: not PSNR and SSIM (libvmaf

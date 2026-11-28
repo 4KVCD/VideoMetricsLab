@@ -328,7 +328,8 @@ BesideScorer::BesideScorer(const GpuPlan& plan, int n_subsample, GpuFrameStream*
     if (!cpu_metrics.empty()) {
         cpu_.emplace(plan.width, plan.height, plan.bit_depth, cpu_metrics, n_subsample, plan.threads,
                      plan.frame_rate, plan.cambi, plan.extra_gpu, plan.vmaf_model, plan.vmaf_on_vulkan,
-                     chroma_from_decoders);
+                     chroma_from_decoders, nullptr, std::vector<std::pair<std::string, std::string>>{},
+                     plan.kept_on_cpu);
     }
     if (hdr) {
         hdr_ = make_hdr_scorer(plan, n_subsample, shared);
@@ -696,7 +697,7 @@ void GpuAttempt::start_scorer(const GpuPlan& plan, int n_subsample) {
         auto cpu = std::make_unique<CpuScorer>(plan.width, plan.height, plan.bit_depth, metrics, n_subsample,
                                                plan.threads, plan.frame_rate, plan.cambi, plan.extra_gpu,
                                                plan.vmaf_model, plan.vmaf_on_vulkan, std::nullopt, nullptr,
-                                               plan.models);
+                                               plan.models, plan.kept_on_cpu);
         if (plan.on_gpu_metrics) {
             plan.on_gpu_metrics(cpu->metric_keys(), cpu->gpu_metrics());
         }

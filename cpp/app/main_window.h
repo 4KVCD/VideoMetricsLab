@@ -557,6 +557,7 @@ private:
     // The metrics Add/remove metrics lists: every metric but the planes.
     static long long listed_metric_count();
     void apply_metric_visibility();
+    void show_metric_route_rows();
     // Add/remove metrics' panel (MetricsPanel), its top left at `top_left`,
     // or its top right at `top_right` (under the button).
     // `anchor`: the button that opened it, whose next click closes it.

@@ -106,6 +106,11 @@ struct Settings {
     bool default_compute_cvvdp = true;
     // Whether VMAF v0.6.1, NEG and v1 run on the GPU.
     bool default_vmaf_on_gpu = true;
+    // Whether CAMBI, CIEDE2000 and MS-SSIM run on the GPU (VmafOptions' cambi_on_gpu...). A settings file from
+    // before them gives them default_vmaf_on_gpu's value, which they followed then.
+    bool default_cambi_on_gpu = true;
+    bool default_ciede2000_on_gpu = true;
+    bool default_ms_ssim_on_gpu = true;
     // The Vship build new videos use for SSIMULACRA2, Butteraugli and CVVDP
     // (vship_build_value: "vship-fast" or "vship").
     std::string default_vship_build = "vship-fast";

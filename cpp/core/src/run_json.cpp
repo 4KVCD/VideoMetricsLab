@@ -266,6 +266,9 @@ nlohmann::json options_json(const VmafOptions& options) {
         {"vvc_on_gpu", options.vvc_on_gpu},
         {"gpu_vendor", static_cast<int>(options.gpu_vendor)},
         {"vmaf_on_gpu", options.vmaf_on_gpu},
+        {"cambi_on_gpu", options.cambi_on_gpu},
+        {"ciede2000_on_gpu", options.ciede2000_on_gpu},
+        {"ms_ssim_on_gpu", options.ms_ssim_on_gpu},
         {"vship_build", static_cast<int>(options.vship_build)},
         {"crop_mode", static_cast<int>(options.crop_mode)},
         {"manual_source_crop", edges_json(options.manual_source_crop)},
@@ -316,6 +319,10 @@ VmafOptions options_from(const nlohmann::json& text) {
     text.at("vvc_on_gpu").get_to(options.vvc_on_gpu);
     options.gpu_vendor = static_cast<GpuVendor>(text.at("gpu_vendor").get<int>());
     text.at("vmaf_on_gpu").get_to(options.vmaf_on_gpu);
+    // Absent before they had a choice of their own: they followed VMAF's.
+    options.cambi_on_gpu = text.value("cambi_on_gpu", options.vmaf_on_gpu);
+    options.ciede2000_on_gpu = text.value("ciede2000_on_gpu", options.vmaf_on_gpu);
+    options.ms_ssim_on_gpu = text.value("ms_ssim_on_gpu", options.vmaf_on_gpu);
     options.vship_build = static_cast<VshipBuild>(text.at("vship_build").get<int>());
     options.crop_mode = static_cast<CropMode>(text.at("crop_mode").get<int>());
     // Absent from runs saved before manual crops

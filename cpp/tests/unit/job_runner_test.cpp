@@ -1074,9 +1074,10 @@ TEST(JobRunner, AMetricWithAGpuRouteOnTheCpuIsAloneInItsTask) {
     const std::string vship(perceptual_task);
     const std::string vship_cpu(perceptual_cpu_task);
 
-    // Set to the CPU: VMAF takes CAMBI, CIEDE2000 and VMAF YUV's U and V there with it.
+    // Set to the CPU: VMAF takes VMAF YUV's U and V there with it, and CAMBI and CIEDE2000 set to the CPU too.
     VmafOptions options;
     options.vmaf_on_gpu = false;
+    options.cambi_on_gpu = options.ciede2000_on_gpu = false;
     EXPECT_EQ(shape(plan_tasks(source, test, options,
                                {"vmaf", "psnr", "ssim", "cambi", "ciede2000", "vmaf_yuv", "ssimulacra2", "butteraugli"},
                                {{"ssimulacra2", "cpu"}, {"butteraugli", "cpu"}})),
@@ -1086,9 +1087,24 @@ TEST(JobRunner, AMetricWithAGpuRouteOnTheCpuIsAloneInItsTask) {
                   {ffmpeg, {"ciede2000"}, true, true},
                   {ffmpeg, {"vmaf_yuv_u", "vmaf_yuv_v"}, true, true},
                   {vship_cpu, {"ssimulacra2", "butteraugli"}, true, false}}));
+    // CAMBI and CIEDE2000 set to the GPU with VMAF on the CPU: in VMAF's task, which offers them the engine.
+    options.cambi_on_gpu = options.ciede2000_on_gpu = true;
+    EXPECT_EQ(shape(plan_tasks(source, test, options, {"vmaf", "psnr", "cambi", "ciede2000", "vmaf_yuv"})),
+              (std::vector<std::tuple<std::string, Keys, bool, bool>>{
+                  {ffmpeg, {"vmaf", "psnr", "cambi", "ciede2000"}, true, true},
+                  {ffmpeg, {"vmaf_yuv_u", "vmaf_yuv_v"}, true, true}}));
+
+    // VMAF on the GPU, CAMBI and MS-SSIM set to the CPU: CAMBI, the first heavy one, keeps the CPU's metrics in a
+    // task beside VMAF's, CIEDE2000 (offered the GPU there) and MS-SSIM (never a task of its own) with it.
+    options.vmaf_on_gpu = true;
+    options.cambi_on_gpu = options.ms_ssim_on_gpu = false;
+    EXPECT_EQ(shape(plan_tasks(source, test, options, {"vmaf", "psnr", "ms_ssim", "cambi", "ciede2000"})),
+              (std::vector<std::tuple<std::string, Keys, bool, bool>>{
+                  {ffmpeg, {"psnr", "ms_ssim", "cambi", "ciede2000"}, true, false},
+                  {std::string(gpu_vmaf_task), {"vmaf"}, false, false}}));
+    options.cambi_on_gpu = options.ms_ssim_on_gpu = true;
 
     // Set to the GPU on a PC whose checks found no Vulkan engine and no GPU for Vship.
-    options.vmaf_on_gpu = true;
     const Keys asked{"psnr", "cambi", "ciede2000", "vmaf_yuv", "ssimulacra2", "butteraugli"};
     EXPECT_EQ(shape(plan_tasks(source, test, options, asked, {}, {}, false, GpuAnswers{EnginePlace{}, false})),
               (std::vector<std::tuple<std::string, Keys, bool, bool>>{
@@ -1101,8 +1117,12 @@ TEST(JobRunner, AMetricWithAGpuRouteOnTheCpuIsAloneInItsTask) {
               (std::vector<std::tuple<std::string, Keys, bool, bool>>{
                   {ffmpeg, {"psnr", "cambi", "ciede2000", "vmaf_yuv_u", "vmaf_yuv_v"}, false, false},
                   {vship, {"ssimulacra2", "butteraugli"}, false, false}}));
-    // VMAF sent to the CPU by a model file, VMAF on the GPU still set: CAMBI goes with it.
+    // VMAF sent to the CPU by a model file, VMAF on the GPU still set: CAMBI, set to the GPU, stays in its task,
+    // where the engine is offered it; set to the CPU, it is a task of its own.
     options.model = "model_path=C\\:/models/own.json";
+    EXPECT_EQ(shape(plan_tasks(source, test, options, {"vmaf", "psnr", "cambi"})),
+              (std::vector<std::tuple<std::string, Keys, bool, bool>>{{ffmpeg, {"vmaf", "psnr", "cambi"}, true, true}}));
+    options.cambi_on_gpu = false;
     EXPECT_EQ(shape(plan_tasks(source, test, options, {"vmaf", "psnr", "cambi"})),
               (std::vector<std::tuple<std::string, Keys, bool, bool>>{{ffmpeg, {"vmaf", "psnr"}, true, true},
                                                                        {ffmpeg, {"cambi"}, true, true}}));
@@ -1269,24 +1289,34 @@ TEST(JobRunner, AVideoCancelledBeforeAnyScoreIsCancelledWhateverIsSaved) {
 }
 
 // What a run calculates names CIEDE2000, CAMBI, MS-SSIM and VMAF YUV's U and V as the
-// GPU's where it may take them (VMAF's place the GPU), not as CPU metrics the
-// line then calls GPU metrics; with VMAF on the CPU they are the CPU's. Once
-// VMAF's backend is known, U and V only on the Vulkan engine's.
+// GPU's where it may take them, not as CPU metrics the line then calls GPU
+// metrics: the first three where each is set to the GPU, whatever VMAF's place,
+// U and V with VMAF's place the GPU. Once VMAF's backend is known, U and V only
+// on the Vulkan engine's.
 TEST(JobRunner, CpuMetricsTheGpuMayTakeAreNamedSo) {
     const std::vector<std::string> keys{"psnr", "cambi", "ciede2000"};
-    EXPECT_EQ(cpu_metrics_text(keys, true), "PSNR; CAMBI and CIEDE2000 (\xCE\x94" "E) on the GPU where it can");
-    EXPECT_EQ(cpu_metrics_text({"ciede2000"}, true), "CIEDE2000 (\xCE\x94" "E) on the GPU where it can");
-    EXPECT_EQ(cpu_metrics_text(keys, false), "PSNR, CAMBI, CIEDE2000 (\xCE\x94" "E)");
-    EXPECT_EQ(cpu_metrics_text({"psnr", "ssim"}, true), "PSNR, SSIM");
-    EXPECT_EQ(cpu_metrics_text({"psnr", "ms_ssim"}, true), "PSNR; MS-SSIM on the GPU where it can");
+    const VmafOptions gpu;  // each on the GPU
+    VmafOptions cpu;
+    cpu.cambi_on_gpu = cpu.ciede2000_on_gpu = cpu.ms_ssim_on_gpu = false;
+    EXPECT_EQ(cpu_metrics_text(keys, gpu, true), "PSNR; CAMBI and CIEDE2000 (\xCE\x94" "E) on the GPU where it can");
+    EXPECT_EQ(cpu_metrics_text(keys, gpu, false), "PSNR; CAMBI and CIEDE2000 (\xCE\x94" "E) on the GPU where it can");
+    EXPECT_EQ(cpu_metrics_text({"ciede2000"}, gpu, true), "CIEDE2000 (\xCE\x94" "E) on the GPU where it can");
+    EXPECT_EQ(cpu_metrics_text(keys, cpu, true), "PSNR, CAMBI, CIEDE2000 (\xCE\x94" "E)");
+    VmafOptions cambi_cpu;
+    cambi_cpu.cambi_on_gpu = false;
+    EXPECT_EQ(cpu_metrics_text(keys, cambi_cpu, true), "PSNR, CAMBI; CIEDE2000 (\xCE\x94" "E) on the GPU where it can");
+    EXPECT_EQ(cpu_metrics_text({"psnr", "ssim"}, gpu, true), "PSNR, SSIM");
+    EXPECT_EQ(cpu_metrics_text({"psnr", "ms_ssim"}, gpu, true), "PSNR; MS-SSIM on the GPU where it can");
+    EXPECT_EQ(cpu_metrics_text({"psnr", "ms_ssim"}, cpu, true), "PSNR, MS-SSIM");
     const std::vector<std::string> chroma{"psnr", "vmaf_yuv_u", "vmaf_yuv_v"};
-    EXPECT_EQ(cpu_metrics_text(chroma, true), "PSNR; VMAF U and VMAF V on the GPU where it can");
+    EXPECT_EQ(cpu_metrics_text(chroma, gpu, true), "PSNR; VMAF U and VMAF V on the GPU where it can");
+    EXPECT_EQ(cpu_metrics_text(chroma, gpu, false), "PSNR, VMAF U, VMAF V");
     EXPECT_EQ(cpu_metrics_text(chroma, may_run_on_gpu(chroma, true, false)), "PSNR, VMAF U, VMAF V");
-    EXPECT_EQ(cpu_metrics_text({"psnr", "vmaf_yuv"}, true), "PSNR; VMAF YUV (6:1:1) on the GPU where it can");
+    EXPECT_EQ(cpu_metrics_text({"psnr", "vmaf_yuv"}, gpu, true), "PSNR; VMAF YUV (6:1:1) on the GPU where it can");
     // HDR VMAF's features follow VMAF's place (hdr_plan), in the CPU's task too.
-    EXPECT_EQ(cpu_metrics_text({"vmaf_hdr", "psnr", "cambi"}, true),
+    EXPECT_EQ(cpu_metrics_text({"vmaf_hdr", "psnr", "cambi"}, gpu, true),
               "PSNR; HDR VMAF and CAMBI on the GPU where it can");
-    EXPECT_EQ(cpu_metrics_text({"vmaf_hdr", "psnr"}, false), "HDR VMAF, PSNR");
+    EXPECT_EQ(cpu_metrics_text({"vmaf_hdr", "psnr"}, gpu, false), "HDR VMAF, PSNR");
 }
 
 }  // namespace

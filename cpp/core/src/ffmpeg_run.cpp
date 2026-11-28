@@ -798,9 +798,9 @@ ParsedScores score_decoded_here(const RunFrames& run, const VmafOptions& options
         plan.backend == "cpu"
             ? score_decoded_cpu(source, distorted, run.source_crop, run.distorted_crop, plan.width, plan.height,
                                 plan.bit_depth, keys, options.n_subsample, range, run.total_frames, decoders,
-                                plan.threads, plan.frame_rate, plan.cambi, plan.extra_gpu, plan.vmaf_model,
-                                plan.models, plan.vmaf_on_vulkan, options.scale_algorithm, ffmpeg, ffprobe,
-                                want_vvdec,
+                                plan.threads, plan.frame_rate, plan.cambi, plan.extra_gpu, plan.kept_on_cpu,
+                                plan.vmaf_model, plan.models, plan.vmaf_on_vulkan, options.scale_algorithm, ffmpeg,
+                                ffprobe, want_vvdec,
                                 on_vvdec_opening(on_status), plan.on_gpu_metrics, on_progress, run.cancel)
         : plan.backend == "hdr"
             ? score_decoded_hdr(source, distorted, run.source_crop, run.distorted_crop, plan, options.n_subsample,
@@ -1283,6 +1283,7 @@ nlohmann::json plan_json(const GpuPlan& plan) {
             {"hdr_threads", plan.hdr_threads},
             {"hdr_gpu", plan.hdr_gpu ? nlohmann::json(*plan.hdr_gpu) : nlohmann::json(nullptr)},
             {"extra_gpu", plan.extra_gpu ? nlohmann::json(*plan.extra_gpu) : nlohmann::json(nullptr)},
+            {"kept_on_cpu", plan.kept_on_cpu},
             {"vmaf_model", plan.vmaf_model}, {"vmaf_on_vulkan", plan.vmaf_on_vulkan}};
 }
 
@@ -1317,6 +1318,7 @@ GpuPlan plan_from(const nlohmann::json& text) {
     if (const nlohmann::json& gpu = text.at("extra_gpu"); !gpu.is_null()) {
         plan.extra_gpu = gpu.get<int>();
     }
+    text.at("kept_on_cpu").get_to(plan.kept_on_cpu);
     text.at("vmaf_model").get_to(plan.vmaf_model);
     text.at("vmaf_on_vulkan").get_to(plan.vmaf_on_vulkan);
     return plan;
@@ -1398,10 +1400,11 @@ ParsedScores score_on_gpu(const RunFrames& run, const VmafOptions& options, cons
     }
     std::string beside;
     if (!plan.beside.empty()) {
-        // CIEDE2000, CAMBI and MS-SSIM may go to the GPU with one given them, VMAF YUV's U and V on the Vulkan engine's
-        // (cpu_plan); libvmaf on the CPU scores the others, HDR VMAF's on threads of its own (log_hdr_vmaf).
+        // CIEDE2000, CAMBI and MS-SSIM may go to the GPU with one given them (not those set to the CPU), VMAF YUV's
+        // U and V on the Vulkan engine's (cpu_plan); libvmaf on the CPU scores the others, HDR VMAF's on threads of
+        // its own (log_hdr_vmaf).
         const std::vector<std::string> maybe_gpu =
-            may_run_on_gpu(plan.beside, plan.extra_gpu.has_value(), plan.vmaf_on_vulkan);
+            may_run_on_gpu(plan.beside, plan.extra_gpu.has_value(), plan.vmaf_on_vulkan, plan.kept_on_cpu);
         const auto on_cpu = [&maybe_gpu](const std::string& key) {
             return std::find(maybe_gpu.begin(), maybe_gpu.end(), key) == maybe_gpu.end();
         };
@@ -2110,11 +2113,11 @@ EnginePlace run_engine_place(const RunFrames& run) {
 }
 
 // The plan for the run's CPU metrics in the app (cpu_metrics_plan).
-// VMAF YUV's U and V are scored with the run's VMAF model. They, CIEDE2000, CAMBI and MS-SSIM (with MS-SSIM YUV)
-// go to the GPU VMAF runs on
-// where the Vulkan engine scores VMAF there (CpuScorer falls back to libvmaf where the GPU cannot take them): with
-// the GPU there they took a fraction of the time and memory libvmaf takes on the CPU. On a GPU whose VMAF is
-// libvmaf's CUDA code the Vulkan engine's would not be checked, so they stay on the CPU there.
+// VMAF YUV's U and V are scored with the run's VMAF model. They (with VMAF set to the GPU), and CIEDE2000, CAMBI
+// and MS-SSIM (with MS-SSIM YUV) each set to the GPU (VmafOptions::on_gpu_chosen, whatever VMAF's place), go to
+// the GPU VMAF runs on where the Vulkan engine scores VMAF there (CpuScorer falls back to libvmaf where the GPU
+// cannot take them): with the GPU there they took a fraction of the time and memory libvmaf takes on the CPU. On
+// a GPU whose VMAF is libvmaf's CUDA code the Vulkan engine's would not be checked, so they stay on the CPU there.
 std::optional<GpuPlan> cpu_plan(const RunFrames& run, const VmafOptions& options) {
     std::optional<GpuPlan> plan =
         cpu_metrics_plan(options, std::pair(run.width, run.height), run.source, run.distorted, run.decoding,
@@ -2126,13 +2129,20 @@ std::optional<GpuPlan> cpu_plan(const RunFrames& run, const VmafOptions& options
     if (chroma_vmaf) {
         plan->vmaf_model = run_vmaf_model(options, run.width, run.height);
     }
-    // What the engine's place serves in this plan: U and V (vmaf_on_vulkan), engine_takes_cpu_metric's
-    // (extra_gpu). VMAF YUV with its Y alone needs neither.
-    const bool engine_metrics = std::any_of(plan->models.begin(), plan->models.end(),
-                                            [](const auto& model) { return engine_takes_cpu_metric(model.first); });
-    if (options.vmaf_on_gpu && (chroma_vmaf || engine_metrics)) {
+    // What the engine's place serves in this plan: U and V (vmaf_on_vulkan), engine_takes_cpu_metric's set to
+    // the GPU (extra_gpu; those set to the CPU are kept_on_cpu). VMAF YUV with its Y alone needs neither.
+    std::vector<std::string> keys;
+    for (const auto& [key, model] : plan->models) {
+        keys.push_back(key);
+    }
+    plan->kept_on_cpu = kept_on_cpu_of(keys, options);
+    const bool engine_metrics = std::any_of(keys.begin(), keys.end(), [&options](const std::string& key) {
+        return engine_takes_cpu_metric(key) && options.on_gpu_chosen(key);
+    });
+    const bool chroma_on_engine = options.vmaf_on_gpu && chroma_vmaf;
+    if (chroma_on_engine || engine_metrics) {
         if (const EnginePlace place = run_engine_place(run); place.on_engine) {
-            plan->vmaf_on_vulkan = chroma_vmaf;
+            plan->vmaf_on_vulkan = chroma_on_engine;
             plan->extra_gpu = place.device;
         }
     }
@@ -2301,6 +2311,7 @@ void put_beside(GpuPlan& pass, const GpuPlan& cpu) {
     pass.frame_rate = cpu.frame_rate;
     pass.cambi = cpu.cambi;
     pass.extra_gpu = beside_gpu(cpu, pass);
+    pass.kept_on_cpu = cpu.kept_on_cpu;
     pass.vmaf_model = cpu.vmaf_model;
     pass.vmaf_on_vulkan = cpu.vmaf_on_vulkan;
 }
@@ -2430,7 +2441,7 @@ std::variant<GpuPlan, std::string> hdr_plan(const RunFrames& run, const VmafOpti
         // Its features on VMAF v1's Vulkan engine, on the GPU VMAF runs on, where the Vulkan engine scores VMAF
         // there (HdrScorer falls back to the CPU where it cannot). Where the engine failed its check, or VMAF is
         // libvmaf's CUDA code, it is not checked on this GPU: the features stay on the CPU, as the run's plan
-        // counts them (heavy_cpu_unit), as do CIEDE2000, CAMBI and MS-SSIM (cpu_plan).
+        // counts them (heavy_cpu_unit), as do CIEDE2000, CAMBI and MS-SSIM set to the GPU (cpu_plan).
         if (const EnginePlace place = run_engine_place(run); place.on_engine) {
             plan.hdr_gpu = place.device;
         }

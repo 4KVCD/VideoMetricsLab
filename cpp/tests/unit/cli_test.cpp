@@ -91,6 +91,13 @@ Json values_of(const Arguments& parsed) {
     if (!a.resolution_tests.empty()) {  // the command line's own: the Python app had none
         values["resolution_tests"] = a.resolution_tests;
     }
+    // The command line's own too, so only where given.
+    for (const auto& [name, value] : {std::pair{"cambi_on", &a.cambi_on}, std::pair{"ciede2000_on", &a.ciede2000_on},
+                                      std::pair{"ms_ssim_on", &a.ms_ssim_on}}) {
+        if (*value) {
+            values[name] = **value;
+        }
+    }
     return values;
 }
 

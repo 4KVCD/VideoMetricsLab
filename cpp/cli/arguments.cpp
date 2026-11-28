@@ -45,7 +45,9 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--size WIDTHxHEIGHT] [--pix-fmt FORMAT]
                                    [--cvvdp-display PRESET] [--cvvdp-fill]
                                    [--subsample N] [--threads N]
-                                   [--vmaf-on {gpu,cpu}]
+                                   [--vmaf-on {gpu,cpu}] [--cambi-on {gpu,cpu}]
+                                   [--ciede2000-on {gpu,cpu}]
+                                   [--ms-ssim-on {gpu,cpu}]
                                    [--vship {vship-fast,vship,vship-hip,vship-cuda}]
                                    [--vship-pass {one,each}] [--cpu]
                                    [--no-gpu-decode |
@@ -328,6 +330,12 @@ options:
   --threads N           libvmaf threads (default: automatic)
   --vmaf-on {gpu,cpu}   where VMAF v0.6.1, VMAF NEG and VMAF v1 is calculated
                         (default: the app's)
+  --cambi-on {gpu,cpu}, --ciede2000-on {gpu,cpu}, --ms-ssim-on {gpu,cpu}
+                        where CAMBI, CIEDE2000 and MS-SSIM (with MS-SSIM YUV)
+                        are calculated, each apart from VMAF: on the GPU where
+                        it can, or on the CPU. Their scores agree, so saved
+                        scores are kept either way (default: as --vmaf-on or
+                        --cpu say, else the app's)
   --vship {vship-fast,vship,vship-hip,vship-cuda}
                         the Vship build that calculates SSIMULACRA2,
                         Butteraugli and CVVDP on the GPU: vship-fast (the
@@ -343,9 +351,11 @@ options:
                         pass for each. The scores are the same (default: the
                         app's)
   --cpu                 calculate on the CPU every metric that can be (CVVDP
-                        is GPU only): VMAF as with --vmaf-on cpu, unless
-                        --vmaf-on says otherwise, and SSIMULACRA2 and
-                        Butteraugli rather than on the GPU where one can
+                        is GPU only): VMAF, CAMBI, CIEDE2000 and MS-SSIM as
+                        with --vmaf-on cpu and --cambi-on, --ciede2000-on and
+                        --ms-ssim-on cpu, unless those options say otherwise,
+                        and SSIMULACRA2 and Butteraugli rather than on the GPU
+                        where one can
 )"
 // (Two literals: MSVC takes at most 16,380 bytes in one, error C2026. The
 // test SourceLimits.StringLiteralsFitMsvc holds every literal under it.)
@@ -1596,6 +1606,11 @@ Parser compare_parser(CompareArguments& parsed) {
                [&parsed](const std::string& value) { parsed.subsample = int_up_to(value, 60); }),
         option({"--threads"}, [&parsed](const std::string& value) { parsed.threads = int_up_to(value, 128); }),
         option({"--vmaf-on"}, [&parsed](const std::string& value) { parsed.vmaf_on = choice(value, {"gpu", "cpu"}); }),
+        option({"--cambi-on"}, [&parsed](const std::string& value) { parsed.cambi_on = choice(value, {"gpu", "cpu"}); }),
+        option({"--ciede2000-on"},
+               [&parsed](const std::string& value) { parsed.ciede2000_on = choice(value, {"gpu", "cpu"}); }),
+        option({"--ms-ssim-on"},
+               [&parsed](const std::string& value) { parsed.ms_ssim_on = choice(value, {"gpu", "cpu"}); }),
         option({"--vship"},
                [&parsed](const std::string& value) {
                    parsed.vship = choice(value, {"vship-fast", "vship", "vship-hip", "vship-cuda"});

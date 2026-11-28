@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "vml/libvmaf.h"
+#include "vml/options.h"
 #include "vml/pair_scorer.h"
 
 namespace vml {
@@ -27,30 +28,35 @@ class GpuFrameStream;  // gpu_frames.h
 // h / 2), MS-SSIM unless MS-SSIM YUV stays on the CPU (libvmaf calculates its
 // luma in the same pass), and CAMBI where the GPU takes all of its libvmaf
 // options (`cambi_options`: not a test video scored at another size or bit
-// depth).
+// depth). None of `kept_on_cpu` (those set to the CPU: kept_on_cpu_of).
 std::vector<std::string> gpu_metrics_of(const std::vector<std::string>& metrics, bool odd_size,
-                                        const std::vector<std::pair<std::string, std::string>>& cambi_options);
+                                        const std::vector<std::pair<std::string, std::string>>& cambi_options,
+                                        const std::vector<std::string>& kept_on_cpu = {});
 
 // Whether `key` is one of the CPU metrics the Vulkan engine may calculate (gpu_metrics_of): CIEDE2000, CAMBI,
 // MS-SSIM, and MS-SSIM YUV with its planes.
 bool engine_takes_cpu_metric(std::string_view key);
 
+// Those of `keys` the engine may take that `options` set to the CPU (VmafOptions::on_gpu_chosen), every MS-SSIM
+// key together: libvmaf calculates MS-SSIM's luma in MS-SSIM YUV's pass.
+std::vector<std::string> kept_on_cpu_of(const std::vector<std::string>& keys, const VmafOptions& options);
+
 // Which of `keys` (CpuScorer's) may go to the GPU, in `keys`' order: gpu_metrics_of's with `extra_gpu_offered` (the
 // size and CAMBI's options aside), VMAF YUV's U and V (and VMAF YUV, as a task names them) with
 // `chroma_vmaf_offered` (VMAF's GPU is the Vulkan engine's: GpuPlan::vmaf_on_vulkan). Where they go is decided only
 // as the scorer starts: it keeps a metric the GPU cannot take (ChromaVmaf's U and V above 10 bits or with a model
-// file, say) on the CPU.
+// file, say) on the CPU. None of `kept_on_cpu` (gpu_metrics_of's).
 std::vector<std::string> may_run_on_gpu(const std::vector<std::string>& keys, bool extra_gpu_offered,
-                                        bool chroma_vmaf_offered);
+                                        bool chroma_vmaf_offered, const std::vector<std::string>& kept_on_cpu = {});
 
 // The CPU scorer's metrics `keys` as a task's name in the log and vml-cli's list of what a run calculates gives
 // them: "PSNR; CAMBI and CIEDE2000 (ΔE) on the GPU where it can", those in `maybe_gpu` (may_run_on_gpu) named so,
 // as where they go is decided only as the scorer starts (it says so then: StatusKind::metrics_on_gpu).
 std::string cpu_metrics_text(const std::vector<std::string>& keys, const std::vector<std::string>& maybe_gpu);
 
-// The same before VMAF's GPU backend is known: with `gpu_offered` (VMAF's place is the GPU:
-// VmafOptions::vmaf_on_gpu), every metric the GPU may take is named so, HDR VMAF (its features) included.
-std::string cpu_metrics_text(const std::vector<std::string>& keys, bool gpu_offered);
+// The same before VMAF's GPU backend is known: CAMBI, CIEDE2000 and MS-SSIM named so where `options` set them
+// to the GPU, VMAF YUV's U and V and HDR VMAF (its features) with `vmaf_offered` (VMAF's place is the GPU).
+std::string cpu_metrics_text(const std::vector<std::string>& keys, const VmafOptions& options, bool vmaf_offered);
 
 // gpu_metrics_of's metrics on the GPU failed after they started (a lost device, say),
 // as CpuScorer says it: the pass is made again with them in libvmaf on the

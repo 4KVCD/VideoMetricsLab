@@ -14,6 +14,7 @@
 #include "i18n.h"
 #include "metric_list.h"
 #include "metric_order.h"
+#include "options_panel.h"
 #include "settings_panel.h"
 #include "vml/metric_cache.h"
 #include "vml/metrics.h"
@@ -124,6 +125,15 @@ void MainWindow::apply_metric_visibility() {
         shown += visible && !metric_definition(item.key).is_plane() ? 1 : 0;
     }
     metrics_count_label_->setText(shown_count_text(shown, listed_metric_count()));
+    show_metric_route_rows();
+}
+
+// The Options panel's GPU/CPU rows of CAMBI, CIEDE2000 and MS-SSIM, for the metrics listed. The video table is
+// built before the panel, so the first call comes before it exists; the constructor calls this again after.
+void MainWindow::show_metric_route_rows() {
+    if (options_panel_) {
+        options_panel_->show_metric_route_rows([this](std::string_view key) { return metric_shown(key); });
+    }
 }
 
 void MainWindow::show_metrics_panel(const QPoint& top_left, std::optional<QPoint> top_right, QWidget* anchor) {

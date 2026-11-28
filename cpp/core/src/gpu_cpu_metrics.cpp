@@ -40,8 +40,11 @@ constexpr std::array<const char*, 3> ms_ssim_features{"float_ms_ssim", "float_ms
 
 }  // namespace
 
-std::vector<std::string> gpu_metrics_of(const std::vector<std::string>& metrics, bool odd_size,
-                                        const std::vector<std::pair<std::string, std::string>>& cambi_options) {
+std::vector<std::string> gpu_metrics_of(const std::vector<std::string>& offered, bool odd_size,
+                                        const std::vector<std::pair<std::string, std::string>>& cambi_options,
+                                        const std::vector<std::string>& kept_on_cpu) {
+    std::vector<std::string> metrics = offered;
+    std::erase_if(metrics, [&kept_on_cpu](const std::string& key) { return has(kept_on_cpu, key); });
     std::vector<std::string> on_gpu;
     if (has(metrics, "ciede2000") && !odd_size) {
         on_gpu.emplace_back("ciede2000");
@@ -66,10 +69,18 @@ bool engine_takes_cpu_metric(std::string_view key) {
            key == "ms_ssim_yuv_y" || key == "ms_ssim_yuv_u" || key == "ms_ssim_yuv_v";
 }
 
+std::vector<std::string> kept_on_cpu_of(const std::vector<std::string>& keys, const VmafOptions& options) {
+    std::vector<std::string> kept;
+    std::copy_if(keys.begin(), keys.end(), std::back_inserter(kept), [&options](const std::string& key) {
+        return engine_takes_cpu_metric(key) && !options.on_gpu_chosen(key);
+    });
+    return kept;
+}
+
 std::vector<std::string> may_run_on_gpu(const std::vector<std::string>& keys, bool extra_gpu_offered,
-                                        bool chroma_vmaf_offered) {
+                                        bool chroma_vmaf_offered, const std::vector<std::string>& kept_on_cpu) {
     const std::vector<std::string> extra =
-        extra_gpu_offered ? gpu_metrics_of(keys, false, {}) : std::vector<std::string>{};
+        extra_gpu_offered ? gpu_metrics_of(keys, false, {}, kept_on_cpu) : std::vector<std::string>{};
     // VMAF YUV, as a task names U and V asked for it alone (job_runner's as_asked), is VMAF's Y and those planes.
     const auto chroma_vmaf = [](const std::string& key) {
         return key == vmaf_u_key || key == vmaf_v_key || key == "vmaf_yuv";
@@ -96,11 +107,11 @@ std::string cpu_metrics_text(const std::vector<std::string>& keys, const std::ve
     return text;
 }
 
-std::string cpu_metrics_text(const std::vector<std::string>& keys, bool gpu_offered) {
-    std::vector<std::string> maybe_gpu = may_run_on_gpu(keys, gpu_offered, gpu_offered);
+std::string cpu_metrics_text(const std::vector<std::string>& keys, const VmafOptions& options, bool vmaf_offered) {
+    std::vector<std::string> maybe_gpu = may_run_on_gpu(keys, true, vmaf_offered, kept_on_cpu_of(keys, options));
     // HDR VMAF, scored in the app rather than by CpuScorer, follows VMAF's place too: its features on the engine
     // (hdr_plan). maybe_gpu is a set to cpu_metrics_text, so its order does not matter.
-    if (gpu_offered && has(keys, "vmaf_hdr")) {
+    if (vmaf_offered && has(keys, "vmaf_hdr")) {
         maybe_gpu.emplace_back("vmaf_hdr");
     }
     return cpu_metrics_text(keys, maybe_gpu);

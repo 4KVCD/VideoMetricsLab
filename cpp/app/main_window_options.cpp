@@ -64,6 +64,7 @@ void MainWindow::on_table_selection_changed() {
             app::tr("Select one or more videos in the table to view or edit their settings."));
         syncing_panel_ = true;
         options_panel_->show_vmaf_backend(default_options_.vmaf_on_gpu);
+        options_panel_->show_metric_routes(default_options_);
         syncing_panel_ = false;
         return;
     }
@@ -233,6 +234,11 @@ void MainWindow::on_panel_field_edited(const QString& field) {
         } else if (field == "vship_build") {
             target.vship_build = panel.vship_build;
         }
+        for (const MetricGpuRoute& route : metric_gpu_routes) {
+            if (field.toStdString() == route.field) {
+                target.*route.on_gpu = panel.*route.on_gpu;
+            }
+        }
         return !(target == before);
     };
     // New rows start with the choices last made here, so that several similar
@@ -250,6 +256,14 @@ void MainWindow::on_panel_field_edited(const QString& field) {
         settings_.default_vmaf_on_gpu = panel.vmaf_on_gpu;
         save_settings();
     }
+    const bool metric_route = std::ranges::any_of(
+        metric_gpu_routes, [&field](const MetricGpuRoute& route) { return field.toStdString() == route.field; });
+    if (metric_route) {  // as VMAF's: the next session starts with the last choice
+        settings_.default_cambi_on_gpu = panel.cambi_on_gpu;
+        settings_.default_ciede2000_on_gpu = panel.ciede2000_on_gpu;
+        settings_.default_ms_ssim_on_gpu = panel.ms_ssim_on_gpu;
+        save_settings();
+    }
     if (field == "vship_build" && !vship_probe_ready(panel.vship_build)) {
         // Its GPU check, for the rows to say what it can calculate: a build
         // other than the default is checked only when a row chooses it.
@@ -257,7 +271,8 @@ void MainWindow::on_panel_field_edited(const QString& field) {
     }
     // Which GPU and how many threads change how a comparison is made, not what
     // it is (the recipe's identity): its scores stay.
-    const bool execution_only = field == "gpu" || field == "n_threads" || field == "vmaf_on_gpu";
+    const bool execution_only =
+        field == "gpu" || field == "n_threads" || field == "vmaf_on_gpu" || metric_route;
     std::vector<int> applied;
     bool filled = false;
     // Another unit for the range: the same part of the videos in it, at the

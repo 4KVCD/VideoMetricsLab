@@ -163,13 +163,15 @@ public:
     // each VMAF model among `metrics` (is_vmaf_model_key), by its key, as
     // GpuPlan::models holds them (other entries are not read); each is
     // loaded into the one libvmaf context under its key's name, as FFmpeg's
-    // libvmaf filter names them. Throws LibvmafError.
+    // libvmaf filter names them. `kept_on_cpu`: those of CIEDE2000, CAMBI and MS-SSIM set to the CPU, which
+    // libvmaf calculates with a `gpu` too (GpuPlan::kept_on_cpu). Throws LibvmafError.
     CpuScorer(int width, int height, int bit_depth, std::vector<std::string> metrics, int n_subsample = 1,
               int threads = 0, int frame_rate = 0, const CambiInput& cambi = {},
               std::optional<int> gpu = std::nullopt, const std::string& vmaf_model = {},
               bool vmaf_on_vulkan = false, std::optional<ChromaFromDecoders> chroma_from_decoders = std::nullopt,
               GpuFrameStream* shared_decoder = nullptr,
-              const std::vector<std::pair<std::string, std::string>>& vmaf_models = {});
+              const std::vector<std::pair<std::string, std::string>>& vmaf_models = {},
+              const std::vector<std::string>& kept_on_cpu = {});
     ~CpuScorer() override;
     CpuScorer(const CpuScorer&) = delete;
     CpuScorer& operator=(const CpuScorer&) = delete;
@@ -220,9 +222,10 @@ public:
 
 private:
     // Starts CIEDE2000, CAMBI and MS-SSIM on GPU `gpu` where it can (gpu_), and sets
-    // libvmaf_metrics_. `cambi_with`: CAMBI's libvmaf options. `shared_decoder`: the constructor's.
+    // libvmaf_metrics_. `cambi_with`: CAMBI's libvmaf options. `shared_decoder`, `kept_on_cpu`: the constructor's.
     void start_gpu(int width, int height, int bit_depth, std::optional<int> gpu,
-                   const std::vector<std::pair<std::string, std::string>>& cambi_with, GpuFrameStream* shared_decoder);
+                   const std::vector<std::pair<std::string, std::string>>& cambi_with, GpuFrameStream* shared_decoder,
+                   const std::vector<std::string>& kept_on_cpu);
     VmafPicture take_picture();
     void give_back(VmafPicture& reference, VmafPicture& distorted);
     void score(VmafPicture& reference, VmafPicture& distorted);
@@ -348,7 +351,8 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
                              int width, int height, int bit_depth, const std::vector<std::string>& metrics,
                              int n_subsample, const FrameRange& range, long long total_frames,
                              const std::pair<std::string, std::string>& decoders, int threads, int frame_rate,
-                             const CambiInput& cambi, std::optional<int> gpu, const std::string& vmaf_model,
+                             const CambiInput& cambi, std::optional<int> gpu,
+                             const std::vector<std::string>& kept_on_cpu, const std::string& vmaf_model,
                              const std::vector<std::pair<std::string, std::string>>& vmaf_models,
                              bool vmaf_on_vulkan, const std::string& scale_algorithm, const std::string& ffmpeg,
                              const std::string& ffprobe, bool want_vvdec,

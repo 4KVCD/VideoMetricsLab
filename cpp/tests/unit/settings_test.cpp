@@ -181,6 +181,22 @@ TEST(Settings, ExportsCarryOverTheOldAfterRunChoices) {
 
 // VML Modern is the default interface, for a settings file from before
 // there was a choice too; one that picked VML Classic keeps it.
+// CAMBI, CIEDE2000 and MS-SSIM went where VMAF went before they had their own
+// setting: one saved without them takes VMAF's.
+TEST(Settings, MetricRoutesSavedBeforeTheirSettingFollowVmaf) {
+    const test::Folder folder;
+    const auto load = [&folder](const std::string& text) {
+        std::ofstream(folder / "settings.json", std::ios::binary) << text;
+        return Settings::load_from(folder / "settings.json");
+    };
+    const Settings fresh = load("{}");
+    EXPECT_TRUE(fresh.default_cambi_on_gpu && fresh.default_ciede2000_on_gpu && fresh.default_ms_ssim_on_gpu);
+    const Settings cpu = load(R"({"default_vmaf_on_gpu": false, "default_ciede2000_on_gpu": true})");
+    EXPECT_FALSE(cpu.default_cambi_on_gpu);
+    EXPECT_TRUE(cpu.default_ciede2000_on_gpu);
+    EXPECT_FALSE(cpu.default_ms_ssim_on_gpu);
+}
+
 TEST(Settings, ModernIsTheDefaultInterface) {
     const test::Folder folder;
     const auto load = [&folder](const std::string& text) {

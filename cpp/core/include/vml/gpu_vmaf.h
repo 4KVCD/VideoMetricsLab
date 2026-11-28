@@ -127,8 +127,10 @@ struct GpuPlan {
     CambiInput cambi;    // CAMBI's test video (libvmaf_cpu.h)
     // The GPU the CPU metrics' CIEDE2000, CAMBI and MS-SSIM go on (CpuScorer's `gpu`:
     // Vulkan's number, -1 for the one VMAF runs on) where the Vulkan engine
-    // scores this PC's GPU VMAF, or nothing (cpu_plan).
+    // scores this PC's GPU VMAF, or nothing (cpu_plan); not those of them set to the CPU (`kept_on_cpu`:
+    // kept_on_cpu_of).
     std::optional<int> extra_gpu;
+    std::vector<std::string> kept_on_cpu;
     // With VMAF YUV's U and V among the CPU metrics: the run's VMAF model
     // (its model= value), and whether they go on extra_gpu too, where the
     // Vulkan engine scores this PC's GPU VMAF (not libvmaf's CUDA code).

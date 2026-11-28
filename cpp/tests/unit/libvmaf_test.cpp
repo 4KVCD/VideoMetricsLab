@@ -378,6 +378,13 @@ TEST(Libvmaf, OnlyTheCpuMetricsTheGpuCalculatesAsLibvmafGoToIt) {
     EXPECT_EQ(gpu_metrics_of(yuv, false, {}), (Keys{"ms_ssim", "ms_ssim_yuv", "ms_ssim_yuv_u"}));
     EXPECT_TRUE(gpu_metrics_of(yuv, true, {}).empty());
     EXPECT_TRUE(gpu_metrics_of({"psnr", "ssim", "psnr_hvs"}, false, {}).empty());
+    // Those set to the CPU stay there, MS-SSIM's keys together (kept_on_cpu_of).
+    VmafOptions options;
+    options.cambi_on_gpu = false;
+    EXPECT_EQ(gpu_metrics_of(metrics, false, {}, kept_on_cpu_of(metrics, options)), (Keys{"ciede2000", "ms_ssim"}));
+    options.ms_ssim_on_gpu = false;
+    EXPECT_EQ(kept_on_cpu_of(yuv, options), (Keys{"ms_ssim", "ms_ssim_yuv", "ms_ssim_yuv_u"}));
+    EXPECT_TRUE(gpu_metrics_of(yuv, false, {}, kept_on_cpu_of(yuv, options)).empty());
 }
 
 // The pool holds a pair per busy libvmaf thread plus one: 8 threads for light

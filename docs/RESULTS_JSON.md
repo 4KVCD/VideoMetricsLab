@@ -184,7 +184,7 @@ Each metric's key (`vmaf`, `vmaf_neg`, `vmaf_v1`, `vmaf_hdr`, `psnr`, `ssim`, `x
 | `frame_pairing` | `frame number`: frame N of one video is compared with frame N of the other, each counted from its own first frame; nothing is dropped or repeated to line them up. |
 | `scaling` | `direction` (`source_to_distorted` scales the reference to the test video's size, `distorted_to_source` the other way), `algorithm`, `compared_at` (the size compared), and for `source` and `test` the scaling each had (`from`, `to`) or `null` when left at its size. A resolution test gives `resolution_test` (`label`, `width`, `scaler`) instead. |
 | `decoding` | `gpu_decode` (whether videos may be decoded on the GPU), `gpu_maker` (`automatic` or the maker chosen), `vvc` (`gpu` or `cpu`: VVdeC decodes VVC either way). |
-| `calculated_on` | Where the metrics were set to run: `vmaf`, `perceptual` (per metric), `vship` (the Vship chosen) and `vship_in_use`, `libvmaf_threads` (`0`: automatic). Each metric's `computed_on` says where it actually ran. |
+| `calculated_on` | Where the metrics were set to run: `vmaf`, `cambi`, `ciede2000` and `ms_ssim` (`gpu` or `cpu`; `ms_ssim` for MS-SSIM YUV too), `perceptual` (per metric), `vship` (the Vship chosen) and `vship_in_use`, `libvmaf_threads` (`0`: automatic). Each metric's `computed_on` says where it actually ran. |
 
 ### `black_bars`
 
