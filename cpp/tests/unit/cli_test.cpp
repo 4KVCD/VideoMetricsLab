@@ -52,7 +52,7 @@ Json values_of(const Arguments& parsed) {
     const auto path = [](const std::optional<std::string>& text) {
         return text ? Json(platform::path_text(python_path(*text))) : Json(nullptr);
     };
-    return Json{
+    Json values{
         {"command", "compare"},
         {"reference", platform::path_text(python_path(a.reference.value_or("")))},
         {"tests", a.tests},
@@ -88,6 +88,10 @@ Json values_of(const Arguments& parsed) {
         {"quiet", a.quiet},
         {"verbose", a.verbose},
     };
+    if (!a.resolution_tests.empty()) {  // the command line's own: the Python app had none
+        values["resolution_tests"] = a.resolution_tests;
+    }
+    return values;
 }
 
 // Python's text, with the C++ app's name and version for its own

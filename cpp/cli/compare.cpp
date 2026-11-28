@@ -16,6 +16,7 @@
 #include <mutex>
 #include <optional>
 #include <set>
+#include <span>
 #include <string_view>
 #include <thread>
 #include <tuple>
@@ -886,7 +887,7 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
         }
         try {
             const std::lock_guard lock(saving);
-            store_result(*cache_folder, result.source, target.path, target.request.recipe, result,
+            store_result(*cache_folder, result.source, target.saved_path(), target.request.recipe, result,
                          platform::path_text(target.path.stem()), target.saved_metrics);
         } catch (const std::exception& error) {
             progress.message(target.label() + ": the scores could not be saved (" + error.what() + ")");
@@ -1011,8 +1012,7 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
                                       const ProgressCallback& on_progress, const StatusCallback& on_status,
                                       const CancelToken& token) {
             const CancelToken& own = watch.token(static_cast<std::size_t>(&job - jobs.data()), token);
-            return run_vmaf(environment, job.source_info, job.distorted_info, options, on_progress, on_status, own,
-                            job.result_distorted_path, job.gpu_answers.engine);
+            return run_job_task(environment, job, options, on_progress, on_status, own);
         },
         [&environment, &jobs, &watch](const VmafJob& job, const std::vector<std::string>& keys, bool together,
                                       int concurrent_cpu_tasks, const PerceptualHooks& hooks,
@@ -1078,7 +1078,7 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
         std::vector<MetricRequestSpec> lumas;
         std::copy_if(video.saved_metrics.begin(), video.saved_metrics.end(), std::back_inserter(lumas),
                      [](const MetricRequestSpec& spec) { return spec.key == "psnr_yuv_y" || spec.key == "ssim_yuv_y"; });
-        if (auto found = load_result(cache_folder, source.path, video.path, video.request.recipe,
+        if (auto found = load_result(cache_folder, source.path, video.saved_path(), video.request.recipe,
                                      video.request.metrics, video.request.perceptual_backends, lumas)) {
             saved = std::move(found->first);
             // The bitrates as read now, as the window takes them
@@ -1089,7 +1089,7 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
             // Saved by an older version: its files recorded now, so that it
             // is found when they move (not with --no-save).
             if (save) {
-                record_saved_files(cache_folder, source.path, video.path, video.request.recipe);
+                record_saved_files(cache_folder, source.path, video.saved_path(), video.request.recipe);
             }
         }
     }
@@ -1442,6 +1442,10 @@ public:
     // line cannot do yet of it, or nothing.
     std::optional<std::string> plan(const std::filesystem::path& path, const std::function<VideoRead()>& read,
                                     const std::string& ffmpeg);
+    // Plans each --resolution-test (the reference with itself, scaled down
+    // and back), after the test videos. Returns what the command line
+    // cannot do yet of it, or nothing.
+    std::optional<std::string> plan_resolution_tests(const std::string& ffmpeg);
     // Each job's video, once every video is planned (the lists no longer grow).
     std::vector<TestVideo*> job_targets();
     // What the command asked for that no video used (--fps with no raw
@@ -1655,6 +1659,64 @@ std::optional<std::string> ComparisonPlanner::plan_pairing(const std::filesystem
     }
 }
 
+std::optional<std::string> ComparisonPlanner::plan_resolution_tests(const std::string& ffmpeg) {
+    const Size reference(source_.width, source_.height);
+    for (const auto& [width, scaler] : arguments_.resolution_tests) {
+        // As the window's dialog takes a width: even, within the widths
+        // this reference can have, which may not be the one typed.
+        const int tested = resample_size_for_width(width, reference).first;
+        ResampleTarget target = resample_target_of_width(tested);
+        target.scaler = scaler;
+        const std::filesystem::path path = synthetic_resample_distorted_path(source_.path, target);
+        if (std::ranges::any_of(videos, [&path](const TestVideo& video) { return video.path == path; })) {
+            continue;  // another width given that is tested at the same one
+        }
+        TestVideo& video = videos.emplace_back();
+        video.path = path;
+        video.media_path = source_.path;
+        video.resample_test = target;
+        video.info = source_;
+        video.source = source_;
+        if (resample_smallest_width(reference) > resample_largest_width(reference)) {
+            video.error = "the reference is too small for a resolution test";
+            video.error_code = codes::not_comparable;
+            continue;
+        }
+        if (tested != width) {
+            video.note(codes::resolution_test_width,
+                       "--resolution-test " + std::to_string(width) + ": tested at " + std::to_string(tested) +
+                           " pixels wide, as a resolution test of this reference is even and from " +
+                           std::to_string(resample_smallest_width(reference)) + " to " +
+                           std::to_string(resample_largest_width(reference)) + " wide");
+        }
+        // Saved as the reference's own scores are kept: not those read with
+        // --colour, nor of a raw stream or raw YUV file.
+        video.save_scores = !arguments_.colour && !source_.timed_raw && source_.format_name != "rawvideo";
+        add_film_grain_notes(video);
+        video.metrics = asked_;
+        leave_out_cvvdp_if_unable(video);
+        leave_out_hdr_vmaf_if_not_pq(video);
+        if (video.metrics.empty()) {
+            video.error = "none of the metrics asked for can be calculated for it";
+            video.error_code = codes::no_metric;
+            continue;
+        }
+        add_colour_notes(video);
+        if (const std::optional<std::string> note = sdr_display_note(arguments_, video.source, video, displays_)) {
+            video.note(codes::sdr_display, *note);
+        }
+        try {
+            if (std::optional<std::string> missing = queue_jobs(video, ffmpeg)) {
+                return missing;
+            }
+        } catch (const std::exception& error) {
+            video.error = error.what();
+            video.error_code = codes::not_comparable;
+        }
+    }
+    return std::nullopt;
+}
+
 std::vector<TestVideo*> ComparisonPlanner::job_targets() {
     std::vector<TestVideo*> targets;
     for (const auto& [index, display] : job_videos_) {
@@ -1726,7 +1788,7 @@ void ComparisonPlanner::add_colour_notes(TestVideo& video) const {
         const char* which;
         const char* other;
     } sides[] = {{&video.source, "the reference", "the test video"}, {&*video.info, "the test video", "the reference"}};
-    for (const auto& side : sides) {
+    for (const auto& side : std::span(sides).first(video.resample_test ? 1 : 2)) {
         if (video.colours_taken == side.which) {
             video.note(codes::colours_taken, taken_colour_note(*side.info, side.which, side.other));
         } else if (!has_colour_tags(*side.info)) {
@@ -1739,7 +1801,8 @@ void ComparisonPlanner::add_colour_notes(TestVideo& video) const {
 void ComparisonPlanner::add_film_grain_notes(TestVideo& video) const {
     const std::pair<const VideoInfo*, const char*> sides[] = {{&video.source, "the reference"},
                                                               {&*video.info, "the test video"}};
-    for (const auto& [info, which] : sides) {
+    // A resolution test's test video is the reference.
+    for (const auto& [info, which] : std::span(sides).first(video.resample_test ? 1 : 2)) {
         if (film_grain_not_known(*info)) {
             video.note(codes::film_grain_unknown, std::string("the film grain of ") + which +
                                   " could not be looked for (FFmpeg failed or took too long): whether its score "
@@ -1808,6 +1871,10 @@ VmafOptions ComparisonPlanner::options_of(const TestVideo& video) const {
     if (video.scale_direction) {
         options.scale_direction = *video.scale_direction;
     }
+    if (video.resample_test) {  // scaled by its own algorithm, as the window's row says
+        options.resample_test = video.resample_test;
+        options.scale_algorithm = video.resample_test->scaler;
+    }
     return options;
 }
 
@@ -1818,8 +1885,14 @@ VmafOptions ComparisonPlanner::options_of(const TestVideo& video) const {
 // job, or nothing; throws when the two videos cannot be compared as asked.
 std::optional<std::string> ComparisonPlanner::queue_jobs(TestVideo& video, const std::string& ffmpeg) {
     video.options = options_of(video);
-    validate_video_pair(video.source, *video.info, video.options);
-    const auto [width, height] = analysis_dimensions(video.source, *video.info, video.options);
+    if (!video.resample_test) {  // a resolution test compares the reference with itself
+        validate_video_pair(video.source, *video.info, video.options);
+    }
+    // Sized as the window sizes it before the run: a resolution test by the
+    // reference, whose black bars are not known yet.
+    const auto [width, height] = video.resample_test
+                                     ? resample_analysis_dimensions(video.source, std::nullopt)
+                                     : analysis_dimensions(video.source, *video.info, video.options);
     VmafOptions options = video.options;
     options.model = video.options.compute_vmaf ? resolve_model(video.options, width, height) : "";
     const DecodingCapabilities capabilities =
@@ -1861,6 +1934,8 @@ void ComparisonPlanner::queue_other_displays(TestVideo& video) {
         other.save_scores = video.save_scores;
         other.scale_direction = video.scale_direction;
         other.variant = video.variant;
+        other.resample_test = video.resample_test;
+        other.media_path = video.media_path;
         other.options = options_of(other);
         const std::size_t before = jobs.size();
         queue(other, other.source, other.options, backends_, displays_[display].second, reads_saved(other), save_,
@@ -1981,8 +2056,8 @@ void record_test_streams(const std::vector<std::unique_ptr<Comparison>>& compari
             for (const TestVideo& video : comparison->planner->videos) {
                 const bool calculated = video.save_scores && video.result && !video.from_cache;
                 const bool found_without_one = video.result && video.from_cache &&
-                                               test_stream_wanted(cache_folder, video.path);
-                if ((calculated || found_without_one) && paths.insert(video.path).second) {
+                                               test_stream_wanted(cache_folder, video.saved_path());
+                if ((calculated || found_without_one) && paths.insert(video.saved_path()).second) {
                     recorded.push_back(&video);
                 }
             }
@@ -2000,12 +2075,12 @@ void record_test_streams(const std::vector<std::unique_ptr<Comparison>>& compari
         const auto started = std::chrono::steady_clock::now();
         bool read = false;
         try {
-            read = record_test_stream(cache_folder, video->path, cancel);
+            read = record_test_stream(cache_folder, video->saved_path(), cancel);
         } catch (const std::exception&) {
             // a record only: the scores are saved
         }
         const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
-        progress.message("  " + platform::path_text(video->path.filename()) + ": " +
+        progress.message("  " + platform::path_text(video->saved_path().filename()) + ": " +
                          (cancel.cancelled() ? std::string("stopped")
                           : read             ? format_fixed(seconds, 1) + " s"
                                              : std::string("recorded before")));
@@ -2623,6 +2698,10 @@ std::optional<int> plan_comparison(Comparison& comparison, std::size_t index, Vi
             return exit_usage;
         }
     }
+    if (const std::optional<std::string> missing = planner.plan_resolution_tests(tools.ffmpeg.path)) {
+        print_error("The C++ command line cannot do this yet: " + *missing + ".");
+        return exit_usage;
+    }
     if (planner.videos.empty()) {
         if (!arguments.batch) {
             print_error("No test videos: the patterns find only the reference.");
@@ -2942,7 +3021,8 @@ int compare(const CompareArguments& given, const ChosenSettings& chosen, bool gp
                                           count_saved_frames);
         if (video.save_scores && scores.save && frames_short->counted()) {
             try {
-                store_result(cache_folder, video.result->source, video.path, video.request.recipe, *video.result,
+                store_result(cache_folder, video.result->source, video.saved_path(), video.request.recipe,
+                             *video.result,
                              platform::path_text(video.path.stem()), video.request.metrics);
             } catch (const std::exception&) {
                 // the counts are still this run's; the next counts again

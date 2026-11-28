@@ -78,6 +78,8 @@ struct CompareArguments {
     std::optional<std::string> size;      // a raw YUV file's picture size, "1920x1080"
     std::optional<std::string> pix_fmt;   // a raw YUV file's pixel format, as FFmpeg names it
     std::vector<std::string> cvvdp_displays;
+    // --resolution-test: each width and scaling algorithm, in the order given, each once.
+    std::vector<std::pair<int, std::string>> resolution_tests;
     bool cvvdp_fill = false;  // CvvdpSettings::resize_to_display
     int subsample = 1;
     std::optional<int> threads;

@@ -1971,6 +1971,16 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
     return tasks;
 }
 
+ComparisonResult run_job_task(const RunEnvironment& environment, const VmafJob& job, const VmafOptions& options,
+                              const ProgressCallback& on_progress, const StatusCallback& on_status,
+                              const CancelToken& cancel) {
+    if (options.resample_test) {
+        return run_resample_test(environment, job.source_info, options, on_progress, on_status, cancel);
+    }
+    return run_vmaf(environment, job.source_info, job.distorted_info, options, on_progress, on_status, cancel,
+                    job.result_distorted_path, job.gpu_answers.engine);
+}
+
 void run_jobs(const std::vector<VmafJob>& jobs, int parallel_jobs, const RunEvents& events, const TaskRunner& runner,
               const PerceptualRunner& perceptual, bool gpu_metrics_together, unsigned cores,
               const CancelToken& cancel) {

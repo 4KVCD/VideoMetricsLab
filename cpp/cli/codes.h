@@ -49,5 +49,6 @@ inline constexpr const char* sdr_display = "sdr_display";              // HDR vi
 inline constexpr const char* near_miss_crop = "near_miss_crop";        // crops a few lines apart, scaled
 inline constexpr const char* frame_counts = "frame_counts";            // fewer frames compared than expected
 inline constexpr const char* long_cpu_run = "long_cpu_run";            // SSIMULACRA2/Butteraugli on the CPU, long
+inline constexpr const char* resolution_test_width = "resolution_test_width";  // tested at another width
 
 }  // namespace vml::cli::codes

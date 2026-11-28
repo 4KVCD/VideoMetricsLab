@@ -266,6 +266,13 @@ using TaskRunner = std::function<ComparisonResult(const VmafJob& job, const Vmaf
                                                   const ProgressCallback& on_progress,
                                                   const StatusCallback& on_status, const CancelToken& cancel)>;
 
+// A task's FFmpeg run as the window and the command line make it (their
+// TaskRunner): a resolution test's (run_resample_test), whose test video is
+// made from the source during the run, else run_vmaf with the job's videos.
+ComparisonResult run_job_task(const RunEnvironment& environment, const VmafJob& job, const VmafOptions& options,
+                              const ProgressCallback& on_progress, const StatusCallback& on_status,
+                              const CancelToken& cancel);
+
 // Calculates one perceptual task's metrics (`keys`) for a video, reporting
 // through `hooks`, the GPU's metrics in one pass when `together`, with
 // `concurrent_cpu_tasks` the number of tasks the CPU's queue may run at once

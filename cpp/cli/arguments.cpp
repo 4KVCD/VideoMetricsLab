@@ -36,6 +36,7 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--source-crop T:B:L:R] [--test-crop T:B:L:R]
                                    [--scale-to {test,reference,both}]
                                    [--scaler {bicubic,bilinear,lanczos,spline}]
+                                   [--resolution-test WIDTH[:SCALER]]
                                    [--duration SECONDS | --range START-END |
                                    --frames FIRST-LAST]
                                    [--colour {pq-bt2020,hlg-bt2020,bt709}]
@@ -261,6 +262,12 @@ options:
                         named "[upscale-distorted-to-source]"
   --scaler {bicubic,bilinear,lanczos,spline}
                         scaling algorithm (default: bicubic)
+  --resolution-test WIDTH[:SCALER]
+                        compare the reference with itself scaled down to
+                        WIDTH and back up, as the window's resolution test,
+                        scaled by SCALER (bicubic, lanczos, bilinear or
+                        spline; default: bicubic). It may be given more than
+                        once; with it, TEST may be left out
   --duration SECONDS    compare only the first SECONDS of each video, in
                         seconds or H:MM:SS, to the millisecond (90, 1.5,
                         1:30.25)
@@ -1378,6 +1385,18 @@ std::pair<long long, long long> time_range_ms(const std::string& text) {
 // --frames: FIRST-LAST, whole frame numbers counted from 0, LAST included;
 // no LAST: to the videos' end. As a range: the first frame and the one past
 // the last (0: to the end).
+// A resolution test's width and scaling algorithm (--resolution-test): "1280" or "1280:lanczos".
+std::pair<int, std::string> resolution_test(const std::string& text) {
+    static const std::regex form(R"(\s*(\d{1,5})\s*(?::\s*(bicubic|lanczos|bilinear|spline)\s*)?)");
+    std::smatch parts;
+    if (!std::regex_match(text, parts, form) || std::stoi(parts[1].str()) == 0) {
+        throw ArgumentError{"invalid resolution test: " + python_string_repr(text) +
+                            " (WIDTH or WIDTH:SCALER, such as 1280 or 1280:lanczos; SCALER bicubic, lanczos, "
+                            "bilinear or spline)"};
+    }
+    return {std::stoi(parts[1].str()), parts[2].matched ? parts[2].str() : std::string(default_resample_scaler)};
+}
+
 std::pair<long long, long long> frame_span(const std::string& text) {
     static const std::regex form(R"(\s*(\d{1,15})\s*-\s*(\d{1,15})?\s*)");
     std::smatch parts;
@@ -1555,6 +1574,13 @@ Parser compare_parser(CompareArguments& parsed) {
         option({"--duration"}, [&parsed](const std::string& value) { parsed.duration_ms = duration_ms(value); }),
         option({"--range"}, [&parsed](const std::string& value) { parsed.range_ms = time_range_ms(value); }),
         option({"--frames"}, [&parsed](const std::string& value) { parsed.frames = frame_span(value); }),
+        option({"--resolution-test"},
+               [&parsed](const std::string& value) {
+                   std::pair<int, std::string> test = resolution_test(value);
+                   if (std::ranges::count(parsed.resolution_tests, test) == 0) {
+                       parsed.resolution_tests.push_back(std::move(test));
+                   }
+               }),
         option({"--colour", "--color"},
                [&parsed](const std::string& value) {
                    parsed.colour = choice(value, {"pq-bt2020", "hlg-bt2020", "bt709"});
@@ -1926,9 +1952,9 @@ std::optional<std::string> stills_misuse(const CompareArguments& arguments) {
 // in their place (as argparse words a missing argument, or a conflict).
 std::optional<std::string> batch_misuse(const CompareArguments& arguments) {
     if (!arguments.batch) {
-        const std::string missing = !arguments.reference       ? "REFERENCE, TEST"
-                                    : arguments.tests.empty() ? "TEST"
-                                                              : "";
+        // --resolution-test compares the reference with itself: no TEST needed.
+        const bool tests = !arguments.tests.empty() || !arguments.resolution_tests.empty();
+        const std::string missing = !arguments.reference ? "REFERENCE, TEST" : !tests ? "TEST" : "";
         return missing.empty() ? std::nullopt
                                : std::optional("the following arguments are required: " + missing);
     }
