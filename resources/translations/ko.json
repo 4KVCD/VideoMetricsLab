@@ -233,6 +233,8 @@
   "Restore Down": "이전 크기로 복원",
   "Close": "닫기",
   "{done} of {total}": "{done}/{total}",
+  "Video {number} of {total}": "영상 {number}/{total}",
+  "Videos {first}–{last} of {total}": "영상 {first}–{last}/{total}",
   "{percent} %": "{percent}%",
   "How test videos' names are shown in Metric Graphs, Video Compare and Worst Frames. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "지표 그래프, 영상 비교, 가장 나쁜 프레임에서 테스트 영상 이름을 표시하는 방식입니다. '서로 다른 부분'은(는) 표시된 영상들이 공유하는 앞부분과 끝부분을 생략합니다: \"…CRF 20\", \"…CRF 22\". 툴팁, 내보내기, 파일 이름에는 전체 이름이 유지됩니다.",
   "Conditions": "조건",

@@ -233,6 +233,8 @@
   "Restore Down": "Vorige grootte",
   "Close": "Sluiten",
   "{done} of {total}": "{done} van {total}",
+  "Video {number} of {total}": "Video {number} van {total}",
+  "Videos {first}–{last} of {total}": "Video's {first}–{last} van {total}",
   "{percent} %": "{percent}%",
   "How test videos' names are shown in Metric Graphs, Video Compare and Worst Frames. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Hoe de namen van testvideo's worden getoond in Metriekgrafieken, Video vergelijken en Slechtste frames. Wat ze onderscheidt laat het begin en einde weg dat de getoonde video's delen: \"…CRF 20\", \"…CRF 22\". Tooltips, exports en bestandsnamen houden de volledige naam.",
   "Conditions": "Voorwaarden",

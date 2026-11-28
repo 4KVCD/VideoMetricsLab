@@ -26,6 +26,7 @@ struct RunCounts {
     int finished = 0;  // over, failed ones included
     int failed = 0;    // failed, wholly or in part
     double fraction = 0.0;
+    int in_progress = 0;  // started and not over
 };
 
 class RunBadge {

@@ -826,6 +826,9 @@ RunCounts MainWindow::run_counts() const {
     counts.total = static_cast<int>(job_rows_.size());
     counts.finished = static_cast<int>(run_progress_.finished.size());
     counts.failed = run_failed_count_ + run_partial_count_;
+    counts.in_progress =
+        static_cast<int>(std::count_if(run_progress_.running.begin(), run_progress_.running.end(),
+                                       [this](int index) { return !run_progress_.finished.contains(index); }));
     if (counts.total == 0) {
         return counts;
     }

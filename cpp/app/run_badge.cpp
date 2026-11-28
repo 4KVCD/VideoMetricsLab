@@ -38,13 +38,23 @@ BadgeLook badge_look(RunBadge::Phase phase, bool paused, const RunCounts& counts
     case RunBadge::Phase::ready:
         parts = {app::tr("Ready")};
         break;
-    case RunBadge::Phase::running:
+    case RunBadge::Phase::running: {
+        // The number of the video being worked on, "Video 1 of 1", not of
+        // those finished, which reads as if nothing were under way; the range
+        // of those being worked on when several run at once.
+        const int first = std::min(counts.finished + 1, counts.total);
+        const int last = std::min(counts.finished + std::max(1, counts.in_progress), counts.total);
+        const QString working =
+            first >= last ? app::tr("Video {number} of {total}", {{"number", first}, {"total", counts.total}})
+                          : app::tr("Videos {first}\xE2\x80\x93{last} of {total}",
+                                    {{"first", first}, {"last", last}, {"total", counts.total}});
         look.fraction = std::clamp(counts.fraction, 0.0, 1.0);
-        parts = {of, app::tr("{percent} %", {{"percent", static_cast<int>(look.fraction * 100)}})};
+        parts = {working, app::tr("{percent} %", {{"percent", static_cast<int>(look.fraction * 100)}})};
         if (paused) {
             parts.prepend(app::tr("Paused"));
         }
         break;
+    }
     case RunBadge::Phase::done:
         look.fraction = 1.0;  // every video is over, failed or not
         if (counts.failed > 0) {

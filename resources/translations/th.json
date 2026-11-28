@@ -233,6 +233,8 @@
   "Restore Down": "ย่อลง",
   "Close": "ปิด",
   "{done} of {total}": "{done} จาก {total}",
+  "Video {number} of {total}": "วิดีโอ {number} จาก {total}",
+  "Videos {first}–{last} of {total}": "วิดีโอ {first}–{last} จาก {total}",
   "{percent} %": "{percent}%",
   "How test videos' names are shown in Metric Graphs, Video Compare and Worst Frames. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "วิธีแสดงชื่อวิดีโอทดสอบใน กราฟเมตริก, เปรียบเทียบวิดีโอ และ เฟรมที่แย่ที่สุด \"ส่วนที่ทำให้ต่างกัน\" จะละส่วนต้นและส่วนท้ายที่วิดีโอที่แสดงมีร่วมกัน: \"…CRF 20\", \"…CRF 22\" คำแนะนำเครื่องมือ การส่งออก และชื่อไฟล์ยังคงใช้ชื่อเต็ม",
   "Conditions": "เงื่อนไข",

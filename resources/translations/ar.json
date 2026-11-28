@@ -233,6 +233,8 @@
   "Restore Down": "استعادة لأسفل",
   "Close": "إغلاق",
   "{done} of {total}": "{done} من {total}",
+  "Video {number} of {total}": "الفيديو {number} من {total}",
+  "Videos {first}–{last} of {total}": "الفيديوهات {first}–{last} من {total}",
   "{percent} %": "{percent}٪",
   "How test videos' names are shown in Metric Graphs, Video Compare and Worst Frames. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "كيف تُعرض أسماء فيديوهات الاختبار في رسوم المقاييس ومقارنة الفيديو وأسوأ الإطارات. «ما يميّزها» يحذف البداية والنهاية المشتركتين بين الفيديوهات المعروضة: \"…CRF 20\"، \"…CRF 22\". تحتفظ التلميحات والتصديرات وأسماء الملفات بالاسم كاملًا.",
   "Conditions": "الشروط",

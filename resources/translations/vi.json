@@ -233,6 +233,8 @@
   "Restore Down": "Khôi phục xuống",
   "Close": "Đóng",
   "{done} of {total}": "{done}/{total}",
+  "Video {number} of {total}": "Video {number}/{total}",
+  "Videos {first}–{last} of {total}": "Video {first}–{last}/{total}",
   "{percent} %": "{percent}%",
   "How test videos' names are shown in Metric Graphs, Video Compare and Worst Frames. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Cách hiển thị tên video thử nghiệm trong Biểu đồ chỉ số, So sánh video và Khung tệ nhất. Phần phân biệt chúng bỏ phần đầu và phần cuối mà các video đang hiển thị có chung: \"…CRF 20\", \"…CRF 22\". Chú giải, bản xuất và tên tệp vẫn giữ tên đầy đủ.",
   "Conditions": "Điều kiện",

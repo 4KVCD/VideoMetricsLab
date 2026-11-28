@@ -55,10 +55,13 @@ TEST(RunBadge, LookOfEachPhase) {
 
     const RunCounts half{2, 1, 0, 0.5};
     const BadgeLook running = badge_look(Phase::running, false, half);
-    EXPECT_EQ(running.text, "1 of 2 · 50 %");
-    EXPECT_EQ(running.state, "1 of 2, 50 %");
+    // The video being worked on: the second, one being over.
+    EXPECT_EQ(running.text, "Video 2 of 2 · 50 %");
+    EXPECT_EQ(running.state, "Video 2 of 2, 50 %");
     EXPECT_DOUBLE_EQ(running.fraction, 0.5);
-    EXPECT_EQ(badge_look(Phase::running, true, half).text, "Paused · 1 of 2 · 50 %");
+    EXPECT_EQ(badge_look(Phase::running, true, half).text, "Paused · Video 2 of 2 · 50 %");
+    EXPECT_EQ(badge_look(Phase::running, false, {1, 0, 0, 0.17, 1}).text, "Video 1 of 1 · 17 %");
+    EXPECT_EQ(badge_look(Phase::running, false, {10, 3, 0, 0.3, 2}).text, "Videos 4\xE2\x80\x93" "5 of 10 · 30 %");
 
     const BadgeLook done = badge_look(Phase::done, false, {2, 2, 0, 0.98});
     EXPECT_EQ(done.text, "Done · 2 of 2");

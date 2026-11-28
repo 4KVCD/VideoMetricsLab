@@ -233,6 +233,8 @@
   "Restore Down": "Відновити",
   "Close": "Закрити",
   "{done} of {total}": "{done} з {total}",
+  "Video {number} of {total}": "Відео {number} з {total}",
+  "Videos {first}–{last} of {total}": "Відео {first}–{last} з {total}",
   "{percent} %": "{percent} %",
   "How test videos' names are shown in Metric Graphs, Video Compare and Worst Frames. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Як назви тестових відео показуються в «Графіки метрик», «Порівняння відео» і «Найгірші кадри». «Що їх розрізняє» пропускає спільні для показаних відео початок і кінець: «…CRF 20», «…CRF 22». Підказки, експорт і імена файлів зберігають повну назву.",
   "Conditions": "Умови",

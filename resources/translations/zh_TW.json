@@ -233,6 +233,8 @@
   "Restore Down": "還原",
   "Close": "關閉",
   "{done} of {total}": "{done}/{total}",
+  "Video {number} of {total}": "影片 {number}/{total}",
+  "Videos {first}–{last} of {total}": "影片 {first}–{last}/{total}",
   "{percent} %": "{percent}%",
   "How test videos' names are shown in Metric Graphs, Video Compare and Worst Frames. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "測試影片名稱在指標圖表、影片比較和最差影格中的顯示方式。「區分它們的部分」會省去所顯示影片共有的開頭和結尾：「…CRF 20」「…CRF 22」。提示、匯出和檔案名稱保留完整名稱。",
   "Conditions": "條件",

@@ -233,6 +233,8 @@
   "Restore Down": "Restaurar Tamanho",
   "Close": "Fechar",
   "{done} of {total}": "{done} de {total}",
+  "Video {number} of {total}": "Vídeo {number} de {total}",
+  "Videos {first}–{last} of {total}": "Vídeos {first}–{last} de {total}",
   "{percent} %": "{percent}%",
   "How test videos' names are shown in Metric Graphs, Video Compare and Worst Frames. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Como os nomes dos vídeos de teste aparecem em Gráficos de métricas, Comparar vídeos e Piores quadros. O que os diferencia omite o início e o fim que os vídeos mostrados compartilham: \"…CRF 20\", \"…CRF 22\". Dicas, exportações e nomes de arquivo mantêm o nome completo.",
   "Conditions": "Condições",

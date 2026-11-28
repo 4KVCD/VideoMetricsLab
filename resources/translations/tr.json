@@ -233,6 +233,8 @@
   "Restore Down": "Aşağı geri getir",
   "Close": "Kapat",
   "{done} of {total}": "{done}/{total}",
+  "Video {number} of {total}": "Video {number}/{total}",
+  "Videos {first}–{last} of {total}": "Video {first}–{last}/{total}",
   "{percent} %": "%{percent}",
   "How test videos' names are shown in Metric Graphs, Video Compare and Worst Frames. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Test videolarının adlarının Metrik grafikleri, Video karşılaştırma ve En kötü kareler içinde nasıl gösterildiği. Onları ayıran kısım, gösterilen videoların ortak başını ve sonunu atlar: \"…CRF 20\", \"…CRF 22\". İpuçları, dışa aktarımlar ve dosya adları tam adı korur.",
   "Conditions": "Koşullar",

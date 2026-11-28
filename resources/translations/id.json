@@ -233,6 +233,8 @@
   "Restore Down": "Pulihkan Ke Bawah",
   "Close": "Tutup",
   "{done} of {total}": "{done} dari {total}",
+  "Video {number} of {total}": "Video {number} dari {total}",
+  "Videos {first}–{last} of {total}": "Video {first}–{last} dari {total}",
   "{percent} %": "{percent}%",
   "How test videos' names are shown in Metric Graphs, Video Compare and Worst Frames. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "Cara nama video uji ditampilkan di Grafik metrik, Bandingkan video, dan Bingkai terburuk. Yang membedakannya menghilangkan awal dan akhir yang sama pada video yang ditampilkan: \"…CRF 20\", \"…CRF 22\". Tooltip, ekspor, dan nama file tetap memakai nama lengkap.",
   "Conditions": "Syarat",

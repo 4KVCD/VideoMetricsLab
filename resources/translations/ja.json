@@ -233,6 +233,8 @@
   "Restore Down": "元に戻す (縮小)",
   "Close": "閉じる",
   "{done} of {total}": "{done}/{total}",
+  "Video {number} of {total}": "動画 {number}/{total}",
+  "Videos {first}–{last} of {total}": "動画 {first}–{last}/{total}",
   "{percent} %": "{percent}%",
   "How test videos' names are shown in Metric Graphs, Video Compare and Worst Frames. What tells them apart leaves out the start and end the videos shown share: \"…CRF 20\", \"…CRF 22\". Tooltips, exports and file names keep the whole name.": "指標グラフ、動画比較、最悪のフレームでのテスト動画名の表示方法。「違いが分かる部分」は、表示中の動画に共通する先頭と末尾を省きます：「…CRF 20」「…CRF 22」。ツールチップ、エクスポート、ファイル名には完全な名前が残ります。",
   "Conditions": "条件",
