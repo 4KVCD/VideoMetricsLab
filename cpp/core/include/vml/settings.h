@@ -167,6 +167,9 @@ struct Settings {
     // Whether closing the window during a run asks first (the run stops):
     // off once "Don't ask again" was ticked, back on in Settings > General.
     bool confirm_close_during_run = true;
+    // The window's shortcut keys (F5, Ctrl+O, Ctrl+1 to Ctrl+8...): off, they
+    // do nothing; Tab, Ctrl+Tab and Video Compare's keys work either way.
+    bool keyboard_shortcuts = true;
     std::string skipped_update_version;
     std::string language;
     std::string theme;

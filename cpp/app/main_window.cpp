@@ -1040,6 +1040,7 @@ void MainWindow::add_shortcuts() {
         const Command command = shortcut.command;
         connect(action, &QAction::triggered, this, [this, command] { run_command(command); });
         addAction(action);
+        shortcut_actions_.push_back(action);
     }
     for (int index = 0; index < tabs_->count() && index < 8; ++index) {
         auto* action = new QAction(this);
@@ -1047,6 +1048,7 @@ void MainWindow::add_shortcuts() {
         action->setShortcutContext(Qt::WindowShortcut);
         connect(action, &QAction::triggered, this, [this, index] { tabs_->setCurrentIndex(index); });
         addAction(action);
+        shortcut_actions_.push_back(action);
     }
     // Delete in the test videos' table removes the selected rows.
     auto* remove = new QAction(distorted_table_);
@@ -1054,7 +1056,18 @@ void MainWindow::add_shortcuts() {
     remove->setShortcutContext(Qt::WidgetShortcut);
     connect(remove, &QAction::triggered, remove_selected_button_, &QPushButton::click);
     distorted_table_->addAction(remove);
-    // Each button's key in its tooltip.
+    shortcut_actions_.push_back(remove);
+    use_keyboard_shortcuts();
+}
+
+void MainWindow::use_keyboard_shortcuts() {
+    // Off, a disabled action lets its key through to the focused control, as
+    // if there were no shortcut.
+    const bool on = settings_.keyboard_shortcuts;
+    for (QAction* action : shortcut_actions_) {
+        action->setEnabled(on);
+    }
+    // Each button's key in its tooltip, while the keys work.
     const auto keys_of = [](Command command) {
         for (const Shortcut& shortcut : shortcuts()) {
             if (shortcut.command == command) {
@@ -1063,14 +1076,14 @@ void MainWindow::add_shortcuts() {
         }
         return QKeySequence();
     };
-    show_shortcut_in_tip(add_files_button_, keys_of(Command::add_videos));
-    show_shortcut_in_tip(source_browse_button_, keys_of(Command::choose_reference));
-    show_shortcut_in_tip(load_button_, keys_of(Command::import_run));
-    show_shortcut_in_tip(run_button_, keys_of(Command::calculate));
-    show_shortcut_in_tip(pause_button_, keys_of(Command::pause));
-    show_shortcut_in_tip(cancel_button_, keys_of(Command::cancel));
-    show_shortcut_in_tip(tab_export_button_, keys_of(Command::export_all));
-    show_shortcut_in_tip(remove_selected_button_, remove_keys());
+    show_shortcut_in_tip(add_files_button_, keys_of(Command::add_videos), on);
+    show_shortcut_in_tip(source_browse_button_, keys_of(Command::choose_reference), on);
+    show_shortcut_in_tip(load_button_, keys_of(Command::import_run), on);
+    show_shortcut_in_tip(run_button_, keys_of(Command::calculate), on);
+    show_shortcut_in_tip(pause_button_, keys_of(Command::pause), on);
+    show_shortcut_in_tip(cancel_button_, keys_of(Command::cancel), on);
+    show_shortcut_in_tip(tab_export_button_, keys_of(Command::export_all), on);
+    show_shortcut_in_tip(remove_selected_button_, remove_keys(), on);
 }
 
 void MainWindow::run_command(Command command) {
@@ -1134,6 +1147,7 @@ SettingsPanel& MainWindow::settings_panel() {
             &FrameComparePanel::set_decoded_videos);
     connect(settings_panel_, &SettingsPanel::ffmpeg_folder_changed, this, [this] { check_ffmpeg(false); });
     connect(settings_panel_, &SettingsPanel::shortcuts_requested, this, [this] { show_shortcuts(); });
+    connect(settings_panel_, &SettingsPanel::keyboard_shortcuts_changed, this, [this] { use_keyboard_shortcuts(); });
     connect(settings_panel_, &SettingsPanel::saved_results_cleared, this, [this] { on_saved_results_cleared(); });
     connect(settings_panel_, &SettingsPanel::video_names_changed, this, [this] {
         graph_panel_->set_video_name_rule(video_name_rule(settings_));

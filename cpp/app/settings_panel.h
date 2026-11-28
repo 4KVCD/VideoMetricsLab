@@ -232,6 +232,7 @@ public:
     QCheckBox* remember_videos = nullptr;
     QCheckBox* check_updates = nullptr;
     QCheckBox* confirm_close = nullptr;
+    QCheckBox* keyboard_shortcuts = nullptr;
     // Notifications (settings_notifications.cpp): when, the services and
     // their keys, how the keys are stored, and the message's templates with
     // their preview.
@@ -306,6 +307,8 @@ signals:
     void video_names_changed();
     // Keyboard shortcuts was clicked: the window shows its list.
     void shortcuts_requested();
+    // Use the keyboard shortcuts was ticked or unticked (saved).
+    void keyboard_shortcuts_changed();
 
 private:
     QGroupBox* build_ffmpeg_box();

@@ -1513,7 +1513,9 @@
   "Keyboard shortcuts": "키보드 단축키",
   "Next or previous tab": "다음 또는 이전 탭",
   "Pause / resume": "일시 중지 / 재개",
-  "Shortcut: {keys}": "단축키: {keys}"
+  "Shortcut: {keys}": "단축키: {keys}",
+  "Use the keyboard shortcuts": "키보드 단축키 사용",
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "끄면 목록의 단축키(F5, Ctrl+O, Ctrl+1~Ctrl+8 등)가 아무 동작도 하지 않습니다. Tab, Ctrl+Tab과 영상 비교의 키는 계속 작동합니다."
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

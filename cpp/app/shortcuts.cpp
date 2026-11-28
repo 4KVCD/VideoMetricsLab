@@ -66,9 +66,17 @@ QKeySequence tab_keys(int index) { return QKeySequence(Qt::CTRL | static_cast<Qt
 
 QKeySequence remove_keys() { return QKeySequence(QKeySequence::Delete); }
 
-void show_shortcut_in_tip(QAbstractButton* button, const QKeySequence& keys) {
+void show_shortcut_in_tip(QAbstractButton* button, const QKeySequence& keys, bool shown) {
+    // The tooltip as it was before any shortcut line, kept on the button.
+    const char* const kept = "vmlTipWithoutShortcut";
+    if (!button->property(kept).isValid()) {
+        button->setProperty(kept, button->toolTip());
+    }
+    const QString before = button->property(kept).toString();
     const QString line = app::tr("Shortcut: {keys}", {{"keys", key_text(keys)}});
-    button->setToolTip(button->toolTip().isEmpty() ? line : button->toolTip() + QStringLiteral("\n\n") + line);
+    button->setToolTip(!shown              ? before
+                       : before.isEmpty() ? line
+                                          : before + QStringLiteral("\n\n") + line);
 }
 
 ShortcutsDialog::ShortcutsDialog(QWidget* parent) : AppDialog(parent, app::tr("Keyboard shortcuts")) {

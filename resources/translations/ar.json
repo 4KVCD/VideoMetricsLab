@@ -1513,7 +1513,9 @@
   "Keyboard shortcuts": "اختصارات لوحة المفاتيح",
   "Next or previous tab": "علامة التبويب التالية أو السابقة",
   "Pause / resume": "إيقاف مؤقت / استئناف",
-  "Shortcut: {keys}": "الاختصار: {keys}"
+  "Shortcut: {keys}": "الاختصار: {keys}",
+  "Use the keyboard shortcuts": "استخدام اختصارات لوحة المفاتيح",
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "عند الإيقاف، لا تفعل الاختصارات الموجودة في القائمة (F5 وCtrl+O وCtrl+1 إلى Ctrl+8 وغيرها) شيئًا. يظل Tab وCtrl+Tab ومفاتيح «مقارنة الفيديو» تعمل."
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

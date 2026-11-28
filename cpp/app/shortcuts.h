@@ -47,9 +47,10 @@ QKeySequence tab_keys(int index);
 QKeySequence remove_keys();
 
 // Adds `button`'s shortcut to its tooltip ("Shortcut: F5"), after the
-// tooltip it has (none: the shortcut alone). Called once, after the tooltip
-// is set.
-void show_shortcut_in_tip(QAbstractButton* button, const QKeySequence& keys);
+// tooltip it had when first called (none: the shortcut alone), or, `shown`
+// false, takes it away again (the shortcuts turned off in Settings). Called
+// after the tooltip is set.
+void show_shortcut_in_tip(QAbstractButton* button, const QKeySequence& keys, bool shown = true);
 
 // The list: the window's shortcuts, the Videos table's and Video Compare's
 // keys (its key guide's, key_guide.h), each beside what it does, in the

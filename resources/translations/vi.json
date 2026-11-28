@@ -1513,7 +1513,9 @@
   "Keyboard shortcuts": "Phím tắt",
   "Next or previous tab": "Thẻ tiếp theo hoặc trước đó",
   "Pause / resume": "Tạm dừng / tiếp tục",
-  "Shortcut: {keys}": "Phím tắt: {keys}"
+  "Shortcut: {keys}": "Phím tắt: {keys}",
+  "Use the keyboard shortcuts": "Dùng phím tắt",
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Khi tắt, các phím tắt trong danh sách (F5, Ctrl+O, Ctrl+1 đến Ctrl+8 và các phím khác) không làm gì. Tab, Ctrl+Tab và các phím của So sánh video vẫn hoạt động."
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

@@ -1169,7 +1169,15 @@ QGroupBox* SettingsPanel::build_window_box() {
     confirm_close->setChecked(settings_.confirm_close_during_run);
     connect(confirm_close, &QCheckBox::toggled, this, [this] { on_edited(); });
     window_layout->addWidget(confirm_close);
-    // The list of the window's keys (shortcuts.h), also F1.
+    // The window's shortcut keys on or off (shortcuts.h), and their list,
+    // also F1.
+    keyboard_shortcuts = new QCheckBox(app::tr("Use the keyboard shortcuts"));
+    keyboard_shortcuts->setObjectName("useKeyboardShortcuts");
+    keyboard_shortcuts->setToolTip(app::tr("Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the "
+                                           "rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work."));
+    keyboard_shortcuts->setChecked(settings_.keyboard_shortcuts);
+    connect(keyboard_shortcuts, &QCheckBox::toggled, this, [this] { on_edited(); });
+    window_layout->addWidget(keyboard_shortcuts);
     auto* keys_button = new QPushButton(app::tr("Keyboard shortcuts"));
     keys_button->setObjectName("keyboardShortcuts");
     connect(keys_button, &QPushButton::clicked, this, &SettingsPanel::shortcuts_requested);
@@ -1593,6 +1601,7 @@ void SettingsPanel::read_controls() {
     }
     settings_.check_for_updates = check_updates->isChecked();
     settings_.confirm_close_during_run = confirm_close->isChecked();
+    settings_.keyboard_shortcuts = keyboard_shortcuts->isChecked();
     settings_.language = language->currentData().toString().toStdString();
     settings_.theme = theme_buttons->checkedButton()->property("value").toString().toStdString();
     settings_.light_look = light_look_buttons->checkedButton()->property("value").toString().toStdString();
@@ -1645,6 +1654,9 @@ void SettingsPanel::set_run_active(bool active) {
 }
 
 void SettingsPanel::apply_global_changes(const Settings& before) {
+    if (settings_.keyboard_shortcuts != before.keyboard_shortcuts) {
+        emit keyboard_shortcuts_changed();
+    }
     if (settings_.theme != before.theme || settings_.light_look != before.light_look ||
         settings_.dark_look != before.dark_look) {
         // the window's changeEvent follows

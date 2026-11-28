@@ -1513,7 +1513,9 @@
   "Keyboard shortcuts": "Raccourcis clavier",
   "Next or previous tab": "Onglet suivant ou précédent",
   "Pause / resume": "Pause / reprise",
-  "Shortcut: {keys}": "Raccourci : {keys}"
+  "Shortcut: {keys}": "Raccourci : {keys}",
+  "Use the keyboard shortcuts": "Utiliser les raccourcis clavier",
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Désactivés, les raccourcis de la liste (F5, Ctrl+O, Ctrl+1 à Ctrl+8 et les autres) ne font rien. Tab, Ctrl+Tab et les touches de Comparaison vidéo fonctionnent toujours."
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

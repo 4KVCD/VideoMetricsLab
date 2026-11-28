@@ -1513,7 +1513,9 @@
   "Keyboard shortcuts": "Billentyűparancsok",
   "Next or previous tab": "Következő vagy előző lap",
   "Pause / resume": "Szünet / folytatás",
-  "Shortcut: {keys}": "Billentyűparancs: {keys}"
+  "Shortcut: {keys}": "Billentyűparancs: {keys}",
+  "Use the keyboard shortcuts": "Billentyűparancsok használata",
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Kikapcsolva a lista billentyűparancsai (F5, Ctrl+O, Ctrl+1–Ctrl+8 és a többi) nem tesznek semmit. A Tab, a Ctrl+Tab és a Videó-összehasonlítás billentyűi továbbra is működnek."
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

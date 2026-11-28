@@ -681,6 +681,9 @@ private:
     // The window's keyboard shortcuts (shortcuts.h): each main action's key,
     // and that key in its button's tooltip.
     void add_shortcuts();
+    // The shortcuts on or off as Settings says (Settings.keyboard_shortcuts):
+    // their actions, and the buttons' tooltip lines.
+    void use_keyboard_shortcuts();
     void run_command(Command command);
     void show_shortcuts();
     // Says how an export went on the indicator (export_indicator.h).
@@ -1095,6 +1098,7 @@ private:
     QCheckBox* parallel_jobs_check_ = nullptr;
     QPushButton* load_button_ = nullptr;
     QPushButton* add_files_button_ = nullptr;
+    std::vector<QAction*> shortcut_actions_;  // add_shortcuts': on or off together
     // The list of the window's keys (shortcuts.h), made when first shown.
     ShortcutsDialog* shortcuts_dialog_ = nullptr;
     // The videos' colours, shared by the graphs, and Metric Graphs.

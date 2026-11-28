@@ -3,6 +3,7 @@
 // moved to; the main actions have shortcuts (shortcuts.h).
 #include <QAbstractItemView>
 #include <QApplication>
+#include <QCheckBox>
 #include <QHeaderView>
 #include <QKeyEvent>
 #include <QPushButton>
@@ -109,6 +110,43 @@ TEST_F(KeyboardInWindow, AGrayedButtonsShortcutLeavesTheTab) {
     QTest::keyClick(QApplication::focusWidget(), Qt::Key_O, Qt::ControlModifier);
     EXPECT_EQ(tabs->currentIndex(), 2);
     add->setEnabled(true);
+    tabs->setCurrentIndex(0);
+}
+
+// Settings' "Use the keyboard shortcuts" unticked: the shortcuts do nothing
+// and the buttons' tooltips leave out their keys; ticked again, both are
+// back.
+TEST_F(KeyboardInWindow, TheShortcutsCanBeTurnedOff) {
+    window_->activateWindow();
+    ASSERT_TRUE(QTest::qWaitForWindowActive(window_));
+    auto* tabs = window_->findChild<QTabWidget*>();
+    ASSERT_NE(tabs, nullptr);
+    tabs->setCurrentIndex(tabs->count() - 1);  // Settings, built now
+    QApplication::processEvents();
+    // Offscreen, building Settings leaves the window inactive (not so on
+    // screen, where the keys go on working): active again, as window
+    // shortcuts need.
+    window_->activateWindow();
+    ASSERT_TRUE(QTest::qWaitForWindowActive(window_));
+    auto* use = window_->findChild<QCheckBox*>("useKeyboardShortcuts");
+    ASSERT_NE(use, nullptr);
+    QPushButton* run = nullptr;
+    for (QPushButton* button : window_->findChildren<QPushButton*>()) {
+        if (button->text() == "Calculate metrics") {
+            run = button;
+        }
+    }
+    ASSERT_NE(run, nullptr);
+    use->setChecked(false);
+    tabs->setCurrentIndex(0);
+    tabs->tabBar()->setFocus();  // the box ticked is on a page now hidden
+    QTest::keyClick(tabs->tabBar(), Qt::Key_3, Qt::ControlModifier);
+    EXPECT_EQ(tabs->currentIndex(), 0);
+    EXPECT_FALSE(run->toolTip().contains("Shortcut")) << run->toolTip().toStdString();
+    use->setChecked(true);
+    QTest::keyClick(tabs->tabBar(), Qt::Key_3, Qt::ControlModifier);
+    EXPECT_EQ(tabs->currentIndex(), 2);
+    EXPECT_TRUE(run->toolTip().endsWith("Shortcut: F5")) << run->toolTip().toStdString();
     tabs->setCurrentIndex(0);
 }
 

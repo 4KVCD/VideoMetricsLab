@@ -1513,7 +1513,9 @@
   "Keyboard shortcuts": "Сочетания клавиш",
   "Next or previous tab": "Следующая или предыдущая вкладка",
   "Pause / resume": "Пауза / продолжить",
-  "Shortcut: {keys}": "Сочетание клавиш: {keys}"
+  "Shortcut: {keys}": "Сочетание клавиш: {keys}",
+  "Use the keyboard shortcuts": "Использовать сочетания клавиш",
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Если выключено, сочетания из списка (F5, Ctrl+O, Ctrl+1–Ctrl+8 и остальные) ничего не делают. Tab, Ctrl+Tab и клавиши сравнения видео продолжают работать."
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

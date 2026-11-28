@@ -1513,7 +1513,9 @@
   "Keyboard shortcuts": "Комбінації клавіш",
   "Next or previous tab": "Наступна або попередня вкладка",
   "Pause / resume": "Пауза / продовжити",
-  "Shortcut: {keys}": "Комбінація клавіш: {keys}"
+  "Shortcut: {keys}": "Комбінація клавіш: {keys}",
+  "Use the keyboard shortcuts": "Використовувати комбінації клавіш",
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Якщо вимкнено, комбінації зі списку (F5, Ctrl+O, Ctrl+1–Ctrl+8 та інші) нічого не роблять. Tab, Ctrl+Tab і клавіші порівняння відео працюють і далі."
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

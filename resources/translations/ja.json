@@ -1513,7 +1513,9 @@
   "Keyboard shortcuts": "キーボードショートカット",
   "Next or previous tab": "次または前のタブ",
   "Pause / resume": "一時停止 / 再開",
-  "Shortcut: {keys}": "ショートカット: {keys}"
+  "Shortcut: {keys}": "ショートカット: {keys}",
+  "Use the keyboard shortcuts": "キーボードショートカットを使う",
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "オフにすると、一覧のショートカット (F5、Ctrl+O、Ctrl+1～Ctrl+8 など) は何もしません。Tab、Ctrl+Tab と動画比較のキーは引き続き使えます。"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [
