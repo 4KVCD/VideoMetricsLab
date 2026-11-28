@@ -1,5 +1,6 @@
 {
  "strings": {
+  "Windows' contrast theme sets the colors while it is on. The accent, theme and looks chosen here apply once it is off.": "Amíg be van kapcsolva, a Windows kontrasztos témája adja a színeket. Az itt választott kiemelőszín, téma és megjelenés a kikapcsolása után érvényes.",
   "Title on the graph:": "Cím a grafikonon:",
   "Show frame {frame} in Video Compare": "A(z) {frame}. képkocka megjelenítése a Videó-összehasonlításban",
   "Show frame in Video Compare": "A képkocka megjelenítése a Videó-összehasonlításban",

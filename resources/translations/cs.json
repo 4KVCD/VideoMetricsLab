@@ -1,5 +1,6 @@
 {
  "strings": {
+  "Windows' contrast theme sets the colors while it is on. The accent, theme and looks chosen here apply once it is off.": "Dokud je zapnutý kontrastní motiv Windows, určuje barvy on. Akcent, motiv a vzhledy zvolené zde se použijí, až ho vypnete.",
   "Title on the graph:": "Název v grafu:",
   "Show frame {frame} in Video Compare": "Zobrazit snímek {frame} v Porovnání videa",
   "Show frame in Video Compare": "Zobrazit snímek v Porovnání videa",

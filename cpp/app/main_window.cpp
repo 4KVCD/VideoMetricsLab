@@ -348,7 +348,10 @@ void MainWindow::changeEvent(QEvent* event) {
     // The palette change comes after the colour scheme's signal; the style
     // sheets resolve palette() from the palette, which the signal may have
     // come before.
-    if (event->type() == QEvent::PaletteChange || event->type() == QEvent::ApplicationPaletteChange) {
+    // A contrast theme turned on or off, or changed, is a ThemeChange alone
+    // while the app has a palette of its own (VML Modern's).
+    if (event->type() == QEvent::PaletteChange || event->type() == QEvent::ApplicationPaletteChange ||
+        event->type() == QEvent::ThemeChange) {
         theme_changed();
     }
     QMainWindow::changeEvent(event);
@@ -370,10 +373,12 @@ void MainWindow::apply_theme_colours() {
     const QPalette palette = QApplication::palette();
     const std::tuple<bool, unsigned, unsigned> applied{theme::is_dark(), palette.window().color().rgba(),
                                                        palette.highlight().color().rgba()};
-    if (theme_applied_ == applied) {
+    const std::optional<theme::SystemColours> contrast = theme::system_contrast();
+    if (theme_applied_ == applied && contrast_applied_ == contrast) {
         return;
     }
     theme_applied_ = applied;
+    contrast_applied_ = contrast;
     theme::refresh();
     make_title_buttons();  // VML Modern chosen in Settings: its buttons too
     if (title_buttons_ != nullptr) {

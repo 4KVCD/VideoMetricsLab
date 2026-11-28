@@ -1,5 +1,6 @@
 {
  "strings": {
+  "Windows' contrast theme sets the colors while it is on. The accent, theme and looks chosen here apply once it is off.": "Windows のコントラスト テーマがオンの間は、そのテーマが色を決めます。ここで選んだアクセント、テーマ、ルックはオフにすると適用されます。",
   "Title on the graph:": "グラフのタイトル：",
   "Show frame {frame} in Video Compare": "フレーム {frame} を動画比較で表示",
   "Show frame in Video Compare": "このフレームを動画比較で表示",

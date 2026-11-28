@@ -1,5 +1,6 @@
 {
  "strings": {
+  "Windows' contrast theme sets the colors while it is on. The accent, theme and looks chosen here apply once it is off.": "تحدد سمة التباين في Windows الألوان ما دامت مفعّلة. يُطبَّق لون التمييز والسمة والمظاهر المختارة هنا بعد إيقافها.",
   "Title on the graph:": "العنوان على الرسم البياني:",
   "Show frame {frame} in Video Compare": "عرض الإطار {frame} في مقارنة الفيديو",
   "Show frame in Video Compare": "عرض الإطار في مقارنة الفيديو",

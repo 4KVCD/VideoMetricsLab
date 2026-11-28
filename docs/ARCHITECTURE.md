@@ -214,6 +214,19 @@ differs is drawn by the style sheet, from a role a widget is given with
 
 Classic draws every role alike, as the system draws the widget.
 
+In a Windows contrast theme (Settings > Accessibility > Contrast themes),
+VML Modern draws in the theme's colours alone (`theme::system_contrast`,
+`theme::in_contrast_theme`): every colour name of `modern_colour`,
+`theme::color`, the charts and the style sheet maps to one of the eight
+the theme sets (`contrast_table` in `app/theme.cpp`: surfaces the
+background, edges and text the text, disabled things gray text, what is
+pointed at or selected the highlight and its text, links the link,
+buttons the button colours). Settings' theme, looks and accent are kept
+for when it is off. A colour name added later needs a row there:
+`Theme.EveryColourHasAContrastThemesColour` fails without one. Turning a
+contrast theme on or off while the app runs restyles the window
+(`MainWindow::apply_theme_colours`, on the `ThemeChange` Windows sends).
+
 VML Modern on Windows draws the window's title bar itself (`app/title_bar.h`,
 `TitleBar`, the window's menu widget). Qt's `Qt::ExpandedClientAreaHint`,
 asked for with no title or buttons of Qt's own, gives the app the window's

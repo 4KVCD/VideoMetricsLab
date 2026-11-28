@@ -30,12 +30,17 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <functional>
 #include <cmath>
 #include <map>
 #include <utility>
 #include <vector>
 
 #include "i18n.h"
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 // VML Modern's drop-down and spin box arrows (chevron_icons.cpp).
 Q_IMPORT_PLUGIN(VmlChevronIconPlugin)
@@ -219,6 +224,77 @@ const std::map<QString, QString> phosphor_window_colours = {
     {"mean_tint", "#1a1814"}, {"mean_selected", "#3f331e"}, {"link", "#f8dbaf"},
     {"link_selected", "#ffffff"}, {"muted", "#c2a269"},     {"faint", "#c2a269"},
 };
+
+// The system colour each of Modern's colours is drawn in, in a contrast
+// theme (contrast_colour): modern_colours', colours' and the sheet's own
+// names. Surfaces are the background, edges and text the text, as Windows'
+// own controls draw them; what is disabled is gray text; what is pointed at
+// or selected the highlight with its text; links the link. The tints
+// (Metric Graphs' means, a video's best and worst scores, a banner, a
+// notice) are the background: a contrast theme has no tints.
+using SystemColour = QColor SystemColours::*;
+const std::map<QString, SystemColour>& contrast_table() {
+    static const std::map<QString, SystemColour> table = {
+        // modern_colours
+        {"window", &SystemColours::window},
+        {"card", &SystemColours::window},
+        {"card_alt", &SystemColours::window},
+        {"inset", &SystemColours::window},
+        {"raised", &SystemColours::window},
+        {"hover", &SystemColours::highlight},
+        {"pressed", &SystemColours::highlight},
+        {"field", &SystemColours::window},
+        {"border", &SystemColours::window_text},
+        {"border_strong", &SystemColours::window_text},
+        {"text", &SystemColours::window_text},
+        {"text_soft", &SystemColours::window_text},
+        {"text_muted", &SystemColours::window_text},
+        {"disabled", &SystemColours::gray_text},
+        {"scroll", &SystemColours::window_text},
+        {"danger", &SystemColours::window_text},
+        {"danger_border", &SystemColours::window_text},
+        {"tile_edge", &SystemColours::window_text},
+        // colours
+        {"muted", &SystemColours::window_text},
+        {"faint", &SystemColours::gray_text},
+        {"dimmed", &SystemColours::gray_text},
+        {"run_line", &SystemColours::window_text},
+        {"failed", &SystemColours::window_text},
+        {"stale", &SystemColours::window_text},
+        {"good", &SystemColours::window_text},
+        {"error_border", &SystemColours::window_text},
+        {"banner_background", &SystemColours::window},
+        {"banner_border", &SystemColours::window_text},
+        {"banner_text", &SystemColours::window_text},
+        {"link", &SystemColours::link},
+        {"link_selected", &SystemColours::link},
+        {"mean_tint", &SystemColours::window},
+        {"mean_selected", &SystemColours::window},
+        {"best", &SystemColours::window},
+        {"worst", &SystemColours::window},
+        // the sheet's own (sheet_own_names)
+        {"accent", &SystemColours::highlight},
+        {"accent_text", &SystemColours::highlight_text},
+        {"accent_hover", &SystemColours::highlight},
+        {"accent_pressed", &SystemColours::highlight},
+        {"accent_tint", &SystemColours::highlight},
+        {"danger_tint", &SystemColours::highlight},
+        {"hover_text", &SystemColours::highlight_text},
+        {"tint_text", &SystemColours::highlight_text},
+        {"notice", &SystemColours::window},
+        {"choice_tint", &SystemColours::window},
+        {"button", &SystemColours::button},
+        {"button_text", &SystemColours::button_text},
+        {"danger_hover_text", &SystemColours::highlight_text},
+    };
+    return table;
+}
+
+// The sheet's names that are not modern_colours' (modern_style_sheet).
+const char* const sheet_own_names[] = {"accent",     "accent_text", "accent_hover", "accent_pressed",
+                                       "accent_tint", "danger_tint", "hover_text",   "tint_text",
+                                       "notice",      "choice_tint", "button",       "button_text",
+                                       "danger_hover_text"};
 
 // Light's chart on `card`: its lines and text as Light's.
 ChartColours light_chart_on(const QColor& card) {
@@ -415,7 +491,9 @@ public:
         if (check) {
             painter->drawRoundedRect(box, 3, 3);
             if (on || partial) {
-                const QColor mark = enabled ? text_on(accent) : modern_colour("disabled", dark);
+                const QColor mark = !enabled             ? modern_colour("disabled", dark)
+                                    : in_contrast_theme() ? option->palette.color(QPalette::HighlightedText)
+                                                          : text_on(accent);
                 painter->setPen(QPen(mark, std::max<qreal>(1.6, side / 8), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
                 painter->setBrush(Qt::NoBrush);
                 if (partial) {
@@ -458,6 +536,10 @@ struct Appearance {
     // The system's accent, as the palette had it before the app set one:
     // put back when a look's own accent is no longer in use.
     std::optional<QColor> system_accent;
+    // The contrast theme's colours while one is on, as last read
+    // (system_contrast), in VML Modern.
+    std::optional<SystemColours> contrast;
+    std::optional<std::optional<SystemColours>> contrast_applied;  // when the palette was set
 };
 
 Appearance& appearance() {
@@ -516,6 +598,37 @@ void apply_palette(bool dark) {
         return;
     }
     QPalette palette;  // nothing set: what is not set below is the style's
+    if (const std::optional<SystemColours>& system = applied.contrast) {
+        // The contrast theme's colours, every one: Settings' accent too is
+        // the system's highlight.
+        palette.setColor(QPalette::Window, system->window);
+        palette.setColor(QPalette::WindowText, system->window_text);
+        palette.setColor(QPalette::Base, system->window);
+        palette.setColor(QPalette::AlternateBase, system->window);
+        palette.setColor(QPalette::Button, system->button);
+        palette.setColor(QPalette::ButtonText, system->button_text);
+        palette.setColor(QPalette::Text, system->window_text);
+        palette.setColor(QPalette::BrightText, system->window_text);
+        palette.setColor(QPalette::PlaceholderText, system->gray_text);
+        palette.setColor(QPalette::ToolTipBase, system->window);
+        palette.setColor(QPalette::ToolTipText, system->window_text);
+        for (const QPalette::ColorRole role : {QPalette::Light, QPalette::Midlight, QPalette::Mid, QPalette::Dark,
+                                               QPalette::Shadow}) {
+            palette.setColor(role, system->window_text);
+        }
+        palette.setColor(QPalette::Link, system->link);
+        palette.setColor(QPalette::LinkVisited, system->link);
+        palette.setColor(QPalette::Accent, system->highlight);
+        palette.setColor(QPalette::Highlight, system->highlight);
+        palette.setColor(QPalette::HighlightedText, system->highlight_text);
+        for (const QPalette::ColorRole role : {QPalette::WindowText, QPalette::Text, QPalette::ButtonText}) {
+            palette.setColor(QPalette::Disabled, role, system->gray_text);
+        }
+        if (palette != QApplication::palette() || palette.resolveMask() != QApplication::palette().resolveMask()) {
+            QApplication::setPalette(palette);
+        }
+        return;
+    }
     {
         const auto colour = [dark](const char* name) { return modern_colour(name, dark); };
         palette.setColor(QPalette::Window, colour("window"));
@@ -611,8 +724,12 @@ QString filled(const QString& template_text) {
     }
     const bool dark = is_dark();
     std::vector<std::pair<QString, QString>> values;
+    const std::optional<SystemColours>& system = appearance().contrast;
     for (const auto& [name, pair] : colours) {
-        values.emplace_back(name, dark ? pair.second : pair.first);
+        // In a contrast theme, the theme's (as color() gives it).
+        values.emplace_back(name, system ? contrast_colour(name.toUtf8().constData(), *system).name()
+                                  : dark ? pair.second
+                                         : pair.first);
     }
     // A hint's slant: Classic's italic; Modern's hints are muted, upright.
     values.emplace_back("hint_style", modern ? "normal" : "italic");
@@ -648,6 +765,9 @@ bool is_dark() {
     if (QGuiApplication::instance() == nullptr) {
         return false;
     }
+    if (const std::optional<SystemColours>& system = appearance().contrast) {
+        return system->window.lightness() < 128;  // the contrast theme's, whatever Settings asks for
+    }
     const Qt::ColorScheme scheme = QGuiApplication::styleHints()->colorScheme();
     if (scheme == Qt::ColorScheme::Dark) {
         return true;
@@ -659,6 +779,9 @@ bool is_dark() {
 }
 
 QColor accent_shown() {
+    if (const std::optional<SystemColours>& system = appearance().contrast) {
+        return system->highlight;
+    }
     if (const std::optional<QColor> chosen = accent_chosen(is_dark())) {
         return *chosen;
     }
@@ -669,6 +792,9 @@ QColor accent_shown() {
 }
 
 QString look() {
+    if (in_contrast_theme()) {
+        return QStringLiteral("contrast");  // its colours alone, whichever looks are asked for
+    }
     const bool dark = is_dark();
     if (appearance().ui != Interface::modern) {
         return dark ? QStringLiteral("dark") : QStringLiteral("light");
@@ -721,6 +847,10 @@ QPixmap look_swatch(const QString& name, int size) {
 QColor color(const char* name, std::optional<bool> dark) {
     const QString key = QString::fromUtf8(name);
     if (!dark) {  // the window's own colours, in its look
+        if (const std::optional<SystemColours>& system = appearance().contrast) {
+            (void)colours.at(key);  // a name only colours has, as without a contrast theme
+            return contrast_colour(name, *system);
+        }
         if (const Look* look = look_for(is_dark()); look != nullptr) {
             if (const auto found = look->window.find(key); found != look->window.end()) {
                 return QColor(found->second);
@@ -735,6 +865,9 @@ QColor readable(const QColor& series_colour) { return is_dark() ? series_colour.
 
 ChartColours chart_colours(std::optional<bool> dark) {
     if (!dark) {  // the window's own colours, in its look
+        if (const std::optional<SystemColours>& system = appearance().contrast) {
+            return contrast_chart_colours(*system);
+        }
         if (const Look* look = look_for(is_dark()); look != nullptr && look->chart) {
             return *look->chart;
         }
@@ -818,15 +951,27 @@ void recolour(QTableWidgetItem* item) {
     }
 }
 
+namespace {
+void show_for_interface();  // below, with the widgets it shows
+}  // namespace
+
 void refresh() {
     // Modern's palette and sheet for the colours now asked for (light or
     // dark), and the accent; set only where they change.
     if (appearance().applied && QApplication::instance() != nullptr) {
         const bool dark = scheme_is_dark();
-        if (appearance().dark != dark || appearance().looks != looks_key()) {
-            appearance().dark = dark;
-            appearance().looks = looks_key();
+        Appearance& applied = appearance();
+        applied.contrast = applied.ui == Interface::modern ? system_contrast() : std::nullopt;
+        if (applied.dark != dark || applied.looks != looks_key() || applied.contrast_applied != applied.contrast) {
+            applied.dark = dark;
+            applied.looks = looks_key();
+            const bool contrast_changed = applied.contrast_applied.has_value() &&
+                                          applied.contrast_applied->has_value() != applied.contrast.has_value();
+            applied.contrast_applied = applied.contrast;
             apply_palette(dark);
+            if (contrast_changed) {
+                show_for_interface();  // contrast_only's
+            }
         }
         apply_sheet(dark);
     }
@@ -865,10 +1010,6 @@ std::optional<QColor> accent_of(const std::string& colour) {
     return chosen;
 }
 
-namespace {
-void show_for_interface();  // below, with the widgets it shows
-}  // namespace
-
 void apply_appearance(Interface ui, std::optional<QColor> accent) {
     if (QApplication::instance() == nullptr) {
         return;
@@ -899,6 +1040,8 @@ void apply_appearance(Interface ui, std::optional<QColor> accent) {
     const bool dark = scheme_is_dark();
     applied.dark = dark;
     applied.looks = looks_key();
+    applied.contrast = ui == Interface::modern ? system_contrast() : std::nullopt;
+    applied.contrast_applied = applied.contrast;
     apply_palette(dark);
     apply_sheet(dark);
     // Templates that differ by interface ({hint_style}, style_classic).
@@ -947,6 +1090,10 @@ std::vector<InterfaceOnly>& interface_only() {
     static std::vector<InterfaceOnly> widgets;
     return widgets;
 }
+std::vector<QPointer<QWidget>>& contrast_widgets() {
+    static std::vector<QPointer<QWidget>> widgets;
+    return widgets;
+}
 std::vector<std::pair<QPointer<QGroupBox>, QString>>& classic_boxes() {
     static std::vector<std::pair<QPointer<QGroupBox>, QString>> boxes;
     return boxes;
@@ -971,6 +1118,11 @@ void show_for_interface() {
     std::erase_if(widgets, [](const InterfaceOnly& item) { return item.widget.isNull(); });
     for (const InterfaceOnly& item : widgets) {
         item.widget->setVisible(item.modern == modern);
+    }
+    auto& contrast = contrast_widgets();
+    std::erase_if(contrast, [](const QPointer<QWidget>& widget) { return widget.isNull(); });
+    for (const QPointer<QWidget>& widget : contrast) {
+        widget->setVisible(in_contrast_theme());
     }
     auto& boxes = classic_boxes();
     std::erase_if(boxes, [](const auto& item) { return item.first.isNull(); });
@@ -1000,6 +1152,13 @@ void add_interface_only(QWidget* widget, bool modern) {
 void modern_only(QWidget* widget) { add_interface_only(widget, true); }
 
 void classic_only(QWidget* widget) { add_interface_only(widget, false); }
+
+void contrast_only(QWidget* widget) {
+    contrast_widgets().emplace_back(widget);
+    if (!in_contrast_theme()) {
+        widget->hide();
+    }
+}
 
 void classic_box(QGroupBox* box, const QString& title) {
     set_role(box, "unboxed");
@@ -1061,6 +1220,10 @@ QColor text_on(const QColor& colour) {
 
 QColor modern_colour(const char* name, bool dark) {
     const QString key = QString::fromUtf8(name);
+    if (const std::optional<SystemColours>& system = appearance().contrast) {
+        (void)modern_colours.at(key);  // a name only modern_colours has, as without a contrast theme
+        return contrast_colour(name, *system);
+    }
     if (const Look* look = look_for(dark); look != nullptr) {
         if (const auto found = look->modern.find(key); found != look->modern.end()) {
             return QColor(found->second);
@@ -1081,7 +1244,11 @@ QString chevron_icon(bool up, const QColor& colour) {
 }
 }  // namespace
 
-QString modern_style_sheet(bool dark, const QColor& accent) {
+namespace {
+
+// Modern's style sheet, its {name}s filled in from `values` (the sheet's
+// own names: sheet_own_names) and, for the rest, `colour`'s modern_colours.
+QString filled_sheet(std::vector<std::pair<QString, QString>> values, const std::function<QColor(const char*)>& colour) {
     QString sheet = QStringLiteral(R"(
 QGroupBox { background: {card}; border: 1px solid {border}; border-radius: 10px; margin-top: 0; padding: 36px 12px 12px 12px; font-weight: 600; }
 QGroupBox::title { subcontrol-origin: padding; subcontrol-position: top left; left: 14px; top: 11px; padding: 0; color: {text}; }
@@ -1092,11 +1259,11 @@ QGroupBox QGroupBox[vmlUntitled="true"] { padding-top: 10px; }
 QTabBar[vmlRole="segmented"] { qproperty-drawBase: 0; }
 QTabBar[vmlRole="segmented"] { outline: 0; }
 QTabBar[vmlRole="segmented"]::tab { background: transparent; color: {text_soft}; border: 0; border-radius: 6px; padding: 5px 12px; margin: 2px 2px 6px 0; min-height: 18px; }
-QTabBar[vmlRole="segmented"]::tab:hover:!selected { color: {text}; background: {hover}; }
+QTabBar[vmlRole="segmented"]::tab:hover:!selected { color: {hover_text}; background: {hover}; }
 QTabBar[vmlRole="segmented"]::tab:selected { background: {accent}; color: {accent_text}; font-weight: 600; }
 QTabWidget[vmlRole="segmented"]::pane { border: 0; top: 0; }
 QToolButton[vmlRole="pill"] { background: transparent; color: {text_soft}; border: 0; border-radius: 6px; padding: 5px 12px; min-height: 18px; }
-QToolButton[vmlRole="pill"]:hover:!checked { color: {text}; background: {hover}; }
+QToolButton[vmlRole="pill"]:hover:!checked { color: {hover_text}; background: {hover}; }
 QToolButton[vmlRole="pill"]:checked { background: {accent}; color: {accent_text}; font-weight: 600; }
 QTabWidget[vmlRole="segmented"]::tab-bar { left: 0; }
 QFrame[vmlRole="separator"] { background: {border_strong}; border: 0; min-width: 1px; max-width: 1px; margin: 4px 6px; }
@@ -1107,23 +1274,23 @@ QWidget[vmlRole="footer"] { background: {card_alt}; border: 0; border-top: 1px s
 QLabel[vmlRole="title"] { font-weight: 600; color: {text}; }
 QLabel[vmlRole="hint"] { color: {text_muted}; }
 QFrame[vmlRole="choice"] { background: {raised}; border: 1px solid {border_strong}; border-radius: 10px; }
-QFrame[vmlRole="choice"][checked="true"] { background: {accent_tint}; border: 2px solid {accent}; }
+QFrame[vmlRole="choice"][checked="true"] { background: {choice_tint}; border: 2px solid {accent}; }
 QWidget[vmlRole="segments"] { background: {field}; border: 1px solid {border}; border-radius: 8px; }
 QWidget[vmlRole="segments"] QPushButton { background: transparent; color: {text_soft}; border: 0; border-radius: 5px; padding: 4px 12px; min-height: 18px; }
-QWidget[vmlRole="segments"] QPushButton:hover:!checked { background: {hover}; color: {text}; }
-QWidget[vmlRole="segments"] QPushButton:checked { background: {hover}; color: {text}; font-weight: 600; }
-QLabel[vmlRole="notice"] { background: {accent_tint}; color: {text}; border: 1px solid {border}; border-radius: 8px; padding: 8px 12px; }
-QPushButton { background: {raised}; color: {text}; border: 1px solid {border_strong}; border-radius: 6px; padding: 4px 12px; min-height: 18px; }
-QPushButton:hover { background: {hover}; }
-QPushButton:pressed { background: {pressed}; }
-QPushButton:checked { background: {accent_tint}; border-color: {accent}; }
+QWidget[vmlRole="segments"] QPushButton:hover:!checked { background: {hover}; color: {hover_text}; }
+QWidget[vmlRole="segments"] QPushButton:checked { background: {hover}; color: {hover_text}; font-weight: 600; }
+QLabel[vmlRole="notice"] { background: {notice}; color: {text}; border: 1px solid {border}; border-radius: 8px; padding: 8px 12px; }
+QPushButton { background: {button}; color: {button_text}; border: 1px solid {border_strong}; border-radius: 6px; padding: 4px 12px; min-height: 18px; }
+QPushButton:hover { background: {hover}; color: {hover_text}; }
+QPushButton:pressed { background: {pressed}; color: {hover_text}; }
+QPushButton:checked { background: {accent_tint}; color: {tint_text}; border-color: {accent}; }
 QPushButton:disabled { background: {card}; color: {disabled}; border-color: {border}; }
 QPushButton[vmlRole="primary"] { background: {accent}; color: {accent_text}; border: 1px solid {accent}; font-weight: 600; padding: 4px 16px; }
 QPushButton[vmlRole="primary"]:hover { background: {accent_hover}; border-color: {accent_hover}; }
 QPushButton[vmlRole="primary"]:pressed { background: {accent_pressed}; }
 QPushButton[vmlRole="primary"]:disabled { background: {raised}; color: {disabled}; border-color: {border}; font-weight: 400; }
 QPushButton[vmlRole="danger"] { background: transparent; color: {danger}; border-color: {danger_border}; }
-QPushButton[vmlRole="danger"]:hover { background: {danger_tint}; }
+QPushButton[vmlRole="danger"]:hover { background: {danger_tint}; color: {danger_hover_text}; }
 QPushButton[vmlRole="danger"]:disabled { color: {disabled}; border-color: {border}; }
 QPushButton[vmlRole="quiet"] { background: transparent; border-color: transparent; }
 QPushButton[vmlRole="quiet"]:hover { background: {hover}; }
@@ -1148,10 +1315,10 @@ QAbstractSpinBox::down-arrow:hover { image: url("{chevron_down_accent}"); }
 QAbstractSpinBox::up-arrow:off, QAbstractSpinBox::up-arrow:disabled { image: url("{chevron_up_disabled}"); }
 QAbstractSpinBox::down-arrow:off, QAbstractSpinBox::down-arrow:disabled { image: url("{chevron_down_disabled}"); }
 QComboBoxPrivateContainer { background: transparent; border: 0; padding: 0; margin: 0; }
-QComboBox QAbstractItemView { background: {card}; color: {text}; border: 1px solid {border_strong}; border-radius: 8px; padding: 4px; selection-background-color: {accent_tint}; selection-color: {text}; outline: 0; }
+QComboBox QAbstractItemView { background: {card}; color: {text}; border: 1px solid {border_strong}; border-radius: 8px; padding: 4px; selection-background-color: {accent_tint}; selection-color: {tint_text}; outline: 0; }
 QComboBox QAbstractItemView::item { padding: 4px 6px; border-radius: 4px; min-height: 18px; }
-QComboBox QAbstractItemView::item:hover { background: {hover}; }
-QComboBox QAbstractItemView::item:selected { background: {accent_tint}; color: {text}; }
+QComboBox QAbstractItemView::item:hover { background: {hover}; color: {hover_text}; }
+QComboBox QAbstractItemView::item:selected { background: {accent_tint}; color: {tint_text}; }
 QComboBox QAbstractItemView::item:disabled { color: {disabled}; }
 QTabWidget::pane { border: 0; border-top: 1px solid {border}; top: -1px; }
 QTabBar { qproperty-drawBase: 0; }
@@ -1160,13 +1327,13 @@ QTabBar::tab:selected { color: {text}; font-weight: 600; border-bottom: 2px soli
 QTabBar::tab:hover:!selected { color: {text}; border-bottom: 2px solid {border_strong}; }
 QTabBar::tab:disabled { color: {disabled}; }
 QHeaderView::section { background: {raised}; color: {text_soft}; border: 0; border-right: 1px solid {border}; border-bottom: 1px solid {border}; padding: 4px 6px; font-weight: 600; }
-QTableView, QTableWidget, QListView, QTreeView { background: {card}; alternate-background-color: {card_alt}; color: {text}; border: 1px solid {border}; border-radius: 6px; gridline-color: {border}; selection-background-color: {accent_tint}; selection-color: {text}; }
+QTableView, QTableWidget, QListView, QTreeView { background: {card}; alternate-background-color: {card_alt}; color: {text}; border: 1px solid {border}; border-radius: 6px; gridline-color: {border}; selection-background-color: {accent_tint}; selection-color: {tint_text}; }
 QTableView, QTableWidget, QTreeView { border-radius: 0px; }
 QTableView#frozenColumns { border: none; border-radius: 0px; }
 QTableCornerButton::section { background: {raised}; border: 0; }
 QMenu { background: {card}; color: {text}; border: 1px solid {border_strong}; border-radius: 6px; padding: 4px; }
 QMenu::item { padding: 5px 24px 5px 20px; border-radius: 4px; }
-QMenu::item:selected { background: {accent_tint}; }
+QMenu::item:selected { background: {accent_tint}; color: {tint_text}; }
 QMenu::item:disabled { color: {disabled}; }
 QMenu::separator { height: 1px; background: {border}; margin: 4px 6px; }
 QToolTip { background: {raised}; color: {text}; border: 1px solid {border_strong}; padding: 4px; }
@@ -1183,26 +1350,19 @@ QFrame[vmlRole="separator"] { background: {border_strong}; border: 0; min-width:
 QWidget[vmlRole="tile"] { background: {raised}; border: 1px solid {tile_edge}; border-radius: 8px; }
 QWidget[vmlRole="toolbar"] { background: {raised}; border: 1px solid {border}; border-radius: 8px; }
 )");
-    const QColor accent_hover = dark ? accent.lighter(112) : accent.darker(108);
-    const QColor accent_pressed = dark ? accent.darker(108) : accent.darker(118);
-    std::vector<std::pair<QString, QString>> values{
-        {"accent", accent.name()},
-        {"accent_text", text_on(accent).name()},
-        {"accent_hover", accent_hover.name()},
-        {"accent_pressed", accent_pressed.name()},
-        {"accent_tint", rgba(accent, dark ? 0.26 : 0.20)},
-        {"danger_tint", rgba(modern_colour("danger", dark), 0.12)},
-    };
+    const QColor accent(std::find_if(values.begin(), values.end(), [](const auto& value) {
+                            return value.first == "accent";
+                        })->second);
     for (const bool up : {true, false}) {
         const QString name = up ? QStringLiteral("chevron_up") : QStringLiteral("chevron_down");
-        values.emplace_back(name, chevron_icon(up, modern_colour("text_muted", dark)));
+        values.emplace_back(name, chevron_icon(up, colour("text_muted")));
         values.emplace_back(name + "_accent", chevron_icon(up, accent));
-        values.emplace_back(name + "_disabled", chevron_icon(up, modern_colour("disabled", dark)));
+        values.emplace_back(name + "_disabled", chevron_icon(up, colour("disabled")));
     }
     for (const auto& [name, pair] : modern_colours) {
         // #rrggbb, or #aarrggbb where see-through ("transparent"): name() alone drops the alpha.
-        const QColor colour = modern_colour(name.toUtf8().constData(), dark);
-        values.emplace_back(name, colour.name(colour.alpha() == 255 ? QColor::HexRgb : QColor::HexArgb));
+        const QColor value = colour(name.toUtf8().constData());
+        values.emplace_back(name, value.name(value.alpha() == 255 ? QColor::HexRgb : QColor::HexArgb));
     }
     // Longest names first: {card_alt} before {card}.
     std::sort(values.begin(), values.end(), [](const auto& a, const auto& b) { return a.first.size() > b.first.size(); });
@@ -1210,6 +1370,96 @@ QWidget[vmlRole="toolbar"] { background: {raised}; border: 1px solid {border}; b
         sheet.replace("{" + name + "}", value);
     }
     return sheet.trimmed();
+}
+
+}  // namespace
+
+QString modern_style_sheet(bool dark, const QColor& accent) {
+    if (const std::optional<SystemColours>& system = appearance().contrast) {
+        return contrast_style_sheet(*system);
+    }
+    const QColor accent_hover = dark ? accent.lighter(112) : accent.darker(108);
+    const QColor accent_pressed = dark ? accent.darker(108) : accent.darker(118);
+    const QString text = modern_colour("text", dark).name();
+    const QString tint = rgba(accent, dark ? 0.26 : 0.20);
+    // Each of sheet_own_names; the text on a hover or a tint, a notice's and
+    // a chosen choice's tint, and a button's colours are those it had before
+    // contrast themes needed names of their own.
+    return filled_sheet(
+        {
+            {"accent", accent.name()},
+            {"accent_text", text_on(accent).name()},
+            {"accent_hover", accent_hover.name()},
+            {"accent_pressed", accent_pressed.name()},
+            {"accent_tint", tint},
+            {"danger_tint", rgba(modern_colour("danger", dark), 0.12)},
+            {"hover_text", text},
+            {"tint_text", text},
+            {"notice", tint},
+            {"choice_tint", tint},
+            {"button", modern_colour("raised", dark).name()},
+            {"button_text", text},
+            {"danger_hover_text", modern_colour("danger", dark).name()},
+        },
+        [dark](const char* name) { return modern_colour(name, dark); });
+}
+
+QString contrast_style_sheet(const SystemColours& system) {
+    std::vector<std::pair<QString, QString>> values;
+    for (const char* name : sheet_own_names) {
+        values.emplace_back(QString::fromLatin1(name), contrast_colour(name, system).name());
+    }
+    return filled_sheet(std::move(values), [&system](const char* name) { return contrast_colour(name, system); });
+}
+
+std::optional<SystemColours> system_contrast() {
+#ifdef _WIN32
+    HIGHCONTRASTW contrast{};
+    contrast.cbSize = sizeof(contrast);
+    if (!SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) ||
+        (contrast.dwFlags & HCF_HIGHCONTRASTON) == 0) {
+        return std::nullopt;
+    }
+    const auto system = [](int index) {
+        const COLORREF value = GetSysColor(index);
+        return QColor(GetRValue(value), GetGValue(value), GetBValue(value));
+    };
+    return SystemColours{system(COLOR_WINDOW),    system(COLOR_WINDOWTEXT),    system(COLOR_GRAYTEXT),
+                         system(COLOR_HIGHLIGHT), system(COLOR_HIGHLIGHTTEXT), system(COLOR_HOTLIGHT),
+                         system(COLOR_BTNFACE),   system(COLOR_BTNTEXT)};
+#else
+    return std::nullopt;
+#endif
+}
+
+bool in_contrast_theme() { return appearance().contrast.has_value(); }
+
+QColor contrast_colour(const char* name, const SystemColours& system) {
+    return system.*contrast_table().at(QString::fromUtf8(name));
+}
+
+std::vector<QString> contrast_names() {
+    std::vector<QString> names;
+    for (const auto& [name, pair] : modern_colours) {
+        names.push_back(name);
+    }
+    for (const auto& [name, pair] : colours) {
+        names.push_back(name);
+    }
+    for (const char* name : sheet_own_names) {
+        names.push_back(QString::fromLatin1(name));
+    }
+    return names;
+}
+
+ChartColours contrast_chart_colours(const SystemColours& system) {
+    // The grid gray text, faint; Metric Graphs' frame range the highlight,
+    // faint; the difference of two lines the link colour.
+    QColor grid = system.gray_text;
+    grid.setAlpha(110);
+    QColor range = system.highlight;
+    range.setAlpha(70);
+    return {system.window, system.window_text, system.window_text, grid, system.window_text, system.link, range};
 }
 
 std::vector<std::pair<QString, QString>> theme_choices() {
