@@ -89,6 +89,28 @@ TEST_F(KeyboardInWindow, ShortcutsWorkAnywhereInTheWindow) {
     }
 }
 
+// A shortcut whose button is grayed (Ctrl+O during a run) does nothing: it
+// does not switch to the Videos tab either.
+TEST_F(KeyboardInWindow, AGrayedButtonsShortcutLeavesTheTab) {
+    window_->activateWindow();
+    ASSERT_TRUE(QTest::qWaitForWindowActive(window_));
+    auto* tabs = window_->findChild<QTabWidget*>();
+    ASSERT_NE(tabs, nullptr);
+    QPushButton* add = nullptr;
+    for (QPushButton* button : window_->findChildren<QPushButton*>()) {
+        if (button->text() == "Add files") {
+            add = button;
+        }
+    }
+    ASSERT_NE(add, nullptr);
+    add->setEnabled(false);
+    tabs->setCurrentIndex(2);
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_O, Qt::ControlModifier);
+    EXPECT_EQ(tabs->currentIndex(), 2);
+    add->setEnabled(true);
+    tabs->setCurrentIndex(0);
+}
+
 // Settings' panel is built when first wanted, after the rest of the window
 // (title bar buttons included): Tab from the tab bar still goes into it,
 // not to the title bar, and on through it before leaving.

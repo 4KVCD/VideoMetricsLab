@@ -1077,14 +1077,18 @@ void MainWindow::run_command(Command command) {
     switch (command) {
     case Command::add_videos:
     case Command::choose_reference:
-    case Command::import_run:
-        // On the Videos tab, where the videos go.
-        tabs_->setCurrentIndex(tab_videos);
-        (command == Command::add_videos         ? add_files_button_
-         : command == Command::choose_reference ? source_browse_button_
-                                                : load_button_)
-            ->click();
+    case Command::import_run: {
+        // On the Videos tab, where the videos go; nothing, the tab left as
+        // it is, while the button is grayed (during a run).
+        QPushButton* button = command == Command::add_videos         ? add_files_button_
+                              : command == Command::choose_reference ? source_browse_button_
+                                                                     : load_button_;
+        if (button->isEnabled()) {
+            tabs_->setCurrentIndex(tab_videos);
+            button->click();
+        }
         break;
+    }
     case Command::calculate:
         run_button_->click();
         break;
