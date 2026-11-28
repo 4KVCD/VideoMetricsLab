@@ -427,6 +427,26 @@ std::vector<std::string> preview_command(const std::string& ffmpeg, const std::s
     return command;
 }
 
+// The command that decodes the keyframe at or before `start` alone: with
+// -noaccurate_seek the first picture is that keyframe, where the seek lands;
+// -skip_frame nokey decodes no frame after it (HEVC would decode the ones it
+// holds back to put the pictures in order); slice threads keep one picture in
+// flight (about 100 MB for 4K); and in software, as FFmpeg starts a GPU's
+// decoder in more time than it takes to decode one picture. preview_command's
+// exact frame decodes every frame from that keyframe up to `start`: for a 4K
+// HEVC film's ten previews, 6.2 s against 1.9 s for their keyframes.
+std::vector<std::string> keyframe_preview_command(const std::string& ffmpeg, const std::string& path,
+                                                  const std::vector<std::string>& input, double start,
+                                                  const BeforeSampling& before) {
+    std::vector<std::string> command = ffmpeg_command_start(ffmpeg, {"-nostats"});
+    append(command, input);
+    command.insert(command.end(), {"-thread_type", "slice", "-skip_frame", "nokey", "-noaccurate_seek", "-ss",
+                                   format_fixed(start, 3), as_stored, "-i", path, "-map",
+                                   "0:" + std::string(video_stream), "-frames:v", "1", "-vf", before.luma({})});
+    append(command, luma_output);
+    return command;
+}
+
 // The frame of a raw stream (VideoInfo::timed_raw) HandBrake judges for each
 // preview starting at `times`: the second from the first at or after its
 // time (a frame's time its number over the frame rate, the time to the
@@ -627,13 +647,28 @@ std::vector<std::string> raw_previews_command(const std::string& ffmpeg, const V
 
 // The pictures a detection command decoded, judged as they came
 // (picture_edges: nothing for one too dark to say), and their size; their
-// luma too where it is asked for (Keep::luma).
+// luma too where it is asked for (Keep::luma); and each one's digest
+// (luma_digest).
 struct Pictures {
     int width = 0;
     int height = 0;
     std::vector<std::optional<BarEdges>> edges;
     std::vector<LumaPicture> lumas;
+    std::vector<std::size_t> digests;
 };
+
+// A digest of a picture's luma, from every eighth row of it: one picture
+// decoded twice has one digest (two keyframe previews that landed on one
+// keyframe, run_keyframe_preview).
+std::size_t luma_digest(const LumaPicture& picture) {
+    const auto width = static_cast<std::size_t>(std::max(1, picture.width));
+    const std::string_view luma(reinterpret_cast<const char*>(picture.luma.data()), picture.luma.size());
+    std::size_t digest = 0;
+    for (std::size_t at = 0; at < luma.size(); at += 8 * width) {
+        digest = digest * 31 + std::hash<std::string_view>{}(luma.substr(at, width));
+    }
+    return digest;
+}
 
 // Whether a command's pictures are kept whole (for place_by_content), or
 // only judged.
@@ -681,6 +716,7 @@ void read_pictures(platform::ChildProcess& process, Pictures& pictures, std::str
             pictures.width = picture->width;
             pictures.height = picture->height;
             pictures.edges.push_back(picture_edges(*picture));
+            pictures.digests.push_back(luma_digest(*picture));
             if (keep == Keep::luma) {
                 pictures.lumas.push_back(std::move(*picture));
             }
@@ -819,6 +855,56 @@ Pictures run_preview(const std::string& ffmpeg, const VideoInfo& info, double st
             return preview_command(ffmpeg, path, info.input_options(), start, frames, attempt, before);
         },
         path, cancel, hwaccel, 60s, keep);
+}
+
+// How a video's keyframe previews went (run_keyframe_preview).
+struct KeyframeSampling {
+    std::set<std::size_t> judged;  // the digests of the keyframes taken so far
+    bool keyframes = true;         // false once a keyframe preview failed or found no picture
+    bool gpu_pictures = false;     // whether a preview's pictures came from the GPU's decoder
+};
+
+// One preview of a video FFmpeg reads and seeks itself: the keyframe at or
+// before `start` (keyframe_preview_command), else the frame at `start`
+// itself (run_preview, the GPU's decoder first): where that keyframe is an
+// earlier preview's too (a video with few keyframes: its previews stay ten
+// pictures), and for the rest of the video's previews once a keyframe preview
+// failed or found no picture (a seek that lands off a keyframe; a stream
+// with none after its first, as x264's intra refresh, would be read to its
+// end each time).
+Pictures run_keyframe_preview(const std::string& ffmpeg, const VideoInfo& info, double start,
+                              const CancelToken& cancel, std::optional<std::string>& hwaccel,
+                              const BeforeSampling& before, KeyframeSampling& sampling) {
+    const std::string path = platform::path_text(info.path);
+    const std::string about = "Black bars in " + platform::path_text(info.path.filename()) + ": ";
+    const std::string at = format_fixed(start, 3) + " s";
+    if (sampling.keyframes) {
+        std::optional<std::string> software;
+        try {
+            Pictures keyframe = run_detection(
+                [&](const std::optional<std::string>&) {
+                    return keyframe_preview_command(ffmpeg, path, info.input_options(), start, before);
+                },
+                path, cancel, software, 10s);
+            if (keyframe.digests.empty()) {
+                sampling.keyframes = false;
+                logger.info(about + "no keyframe from " + at + "; each preview's own frame from here");
+            } else if (sampling.judged.insert(keyframe.digests.front()).second) {
+                return keyframe;
+            } else {
+                logger.info(about + "the keyframe before " + at +
+                            " is an earlier preview's; this preview's own frame instead");
+            }
+        } catch (const CropDetectError& error) {
+            sampling.keyframes = false;
+            logger.info(about + error.what() + " for the keyframe before " + at +
+                        "; each preview's own frame from here");
+        }
+    }
+    const bool on_gpu = hwaccel.has_value();
+    Pictures exact = run_preview(ffmpeg, info, start, 2, cancel, hwaccel, before);
+    sampling.gpu_pictures = sampling.gpu_pictures || (on_gpu && hwaccel.has_value());  // none if it fell back
+    return exact;
 }
 
 // One preview decoded by the app's decoder (samples_through_the_app): the
@@ -1030,15 +1116,17 @@ std::optional<std::string> preview_decoder(const std::optional<std::string>& gpu
 
 // detect_crop's work, without the kept answers: HandBrake's previews
 // (black_bars_rule.h), each a decoder's run of its own, one after another.
-CropBox detect_uncached(BarFindings& findings, const std::string& ffmpeg, const VideoInfo& info,
-                        double sampled_duration,
-                        const CancelToken& cancel, const std::optional<std::string>& gpu_decoder,
-                        const std::string& scale_algorithm) {
+// `gpu_pictures` says whether any of the pictures judged came from the GPU's
+// decoder.
+CropBox detect_uncached(BarFindings& findings, bool& gpu_pictures, const std::string& ffmpeg,
+                        const VideoInfo& info, double sampled_duration, const CancelToken& cancel,
+                        const std::optional<std::string>& gpu_decoder, const std::string& scale_algorithm) {
     const std::string path = platform::path_text(info.path);
     const BeforeSampling before{hw_native_format(info.pix_fmt), size_change_scale(info, scale_algorithm),
                                 is_rgb_format(info.pix_fmt)};
     const std::vector<double> times = preview_times(sampled_duration);
     std::optional<std::string> hwaccel = preview_decoder(gpu_decoder, info);  // dropped for the rest once it fails
+    gpu_pictures = hwaccel.has_value();
     cancel.throw_if_cancelled();
     // One decoder slot for all of the video's previews: they run in turn
     const DecoderSlot slot(cancel);
@@ -1061,19 +1149,28 @@ CropBox detect_uncached(BarFindings& findings, const std::string& ffmpeg, const 
                        ? run_preview_through_the_app(ffmpeg, info, start, frames, cancel, hwaccel, before)
                        : run_preview(ffmpeg, info, start, frames, cancel, hwaccel, before);
         };
+        // A file FFmpeg seeks itself, of a known length, has its keyframes
+        // judged (run_keyframe_preview)
+        KeyframeSampling sampling;
         try {
             if (times.empty()) {
                 previews = as_previews(preview(0, unknown_duration_pictures));
             }
             for (const double time : times) {
                 try {
-                    previews.push_back(preview(time, 2));
+                    previews.push_back(through_the_app
+                                           ? preview(time, 2)
+                                           : run_keyframe_preview(ffmpeg, info, time, cancel, hwaccel, before,
+                                                                  sampling));
                 } catch (const CropDetectError& error) {
                     failures.emplace_back(error.what());
                 }
             }
         } catch (const CropDetectError& error) {
             failures.emplace_back(error.what());
+        }
+        if (!through_the_app && !times.empty()) {
+            gpu_pictures = sampling.gpu_pictures;
         }
     }
     cancel.throw_if_cancelled();  // a partial sampling is not an answer
@@ -1562,9 +1659,11 @@ CropBox detect_crop(const std::string& ffmpeg, const VideoInfo& info, const Canc
     }
     std::optional<CropBox> box;
     BarFindings findings;
+    bool gpu_pictures = false;
     const auto began = std::chrono::steady_clock::now();
     try {
-        box = detect_uncached(findings, ffmpeg, info, sampled_duration, cancel, hwaccel, scale_algorithm);
+        box = detect_uncached(findings, gpu_pictures, ffmpeg, info, sampled_duration, cancel, hwaccel,
+                              scale_algorithm);
         logger.info("Black bars in " + platform::path_text(info.path.filename()) + ": picture " + box_text(*box) +
                     " of " + std::to_string(info.frame_size().first) + "x" + std::to_string(info.frame_size().second));
     } catch (const CropDetectError& error) {
@@ -1583,7 +1682,7 @@ CropBox detect_crop(const std::string& ffmpeg, const VideoInfo& info, const Canc
     if (key) {
         // Not kept when it was found from the GPU's pictures while its decoding was being found wrong: the run is
         // made again on the CPU, and finds it again there
-        const bool spoiled = hwaccel.has_value() && gpu_decoding_distrusted().has_value();
+        const bool spoiled = gpu_pictures && gpu_decoding_distrusted().has_value();
         const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - began).count();
         const CropAnswer answer{*box, findings, utc_text(std::chrono::system_clock::now()), seconds};
         answers().settle(*key, spoiled ? std::nullopt : std::optional(answer));
