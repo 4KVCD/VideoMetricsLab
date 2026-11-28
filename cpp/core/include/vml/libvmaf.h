@@ -105,9 +105,16 @@ struct LibvmafHandles {
 
     // Loads the model in `file` (and destroys one that fails half-made).
     void load_model(const std::filesystem::path& file);
-    // Loads the model libvmaf has built in as `version` ("vmaf_v0.6.1").
-    void load_builtin(const std::string& version);
+    // Loads `model`, a model= value (load_vmaf_model).
+    void load(std::string_view model);
 };
+
+// Loads `model`, a model= value: "version=vmaf_v0.6.1" for one libvmaf has
+// built in, "path=<file>" for a file. libvmaf keeps each model's scores under
+// its `name`, so each model of one context needs a name of its own. The
+// caller destroys it (Libvmaf::model_destroy). Throws LibvmafError, for a
+// value of another form too.
+VmafModel* load_vmaf_model(const Libvmaf& library, std::string_view model, const std::string& name);
 
 // Where the bundled library is, with its build record.
 std::filesystem::path libvmaf_folder();

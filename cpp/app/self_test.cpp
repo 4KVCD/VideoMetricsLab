@@ -220,13 +220,13 @@ void check_gpu_metrics(SelfTestReport& report) {
     if (!vmaf.backend.empty()) {
         report.ok("VMAF on the GPU (" + vmaf.text + ")");
     } else {
-        report.warn("VMAF on the GPU unavailable; FFmpeg's libvmaf is used (" + vmaf.text + ")");
+        report.warn("VMAF on the GPU unavailable; the CPU is used (" + vmaf.text + ")");
     }
     const V1Probe v1 = v1_available(gpu_probes_token());
     if (v1.available) {
         report.ok("VMAF v1 with the GPU (" + v1.text + ")");
     } else {
-        report.warn("VMAF v1 with the GPU unavailable; FFmpeg's libvmaf is used (" + v1.text + ")");
+        report.warn("VMAF v1 with the GPU unavailable; the CPU is used (" + v1.text + ")");
     }
 }
 

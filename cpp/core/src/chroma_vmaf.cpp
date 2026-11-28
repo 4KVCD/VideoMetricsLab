@@ -14,7 +14,6 @@
 #include "vml/gpu_vmaf.h"
 #include "vml/model_select.h"
 #include "vml/pair_scorer.h"
-#include "vml/platform/system.h"
 #include "vml/vmaf_vulkan.h"
 
 namespace vml {
@@ -22,8 +21,6 @@ namespace vml {
 namespace {
 
 const app_log::Logger logger("vml.chroma_vmaf");
-
-constexpr std::string_view version_prefix = "version=";
 
 // The plane of a 4:2:0 picture (1 U, 2 V) that `key` scores.
 int plane_of_key(const std::string& key) {
@@ -194,13 +191,7 @@ ChromaVmaf::ChromaVmaf(int width, int height, int bit_depth, const std::string& 
         if (!plane->gpu) {
             plane->cpu = std::make_unique<LibvmafHandles>(library);
             plane->cpu->start(cpu_threads, n_subsample);
-            if (const std::optional<std::string_view> file = model_file_of(model)) {
-                plane->cpu->load_model(platform::path_from_text(std::string(*file)));
-            } else if (model.starts_with(version_prefix)) {
-                plane->cpu->load_builtin(model.substr(version_prefix.size()));
-            } else {
-                throw LibvmafError("VMAF YUV cannot read the model " + model);
-            }
+            plane->cpu->load(model);
             check_libvmaf(library.use_features_from_model(plane->cpu->context, plane->cpu->model),
                           "Starting the model's features");
             // A pair for each thread and one being filled: a plane of a 4K

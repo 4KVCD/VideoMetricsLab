@@ -59,12 +59,17 @@ std::vector<std::string> device_lines(const DeviceFindings& found) {
                         (found.vmaf.backend == "cuda" ? std::string("libvmaf CUDA")
                                                       : "Vulkan, GPU " + std::to_string(found.vmaf.device.value_or(0))) +
                         ")");
-    } else {
-        lines.push_back("VMAF v0.6.1, VMAF NEG: CPU (" + found.vmaf.text + ")");
     }
-    lines.push_back("VMAF v1: " + std::string(found.v1.available ? "GPU (" : "CPU (") + found.v1.text + ")");
-    lines.push_back(found.cpu_metrics_in_app ? "PSNR, SSIM, XPSNR: CPU (libvmaf-fast " + found.libvmaf_fast_version +
-                                                   " in the app; FFmpeg beside VMAF on the CPU)"
+    // On the CPU, VMAF goes where PSNR, SSIM and XPSNR do: the app's libvmaf-fast, else FFmpeg's libvmaf.
+    const std::string in_app = "libvmaf-fast " + found.libvmaf_fast_version + " in the app";
+    const auto on_cpu = [&](const std::string& why) {
+        return "CPU (" + (found.cpu_metrics_in_app ? in_app + "; " : std::string()) + why + ")";
+    };
+    if (found.vmaf.backend.empty()) {
+        lines.push_back("VMAF v0.6.1, VMAF NEG: " + on_cpu(found.vmaf.text));
+    }
+    lines.push_back("VMAF v1: " + (found.v1.available ? "GPU (" + found.v1.text + ")" : on_cpu(found.v1.text)));
+    lines.push_back(found.cpu_metrics_in_app ? "PSNR, SSIM, XPSNR: CPU (" + in_app + ")"
                                              : "PSNR, SSIM, XPSNR: CPU (FFmpeg)");
     return lines;
 }

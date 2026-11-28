@@ -40,9 +40,9 @@
 
 The model selector includes Netflix VMAF v0 models and the bundled VMAF v1
 models (1080p, phone, 4K, and high-frame-rate variants). VMAF v1 requires an
-FFmpeg build linked against a libvmaf version that supports the v1 feature set;
-older FFmpeg packages will report a clear model/feature error and should use a
-v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
+On the CPU the app calculates it with its bundled libvmaf-fast; only where that
+fails does it need an FFmpeg build linked against a libvmaf version that supports
+the v1 feature set (older FFmpeg packages report a clear model/feature error). For SDR, VMAF v1 is best measured at 10-bit precision.
 
 **HDR VMAF** scores PQ (HDR10) videos with Netflix's HDR VMAF models (1080p,
 phone, 4K, and high-frame-rate variants), chosen in **HDR VMAF model**. It is
@@ -341,10 +341,13 @@ The GPU's scores agree with FFmpeg's libvmaf on the CPU to within a thousandth
 of a point on every frame, so a saved VMAF score is reused whichever is
 chosen. PSNR, SSIM and XPSNR have no GPU code: the app
 calculates them on the CPU with the bundled libvmaf-fast, from the pictures
-decoded for VMAF where it can, so the videos are not decoded twice. With VMAF
-on the CPU, FFmpeg calculates them in the same run, except XPSNR of videos of more than 8 bits: FFmpeg's `xpsnr`
-filter reads such pictures wrongly at some widths, so the app calculates it,
-beside FFmpeg's run.
+decoded for VMAF where it can, so the videos are not decoded twice. VMAF,
+VMAF NEG and VMAF v1 on the CPU are calculated the same way, with
+libvmaf-fast's SIMD code, and give FFmpeg's libvmaf's scores on every frame.
+Only where the app's calculation fails does FFmpeg calculate them all in one
+run, except XPSNR of videos of more than 8 bits: FFmpeg's `xpsnr` filter reads
+such pictures wrongly at some widths, so the app calculates it, beside
+FFmpeg's run.
 
 VMAF v1 follows the same choice, with any GPU that has a Vulkan driver. Its
 four features, detail loss (ADM), motion, banding (CAMBI) and colour (SpEED),
@@ -358,8 +361,8 @@ Intel integrated GPU. A video too small for SpEED
 calculated on the CPU. A video's VMAF on the GPU waits for the
 GPU like its other GPU metrics, one video at a time, and goes before them. If the GPU calculation fails, or crashes, that
 video's VMAF is calculated on the CPU instead, as it is when the GPU's driver
-fails the self-test the app runs on it when it starts. Without a GPU, FFmpeg's
-libvmaf calculates everything.
+fails the self-test the app runs on it when it starts. Without a GPU, everything
+is calculated on the CPU.
 
 The files must describe corresponding frames. The app rejects several timing
 and geometry mismatches; this is not automatic content alignment. A source with
@@ -545,8 +548,7 @@ codec comparisons weigh YUV-SSIM, for comparing with those: each frame's (6 x Y 
 SSIM, and the score is the mean of the frames'. VVenC's and VTM's own
 YUV-PSNR line is a different average (one PSNR of the planes' errors
 weighted by their sample counts), so it does not match these. Only the app calculates them, with
-its libvmaf-fast, as FFmpeg's metrics have no such average; with VMAF on
-the CPU, it calculates them beside FFmpeg's run. Each plane's
+its libvmaf-fast, as FFmpeg's metrics have no such average. Each plane's
 PSNR stops at libvmaf's ceiling of 6 x bits + 12 dB (60 dB at 8 bits, 72 at
 10), as the PSNR column's does, where FFmpeg's `psnr` filter gives identical
 planes infinity. Videos in other chroma formats are compared as 4:2:0, as

@@ -615,16 +615,11 @@ ParsedScores gpu_scores(const PairScores& scored, double fps, const VmafOptions&
     return scores;
 }
 
-// The plan's metrics in the run's own words: "PSNR, SSIM and XPSNR".
+// The plan's metrics in the run's own words: "VMAF v0.6.1, PSNR and SSIM".
 std::string metric_names(const GpuPlan& plan) {
     std::vector<std::string> names;
     for (const auto& [key, model] : plan.models) {
-        names.push_back(key == "psnr"        ? "PSNR"
-                        : key == "ssim"      ? "SSIM"
-                        : key == "xpsnr"     ? "XPSNR"
-                        : key == "vmaf_hdr"  ? "HDR VMAF"
-                        : scored_in_app(key) ? std::string(metric_definition(key).short_label)
-                                             : key);
+        names.push_back(key == "vmaf_hdr" ? "HDR VMAF" : std::string(metric_definition(key).short_label));
     }
     std::string text;
     for (std::size_t i = 0; i < names.size(); ++i) {
@@ -783,7 +778,7 @@ std::function<void()> on_vvdec_opening(const StatusCallback& on_status) {
 // The plan's metrics with both videos decoded in this process (the Python
 // app's _score_decoded_on_gpu): VMAF and NEG on the GPU (score_decoded),
 // with VMAF v1 from whole frames (score_decoded_v1), or PSNR, SSIM and XPSNR
-// in the app (score_decoded_cpu), over the same frames execute_gpu_run's
+// (with VMAF on the CPU) in the app (score_decoded_cpu), over the same frames execute_gpu_run's
 // FFmpegs would give the scorer.
 ParsedScores score_decoded_here(const RunFrames& run, const VmafOptions& options, const GpuPlan& planned,
                                 const std::pair<std::string, std::string>& decoders,
@@ -804,7 +799,8 @@ ParsedScores score_decoded_here(const RunFrames& run, const VmafOptions& options
             ? score_decoded_cpu(source, distorted, run.source_crop, run.distorted_crop, plan.width, plan.height,
                                 plan.bit_depth, keys, options.n_subsample, range, run.total_frames, decoders,
                                 plan.threads, plan.frame_rate, plan.cambi, plan.extra_gpu, plan.vmaf_model,
-                                plan.vmaf_on_vulkan, options.scale_algorithm, ffmpeg, ffprobe, want_vvdec,
+                                plan.models, plan.vmaf_on_vulkan, options.scale_algorithm, ffmpeg, ffprobe,
+                                want_vvdec,
                                 on_vvdec_opening(on_status), plan.on_gpu_metrics, on_progress, run.cancel)
         : plan.backend == "hdr"
             ? score_decoded_hdr(source, distorted, run.source_crop, run.distorted_crop, plan, options.n_subsample,
@@ -1027,9 +1023,9 @@ ParsedScores score_plan(const RunFrames& run, const VmafOptions& options, const 
 
 // ----------------------------------------------- PSNR, SSIM and XPSNR in the app
 
-// The environment variable that, set to "ffmpeg", leaves PSNR, SSIM and
-// XPSNR to FFmpeg's filters instead of the app's own libvmaf, to compare
-// the two.
+// The environment variable that, set to "ffmpeg", leaves VMAF on the CPU,
+// PSNR, SSIM and XPSNR to FFmpeg's filters instead of the app's own
+// libvmaf, to compare the two.
 constexpr std::string_view cpu_metrics_variable = "VML_CPU_METRICS";
 
 // The metric FFmpeg's libvmaf feature is, where the app scores it itself.
@@ -1094,25 +1090,40 @@ bool decoded_in_app(const VideoInfo& source, const VideoInfo& distorted, const s
     }
 }
 
-// The plan for scoring PSNR, SSIM and XPSNR with the bundled libvmaf in the
-// app (run_cpu_metrics) instead of with FFmpeg's libvmaf and xpsnr filters,
-// or nothing to leave them to FFmpeg's filters. The app scores them when
-// they are the run's only metrics (VMAF on the CPU keeps them in FFmpeg's
-// filters, which it runs anyway). XPSNR of 8 bits stays with FFmpeg where
-// libvmaf-fast's score would not be FFmpeg's exactly (xpsnr_frame_rate,
-// xpsnr_in_app), while PSNR and SSIM are still scored in the app; of more
-// bits, FFmpeg's would be wrong (ffmpeg_scores_xpsnr): it is the app's, or
-// nobody's, as the app's own metrics are always (app_only_metrics). `cores`
-// are "Auto"'s threads; `ffmpeg` scales a video the decoders cannot
-// (decoded_in_app).
+// The model= value of the run's VMAF at the size compared: the one chosen, or, for Auto, the one for that size.
+std::string run_vmaf_model(const VmafOptions& options, int width, int height) {
+    return options.model_choice != auto_model_choice ? options.model : model_for_resolution(width, height);
+}
+
+// The plan for scoring VMAF, NEG and v1 on the CPU, PSNR, SSIM and XPSNR
+// with the bundled libvmaf in the app (run_cpu_metrics) instead of with
+// FFmpeg's libvmaf and xpsnr filters, or nothing to leave them to FFmpeg's
+// filters. VMAF's models are FFmpeg's (libvmaf_options), each by its key's
+// name. XPSNR of 8 bits stays with FFmpeg where libvmaf-fast's score would
+// not be FFmpeg's exactly (xpsnr_frame_rate, xpsnr_in_app), while the others
+// are still scored in the app; of more bits, FFmpeg's would be wrong
+// (ffmpeg_scores_xpsnr): it is the app's, or nobody's, as the app's own
+// metrics are always (app_only_metrics). `cores` are "Auto"'s threads;
+// `ffmpeg` scales a video the decoders cannot (decoded_in_app).
 std::optional<GpuPlan> cpu_metrics_plan(const VmafOptions& options, std::pair<int, int> size,
                                         const VideoInfo& source, const VideoInfo& distorted,
                                         const HardwareDecoding& decoding,
                                         const std::optional<CropBox>& source_crop,
                                         const std::optional<CropBox>& distorted_crop, unsigned cores,
                                         const std::string& ffmpeg) {
-    if (!cpu_metrics_in_app() || uses_vmaf_model(options)) {
+    if (!cpu_metrics_in_app()) {
         return std::nullopt;
+    }
+    const auto [width, height] = size;
+    GpuModels models;  // VMAF's (CpuScorer's vmaf_models)
+    if (options.compute_vmaf) {
+        models.emplace_back("vmaf", run_vmaf_model(options, width, height));
+    }
+    if (options.compute_vmaf_neg) {
+        models.emplace_back("vmaf_neg", "version=vmaf_v0.6.1neg");
+    }
+    if (options.compute_vmaf_v1) {
+        models.emplace_back("vmaf_v1", options.model_v1);  // its file (resolve_run_models)
     }
     std::vector<std::string> metrics;
     for (const std::string& feature : options.extra_features) {
@@ -1131,7 +1142,6 @@ std::optional<GpuPlan> cpu_metrics_plan(const VmafOptions& options, std::pair<in
             app_only = true;
         }
     }
-    const auto [width, height] = size;
     const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt}));
     const std::optional<int> frame_rate = options.compute_xpsnr ? xpsnr_frame_rate(distorted) : std::nullopt;
     // Where FFmpeg's filter would score XPSNR wrongly, the speed it would
@@ -1140,17 +1150,17 @@ std::optional<GpuPlan> cpu_metrics_plan(const VmafOptions& options, std::pair<in
     if (frame_rate && xpsnr_in_app(width, height, depth)) {
         metrics.emplace_back("xpsnr");
     } else if (options.compute_xpsnr && ffmpeg_may_score && !(decoding.source && decoding.distorted) &&
-               !app_only) {
+               !app_only && models.empty()) {
         // XPSNR's FFmpeg beside them would decode the videos again, and a
         // video the CPU decodes would then be decoded twice on the CPU: 70%
         // more CPU per frame for a 4K film against its encode, and slower for
         // a 4K film against a 1080p encode (97 fps against 112). FFmpeg's
         // single run decodes each video once for both libvmaf and XPSNR. The
-        // app's own metrics are the app's alone, so XPSNR's FFmpeg is then run
-        // beside them.
+        // app's own metrics are the app's alone, and VMAF is the app's where
+        // it can (its SIMD), so XPSNR's FFmpeg is then run beside them.
         return std::nullopt;
     }
-    if (metrics.empty()) {
+    if (metrics.empty() && models.empty()) {
         return std::nullopt;
     }
     if (metrics == std::vector<std::string>{"xpsnr"} && ffmpeg_may_score &&
@@ -1163,6 +1173,7 @@ std::optional<GpuPlan> cpu_metrics_plan(const VmafOptions& options, std::pair<in
         return std::nullopt;
     }
     GpuPlan plan;
+    plan.models = std::move(models);
     for (const std::string& metric : metrics) {
         plan.models.emplace_back(metric, metric);
     }
@@ -1524,8 +1535,8 @@ void merge_xpsnr(ParsedScores& frames, const ParsedScores& xpsnr) {
     }
 }
 
-// PSNR, SSIM and XPSNR with the bundled libvmaf's CPU extractors (the Python
-// app's _run_cpu_metrics), in a process of its own where a program to run it
+// VMAF on the CPU, PSNR, SSIM and XPSNR with the bundled libvmaf's CPU
+// extractors (the Python app's _run_cpu_metrics), in a process of its own where a program to run it
 // is set (score_plan_apart), on the frames that would reach FFmpeg's
 // filters, paired as those filters pair them. XPSNR that the plan leaves to
 // FFmpeg is scored by an FFmpeg of its own alongside, and its scores are
@@ -1603,11 +1614,6 @@ std::optional<ParsedScores> run_cpu_metrics(const RunFrames& run, const VmafOpti
 // is known only once black bars are: Auto's model comes from it, while an
 // explicit or custom choice is the user's. VMAF v1's and HDR VMAF's models
 // are resolved into `options` the same way.
-// The model= value of the run's VMAF at the size compared: the one chosen, or, for Auto, the one for that size.
-std::string run_vmaf_model(const VmafOptions& options, int width, int height) {
-    return options.model_choice != auto_model_choice ? options.model : model_for_resolution(width, height);
-}
-
 std::string resolve_run_models(VmafOptions& options, int width, int height) {
     if (options.compute_vmaf_v1) {
         options.model_v1 = resolve_v1_model(options, width, height);
@@ -2195,9 +2201,10 @@ std::optional<RunScores> score_app_only_beside(const RunFrames& run, const VmafO
 }
 
 // The scores of a run in one part: VMAF, NEG and VMAF v1 on the GPU when they
-// are all it scores and the GPU scores them; PSNR, SSIM and XPSNR in the app
-// when they are all it scores; otherwise, or when either fails, FFmpeg's
-// (the metrics FFmpeg cannot score in the app beside it: score_app_only_beside).
+// are all it scores and the GPU scores them; otherwise in the app on the CPU
+// with PSNR, SSIM and XPSNR (cpu_plan); otherwise, or when that fails too,
+// FFmpeg's (the metrics FFmpeg cannot score in the app beside it:
+// score_app_only_beside).
 RunScores score_alone(const RunFrames& run, const VmafOptions& options, const std::string& model,
                       const ProgressCallback& on_progress, const StatusCallback& on_status) {
     RunScores scores;
@@ -2318,9 +2325,9 @@ RunScores score_shared(const RunFrames& run, const VmafOptions& options, const G
 // The run's GPU metrics (`gpu`, with `gpu_options`) and its CPU metrics (with
 // `cpu_options`: in the app by `cpu`, or else by FFmpeg's filters), each from
 // a decode of its own and at the same time, as two tasks score them: the
-// CPU's on a thread beside. Each falls back as its task would: VMAF to
-// FFmpeg's libvmaf on the CPU, PSNR, SSIM and XPSNR to FFmpeg's filters. The
-// statuses are the GPU's.
+// CPU's on a thread beside. Each falls back as its task would: VMAF to the
+// CPU in the app, then to FFmpeg's libvmaf, PSNR, SSIM and XPSNR to FFmpeg's
+// filters. The statuses are the GPU's.
 RunScores score_apart(const RunFrames& run, const VmafOptions& gpu_options, const VmafOptions& cpu_options,
                       const GpuPlan& gpu, const std::optional<GpuPlan>& cpu, const std::string& model,
                       const ProgressCallback& on_progress, const StatusCallback& on_status) {
@@ -2349,6 +2356,9 @@ RunScores score_apart(const RunFrames& run, const VmafOptions& gpu_options, cons
     std::optional<ParsedScores> gpu_scores = run_on_gpu(run, gpu_options, gpu, progress.part(0), on_status);
     if (gpu_scores) {
         insert_keys(scores.gpu_keys, gpu);
+    } else if (const std::optional<GpuPlan> on_cpu = cpu_plan(run, gpu_options);
+               on_cpu && (gpu_scores = run_cpu_metrics(run, gpu_options, *on_cpu, progress.part(0), on_status))) {
+        insert_keys(scores.cpu_keys, *on_cpu);
     } else {
         gpu_scores = execute_run(run, gpu_options, model, progress.part(0), on_status);
     }
@@ -2946,9 +2956,10 @@ namespace {
 // and XPSNR in the app, from the same frames. NVIDIA's decoder makes its pictures,
 // scaling as FFmpeg's scale filter does; with any other maker's, FFmpeg's scale
 // filters make them, the same pictures, in the comparison's pipes (video_chains).
-// Nothing where it cannot be, or where only FFmpeg's filters could make it and the
-// CPU scores VMAF: then FFmpeg makes the test, decoding the video once
-// (resample_test_run).
+// With VMAF on the CPU, its metrics are the app's too (cpu_plan). Nothing where it
+// cannot be, or where only FFmpeg's filters could make it, VMAF is on the CPU and
+// VML_CPU_METRICS=ffmpeg leaves the CPU's metrics to FFmpeg: then FFmpeg makes the
+// test, decoding the video once (resample_test_run).
 std::optional<ComparisonResult> resample_test_on_gpu(const RunEnvironment& environment, const VideoInfo& source,
                                                      const VmafOptions& options,
                                                      const std::optional<CropBox>& source_crop,
@@ -2978,7 +2989,7 @@ std::optional<ComparisonResult> resample_test_on_gpu(const RunEnvironment& envir
             logger.info(std::string("Resolution test made by FFmpeg: ") + error.what());
             return std::nullopt;
         }
-    } else if (!options.vmaf_on_gpu || gpu_vmaf_backend(cancel).backend.empty()) {
+    } else if ((!options.vmaf_on_gpu || gpu_vmaf_backend(cancel).backend.empty()) && !cpu_metrics_in_app()) {
         return std::nullopt;
     }
     try {

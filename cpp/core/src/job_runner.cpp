@@ -840,7 +840,7 @@ void JobRun::report_status(std::size_t task, const RunStatus& status) {
         state.waiting_for = "GPU";
     }
     if (pool_of(task) == gpu_pool && status.kind == StatusKind::gpu_vmaf_failed) {
-        // FFmpeg's libvmaf takes over on the CPU, from frame 0.
+        // The CPU takes over (the app's libvmaf-fast, else FFmpeg's libvmaf), from frame 0.
         state.cpu_keys = job_.tasks[task].metric_keys;
         state.progress.reset();
     }

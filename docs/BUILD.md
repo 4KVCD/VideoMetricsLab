@@ -86,7 +86,7 @@ previous build's output undeletable. The package therefore goes to
   `VML_SOFTWARE_DECODE=ffmpeg` sends them all that way. A VVC video with its
   H.274 grain never goes there (with `VML_SOFTWARE_DECODE=ffmpeg` its metrics
   are not calculated): this decoder scales it itself, a damaged one is not
-  scored, and FFmpeg's own routes (VMAF on the CPU, its xpsnr filter, the
+  scored, and FFmpeg's own routes (VMAF where the app's fails, its xpsnr filter, the
   resolution test, the PNG pictures of SSIMULACRA2 and Butteraugli on the
   CPU) read its pictures from this decoder, run in a process of its own and
   fed to FFmpeg through a pipe as rawvideo (`cpp/core/src/grain_feed.cpp`).
@@ -175,7 +175,7 @@ previous build's output undeletable. The package therefore goes to
   `resources/tools/libvmaf/libvmaf-fast.json`, whose version every score
   made with these libraries records. The C runtime is linked in, so it needs
   only Windows and the NVIDIA driver; no CUDA runtime ships. VMAF on the CPU
-  still comes from the user's FFmpeg. libvmaf and Vship run in a process of
+  comes from them too; the user's FFmpeg calculates it only where they fail. libvmaf and Vship run in a process of
   their own (`cpp/core/include/vml/isolated.h`), so a crash in either, or in
   the GPU's driver, falls back to the CPU instead of ending the run.
 - **VMAF's features with Vulkan** (`resources/tools/vmaf_vulkan/vmaf_vulkan.dll`),

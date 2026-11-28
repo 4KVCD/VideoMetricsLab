@@ -115,9 +115,29 @@ void LibvmafHandles::load_model(const std::filesystem::path& file) {
     check_libvmaf(library.model_load_from_path(&model, &config, path.c_str()), "Loading the model");
 }
 
-void LibvmafHandles::load_builtin(const std::string& version) {
-    VmafModelConfig config{"vmaf", 0};
-    check_libvmaf(library.model_load(&model, &config, version.c_str()), "Loading the " + version + " model");
+void LibvmafHandles::load(std::string_view value) { model = load_vmaf_model(library, value, "vmaf"); }
+
+VmafModel* load_vmaf_model(const Libvmaf& library, std::string_view model, const std::string& name) {
+    constexpr std::string_view version_prefix = "version=";
+    VmafModelConfig config{name.c_str(), 0};
+    VmafModel* loaded = nullptr;
+    int error = 0;
+    if (const std::optional<std::string_view> file = model_file_of(model)) {
+        const std::string path = libvmaf_path(platform::path_from_text(std::string(*file)));
+        error = library.model_load_from_path(&loaded, &config, path.c_str());
+    } else if (model.starts_with(version_prefix)) {
+        const std::string version(model.substr(version_prefix.size()));
+        error = library.model_load(&loaded, &config, version.c_str());
+    } else {
+        throw LibvmafError("libvmaf cannot read the model " + std::string(model));
+    }
+    if (error != 0) {
+        if (loaded != nullptr) {
+            library.model_destroy(loaded);  // a load that fails can leave it made
+        }
+        check_libvmaf(error, "Loading the model " + std::string(model));
+    }
+    return loaded;
 }
 
 Libvmaf::Libvmaf(const std::filesystem::path& path)

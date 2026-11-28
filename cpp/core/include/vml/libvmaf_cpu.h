@@ -69,8 +69,13 @@ struct CpuFeature {
 // The extractor of metric `key`, or nullptr for one not scored this way.
 const CpuFeature* cpu_feature(std::string_view key);
 
-// Whether `metrics` (cpu_feature keys) read the chroma planes: the 6:1:1
-// metrics, PSNR-HVS-M and CIEDE2000 do; the others read the luma alone.
+// Whether `key` is a VMAF model's score CpuScorer predicts from its model's
+// features: VMAF v0.6.1 ("vmaf"), NEG or v1.
+bool is_vmaf_model_key(std::string_view key);
+
+// Whether `metrics` (cpu_feature keys and VMAF's, is_vmaf_model_key) read
+// the chroma planes: the 6:1:1 metrics, PSNR-HVS-M, CIEDE2000 and VMAF v1
+// (its models' SpEED chroma feature) do; the others read the luma alone.
 bool cpu_metrics_read_chroma(const std::vector<std::string>& metrics);
 
 // Whether the scorer keeps `key`'s values as calculated beside the rounded
@@ -154,12 +159,17 @@ public:
     // only to add_decoded and nothing else imports the decoders' memory;
     // where the GPU alone scores the pairs, from their luma alone (MS-SSIM,
     // CAMBI), it copies them on the GPU into the engine's memory
-    // (GpuMetricsScorer's `shared`). Throws LibvmafError.
+    // (GpuMetricsScorer's `shared`). `vmaf_models`: the model= value of
+    // each VMAF model among `metrics` (is_vmaf_model_key), by its key, as
+    // GpuPlan::models holds them (other entries are not read); each is
+    // loaded into the one libvmaf context under its key's name, as FFmpeg's
+    // libvmaf filter names them. Throws LibvmafError.
     CpuScorer(int width, int height, int bit_depth, std::vector<std::string> metrics, int n_subsample = 1,
               int threads = 0, int frame_rate = 0, const CambiInput& cambi = {},
               std::optional<int> gpu = std::nullopt, const std::string& vmaf_model = {},
               bool vmaf_on_vulkan = false, std::optional<ChromaFromDecoders> chroma_from_decoders = std::nullopt,
-              GpuFrameStream* shared_decoder = nullptr);
+              GpuFrameStream* shared_decoder = nullptr,
+              const std::vector<std::pair<std::string, std::string>>& vmaf_models = {});
     ~CpuScorer() override;
     CpuScorer(const CpuScorer&) = delete;
     CpuScorer& operator=(const CpuScorer&) = delete;
@@ -244,6 +254,8 @@ private:
     std::vector<std::string> libvmaf_metrics_;  // those of metrics_ libvmaf calculates; the GPU the others
     std::unique_ptr<GpuMetricsScorer> gpu_;     // CIEDE2000, CAMBI and MS-SSIM on the GPU, or nullptr
     std::unique_ptr<ChromaVmaf> chroma_vmaf_;   // VMAF YUV's U and V, or nullptr
+    // The VMAF models among libvmaf_metrics_, by key, loaded into context_.
+    std::vector<std::pair<std::string, VmafModel*>> models_;
     std::string cambi_feature_;  // CAMBI's score's name, which libvmaf builds from its options
     unsigned step_ = 1;
     unsigned count_ = 0;
@@ -337,6 +349,7 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
                              int n_subsample, const FrameRange& range, long long total_frames,
                              const std::pair<std::string, std::string>& decoders, int threads, int frame_rate,
                              const CambiInput& cambi, std::optional<int> gpu, const std::string& vmaf_model,
+                             const std::vector<std::pair<std::string, std::string>>& vmaf_models,
                              bool vmaf_on_vulkan, const std::string& scale_algorithm, const std::string& ffmpeg,
                              const std::string& ffprobe, bool want_vvdec,
                              const std::function<void()>& on_vvdec_opening,

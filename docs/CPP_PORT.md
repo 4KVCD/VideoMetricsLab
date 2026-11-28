@@ -168,8 +168,10 @@ CPU, frame by frame:
 - libjxl's tools are built without it: Butteraugli then differs on 1 frame
   rather than 10. SSIMULACRA2's vector code sums in another order on
   Apple's chips (Highway's NEON against AVX2).
-- VMAF runs in FFmpeg's libvmaf filter, which is the libvmaf the user's
-  FFmpeg links (Homebrew's), not the app's.
+- VMAF was measured in FFmpeg's libvmaf filter, the libvmaf the user's
+  FFmpeg links (Homebrew's). The app now scores VMAF on the CPU with its
+  libvmaf-fast, built with the same fused multiply-adds; that has not yet
+  been compared on a Mac.
 
 ### Video Compare
 

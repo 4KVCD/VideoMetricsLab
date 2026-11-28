@@ -695,7 +695,8 @@ void GpuAttempt::start_scorer(const GpuPlan& plan, int n_subsample) {
         }
         auto cpu = std::make_unique<CpuScorer>(plan.width, plan.height, plan.bit_depth, metrics, n_subsample,
                                                plan.threads, plan.frame_rate, plan.cambi, plan.extra_gpu,
-                                               plan.vmaf_model, plan.vmaf_on_vulkan);
+                                               plan.vmaf_model, plan.vmaf_on_vulkan, std::nullopt, nullptr,
+                                               plan.models);
         if (plan.on_gpu_metrics) {
             plan.on_gpu_metrics(cpu->metric_keys(), cpu->gpu_metrics());
         }

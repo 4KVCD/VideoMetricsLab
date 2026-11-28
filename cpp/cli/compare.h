@@ -1,10 +1,11 @@
 // The compare command: the test videos against the reference, as the
 // Python app's command line compares them (vmaf_app/cli.py).
 //
-// It calculates FFmpeg's metrics: VMAF v0.6.1, NEG and
-// v1 with FFmpeg's libvmaf, VMAF, NEG and v1 on the GPU with Vulkan or
-// libvmaf's CUDA code, and PSNR, SSIM and XPSNR in the app or with FFmpeg's
-// filters, a video's VMAF on the GPU beside its other metrics on the CPU;
+// It calculates FFmpeg's metrics: VMAF v0.6.1, NEG and v1 on the CPU in
+// the app with its libvmaf-fast (or FFmpeg's libvmaf where that fails),
+// VMAF, NEG and v1 on the GPU with Vulkan or libvmaf's CUDA code, and PSNR,
+// SSIM and XPSNR in the app or with FFmpeg's filters, a video's VMAF on the
+// GPU beside its other metrics on the CPU;
 // SSIMULACRA2, Butteraugli and CVVDP (on each --cvvdp-display) on the GPU
 // with Vship; and SSIMULACRA2 and Butteraugli on the CPU with the app's own
 // engines. What it cannot do yet (FFmpeg pairing the frames, with

@@ -277,6 +277,43 @@ TEST(Libvmaf, VmafOfEachChromaPlaneReadsThatPlane) {
     EXPECT_TRUE(cpu_metrics_unfit({"vmaf_yuv_u", "vmaf_yuv_v"}, 64, 64, 8, {}).empty());
 }
 
+// VMAF and NEG scored by one scorer keep each model's own scores (libvmaf
+// keeps them by the model's name), as each alone gives them: of a test
+// picture with its contrast raised, NEG's gain limits score lower.
+TEST(Libvmaf, VmafModelsScoredTogetherKeepTheirOwnScores) {
+    if (!std::filesystem::exists(libvmaf_folder() / platform::shared_library_name("libvmaf"))) {
+        GTEST_SKIP() << "the app ships no libvmaf-fast for this system yet";
+    }
+    constexpr int width = 128, height = 96, frames = 2;
+    const PackedFrame packed(width, height, 8);
+    const auto picture = [&](int index, double contrast) {
+        std::vector<std::uint8_t> bytes(packed.bytes(), 128);  // grey chroma
+        for (std::size_t i = 0; i < static_cast<std::size_t>(width) * height; ++i) {
+            const double detail = 60 * std::sin(0.37 * static_cast<double>(i) + index) *
+                                  std::cos(0.21 * static_cast<double>(i / width));
+            bytes[i] = static_cast<std::uint8_t>(std::clamp(128 + contrast * detail, 0.0, 255.0));
+        }
+        return bytes;
+    };
+    const std::vector<std::pair<std::string, std::string>> models{{"vmaf", "version=vmaf_v0.6.1"},
+                                                                  {"vmaf_neg", "version=vmaf_v0.6.1neg"}};
+    const auto scored = [&](const std::vector<std::string>& keys) {
+        CpuScorer scorer(width, height, 8, keys, 1, 1, 0, {}, std::nullopt, {}, false, std::nullopt, nullptr, models);
+        for (int index = 0; index < frames; ++index) {
+            scorer.add(picture(index, 1.0), picture(index, 1.3));
+        }
+        return scorer.finish();
+    };
+    const PairScores both = scored({"vmaf", "vmaf_neg"});
+    const std::vector<double>&vmaf = scores_of(both, "vmaf"), &neg = scores_of(both, "vmaf_neg");
+    ASSERT_EQ(vmaf.size(), static_cast<std::size_t>(frames));
+    EXPECT_EQ(vmaf, scores_of(scored({"vmaf"}), "vmaf"));
+    EXPECT_EQ(neg, scores_of(scored({"vmaf_neg"}), "vmaf_neg"));
+    for (std::size_t i = 0; i < frames; ++i) {
+        EXPECT_LT(neg[i], vmaf[i]) << "frame " << i;
+    }
+}
+
 // The app's metrics a comparison cannot score are refused up front, each with
 // its reason, so they fail alone: libvmaf would fail every metric scored with
 // them. 160x90 is below MS-SSIM's 176 and CAMBI's 216; DCI 4K is past CAMBI's
@@ -350,6 +387,9 @@ TEST(Libvmaf, ThePicturePoolFollowsTheSlowestMetric) {
     EXPECT_EQ(cpu_metrics_cost({"psnr", "ssim"}), CpuMetricsCost::light);
     EXPECT_EQ(cpu_metrics_cost({"psnr", "psnr_hvs"}), CpuMetricsCost::medium);
     EXPECT_EQ(cpu_metrics_cost({"psnr_hvs", "ms_ssim_yuv_u"}), CpuMetricsCost::heavy);
+    EXPECT_EQ(cpu_metrics_cost({"psnr", "vmaf_neg"}), CpuMetricsCost::heavy);
+    EXPECT_TRUE(cpu_metrics_read_chroma({"vmaf", "vmaf_v1"}));
+    EXPECT_FALSE(cpu_metrics_read_chroma({"vmaf", "vmaf_neg", "psnr"}));
     EXPECT_EQ(cpu_pairs(1920, 1080, 8, 24, false, true, CpuMetricsCost::light), 9);
     EXPECT_EQ(cpu_pairs(1920, 1080, 8, 24, false, true, CpuMetricsCost::medium), 13);
     EXPECT_EQ(cpu_pairs(1920, 1080, 8, 24, false, true, CpuMetricsCost::heavy), 25);

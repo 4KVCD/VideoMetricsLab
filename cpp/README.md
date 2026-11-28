@@ -74,8 +74,9 @@ not use it yet.
 
 `vml-cli` takes the Python app's commands and options (`vml-cli compare
 --help`), and reads them as its argparse parser does. So far it compares on
-the CPU path, VMAF v0.6.1, NEG and v1 calculated by FFmpeg's libvmaf with
-PSNR, SSIM and XPSNR beside them (`--vmaf-on cpu` or `--cpu`); scores VMAF,
+the CPU path, VMAF v0.6.1, NEG and v1 calculated by the app's libvmaf-fast
+with PSNR, SSIM and XPSNR, or by FFmpeg's libvmaf where that fails
+(`--vmaf-on cpu` or `--cpu`); scores VMAF,
 NEG and v1 on the GPU, the app's default, with Vulkan or, where Vulkan
 cannot, with libvmaf's CUDA code on an NVIDIA GPU; scores PSNR, SSIM and XPSNR in the app, with its libvmaf's own
 extractors, as the Python app did; scores SSIMULACRA2, Butteraugli and

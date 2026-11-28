@@ -126,7 +126,8 @@ constexpr std::size_t xpsnr_picture_memory = std::size_t{270} << 20;
 // 8-bit at 662 fps with 9 pairs, 834 with 13 and 830 with 25.
 constexpr int medium_threads = 12;
 constexpr std::size_t medium_picture_memory = std::size_t{420} << 20;
-// MS-SSIM, CAMBI and CIEDE2000 take far longer per pair than the decoders
+// MS-SSIM, CAMBI and CIEDE2000, and VMAF's models (FFmpeg's libvmaf filter
+// runs them on every core), take far longer per pair than the decoders
 // take to feed one, so they get a pair per thread: on 4K 10-bit video beside
 // GPU VMAF (RTX 5090, Core Ultra 9 285K, 24 threads), the five new metrics
 // run at 6.0 fps with 6 pairs, 10.8 with 12 and 15.1 with 24 (this limit:
@@ -207,6 +208,9 @@ std::vector<Extractor> extractors_for(const std::vector<std::string>& requested,
                                       const ExtractorOptions& cambi) {
     std::vector<std::string> metrics;
     for (const std::string& metric : requested) {
+        if (is_vmaf_model_key(metric)) {
+            continue;  // its model's features (use_features_from_model)
+        }
         if (cpu_feature(metric) == nullptr) {
             throw std::invalid_argument(metric + " is not scored with libvmaf's CPU extractors");
         }
@@ -316,6 +320,8 @@ const CpuFeature* cpu_feature(std::string_view key) {
     return found == cpu_features.end() ? nullptr : &*found;
 }
 
+bool is_vmaf_model_key(std::string_view key) { return key == "vmaf" || key == "vmaf_neg" || key == "vmaf_v1"; }
+
 bool keeps_exact(std::string_view key) {
     const std::string_view metric = scored_by(key);
     return key == "psnr" || key == "ssim" || (key != metric && (metric == "psnr_yuv" || metric == "ssim_yuv"));
@@ -336,7 +342,9 @@ double yuv_score(std::string_view key, double y, double u, double v) {
 bool cpu_metrics_read_chroma(const std::vector<std::string>& metrics) {
     return std::any_of(metrics.begin(), metrics.end(), [](const std::string& metric) {
         const CpuFeature* feature = cpu_feature(metric);
-        return feature != nullptr && feature->chroma;
+        // Without U and V, libvmaf scores no frame of VMAF v1 (error -22). A custom
+        // VMAF model that read them would fail so too, and fall back to FFmpeg's libvmaf.
+        return metric == "vmaf_v1" || (feature != nullptr && feature->chroma);
     });
 }
 
@@ -344,7 +352,8 @@ CpuMetricsCost cpu_metrics_cost(const std::vector<std::string>& metrics) {
     CpuMetricsCost cost = CpuMetricsCost::light;
     for (const std::string& key : metrics) {
         const std::string_view metric = scored_by(key);
-        if (metric == "ms_ssim" || metric == "ms_ssim_yuv" || metric == "cambi" || metric == "ciede2000") {
+        if (metric == "ms_ssim" || metric == "ms_ssim_yuv" || metric == "cambi" || metric == "ciede2000" ||
+            is_vmaf_model_key(key)) {
             return CpuMetricsCost::heavy;
         }
         if (metric == "psnr_hvs") {
@@ -398,7 +407,8 @@ std::string cpu_library_build() { return "libvmaf-fast " + libvmaf_fast_version(
 CpuScorer::CpuScorer(int width, int height, int bit_depth, std::vector<std::string> metrics, int n_subsample,
                      int threads, int frame_rate, const CambiInput& cambi, std::optional<int> gpu,
                      const std::string& vmaf_model, bool vmaf_on_vulkan,
-                     std::optional<ChromaFromDecoders> chroma_from_decoders, GpuFrameStream* shared_decoder)
+                     std::optional<ChromaFromDecoders> chroma_from_decoders, GpuFrameStream* shared_decoder,
+                     const std::vector<std::pair<std::string, std::string>>& vmaf_models)
     : library_(libvmaf()), metrics_(std::move(metrics)), step_(static_cast<unsigned>(std::max(1, n_subsample))) {
     threads = std::max(0, threads);
     // VMAF YUV's U and V first: whether the pictures need their planes.
@@ -441,6 +451,19 @@ CpuScorer::CpuScorer(int width, int height, int bit_depth, std::vector<std::stri
             // libvmaf frees the options (if it refuses them early, a few bytes leak).
             check_libvmaf(library_.use_feature(context_, extractor.name.c_str(), options),
                           "Starting " + extractor.name);
+        }
+        for (const std::string& key : libvmaf_metrics_) {
+            if (!is_vmaf_model_key(key)) {
+                continue;
+            }
+            const auto given = std::find_if(vmaf_models.begin(), vmaf_models.end(),
+                                            [&key](const auto& model) { return model.first == key; });
+            if (given == vmaf_models.end()) {
+                throw std::invalid_argument(key + " is asked for without its model");
+            }
+            models_.emplace_back(key, load_vmaf_model(library_, given->second, key));
+            check_libvmaf(library_.use_features_from_model(context_, models_.back().second),
+                          "Starting " + key + "'s features");
         }
         const VmafPictureConfiguration pool{
             {static_cast<unsigned>(width), static_cast<unsigned>(height), static_cast<unsigned>(bit_depth),
@@ -499,6 +522,10 @@ void CpuScorer::release() {
         }
     }
     pinned_.clear();
+    for (const auto& [key, model] : models_) {
+        library_.model_destroy(model);
+    }
+    models_.clear();
     if (context_ != nullptr) {
         library_.close(context_);
         context_ = nullptr;
@@ -837,6 +864,20 @@ PairScores CpuScorer::finish() {
         result.frames.push_back(frame);
     }
     for (const std::string& metric : metrics_) {
+        const auto model = std::find_if(models_.begin(), models_.end(),
+                                        [&metric](const auto& loaded) { return loaded.first == metric; });
+        if (model != models_.end()) {
+            std::vector<double> column;
+            column.reserve(result.frames.size());
+            for (const unsigned frame : result.frames) {
+                double score = 0;
+                check_libvmaf(library_.score_at_index(context_, model->second, &score, frame),
+                              "Reading " + metric + " for frame " + std::to_string(frame));
+                column.push_back(to_6_decimals(score));  // as libvmaf's log, which FFmpeg's route reads
+            }
+            result.by_metric.emplace_back(metric, std::move(column));
+            continue;
+        }
         const CpuFeature& feature = *cpu_feature(metric);
         if (feature.value == Value::chroma_vmaf) {
             std::vector<double>& column = chroma_vmaf.at(metric);
@@ -975,6 +1016,7 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
                              int n_subsample, const FrameRange& range, long long total_frames,
                              const std::pair<std::string, std::string>& decoders, int threads, int frame_rate,
                              const CambiInput& cambi, std::optional<int> gpu, const std::string& vmaf_model,
+                             const std::vector<std::pair<std::string, std::string>>& vmaf_models,
                              bool vmaf_on_vulkan, const std::string& scale_algorithm, const std::string& ffmpeg,
                              const std::string& ffprobe, bool want_vvdec,
                              const std::function<void()>& on_vvdec_opening,
@@ -1005,7 +1047,7 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
     // Declared after the streams so that it goes first: it gives back the
     // memory their decoders page-locked, and the GPU memory they imported.
     CpuScorer scorer(width, height, bit_depth, metrics, n_subsample, threads, frame_rate, cambi, gpu, vmaf_model,
-                     vmaf_on_vulkan, std::nullopt, may_share ? &test : nullptr);
+                     vmaf_on_vulkan, std::nullopt, may_share ? &test : nullptr, vmaf_models);
     if (on_gpu_metrics) {
         on_gpu_metrics(scorer.metric_keys(), scorer.gpu_metrics());
     }
