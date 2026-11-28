@@ -800,9 +800,7 @@ void MainWindow::update_run_status() {
         show_status(run_hold_message_);
         return;
     }
-    const int running =
-        static_cast<int>(std::count_if(run_progress_.running.begin(), run_progress_.running.end(),
-                                       [this](int index) { return !run_progress_.finished.contains(index); }));
+    const int running = videos_in_progress();
     if (run_hold_ != RunHold::paused && running == 0 && !(run_active_ && !job_rows_.empty())) {
         return;
     }
@@ -810,10 +808,13 @@ void MainWindow::update_run_status() {
     show_progress_badge();
 }
 
+int MainWindow::videos_in_progress() const {
+    return static_cast<int>(std::count_if(run_progress_.running.begin(), run_progress_.running.end(),
+                                          [this](int index) { return !run_progress_.finished.contains(index); }));
+}
+
 QString MainWindow::queue_line() const {
-    const int running =
-        static_cast<int>(std::count_if(run_progress_.running.begin(), run_progress_.running.end(),
-                                       [this](int index) { return !run_progress_.finished.contains(index); }));
+    const int running = videos_in_progress();
     const std::optional<double> elapsed = run_elapsed();
     const QString elapsed_text =
         elapsed ? "   ·   " + app::tr("Elapsed: {time}", {{"time", format_hms(*elapsed)}}) : QString();
@@ -829,9 +830,7 @@ RunCounts MainWindow::run_counts() const {
     counts.total = static_cast<int>(job_rows_.size());
     counts.finished = static_cast<int>(run_progress_.finished.size());
     counts.failed = run_failed_count_ + run_partial_count_;
-    counts.in_progress =
-        static_cast<int>(std::count_if(run_progress_.running.begin(), run_progress_.running.end(),
-                                       [this](int index) { return !run_progress_.finished.contains(index); }));
+    counts.in_progress = videos_in_progress();
     if (counts.total == 0) {
         return counts;
     }

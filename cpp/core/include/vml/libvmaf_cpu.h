@@ -37,9 +37,9 @@ class GpuMetricsScorer;  // gpu_cpu_metrics.h
 // They match what FFmpeg's libvmaf filter is asked for ("name=psnr",
 // "name=float_ssim") and how its log names and rounds the scores the app
 // reads; XPSNR is rounded as FFmpeg's xpsnr filter writes its stats file
-// ("%3.4f"). A 6:1:1 metric (PSNR YUV, SSIM YUV, MS-SSIM YUV) is
+// ("%3.4f"). A 6:1:1 metric (PSNR YUV avg. dB, SSIM YUV, MS-SSIM YUV) is
 // (6 Y + Cb + Cr) / 8 of its extractor's luma feature and its two chroma
-// features, rounded once; PSNR YUV avg. MSE weighs the planes' squared
+// features, rounded once; PSNR YUV (avg. MSE) weighs the planes' squared
 // errors 6:1:1 instead, from the same three PSNR features. VMAF YUV's U and V
 // are the run's VMAF model applied to a chroma plane (ChromaVmaf), not a
 // libvmaf extractor's feature. CIEDE2000 is shown
@@ -83,7 +83,7 @@ bool cpu_metrics_read_chroma(const std::vector<std::string>& metrics);
 // planes of PSNR YUV and SSIM YUV, which those 6:1:1 metrics are made of.
 bool keeps_exact(std::string_view key);
 
-// Whether `key` (PSNR YUV, PSNR YUV avg. MSE, SSIM YUV) can be made from its
+// Whether `key` (PSNR YUV avg. dB, PSNR YUV, SSIM YUV) can be made from its
 // planes as calculated (keeps_exact): its Y saved, and its U and V scored
 // without the Y (plan_tasks, JobRun::merged).
 bool made_of_exact_planes(std::string_view key);

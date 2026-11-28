@@ -425,6 +425,8 @@ private:
     void check_ticks_soon();
     // The run's counts on the progress button: how far it has got.
     RunCounts run_counts() const;
+    // The videos of the run started and not over.
+    int videos_in_progress() const;
 
     // ------------------------------------------------------ FFmpeg's presence
     bool check_ffmpeg(bool prompt);
