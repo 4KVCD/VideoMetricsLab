@@ -256,10 +256,8 @@ private:
     Made made_of(const std::variant<FrameMetricResult, SequenceMetricResult>& score) const;
     // Why a score file is not used ("out of date..."), or empty where it is usable.
     QString unusable_note(const std::filesystem::path& file) const;
-    // The score files read for a comparison other than the one shown: a file
-    // read to choose among a metric's several scores is not read again to
-    // load it.
-    using ScoreReads = std::map<std::filesystem::path, std::optional<SavedScore>>;
+    // The score files read for a comparison other than the one shown.
+    using ScoreReads = SavedScoreReads;
     // The file of `key` `saved` uses: the one picked, else the one Settings'
     // rule picks (pick_saved_score). The files it reads to choose are kept in
     // `reads` where given.

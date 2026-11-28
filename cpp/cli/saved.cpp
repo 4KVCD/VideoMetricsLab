@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <optional>
 #include <set>
@@ -269,7 +270,38 @@ std::vector<const SavedComparison*> saved_named(const std::vector<SavedCompariso
     return found;
 }
 
-ComparisonResult read_comparison(const std::string& item, const std::filesystem::path& folder) {
+namespace {
+
+// A saved comparison with each metric's score the one Settings' rule picks, as the window's Saved Results
+// has it (saved_scores_by_rule); each file read once, its first usable read passed to `used`.
+std::optional<std::pair<ComparisonResult, std::string>> load_by_rule(
+    const SavedComparison& comparison, const Settings& settings,
+    const std::function<void(const std::filesystem::path&)>& used = {}) {
+    SavedScoreReads reads;
+    const std::map<std::string, std::filesystem::path> chosen =
+        saved_scores_by_rule(comparison, saved_score_rule(settings), reads);
+    const auto read = [&reads, &used](const std::filesystem::path& file) {
+        std::optional<SavedScore> score;
+        if (const auto kept = reads.find(file); kept != reads.end()) {
+            // Read once (readable or not). Taken out: a file listed under two keys (a YUV metric's Y,
+            // list_luma_planes) is read again, not handed out moved from.
+            score = std::move(kept->second);
+            reads.erase(kept);
+        } else {
+            score = read_saved_score(file);
+        }
+        if (score && !score->outdated && used) {
+            used(file);
+        }
+        return score;
+    };
+    return load_saved_comparison(comparison, chosen, read);
+}
+
+}  // namespace
+
+ComparisonResult read_comparison(const std::string& item, const std::filesystem::path& folder,
+                                 const Settings& settings) {
     const std::filesystem::path path = python_path(item);
     std::error_code ignored;
     if (std::filesystem::is_regular_file(path, ignored)) {
@@ -287,7 +319,7 @@ ComparisonResult read_comparison(const std::string& item, const std::filesystem:
     if (found.size() > 1) {
         throw std::runtime_error("more than one saved comparison's ID begins with it; give more of it");
     }
-    std::optional<std::pair<ComparisonResult, std::string>> loaded = load_saved_comparison(*found.front());
+    std::optional<std::pair<ComparisonResult, std::string>> loaded = load_by_rule(*found.front(), settings);
     if (!loaded) {
         throw std::runtime_error("its saved scores could not be read");
     }
@@ -398,22 +430,19 @@ int saved(const SavedArguments& arguments, const Settings& settings) {
     }
     std::vector<Group> groups;
     for (const SavedComparison* comparison : named) {
-        // Which file each metric's score came from (the first usable, newest
-        // first, as load_saved_comparison takes them): its time is the score
-        // details' "saved".
+        // Which file each metric's score came from (the first usable, the
+        // rule's pick first, as load_saved_comparison takes them): its time
+        // is the score details' "saved".
         std::map<std::string, std::chrono::system_clock::time_point> times;
-        const auto read = [comparison, &times](const std::filesystem::path& file) {
-            std::optional<SavedScore> score = read_saved_score(file);
-            if (score && !score->outdated) {
-                for (const SavedScoreFile& saved : comparison->scores) {
-                    if (saved.file == file) {
-                        times.try_emplace(saved.key, saved.saved);  // the first usable is the one used
-                    }
+        const auto used = [comparison, &times](const std::filesystem::path& file) {
+            for (const SavedScoreFile& saved : comparison->scores) {
+                if (saved.file == file) {
+                    times.try_emplace(saved.key, saved.saved);  // the first usable is the one used
                 }
             }
-            return score;
         };
-        std::optional<std::pair<ComparisonResult, std::string>> loaded = load_saved_comparison(*comparison, {}, read);
+        std::optional<std::pair<ComparisonResult, std::string>> loaded =
+            load_by_rule(*comparison, settings, used);
         if (!loaded) {
             print_error(saved_id(*comparison).substr(0, 12) + ": its saved scores could not be read");
             ok = false;

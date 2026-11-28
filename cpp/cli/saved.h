@@ -53,7 +53,8 @@ void take_saved_segments_of_scores(CompareArguments& output, const Settings& set
 // The comparison `item` names: a run file's (.metrics.json), or the saved
 // one whose ID begins with it (at least 6 hex digits). Throws
 // std::runtime_error saying why there is none, or more than one.
-ComparisonResult read_comparison(const std::string& item, const std::filesystem::path& folder);
+ComparisonResult read_comparison(const std::string& item, const std::filesystem::path& folder,
+                                 const Settings& settings);
 
 // Runs the saved command; returns the exit code: 0; 1 when a file asked for
 // could not be written, or a comparison could not be read or deleted; 2 for

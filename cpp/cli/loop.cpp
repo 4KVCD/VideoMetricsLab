@@ -431,7 +431,8 @@ int diff(const SavedArguments& arguments, const Settings& settings) {
     for (int at = 0; at < 2; ++at) {
         try {
             // The settings' folder, or --cache-dir's, as saved and report take it.
-            runs[at] = read_comparison(arguments.items.at(at), saved_scores_use(arguments.profile, settings).folder);
+            runs[at] =
+                read_comparison(arguments.items.at(at), saved_scores_use(arguments.profile, settings).folder, settings);
             if (!settings.show_yuv_planes) {
                 // Saved with their metrics (with_planes); compared where the window shows them.
                 drop_planes_not_in(runs[at]->metric_results, {});

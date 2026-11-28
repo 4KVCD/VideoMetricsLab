@@ -20,6 +20,8 @@
 
 namespace vml {
 
+struct Settings;
+
 // One score file of a saved comparison: <key>_<hash>.npz.
 struct SavedScoreFile {
     std::filesystem::path file;
@@ -83,6 +85,9 @@ struct SavedScoreRule {
     std::string engine = "any";   // "any", "app" or "ffmpeg": first, likewise
 };
 
+// The rule Settings > Saved Results gives.
+SavedScoreRule saved_score_rule(const Settings& settings);
+
 // The score `rule` uses among `choices` (those of one metric), or none where
 // none is usable. "videos": the newest of those `videos_would_use` takes
 // (the Videos tab's lookup, the window's), else as "newest". "newest": the
@@ -92,6 +97,25 @@ struct SavedScoreRule {
 std::optional<std::filesystem::path> pick_saved_score(
     const std::vector<SavedScoreChoice>& choices, const SavedScoreRule& rule,
     const std::function<bool(const SavedScoreChoice&)>& videos_would_use = {});
+
+// The file of `key`'s score among `comparison`'s that `rule` picks
+// (pick_saved_score): where it has several, each read by `score_of` (none:
+// it can't be read) to see how it was made; with one, that one, usable or
+// not; none where it has no score of `key`.
+std::optional<std::filesystem::path> saved_score_by_rule(
+    const SavedComparison& comparison, const std::string& key, const SavedScoreRule& rule,
+    const std::function<const SavedScore*(const std::filesystem::path&)>& score_of,
+    const std::function<bool(const SavedScoreChoice&)>& videos_would_use = {});
+
+// Score files read once: a file read to choose among a metric's several
+// scores is not read again to load it (readable or not).
+using SavedScoreReads = std::map<std::filesystem::path, std::optional<SavedScore>>;
+
+// Each metric's file `rule` picks (saved_score_by_rule), the files read to
+// choose kept in `reads`.
+std::map<std::string, std::filesystem::path> saved_scores_by_rule(const SavedComparison& comparison,
+                                                                 const SavedScoreRule& rule,
+                                                                 SavedScoreReads& reads);
 
 // Deletes the comparison's folder, which must be one under `base`'s v2
 // folder: whether it is gone. Whole or not at all: where one of its files

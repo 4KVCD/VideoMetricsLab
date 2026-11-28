@@ -2441,5 +2441,37 @@ TEST(MetricCache, ASavedScoreIsPickedByTheRule) {
     EXPECT_EQ(pick_saved_score({{"x", now, std::nullopt}}, SavedScoreRule{}), std::nullopt);
 }
 
+// A comparison's files of a metric: each read for how it was made (the window's Saved Results and the command
+// line's saved show), one out of date never picked, a metric with one file not read.
+TEST(SavedResults, PicksAComparisonsScoreByTheRule) {
+    using std::chrono::hours;
+    const auto now = std::chrono::system_clock::now();
+    SavedComparison saved;
+    saved.scores = {{"vmaf_new", "vmaf", now, 0},
+                    {"vmaf_outdated_gpu", "vmaf", now - hours(1), 0},
+                    {"vmaf_old_gpu", "vmaf", now - hours(2), 0},
+                    {"psnr_only", "psnr", now, 0}};
+    std::map<std::filesystem::path, SavedScore> scores;
+    for (const auto& [file, device] : {std::pair{"vmaf_new", "cpu"}, {"vmaf_outdated_gpu", "gpu"},
+                                       {"vmaf_old_gpu", "gpu"}}) {
+        FrameMetricResult metric;
+        metric.provenance.compute_backend = device;
+        scores[file] = SavedScore{metric, std::string(file) == "vmaf_outdated_gpu"};
+    }
+    std::vector<std::filesystem::path> read;
+    const auto score_of = [&](const std::filesystem::path& file) -> const SavedScore* {
+        read.push_back(file);
+        const auto found = scores.find(file);
+        return found == scores.end() ? nullptr : &found->second;
+    };
+    EXPECT_EQ(saved_score_by_rule(saved, "vmaf", SavedScoreRule{"newest", "gpu", "any"}, score_of),
+              "vmaf_old_gpu");
+    EXPECT_EQ(saved_score_by_rule(saved, "vmaf", SavedScoreRule{}, score_of), "vmaf_new");
+    read.clear();
+    EXPECT_EQ(saved_score_by_rule(saved, "psnr", SavedScoreRule{}, score_of), "psnr_only");
+    EXPECT_TRUE(read.empty());
+    EXPECT_EQ(saved_score_by_rule(saved, "ssim", SavedScoreRule{}, score_of), std::nullopt);
+}
+
 }  // namespace
 }  // namespace vml

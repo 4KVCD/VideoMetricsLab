@@ -660,46 +660,27 @@ std::optional<std::filesystem::path> SavedResultsPanel::used_file(const SavedCom
             return file->second;
         }
     }
-    // By Settings > Saved Results' rule (pick_saved_score), among the files
-    // read: those of the comparison shown, or else read now (only where the
-    // metric has several, whose choice needs how each was made).
-    std::vector<SavedScoreChoice> choices;
-    std::optional<std::filesystem::path> first;
-    for (const SavedScoreFile& file : saved.scores) {
-        if (file.key != key) {
-            continue;
-        }
-        first = first.value_or(file.file);
-        choices.push_back({file.file, file.saved, std::nullopt});
-    }
-    if (choices.size() < 2) {
-        return first;  // nothing to choose; usable or not, it's the one there is
-    }
+    // By Settings > Saved Results' rule (saved_score_by_rule), among the
+    // files read: those of the comparison shown, or else read now (only
+    // where the metric has several, whose choice needs how each was made).
     const bool shown = details_read_.folder == saved.folder;
-    for (SavedScoreChoice& choice : choices) {
-        std::optional<SavedScore> read;
-        const SavedScore* score = shown ? read_score(choice.file) : nullptr;
-        if (!shown && reads != nullptr) {
-            const auto [kept, first_read] = reads->try_emplace(choice.file);
-            if (first_read) {
-                kept->second = read_saved_score(choice.file);
-            }
-            score = kept->second ? &*kept->second : nullptr;
-        } else if (!shown) {
-            read = read_saved_score(choice.file);
-            score = read ? &*read : nullptr;
+    ScoreReads read_here;  // where `reads` is not given
+    ScoreReads& kept = reads != nullptr ? *reads : read_here;
+    const auto score_of = [this, shown, &kept](const std::filesystem::path& file) -> const SavedScore* {
+        if (shown) {
+            return read_score(file);
         }
-        if (score != nullptr && !score->outdated) {
-            choice.provenance =
-                std::visit([](const auto& metric) { return metric.provenance; }, score->metric);
+        const auto [at, first_read] = kept.try_emplace(file);
+        if (first_read) {
+            at->second = read_saved_score(file);
         }
-    }
-    const SavedScoreRule rule{settings_.saved_score_pick, settings_.saved_score_device, settings_.saved_score_engine};
+        return at->second ? &*at->second : nullptr;
+    };
     std::function<bool(const SavedScoreChoice&)> videos;
     if (videos_would_use) {
         videos = [this, &saved, &key](const SavedScoreChoice& choice) { return videos_would_use(saved, key, choice); };
     }
-    return pick_saved_score(choices, rule, videos).value_or(*first);
+    return saved_score_by_rule(saved, key, saved_score_rule(settings_), score_of, videos);
 }
 
 std::optional<std::filesystem::path> SavedResultsPanel::used_score(const std::string& key) const {
@@ -1000,7 +981,11 @@ std::vector<LoadedSavedResult> SavedResultsPanel::selected_results() const {
                 }
             }
             if (const auto kept = reads.find(file); kept != reads.end()) {
-                return std::move(kept->second);  // read once (readable or not), and needed no more
+                // Read once (readable or not). Taken out: a file listed under two keys (a YUV metric's Y,
+                // list_luma_planes) is read again, not handed out moved from.
+                std::optional<SavedScore> score = std::move(kept->second);
+                reads.erase(kept);
+                return score;
             }
             return read_saved_score(file);
         };

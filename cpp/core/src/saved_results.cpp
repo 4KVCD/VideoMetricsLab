@@ -8,6 +8,7 @@
 #include "vml/metric_cache.h"
 #include "vml/metrics.h"
 #include "vml/platform/system.h"
+#include "vml/settings.h"
 
 namespace vml {
 
@@ -182,6 +183,10 @@ std::vector<int> app_version_of(const std::string& made_by) {
 
 }  // namespace
 
+SavedScoreRule saved_score_rule(const Settings& settings) {
+    return {settings.saved_score_pick, settings.saved_score_device, settings.saved_score_engine};
+}
+
 std::optional<std::filesystem::path> pick_saved_score(const std::vector<SavedScoreChoice>& choices,
                                                       const SavedScoreRule& rule,
                                                       const std::function<bool(const SavedScoreChoice&)>& videos_would_use) {
@@ -236,6 +241,46 @@ std::optional<std::filesystem::path> pick_saved_score(const std::vector<SavedSco
     };
     std::stable_sort(usable.begin(), usable.end(), better);
     return usable.front()->file;
+}
+
+std::optional<std::filesystem::path> saved_score_by_rule(
+    const SavedComparison& comparison, const std::string& key, const SavedScoreRule& rule,
+    const std::function<const SavedScore*(const std::filesystem::path&)>& score_of,
+    const std::function<bool(const SavedScoreChoice&)>& videos_would_use) {
+    std::vector<SavedScoreChoice> choices;
+    for (const SavedScoreFile& file : comparison.scores) {
+        if (file.key == key) {
+            choices.push_back({file.file, file.saved, std::nullopt});
+        }
+    }
+    if (choices.size() < 2) {  // nothing to choose; usable or not, it's the one there is
+        return choices.empty() ? std::nullopt : std::optional(choices.front().file);
+    }
+    for (SavedScoreChoice& choice : choices) {
+        if (const SavedScore* score = score_of(choice.file); score != nullptr && !score->outdated) {
+            choice.provenance = std::visit([](const auto& metric) { return metric.provenance; }, score->metric);
+        }
+    }
+    return pick_saved_score(choices, rule, videos_would_use).value_or(choices.front().file);
+}
+
+std::map<std::string, std::filesystem::path> saved_scores_by_rule(const SavedComparison& comparison,
+                                                                 const SavedScoreRule& rule,
+                                                                 SavedScoreReads& reads) {
+    const auto score_of = [&reads](const std::filesystem::path& file) -> const SavedScore* {
+        const auto [kept, first_read] = reads.try_emplace(file);
+        if (first_read) {
+            kept->second = read_saved_score(file);
+        }
+        return kept->second ? &*kept->second : nullptr;
+    };
+    std::map<std::string, std::filesystem::path> chosen;
+    for (const std::string& key : comparison.keys()) {
+        if (const std::optional<std::filesystem::path> file = saved_score_by_rule(comparison, key, rule, score_of)) {
+            chosen[key] = *file;
+        }
+    }
+    return chosen;
 }
 
 bool delete_saved_comparison(const std::filesystem::path& base, const SavedComparison& comparison) {
