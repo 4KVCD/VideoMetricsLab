@@ -237,8 +237,8 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     });
 
     // The selected comparison's scores, in a column on the table's left
-    // (as Worst Frames' Videos, Conditions and Details): in VML Modern a card
-    // a score, tiles_a_row of them a row, in Classic a row each; scrolled
+    // (as Worst Frames' Videos, Conditions and Details): a card a score,
+    // tiles_a_row of them a row; scrolled
     // where they are more than it holds. Its ⓘ button opens every detail
     // of them (open_details).
     details_ = new QGroupBox(app::tr("Saved scores"));
@@ -307,8 +307,8 @@ SavedResultsPanel::~SavedResultsPanel() {
 }
 
 void SavedResultsPanel::clear_layout(QLayout* layout) {
-    // Every widget in it, those of layouts within it too (Classic's rows
-    // are one each): deleting a layout leaves its widgets where they were,
+    // Every widget in it, those of layouts within it too (a tile's name
+    // row is one): deleting a layout leaves its widgets where they were,
     // drawn under the next comparison's.
     while (QLayoutItem* item = layout->takeAt(0)) {
         if (QLayout* inner = item->layout()) {
@@ -559,11 +559,9 @@ std::vector<const SavedComparison*> SavedResultsPanel::selected() const {
 
 void SavedResultsPanel::show_details() {
     clear_layout(details_grid_);
-    // Cards alike across the column, or Classic's rows (a metric's label,
-    // then its score and how it was made).
-    const bool tiles = showing_tiles();
+    // Cards alike across the column.
     for (int column = 0; column < tiles_a_row; ++column) {
-        details_grid_->setColumnStretch(column, tiles || column == 1 ? 1 : 0);
+        details_grid_->setColumnStretch(column, 1);
     }
     const std::vector<const SavedComparison*> chosen = selected();
     const bool one = chosen.size() == 1;
@@ -632,14 +630,6 @@ void SavedResultsPanel::wait_for_details() {
 
 void SavedResultsPanel::fill_details(const SavedComparison& saved) { show_scores(saved); }
 
-bool SavedResultsPanel::showing_tiles() const {
-    return tiles_.value_or(theme::current_interface() == theme::Interface::modern);
-}
-
-void SavedResultsPanel::set_tiles(bool tiles) {
-    tiles_ = tiles;
-    show_details();
-}
 
 const SavedScore* SavedResultsPanel::read_score(const std::filesystem::path& file) const {
     const auto read = details_read_.scores.find(file);
@@ -800,10 +790,8 @@ SavedScoresPanel* SavedResultsPanel::open_details() {
 }
 
 void SavedResultsPanel::show_scores(const SavedComparison& saved) {
-    // A card (VML Modern) or a row (Classic) for each metric's score used,
-    // or for each score saved; with several of a metric, a radio button on
-    // each picks the one used.
-    const bool tiles = showing_tiles();
+    // A card for each metric's score used, or for each score saved; with
+    // several of a metric, a radio button on each picks the one used.
     const bool each = settings_.saved_score_versions == "each";
     int placed = 0;
     for (const std::string& key : in_order_shown(saved.keys())) {
@@ -836,7 +824,7 @@ void SavedResultsPanel::show_scores(const SavedComparison& saved) {
                           versions);
             }
             QWidget* name = nullptr;
-            const QString label = metric_label(key) + (tiles ? QString() : QStringLiteral(":"));
+            const QString label = metric_label(key);
             if (picks) {
                 auto* pick = new QRadioButton(label);
                 pick->setObjectName("pick_" + QString::fromStdString(key));
@@ -858,20 +846,8 @@ void SavedResultsPanel::show_scores(const SavedComparison& saved) {
             } else {
                 name = new QLabel(label);
             }
-            if (tiles) {
-                details_grid_->addWidget(make_tile(key, name, value, line, badge, tip), placed / tiles_a_row,
-                                         placed % tiles_a_row);
-            } else {
-                auto* shown = new QLabel(value + QStringLiteral(" \u00B7 ") + line);
-                details_grid_->addWidget(name, placed, 0);
-                auto* value_row = new QHBoxLayout;
-                value_row->addWidget(shown);
-                if (!badge.isEmpty()) {
-                    value_row->addWidget(saved_badge(key, badge, tip));
-                }
-                value_row->addStretch(1);
-                details_grid_->addLayout(value_row, placed, 1);
-            }
+            details_grid_->addWidget(make_tile(key, name, value, line, badge, tip), placed / tiles_a_row,
+                                     placed % tiles_a_row);
             ++placed;
         }
     }
@@ -946,7 +922,7 @@ int SavedResultsPanel::tile_height() const {
 
 int SavedResultsPanel::scores_column_width() const {
     // Three cards a row, each as wide as the widest metric's name or a long
-    // score large; Classic's rows fit in the same.
+    // score large.
     const QFontMetrics text = fontMetrics();
     QFont large = font();
     large.setPointSizeF(large.pointSizeF() * 1.4);

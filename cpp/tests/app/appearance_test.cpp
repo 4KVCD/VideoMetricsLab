@@ -1,19 +1,19 @@
-// The window in each interface (theme.h): every role a widget is given is one
-// VML Modern's style sheet styles, and the window is drawn in Classic, Modern
-// dark and Modern light without a style sheet Qt cannot read.
+// The window in VML Modern (theme.h): every role a widget is given is one
+// its style sheet styles, and the window is drawn in Modern dark and light
+// without a style sheet Qt cannot read.
 //
-// Applying an interface changes the whole application's style, and Classic
-// cannot be put back once Modern is shown (theme.h), so these tests are a
-// program of their own (vml_appearance_tests), run in the order written:
-// Classic first. They share one window, built once.
+// Applying the appearance changes the whole application's style, so these
+// tests are a program of their own (vml_appearance_tests), run in the order
+// written. They share one window, built once, as main builds it: after the
+// appearance is applied.
 //
 // Modern dark needs a platform that takes the app's light or dark (Windows',
 // macOS'): Qt's offscreen one, the tests' own, does not, so there it is
 // skipped. VML_TEST_ON_SCREEN=1 runs it, on the display (tests/app/main.cpp).
 //
 // With VML_UI_SNAPSHOTS set to a folder, each test also saves the window's
-// tabs there as PNGs (classic-01-videos.png, modern-dark-01-videos.png, ...),
-// for a review to look at both interfaces without starting the app.
+// tabs there as PNGs (modern-light-01-videos.png, modern-dark-01-videos.png,
+// ...), for a review to look at the window without starting the app.
 #include <QAbstractButton>
 #include <QAbstractSpinBox>
 #include <QAccessible>
@@ -121,8 +121,8 @@ QColor pixel(QWidget& widget, int x, int y) {
 class Appearance : public ::testing::Test {
 protected:
     static void SetUpTestSuite() {
-        // Layout that is Modern's alone (theme::container, modern_only,
-        // classic_only, classic_box), built in Classic, checked in each.
+        // A container's room (theme::container), checked in each look.
+        theme::apply_appearance(accent);
         layouts_ = new QWidget;
         auto* column = new QVBoxLayout(layouts_);
         QBoxLayout* inside = nullptr;
@@ -130,15 +130,6 @@ protected:
         padded_child_ = new QLabel("inside");
         inside->addWidget(padded_child_);
         column->addWidget(padded_);
-        modern_label_ = new QLabel("Modern's");
-        theme::modern_only(modern_label_);
-        column->addWidget(modern_label_);
-        classic_label_ = new QLabel("Classic's");
-        theme::classic_only(classic_label_);
-        column->addWidget(classic_label_);
-        box_ = new QGroupBox;
-        theme::classic_box(box_, "Framed in Classic");
-        column->addWidget(box_);
         layouts_->resize(400, 300);
         layouts_->show();
         window_ = new MainWindow;
@@ -155,9 +146,6 @@ protected:
     static QWidget* layouts_;
     static QWidget* padded_;
     static QLabel* padded_child_;
-    static QLabel* modern_label_;
-    static QLabel* classic_label_;
-    static QGroupBox* box_;
 
     // Where padded_child_ sits in its container, laid out now.
     static QPoint child_place() {
@@ -172,25 +160,20 @@ protected:
     static void check_modern(bool dark, bool mocha = false) {
         theme::apply_theme(dark || mocha ? "dark" : "light", "light", mocha ? "mocha" : "dark");
         std::vector<std::string> warnings = warnings_while([] {
-            theme::apply_appearance(theme::Interface::modern, accent);
+            theme::apply_appearance(accent);
         });
-        ASSERT_EQ(theme::current_interface(), theme::Interface::modern);
+        ASSERT_TRUE(theme::appearance_applied());
         const char* name = mocha ? "modern-mocha" : dark ? "modern-dark" : "modern-light";
-        // Modern's layout: the container padded, its labels shown and
-        // Classic's hidden, the box untitled.
+        // The container padded.
         EXPECT_GE(child_place().x(), 12) << name;
         EXPECT_GE(child_place().y(), 10) << name;
-        EXPECT_TRUE(modern_label_->isVisibleTo(layouts_)) << name;
-        EXPECT_FALSE(classic_label_->isVisibleTo(layouts_)) << name;
-        EXPECT_TRUE(box_->title().isEmpty()) << name;
-        // The Options' middle column, built in Classic: Modern's margins,
-        // none, after the switch, so that its cards line up (#182).
+        // The Options' middle column: no margins, so that its cards line up
+        // (#182).
         const auto* metric_box = window_->findChild<QGroupBox*>("metricSettings");
         ASSERT_NE(metric_box, nullptr);
         EXPECT_EQ(metric_box->layout()->contentsMargins(), QMargins()) << name;
-        // And no padding of the sheet's either, whether the box was untitled
-        // when the sheet came (built in Modern) or not (built in Classic):
-        // the cards' tops level with the side boxes'.
+        // And no padding of the sheet's either: the cards' tops level with the
+        // side boxes'.
         EXPECT_EQ(metric_box->contentsRect().top(), 0) << name;
 
         QWidget probes;
@@ -213,13 +196,6 @@ protected:
         warnings.insert(warnings.end(), drawing.begin(), drawing.end());
         for (const std::string& warning : warnings) ADD_FAILURE() << name << ": " << warning;
 
-        // Hints upright; a sheet only Classic draws, none.
-        QLabel hint;
-        theme::style(&hint, "color: {muted}; font-style: {hint_style};");
-        EXPECT_TRUE(hint.styleSheet().contains("font-style: normal;")) << name;
-        QLabel classic_only;
-        theme::style_classic(&classic_only, "QLabel {{ color: {muted}; }}");
-        EXPECT_TRUE(classic_only.styleSheet().isEmpty()) << name;
 
         // Video Compare's Zoom: its text box as wide as "Fit to window" and
         // the text box's own margins, so the text is not scrolled, its first
@@ -237,26 +213,10 @@ MainWindow* Appearance::window_ = nullptr;
 QWidget* Appearance::layouts_ = nullptr;
 QWidget* Appearance::padded_ = nullptr;
 QLabel* Appearance::padded_child_ = nullptr;
-QLabel* Appearance::modern_label_ = nullptr;
-QLabel* Appearance::classic_label_ = nullptr;
-QGroupBox* Appearance::box_ = nullptr;
-
-TEST_F(Appearance, ClassicHasNoStyleSheetOfItsOwn) {
-    ASSERT_EQ(theme::current_interface(), theme::Interface::classic);  // run first: see the top
-    theme::apply_appearance(theme::Interface::classic, accent);
-    EXPECT_TRUE(qApp->styleSheet().isEmpty());
-    EXPECT_TRUE(warnings_while([] { draw_tabs(*window_, "classic"); }).empty());
-    // Modern's layout leaves Classic's as it was: no margins, Modern's
-    // labels hidden, Classic's shown, the box framed and titled.
-    EXPECT_EQ(child_place(), QPoint(0, 0));
-    EXPECT_FALSE(modern_label_->isVisibleTo(layouts_));
-    EXPECT_TRUE(classic_label_->isVisibleTo(layouts_));
-    EXPECT_EQ(box_->title(), "Framed in Classic");
-}
 
 // Every widget given a role is given one the style sheet styles: a role
 // misspelt, or one added without its rule, would be drawn as no role at all,
-// and only in Modern, where a review of Classic alone would not see it.
+// and only where the sheet is drawn.
 TEST_F(Appearance, EveryRoleInTheWindowIsOneModernStyles) {
     const QSet<QString> styled = styled_roles();
     EXPECT_TRUE(styled.contains("primary"));
@@ -361,7 +321,7 @@ TEST_F(Appearance, ModernLight) {
 // thinner edge there in the light looks, none in the dark ones.
 TEST_F(Appearance, NoLineAboveTheWindowsTabsInModern) {
     theme::apply_theme("light", "light", "dark");
-    theme::apply_appearance(theme::Interface::modern, accent);
+    theme::apply_appearance(accent);
     auto* tabs = window_->findChild<QTabWidget*>();
     ASSERT_NE(tabs, nullptr);
     tabs->setCurrentIndex(0);
@@ -412,7 +372,7 @@ TEST(RowMarks, AreSaidAsWhatAClickDoes) {
 // not a plain widget's. Each tab is shown in turn, so its controls are
 // visible; the test lists every one that has no name or no role.
 TEST_F(Appearance, EveryControlInModernHasANameAndARole) {
-    theme::apply_appearance(theme::Interface::modern, accent);
+    theme::apply_appearance(accent);
     auto* tabs = window_->findChild<QTabWidget*>();
     ASSERT_NE(tabs, nullptr);
     // The export indicator, shown with a note kept until clicked, as after
@@ -466,11 +426,11 @@ TEST_F(Appearance, EveryControlInModernHasANameAndARole) {
     EXPECT_TRUE(missing.isEmpty()) << missing.size() << " without:\n" << missing.join('\n').toStdString();
 }
 
-// Issue #203: a left click on a slider jumps to the click in Modern, as in
-// Classic. Fusion, which Modern's style is drawn over, paged toward it by
+// Issue #203: a left click on a slider jumps to the click, as in Windows'
+// own style. Fusion, which Modern's style is drawn over, paged toward it by
 // the page step instead (10 frames a click on Video Compare's timeline).
 TEST_F(Appearance, ALeftClickOnASliderJumpsThereInModern) {
-    ASSERT_EQ(theme::current_interface(), theme::Interface::modern);  // run after ModernLight
+    ASSERT_TRUE(theme::appearance_applied());  // run after ModernLight
     QSlider slider(Qt::Horizontal);
     slider.setRange(0, 1000);
     slider.resize(400, 24);
@@ -506,7 +466,7 @@ int first_ink(const QImage& image, const QRect& area, const QColor& background) 
 // field, at least as wide as its longest entry; a spin box's steps sit
 // inside its field, and its text is inset as a drop-down's.
 TEST_F(Appearance, DropDownsInModern) {
-    ASSERT_EQ(theme::current_interface(), theme::Interface::modern);  // run after ModernLight
+    ASSERT_TRUE(theme::appearance_applied());  // run after ModernLight
     QWidget host;
     auto* combo = new QComboBox(&host);
     const QString longest = QStringLiteral("An entry much longer than the field it is chosen in");
@@ -601,7 +561,7 @@ TEST_F(Appearance, ModernDark) {
 }
 
 // Mocha: Modern's dark, in chocolate browns; amber while no accent is
-// chosen, the one chosen otherwise; and in Classic, Dark.
+// chosen, the one chosen otherwise.
 TEST_F(Appearance, ModernMocha) {
     theme::apply_theme("dark");
     if (!theme::is_dark()) {
@@ -612,7 +572,7 @@ TEST_F(Appearance, ModernMocha) {
     EXPECT_EQ(theme::modern_colour("card", true), QColor("#251c16"));
     EXPECT_NE(theme::modern_colour("card", true), theme::modern_colour("card", false));
     EXPECT_EQ(QApplication::palette().color(QPalette::Accent), accent);  // the one chosen
-    theme::apply_appearance(theme::Interface::modern, std::nullopt);
+    theme::apply_appearance(std::nullopt);
     EXPECT_EQ(QApplication::palette().color(QPalette::Accent), theme::mocha_accent());
     // Back to Dark's own look: Modern's own dark colours, at once.
     theme::apply_theme("dark", "light", "dark");
@@ -661,10 +621,10 @@ TEST_F(Appearance, MetricHeadingsFitTheirColumns) {
 
 // Light's looks: Dim's and Desert's colours in place of Light's, Desert's
 // burnt orange while no accent is chosen; Light's own again, at once, when
-// its look is Light; and Classic has none.
+// its look is Light.
 TEST_F(Appearance, ModernLightLooks) {
     theme::apply_theme("light", "dim", "dark");
-    theme::apply_appearance(theme::Interface::modern, std::nullopt);
+    theme::apply_appearance(std::nullopt);
     if (theme::is_dark()) {
         GTEST_SKIP() << "This platform does not take the app's light.";
     }
@@ -683,9 +643,9 @@ TEST_F(Appearance, ModernLightLooks) {
     EXPECT_EQ(QApplication::palette().color(QPalette::Accent), QColor("#903909"));
     EXPECT_EQ(theme::accent_shown(), QColor("#903909"));  // Settings' accent box shows it
     EXPECT_EQ(theme::color("link"), QColor("#1c5e75"));
-    theme::apply_appearance(theme::Interface::modern, accent);
+    theme::apply_appearance(accent);
     EXPECT_EQ(QApplication::palette().color(QPalette::Accent), accent);  // the one chosen
-    theme::apply_appearance(theme::Interface::modern, std::nullopt);
+    theme::apply_appearance(std::nullopt);
     theme::apply_theme("light", "mocha", "desert");  // each side's own looks only
     EXPECT_EQ(theme::look(), "light");
     theme::apply_theme("light", "light", "dark");

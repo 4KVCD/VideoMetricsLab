@@ -251,8 +251,7 @@ int main(int argc, char** argv) {
     // Before the window is built, which reads it to colour itself.
     app::theme::apply_theme(QString::fromStdString(settings.theme), QString::fromStdString(settings.light_look),
                             QString::fromStdString(settings.dark_look));
-    app::theme::apply_appearance(app::theme::interface_of(settings.interface_style),
-                                 app::theme::accent_of(settings.accent_colour));
+    app::theme::apply_appearance(app::theme::accent_of(settings.accent_colour));
     // Windows' Text size, which Qt's fonts do not follow: after the style,
     // whose setting reads the system's fonts again, and before the window is
     // built, which takes its sizes from the fonts.

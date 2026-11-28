@@ -106,9 +106,8 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
     const QWidget* column = panel.findChild<QWidget*>("savedScoresColumn");
     ASSERT_NE(column, nullptr);
     EXPECT_LT(column->geometry().right(), table.geometry().left());
-    // In VML Modern a tile a metric: its score itself, large, as Metric
-    // Graphs shows it, and how it was made under it.
-    panel.set_tiles(true);
+    // A tile a metric: its score itself, large, as Metric Graphs shows it,
+    // and how it was made under it.
     for (const std::string key : {"vmaf", "psnr"}) {
         const QString name = QString::fromStdString(key);
         const auto* score = panel.findChild<QLabel*>("score_" + name);
@@ -123,36 +122,13 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
             << made->full_text().toStdString();
         EXPECT_TRUE(panel.findChild<QWidget*>("tile_" + name)->isAncestorOf(score));
     }
-    // In VML Classic a row a metric: its score itself, then how it was made.
-    panel.set_tiles(false);
-    for (const std::string key : {"vmaf", "psnr"}) {
-        const std::string score =
-            find_metric(key)->format_value(result.metric_results.frame(key)->aggregate()) + " \xC2\xB7 ";
-        bool found = false;
-        for (const QLabel* label : panel.findChildren<QLabel*>()) {
-            found = found || label->text().startsWith(QString::fromStdString(score));
-        }
-        std::string seen;
-        for (const QLabel* label : panel.findChildren<QLabel*>()) {
-            seen += "[" + label->text().toStdString() + "] ";
-        }
-        EXPECT_TRUE(found) << key << ": no line starts with " << score << " in " << seen;
-        EXPECT_EQ(panel.findChild<QWidget*>("tile_" + QString::fromStdString(key)), nullptr);
-    }
-    // Shown again (another row, the same row clicked again): the rows before
-    // are gone, not left under the new ones (each row is a layout of its
-    // own, whose labels deleting it left behind).
+    // Shown again (another row, the same row clicked again): the tiles
+    // before are gone, not left under the new ones (a tile's name row is a
+    // layout of its own, whose labels deleting it would leave behind).
     panel.scores_settings_changed();
     panel.scores_settings_changed();
-    {
-        const std::string score =
-            find_metric("vmaf")->format_value(result.metric_results.frame("vmaf")->aggregate()) + " \xC2\xB7 ";
-        int lines = 0;
-        for (const QLabel* label : panel.findChildren<QLabel*>()) {
-            lines += label->text().startsWith(QString::fromStdString(score)) ? 1 : 0;
-        }
-        EXPECT_EQ(lines, 1);
-    }
+    EXPECT_EQ(panel.findChildren<QWidget*>("tile_vmaf").size(), 1);
+    EXPECT_EQ(panel.findChildren<QLabel*>("score_vmaf").size(), 1);
     const std::vector<LoadedSavedResult> read = panel.selected_results();
     ASSERT_EQ(read.size(), 1U);
     EXPECT_EQ(read[0].label, "t");
@@ -681,7 +657,6 @@ TEST(SavedResultsPanel, SeveralScoresOfAMetricAreCountedAndPicked) {
     const Dialogs dialogs = standard_dialogs(nullptr);
     FileWrites writes;
     SavedResultsPanel panel(saved.settings, dialogs, writes);
-    panel.set_tiles(true);
     panel.show_list(list_saved_comparisons(saved.folder / "cache"));
     panel.resize(1200, 800);
     panel.show();
@@ -750,7 +725,6 @@ TEST(SavedResultsPanel, TheScoresColumnHoldsEveryScoreThreeCardsARow) {
     const Dialogs dialogs = standard_dialogs(nullptr);
     FileWrites writes;
     SavedResultsPanel panel(settings, dialogs, writes);
-    panel.set_tiles(true);
     panel.show_list({many});
     panel.resize(1200, 700);
     panel.show();

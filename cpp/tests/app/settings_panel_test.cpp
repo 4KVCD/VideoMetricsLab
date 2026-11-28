@@ -84,7 +84,7 @@ TEST(SettingsPanel, ARunLocksOnlyWhatItUsesAndSaysSo) {
     EXPECT_FALSE(delete_old->isEnabled());
     EXPECT_TRUE(export_folder->isEnabled());
     EXPECT_TRUE(note->isVisibleTo(&panel));
-    EXPECT_TRUE(note->text().startsWith(QStringLiteral("\U0001F512 Metrics are being calculated")));  // Classic's padlock
+    EXPECT_TRUE(note->text().startsWith(QStringLiteral("Metrics are being calculated")));
     EXPECT_EQ(note->property("vmlRole").toString(), "notice");
 
     panel.set_run_active(false);
@@ -288,12 +288,10 @@ TEST(SettingsPanel, NotificationServicesAreListedAndTickedEitherWay) {
 // (JSON, CSV); and a .zip or loose files; After each run: on or off, and
 // where (only to choose while on).
 // Each edit is saved.
-// Settings > Appearance shows the interface, the accent and light or dark
-// chosen, and saves each as it is picked: the interface by its card, the
-// accent by a disc, a code typed, or the system's (its code then shown),
-// light or dark by its segment. The accent's choices are usable only while
-// VML Modern is picked. (VML Modern is not picked here: applied, it would be
-// every later test's style.)
+// Settings > Appearance shows the accent and light or dark chosen, and saves
+// each as it is picked: the accent by a disc, a code typed, or the system's
+// (its code then shown), light or dark by its segment. (The appearance is
+// not applied here: it would be every later test's style.)
 // What an edit did goes to the window's indicator (notify), not a line at
 // the tab's foot; a setting that shows only after a restart asks for one.
 TEST(SettingsPanel, SaysWhatAnEditDidAndWhenARestartIsNeeded) {
@@ -320,12 +318,10 @@ TEST(SettingsPanel, SaysWhatAnEditDidAndWhenARestartIsNeeded) {
 
 TEST(SettingsPanel, AppearanceSavesEachChoice) {
     Settings settings;
-    settings.interface_style = "modern";
     settings.accent_colour = "#4f8fe8";
     FileWrites writes;
     const Dialogs dialogs = standard_dialogs(nullptr);
     SettingsPanel panel(settings, writes, [] { return ToolsStatus{}; }, dialogs);
-    EXPECT_EQ(panel.interface_buttons->checkedId(), 1);
     ASSERT_NE(panel.accent_buttons->checkedButton(), nullptr);
     EXPECT_EQ(panel.accent_buttons->checkedButton()->property("hex").toString(), "#4f8fe8");
     EXPECT_EQ(panel.accent_hex->text(), "#4F8FE8");
@@ -336,13 +332,6 @@ TEST(SettingsPanel, AppearanceSavesEachChoice) {
             << choice->styleSheet().toStdString();
     }
 
-    panel.interface_buttons->button(0)->click();
-    EXPECT_EQ(settings.interface_style, "classic");
-    EXPECT_FALSE(panel.accent_controls->isEnabled());
-    EXPECT_FALSE(panel.look_controls->isEnabled());
-    // Usable again by hand: picking VML Modern would apply it.
-    panel.accent_controls->setEnabled(true);
-    panel.look_controls->setEnabled(true);  // VML Modern's alone, as the accent is
 
     panel.accent_hex->setText("123ABC");
     emit panel.accent_hex->editingFinished();

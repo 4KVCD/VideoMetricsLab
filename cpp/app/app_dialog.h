@@ -2,10 +2,10 @@
 // dialog that waits for the user is built on (docs/ARCHITECTURE.md, "Asking
 // and telling the user").
 //
-// AppDialog is a QDialog with, in VML Modern on Windows, the app's own title
-// bar (TitleBar, as the main window's: the title and a close button, in the
-// theme's colours) in place of the system's; elsewhere, and in VML Classic,
-// the system's, as the main window has. Its contents go in body().
+// AppDialog is a QDialog with, on Windows, the app's own title bar
+// (TitleBar, as the main window's: the title and a close button, in the
+// theme's colours) in place of the system's; elsewhere, and in a contrast
+// theme, the system's, as the main window has. Its contents go in body().
 //
 // show_message is the window's message: an icon drawn by the app in the
 // theme's colours (never the system's), the text, buttons and an optional

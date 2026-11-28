@@ -238,18 +238,9 @@ void TitleButtons::set_progress(const Progress& progress) {
     }
 }
 
-void TitleButtons::set_modern(bool modern) {
-    modern_ = modern;
-    // Classic's tab bar draws its tabs to its edges: a little room at its
-    // right end and above the pane's frame.
-    layout()->setContentsMargins(0, 0, modern ? 0 : 6, modern ? 0 : 3);
-    theme_->setVisible(modern);
-    update_->setVisible(modern && !update_version_.isEmpty());
-}
-
 void TitleButtons::set_update(const QString& version) {
     update_version_ = version;
-    update_->setVisible(modern_ && !version.isEmpty());
+    update_->setVisible(!version.isEmpty());
     if (version.isEmpty()) {
         return;
     }
@@ -382,8 +373,7 @@ QPixmap icon_pixmap(const QWidget* window) {
 
 bool TitleBar::wanted() {
     // Windows' own windows: not offscreen (the tests), where there are none.
-    if (theme::current_interface() != theme::Interface::modern ||
-        QGuiApplication::platformName() != QLatin1String("windows")) {
+    if (QGuiApplication::platformName() != QLatin1String("windows")) {
         return false;
     }
     return !theme::system_contrast();  // in a contrast theme, the system's bar in its colours

@@ -85,7 +85,7 @@ private:
 // Modern's style sheet gives tables a selection-background-color, which a
 // style sheet paints over the cell's own background: with Highlight
 // best/worst results ticked, the selected video's best and worst could not
-// be seen. In VML Classic the mark showed with no sign of the selection.
+// be seen.
 class MarkedCellDelegate : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;

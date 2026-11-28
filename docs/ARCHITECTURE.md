@@ -181,19 +181,14 @@ sees events on its own thread, in the order they were sent. File writes run
 on one thread of their own, in the order they were asked for, and closing
 the window ends the run and waits for them.
 
-## The window's interfaces
+## The window's interface
 
-The window has two interfaces, chosen in Settings > Window > Interface
-(`app/theme.h`):
-
-- **VML Classic:** the system's style (windows11 on Windows, Fusion on
-  macOS) with its own palette, and no style sheet of the app's own.
-- **VML Modern:** Fusion, with a palette and one application style sheet
-  made from Modern's colours and the accent.
-
-Both follow light and dark. A panel is laid out once, for both. What
-differs is drawn by the style sheet, from a role a widget is given with
-`theme::set_role`:
+The window's interface is VML Modern (`app/theme.h`): Fusion, with a
+palette and one application style sheet made from Modern's colours and the
+accent. It follows light and dark. (VML Classic, the system's own style,
+was retired in #249; a setting saved as Classic opens in Modern.) What a
+widget is drawn as comes from the style sheet, from a role it is given
+with `theme::set_role`:
 
 | Role | For | In Modern |
 | --- | --- | --- |
@@ -206,13 +201,12 @@ differs is drawn by the style sheet, from a role a widget is given with
 | `separator` | a line between a toolbar's groups (`theme::separator()`) | a line of the border colour |
 | `segmented` | a tab bar of a few choices, and its tab widget (Settings' sections, Metric Graphs' metrics) | a row of pills, the current one in the accent |
 | `notice` | a label set apart: what a run locks, say | a tinted strip |
-| `unboxed` | a group box only Classic frames (`theme::classic_box`) | no box, no title: its cards are the boxes |
+| `unboxed` | a group box that only holds cards | no box, no title: its cards are the boxes |
 | `footer` | a strip of buttons along a card's bottom | a strip of the card's alternate colour |
 | `title`, `hint` | a card's title and the line beside it | semibold; muted |
 | `choice` | a frame picked as a whole, with a `checked` property (Settings' interface cards) | a raised card, the one picked tinted and edged in the accent |
 | `segments` | a row of checkable buttons, one of a few (Settings' Theme) | a sunken strip, the one picked raised |
 
-Classic draws every role alike, as the system draws the widget.
 
 In a Windows contrast theme (Settings > Accessibility > Contrast themes),
 VML Modern draws in the theme's colours alone (`theme::system_contrast`,
@@ -245,13 +239,12 @@ buttons' state has changed (Qt 6.12, QTBUG-152532), so every click came twice, a
 menu closed as it opened and double clicks went unseen. It also shows the system menu for
 Alt+Space, the icon and a right-click, with Minimize and Maximize enabled
 (Qt's own menu for Alt+Space would have them off). The bar is made when the
-window is built, so it follows the interface the app started in, and not in
-high-contrast mode, where the system's colours belong. Its three buttons
-(`TitleButtons`: a run's progress, the theme, an update) are VML Modern's on
+window is built, and not in a contrast theme, where the system's colours
+belong. Its three buttons
+(`TitleButtons`: a run's progress, the theme, an update) are there on
 every system: in the bar, or at the tab bar's right end where there is none,
 before the export indicator and the Export button, which is the tab bar's
-last in both interfaces. VML Classic has the progress button alone, there
-too. It is
+last. The progress button is
 always there; what it shows (Ready, the run's progress, Done or Cancelled
 until the ticks change) is `RunBadge`'s (`app/run_badge.h`).
 
@@ -277,20 +270,14 @@ When you add to the window:
 - **A role is one of the table's.** A new one needs its rule in
   `modern_style_sheet` first. `vml_appearance_tests` fails on a role the
   style sheet doesn't style: misspelt, or added without its rule.
-- **A hint's slant is `{hint_style}`** in a `theme::style` template: italic
-  in Classic, upright in Modern. A widget whose own sheet only Classic
-  should draw uses `theme::style_classic`.
-- **Classic stays as it is.** Layout that is Modern's alone is built with
-  `theme::container` (a card, a toolbar or a footer whose margins are
-  Modern's only), `theme::modern_only` and `theme::classic_only` (a widget
-  one interface shows), and `theme::classic_box` (a group box Classic frames
-  and titles, Modern leaves unboxed). Each follows the interface applied.
+- **Room by role.** A card, a toolbar or a footer is built with
+  `theme::container`, whose margins are the role's at the text size in use.
 - **Colour nothing in a panel by hand.** A colour comes from the palette, from
-  `theme::color`, or from a role. Anything else shows in one interface and not
-  the other.
-- **Look at the change in both interfaces**, light and dark.
-  `vml_appearance_tests` saves every tab in each when `VML_UI_SNAPSHOTS` names
-  a folder (`CONTRIBUTING.md`).
+  `theme::color`, or from a role. Anything else misses the looks and the
+  contrast themes.
+- **Look at the change in light and dark.** `vml_appearance_tests` saves
+  every tab in each when `VML_UI_SNAPSHOTS` names a folder
+  (`CONTRIBUTING.md`).
 
 ### Buttons that open a panel
 
@@ -352,8 +339,8 @@ not the first. Each rule here is one a reviewer can check.
   what it describes; so does what a control's own row says of a click on
   it (Delete...'s result, drawn bold, then faded to its muted line; Remove
   all's "click again"). No window opens to say something worked.
-- **A setting that shows only after a restart** (the language, VML
-  Classic) asks at once, in the app's own question: Restart now or Later.
+- **A setting that shows only after a restart** (the language) asks at
+  once, in the app's own question: Restart now or Later.
   Later, and any change during a run (a restart would stop it), leaves a
   note in the indicator until clicked.
 - **A line in the tab bar's indicator** (`ExportIndicator`: an export's

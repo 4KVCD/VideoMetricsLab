@@ -190,32 +190,27 @@ over the video shows the whole name where it fits, the shortened one only
 where it doesn't. Tooltips, exports and file names always keep the whole name.
 
 **Settings > Appearance** chooses how the window looks; nothing else changes
-with it. **Interface** is a card each, with a picture of it, VML Modern first:
+with it. The window is VML Modern: boxes as cards, each tab's main action
+(**Calculate metrics**, **Open in Metric Graphs**, **Play**, **Calculate
+bitrate**) in the accent colour, actions that delete in red, and ticked
+boxes and the selection in the accent.
 
-- **VML Modern** (the default): boxes as cards, each tab's main action
-  (**Calculate metrics**, **Open in Metric Graphs**, **Play**, **Calculate
-  bitrate**) in the accent colour, actions that delete in red, and ticked
-  boxes and the selection in the accent.
-- **VML Classic**: the window as it was before VML Modern, in the system's
-  own controls.
-
-VML Modern shows at once; VML Classic, chosen while VML Modern is shown, when
-the app is next started: the app offers to restart now (**Restart now**,
-which reopens the videos open if Reopen the videos is ticked) or **Later**,
-which leaves a note in the title bar until you click it. A new language
-asks the same. During a run there's only the note: restarting would stop
+A new language shows when the app is next started: the app offers to
+restart now (**Restart now**, which reopens the videos open if Reopen the
+videos is ticked) or **Later**, which leaves a note in the title bar until
+you click it. During a run there's only the note: restarting would stop
 it.
 
 What an action did shows at the right end of the tab bar, beside Export:
 "Settings saved.", rows added, a preset saved, a run's end, a log exported.
 A success fades after a few seconds; a failure, a run whose videos failed,
-and a restart to make stay until you click them. **Accent**, usable with VML Modern, is the system's
+and a restart to make stay until you click them. **Accent** is the system's
 (**Same as Windows**), one of six colours, a colour picked with **Custom...**,
 or one typed as `#RRGGBB` in the box beside it; text on it is dark or light,
-whichever reads. VML Classic keeps the system's accent. **Theme** is the
+whichever reads. **Theme** is the
 system's (**Same as Windows**), **Light** or **Dark**.
 
-VML Modern draws Light and Dark each in a look of its own, picked under
+Light and Dark are each drawn in a look of their own, picked under
 **Light look** and **Dark look**; with **Same as Windows**, the window
 changes look as Windows changes between light and dark:
 
@@ -239,13 +234,13 @@ changes look as Windows changes between light and dark:
 While a look with an accent of its own (Desert, Mocha, Joker, Nitrate,
 Phosphor) is the one the theme
 shows, the accent's first choice reads **Theme default** and gives that
-accent. The looks are VML Modern's alone: VML Classic shows Light or Dark.
+accent.
 
 In a Windows contrast theme, VML Modern takes all its colors from the
 theme, as Windows' own windows do; the accent, theme and looks chosen in
 Settings apply again once it is off.
 
-In VML Modern on Windows, the window's title bar is the app's own, in the
+On Windows, the window's title bar is the app's own, in the
 theme's colours, with Windows' minimize, maximize and close (hovering
 maximize shows Windows 11's snap layouts, and Alt+Space or a click on the
 icon opens the window menu). Three small buttons sit in it:
@@ -262,14 +257,11 @@ icon opens the window menu). Three small buttons sit in it:
   them, **Light look** and **Dark look** menus of the looks, as in Settings >
   Appearance.
 - **Update to ...**, when a newer version is available: a click shows what's
-  new and the download. VML Classic asks with a dialog when the app starts
-  instead.
+  new and the download.
 
-On macOS and Linux, and on Windows in high-contrast mode or when VML Modern
-was chosen since the app started, the title bar stays the system's and the
-three buttons sit at the right end of the tab bar, just before **Export**. VML
-Classic has the **Progress** button alone, there too: **Export** is always the
-last button of the tab bar.
+On macOS, and on Windows in a contrast theme, the title bar stays the
+system's and the three buttons sit at the right end of the tab bar, just
+before **Export**: **Export** is always the last button of the tab bar.
 
 While metrics are calculated, Settings stays open, but the ffmpeg folder, the
 saved results' folder and deleting saved results are locked until the run
@@ -1274,9 +1266,8 @@ such they would delete before they do.
 
 **Saved scores**, in a column on the list's left, shows the selected
 comparison's scores: each metric's score for the whole video, as Metric
-Graphs' table shows it, and whether the GPU or the CPU calculated it. In VML
-Modern each is a card, three to a row, its score in large type; in VML
-Classic a line each. Every score is there; the column scrolls where there
+Graphs' table shows it, and whether the GPU or the CPU calculated it. Each
+is a card, three to a row, its score in large type. Every score is there; the column scrolls where there
 are more than it holds.
 
 The button at the column's top right (a circled *i*) opens the details: a

@@ -427,8 +427,8 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
     auto* root = new QVBoxLayout(this);
 
     // The rows above the view, a toolbar of their own in VML Modern; the
-    // controls under it (playback, the timeline, the loop) a card. In
-    // Classic the rows as they were (theme::container).
+    // controls under it (playback, the timeline, the loop) a card
+    // (theme::container).
     QBoxLayout* top_layout = nullptr;
     QWidget* top_bar = theme::container("toolbar", false, &top_layout);
     add_video_row(top_layout);
@@ -488,7 +488,7 @@ void FrameComparePanel::add_video_row(QBoxLayout* root) {
     top->addWidget(previous_video_button);
     top->addWidget(video_combo, 1);
     top->addWidget(next_video_button);
-    top->addWidget(theme::separator(12));
+    top->addWidget(theme::separator());
     auto* zoom_label = new QLabel(app::tr("Zoom:"));
     zoom_label->setBuddy(zoom_combo);
     top->addWidget(zoom_label);
@@ -549,7 +549,7 @@ void FrameComparePanel::add_colour_row(QBoxLayout* root) {
         combo->view()->setMinimumWidth(full);
     }
     color_row->addWidget(color_status_label, 1);
-    color_row->addWidget(theme::separator(0));
+    color_row->addWidget(theme::separator());
     advanced_info_button = new QPushButton(app::tr("Advanced info"));
     advanced_info_button->setToolTip(app::tr("Playback's details: how each video is decoded and shown, and its "
                                              "sound. Selectable and copyable."));
@@ -638,7 +638,7 @@ void FrameComparePanel::add_seek_rows(QBoxLayout* root) {
     connect(next_frame_button, &QPushButton::clicked, this, [this] { set_frame(frame_ + 1); });
     seek->addWidget(play_button);
     seek->addWidget(audio_checkbox);
-    seek->addWidget(theme::separator(12));
+    seek->addWidget(theme::separator());
     seek->addWidget(previous_frame_button);
     auto* frame_label = new QLabel(app::tr("Frame:"));
     frame_label->setBuddy(frame_spin);

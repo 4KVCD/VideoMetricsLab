@@ -192,7 +192,7 @@ OptionsPanel::OptionsPanel(const std::vector<GpuVendor>& gpu_vendors, QWidget* p
     // what affects scores.
     auto* layout = new QVBoxLayout(this);
     target_label = new QLabel;
-    theme::style(target_label, "color: {muted}; font-style: {hint_style};");
+    theme::style(target_label, "color: {muted};");
     target_label->setWordWrap(true);
     layout->addWidget(target_label);
 
@@ -208,24 +208,21 @@ OptionsPanel::OptionsPanel(const std::vector<GpuVendor>& gpu_vendors, QWidget* p
         return forms.back();
     };
     build_preparation(add_box(app::tr("Video preparation (calculation only)")));
-    // The middle column: one box in Classic, "Metric-specific settings". In
-    // VML Modern two cards, one above the other: VMAF (its three models and
-    // the frame subsample) and CVVDP (its display), which have nothing in
-    // common but the column (theme::classic_box, theme::container).
+    // The middle column: two cards, one above the other: VMAF (its three
+    // models and the frame subsample) and CVVDP (its display), which have
+    // nothing in common but the column.
     auto* metric_box = new QGroupBox;
-    theme::classic_box(metric_box, app::tr("Metric-specific settings"));
+    theme::set_role(metric_box, "unboxed");
     metric_box->setObjectName("metricSettings");
     auto* metric_column = new QVBoxLayout(metric_box);
-    // In Modern none, so that the cards' tops are level with the side boxes'
-    // (Modern's box draws nothing of its own around them); again after a
-    // switch to Modern while the app runs.
-    theme::modern_margins(metric_box, QMargins());
+    // None, so that the cards' tops are level with the side boxes' (the box
+    // draws nothing of its own around them).
+    metric_column->setContentsMargins(QMargins());
     const auto add_card = [&metric_column, &forms](const QString& title) {
         QBoxLayout* card_layout = nullptr;
         metric_column->addWidget(theme::container("card", false, &card_layout));
         auto* heading = new QLabel(title);
         theme::set_role(heading, "title");
-        theme::modern_only(heading);
         card_layout->addWidget(heading);
         auto* form = new QFormLayout;
         card_layout->addLayout(form);
@@ -238,7 +235,7 @@ OptionsPanel::OptionsPanel(const std::vector<GpuVendor>& gpu_vendors, QWidget* p
     columns->addWidget(metric_box, 1);
     build_metric_settings(vmaf_form);
     build_cvvdp(cvvdp_form);
-    // One label column across the two, as the one form Classic had.
+    // One label column across the two cards.
     same_label_width({vmaf_form, cvvdp_form});
     build_performance(add_box(app::tr("Performance")), gpu_vendors);
     layout->addLayout(columns);
@@ -246,7 +243,7 @@ OptionsPanel::OptionsPanel(const std::vector<GpuVendor>& gpu_vendors, QWidget* p
     auto* metrics_hint = new QLabel(
         app::tr("Cropping, scaling and film grain here affect scores. Video Compare's tone mapping and playback "
                 "resolution are display-only settings and do not change calculated metrics."));
-    theme::style(metrics_hint, "color: {muted}; font-style: {hint_style};");
+    theme::style(metrics_hint, "color: {muted};");
     metrics_hint->setWordWrap(true);
     layout->addWidget(metrics_hint);
     layout->addStretch(1);
@@ -334,7 +331,7 @@ void OptionsPanel::build_preparation(QFormLayout* form) {
     form->addRow(range_label, range_row);
     range_frames_note = new QLabel(app::tr("CVVDP scores whole seconds: its range is rounded to the nearest second."));
     range_frames_note->setWordWrap(true);
-    theme::style(range_frames_note, "color: {muted}; font-style: {hint_style};");
+    theme::style(range_frames_note, "color: {muted};");
     form->addRow(QString(), range_frames_note);
     // Seconds until a row in frames is shown. Hidden, not show_range_unit():
     // shown before the form has a parent, a field would be a window.

@@ -1,19 +1,14 @@
-// Settings > Appearance: the interface (VML Classic or VML Modern), each a
-// card with a picture of it, Modern's accent (the system's, a preset, or a
-// colour of one's own), and light or dark (theme.h).
+// Settings > Appearance: the accent (the system's, a preset, or a colour of
+// one's own), and light or dark and their looks (theme.h).
 #include <QAbstractButton>
 #include <QApplication>
 #include <QButtonGroup>
 #include <QColor>
-#include <QFrame>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
-#include <QMouseEvent>
-#include <QPainter>
-#include <QPainterPath>
 #include <QPalette>
 #include <QPushButton>
 #include <QRadioButton>
@@ -40,155 +35,12 @@ constexpr std::pair<const char*, const char*> accent_presets[] = {
     {N_("Green"), "#3fa66b"}, {N_("Amber"), "#d98a2b"}, {N_("Rose"), "#e0607e"},
 };
 
-// A small picture of an interface, drawn in the colours in use: Classic's
-// framed box and flat buttons, or Modern's card and accent button.
-class InterfacePreview : public QWidget {
-public:
-    InterfacePreview(bool modern, QWidget* parent = nullptr) : QWidget(parent), modern_(modern) {
-        setFixedSize(180, 104);
-    }
-    // The accent Modern's picture shows: none for the system's.
-    void set_accent(std::optional<QColor> accent) {
-        accent_ = accent;
-        update();
-    }
-
-protected:
-    void paintEvent(QPaintEvent*) override {
-        QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing);
-        const bool dark = theme::is_dark();
-        const QRectF frame = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-        if (!modern_) {
-            // Classic: square corners, every edge a line, every button alike.
-            const QColor ground = dark ? QColor("#202020") : QColor("#f3f3f3");
-            const QColor line = dark ? QColor("#3a3a3a") : QColor("#c8c8c8");
-            const QColor button = dark ? QColor("#2d2d2d") : QColor("#e6e6e6");
-            painter.fillRect(rect(), ground);
-            painter.setPen(line);
-            painter.drawRect(frame);
-            painter.fillRect(QRectF(8, 8, 112, 8), line);
-            painter.setBrush(Qt::NoBrush);
-            painter.drawRect(QRectF(8.5, 22.5, 163, 54));
-            painter.setBrush(button);
-            painter.drawRect(QRectF(8.5, 84.5, 34, 10));
-            painter.drawRect(QRectF(46.5, 84.5, 34, 10));
-            return;
-        }
-        // Modern: a card on the window, a primary button in the accent.
-        const QColor accent = accent_.value_or(QApplication::palette().color(QPalette::Accent));
-        QPainterPath outline;
-        outline.addRoundedRect(frame, 6, 6);
-        painter.fillPath(outline, theme::modern_colour("window", dark));
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(theme::modern_colour("border_strong", dark));
-        painter.drawRoundedRect(QRectF(8, 8, 72, 8), 2, 2);
-        painter.setPen(theme::modern_colour("border", dark));
-        painter.setBrush(theme::modern_colour("card", dark));
-        painter.drawRoundedRect(QRectF(8.5, 22.5, 163, 54), 5, 5);
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(accent);
-        painter.drawRoundedRect(QRectF(8, 84, 44, 12), 3, 3);
-        painter.setPen(theme::modern_colour("border_strong", dark));
-        painter.setBrush(theme::modern_colour("raised", dark));
-        painter.drawRoundedRect(QRectF(56.5, 84.5, 34, 11), 3, 3);
-    }
-
-private:
-    bool modern_;
-    std::optional<QColor> accent_;
-};
-
-// An interface's card: its radio button, its picture, its name and what it
-// is. A click anywhere on it picks it.
-class InterfaceCard : public QFrame {
-public:
-    InterfaceCard(QRadioButton* radio, InterfacePreview* preview, const QString& name, const QString& about)
-        : radio_(radio) {
-        setObjectName("interfaceCard");
-        setFrameShape(QFrame::StyledPanel);  // Classic's frame; Modern's sheet draws a card
-        theme::set_role(this, "choice");
-        setCursor(Qt::PointingHandCursor);
-        auto* layout = new QHBoxLayout(this);
-        layout->setContentsMargins(12, 12, 12, 12);
-        layout->setSpacing(14);
-        layout->addWidget(radio);
-        layout->addWidget(preview);
-        auto* words = new QVBoxLayout;
-        words->setSpacing(4);
-        auto* title = new QLabel(name);
-        QFont bold = title->font();
-        bold.setWeight(QFont::DemiBold);
-        title->setFont(bold);
-        auto* text = new QLabel(about);
-        text->setWordWrap(true);
-        theme::style(text, "color: {muted};");
-        words->addStretch(1);
-        words->addWidget(title);
-        words->addWidget(text);
-        words->addStretch(1);
-        layout->addLayout(words, 1);
-        connect(radio, &QRadioButton::toggled, this, [this](bool on) { show_checked(on); });
-        show_checked(radio->isChecked());
-    }
-
-protected:
-    void mouseReleaseEvent(QMouseEvent* event) override {
-        if (event->button() == Qt::LeftButton && rect().contains(event->position().toPoint())) {
-            radio_->click();
-        }
-        QFrame::mouseReleaseEvent(event);
-    }
-
-private:
-    // Modern's sheet draws the card picked in the accent.
-    void show_checked(bool on) {
-        setProperty("checked", on);
-        style()->unpolish(this);
-        style()->polish(this);
-    }
-    QRadioButton* radio_;
-};
-
 }  // namespace
 
 QWidget* SettingsPanel::build_appearance_page() {
     auto* page = new QWidget;
     auto* page_layout = new QVBoxLayout(page);
 
-    // The interface: a card each.
-    auto* interface_box = new QGroupBox(app::tr("Interface"));
-    auto* interface_layout = new QVBoxLayout(interface_box);
-    auto* interface_hint = new QLabel(app::tr("VML Modern shows at once, VML Classic when the app is next started. "
-                                              "Your settings, results and layout stay as they are."));
-    interface_hint->setWordWrap(true);
-    theme::style(interface_hint, "color: {muted};");
-    interface_layout->addWidget(interface_hint);
-    auto* cards = new QHBoxLayout;
-    cards->setSpacing(12);
-    interface_buttons = new QButtonGroup(this);
-    const bool modern = theme::interface_of(settings_.interface_style) == theme::Interface::modern;
-    auto* classic_radio = new QRadioButton;
-    classic_radio->setAccessibleName(app::tr("VML Classic"));
-    classic_radio->setChecked(!modern);
-    auto* modern_radio = new QRadioButton;
-    modern_radio->setAccessibleName(app::tr("VML Modern"));
-    modern_radio->setChecked(modern);
-    interface_buttons->addButton(classic_radio, 0);
-    interface_buttons->addButton(modern_radio, 1);
-    auto* modern_picture = new InterfacePreview(true);
-    modern_preview = modern_picture;
-    // VML Modern first: the default.
-    cards->addWidget(new InterfaceCard(modern_radio, modern_picture, app::tr("VML Modern"),
-                                       app::tr("Cards, grouped toolbars, one accent button per tab, scores that read "
-                                               "first.")),
-                     1);
-    cards->addWidget(new InterfaceCard(classic_radio, new InterfacePreview(false), app::tr("VML Classic"),
-                                       app::tr("The window as it has been: the system's own controls, framed boxes, "
-                                               "every button alike.")),
-                     1);
-    interface_layout->addLayout(cards);
-    page_layout->addWidget(interface_box);
 
     // In a contrast theme, VML Modern takes its colors alone.
     auto* contrast_note = new QLabel(app::tr("Windows' contrast theme sets the colors while it is on. The accent, "
@@ -221,7 +73,7 @@ QWidget* SettingsPanel::build_appearance_page() {
         layout->addWidget(under);
         return names;
     };
-    grid->addWidget(row_name(app::tr("Accent"), app::tr("VML Modern only")), 0, 0);
+    grid->addWidget(row_name(app::tr("Accent"), QString()), 0, 0);
     accent_controls = new QWidget;
     auto* accent_row = new QHBoxLayout(accent_controls);
     accent_row->setContentsMargins(0, 0, 0, 0);
@@ -243,7 +95,7 @@ QWidget* SettingsPanel::build_appearance_page() {
         swatch->setAccessibleName(app::tr(name));
         swatch->setProperty("hex", QString::fromLatin1(hex));
         swatch->setCursor(Qt::PointingHandCursor);
-        // A disc of its colour, ringed when chosen, in either interface.
+        // A disc of its colour, ringed when chosen.
         theme::style(swatch, QStringLiteral("QPushButton {{ background: %1; border: 2px solid transparent; "
                                             "border-radius: 14px; padding: 0; min-height: 0; }} "
                                             "QPushButton:checked {{ border-color: palette(window-text); }} "
@@ -344,22 +196,21 @@ QWidget* SettingsPanel::build_appearance_page() {
     looks_grid->setVerticalSpacing(14);
     looks_grid->setColumnMinimumWidth(0, 180);
     looks_grid->setColumnStretch(1, 1);
-    looks_grid->addWidget(row_name(app::tr("Light look"), app::tr("VML Modern only")), 0, 0);
+    looks_grid->addWidget(row_name(app::tr("Light look"), QString()), 0, 0);
     // Each look's description, for its button's tooltip.
     const auto look_tip = [](const QString& look) {
-        return look == "dim"     ? app::tr("Light, a step darker throughout, for less glare. VML Classic shows Light.")
-               : look == "paper" ? app::tr("Dim, warmed a little, like unbleached paper. VML Classic shows Light.")
+        return look == "dim"     ? app::tr("Light, a step darker throughout, for less glare.")
+               : look == "paper" ? app::tr("Dim, warmed a little, like unbleached paper.")
                : look == "desert"
                    ? app::tr("Warm cream with dark text and edges and a burnt-orange accent, after Windows' Desert "
-                             "contrast theme. VML Classic shows Light.")
-               : look == "mocha" ? app::tr("Dark chocolate browns with an amber accent. VML Classic shows Dark.")
-               : look == "joker" ? app::tr("Plum purples with a vivid green accent. VML Classic shows Dark.")
+                             "contrast theme.")
+               : look == "mocha" ? app::tr("Dark chocolate browns with an amber accent.")
+               : look == "joker" ? app::tr("Plum purples with a vivid green accent.")
                : look == "nitrate"
-                   ? app::tr("Green-black shadows with cream text and a gold accent, like an old film print. VML "
-                             "Classic shows Dark.")
+                   ? app::tr("Green-black shadows with cream text and a gold accent, like an old film print.")
                : look == "phosphor"
                    ? app::tr("Near-black with umber edges, bright cream text and a gold accent, for the most "
-                             "contrast. VML Classic shows Dark.")
+                             "contrast.")
                    : QString();
     };
     const auto looks_of = [&look_tip](bool dark) {
@@ -371,7 +222,7 @@ QWidget* SettingsPanel::build_appearance_page() {
     };
     looks_grid->addLayout(segments("lightLooks", light_look_buttons, looks_of(false), settings_.light_look, true), 0,
                           1);
-    looks_grid->addWidget(row_name(app::tr("Dark look"), app::tr("VML Modern only")), 1, 0);
+    looks_grid->addWidget(row_name(app::tr("Dark look"), QString()), 1, 0);
     looks_grid->addLayout(segments("darkLooks", dark_look_buttons, looks_of(true), settings_.dark_look, true), 1, 1);
     grid->addWidget(look_controls, 2, 0, 1, 2);
     // The accent's first choice names what no accent gives: the system's,
@@ -415,16 +266,7 @@ QWidget* SettingsPanel::build_appearance_page() {
     page_layout->addWidget(look_box);
     page_layout->addStretch(1);
 
-    // The accent's controls, Modern's alone (theme::apply_palette): usable
-    // while it is picked.
     set_accent(QString::fromStdString(settings_.accent_colour).toLower());
-    accent_controls->setEnabled(modern);
-    look_controls->setEnabled(modern);
-    connect(interface_buttons, &QButtonGroup::idClicked, this, [this](int id) {
-        accent_controls->setEnabled(id == 1);
-        look_controls->setEnabled(id == 1);
-        on_edited();
-    });
     return page;
 }
 
@@ -469,7 +311,6 @@ void SettingsPanel::set_accent(const QString& hex) {
     // even before the palette has followed a change between light and dark.
     accent_hex->setText(colour ? accent_value.toUpper() : theme::accent_shown().name().toUpper());
     accent_hex->setPlaceholderText(QString());
-    static_cast<InterfacePreview*>(modern_preview)->set_accent(colour);
 }
 
 void SettingsPanel::choose_custom_accent() {

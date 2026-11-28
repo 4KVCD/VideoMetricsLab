@@ -1581,8 +1581,8 @@ void RemoveMarkDelegate::paint(QPainter* painter, const QStyleOptionViewItem& op
     // sent), so its hover is drawn then too; a locked remove mark's isn't.
     const bool hovered = (!disabled || shape_ == Shape::send) && (option.state & QStyle::State_MouseOver) != 0;
     // The text's colour on a selected row too, as the row's own text is
-    // drawn in both interfaces (Windows' style keeps it on its light
-    // selection; HighlightedText was dark there in Classic's dark theme).
+    // drawn on the selection too (HighlightedText can be dark on a light
+    // selection).
     // Dimmed: a third of it, as the palette's disabled text is close to the
     // text in some looks (VML Modern's).
     QColor colour = option.palette.color(QPalette::Active, QPalette::Text);

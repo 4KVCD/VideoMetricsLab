@@ -1,7 +1,8 @@
-// The window's interfaces (theme.h): the settings read as an interface and
-// an accent, the text an accent button takes, and VML Modern's style sheet.
-// Applying one changes the whole application's style, which every later
-// test in the process would inherit: that is checked in the window instead.
+// The window's look (theme.h): the setting read as an accent, the text an
+// accent button takes, VML Modern's layout and style sheet. Applying the
+// appearance changes the whole application's style, which every later test
+// in the process would inherit: that is checked in the window instead
+// (vml_appearance_tests).
 #include <QApplication>
 #include <QBoxLayout>
 #include <QColor>
@@ -23,12 +24,7 @@
 namespace vml::app {
 namespace {
 
-TEST(Theme, TheSettingsReadAsAnInterfaceAndAnAccent) {
-    EXPECT_EQ(theme::interface_of("modern"), theme::Interface::modern);
-    EXPECT_EQ(theme::interface_of("classic"), theme::Interface::classic);
-    EXPECT_EQ(theme::interface_of(""), theme::Interface::classic);  // older settings, or anything else
-    EXPECT_EQ(theme::interface_of("Modern"), theme::Interface::classic);
-
+TEST(Theme, TheSettingReadsAsAnAccent) {
     EXPECT_EQ(theme::accent_of("#4f8fe8"), QColor("#4f8fe8"));
     EXPECT_FALSE(theme::accent_of(""));  // the system's
     EXPECT_FALSE(theme::accent_of("blue"));
@@ -36,51 +32,15 @@ TEST(Theme, TheSettingsReadAsAnInterfaceAndAnAccent) {
     EXPECT_FALSE(theme::accent_of("#zzzzzz"));
 }
 
-// In Classic, the interface these tests run in: a hint is italic, and a
-// Classic-only template is the widget's sheet (VML Modern's are checked in
-// vml_appearance_tests).
-TEST(Theme, ClassicKeepsItalicHintsAndItsOwnSheets) {
-    ASSERT_EQ(theme::current_interface(), theme::Interface::classic);
-    QLabel hint;
-    theme::style(&hint, "color: {muted}; font-style: {hint_style};");
-    EXPECT_TRUE(hint.styleSheet().contains("font-style: italic;"));
-    QLabel own;
-    theme::style_classic(&own, "QLabel {{ color: {muted}; }}");
-    EXPECT_TRUE(own.styleSheet().startsWith("QLabel { color: #"));
-}
-
-// Layout that is VML Modern's alone leaves Classic's as it was: a
-// container without margins, Modern's widgets hidden and Classic's shown, a
-// Classic box titled, a separator the gap Classic had (Modern's are checked
-// in vml_appearance_tests).
-TEST(Theme, ModernsLayoutLeavesClassicAsItWas) {
-    ASSERT_EQ(theme::current_interface(), theme::Interface::classic);
+// A container's room is the role's (a card's 14 by 12 pixels at 100 % text
+// size), and a separator is a frame the sheet draws as a line.
+TEST(Theme, ContainersHaveTheirRolesRoom) {
     QBoxLayout* layout = nullptr;
     const std::unique_ptr<QWidget> card(theme::container("card", true, &layout));
-    EXPECT_EQ(layout->contentsMargins(), QMargins());
-    QWidget page;
-    auto* column = new QVBoxLayout(&page);
-    auto* modern = new QLabel;
-    theme::modern_only(modern);
-    auto* classic = new QLabel;
-    theme::classic_only(classic);
-    // Not shown before it has a parent: it would be shown as a window of its
-    // own, made and unmade again as it is added to one (about 40 ms of the
-    // main window's build).
-    EXPECT_FALSE(classic->isVisible());
-    column->addWidget(modern);
-    column->addWidget(classic);
-    page.show();
-    EXPECT_FALSE(modern->isVisible());
-    EXPECT_TRUE(classic->isVisible());
-    QGroupBox box;
-    theme::classic_box(&box, "Videos");
-    EXPECT_EQ(box.title(), "Videos");
-    const std::unique_ptr<QFrame> gap(theme::separator(16));
-    EXPECT_EQ(gap->minimumWidth(), 16);
-    EXPECT_EQ(gap->frameShape(), QFrame::NoFrame);
-    const std::unique_ptr<QFrame> none(theme::separator(0));
-    EXPECT_TRUE(none->isHidden());  // no gap in Classic: not there
+    EXPECT_EQ(layout->contentsMargins(), theme::scaled(QMargins(14, 12, 14, 12)));
+    EXPECT_EQ(card->property("vmlRole").toString(), "card");
+    const std::unique_ptr<QFrame> line(theme::separator());
+    EXPECT_EQ(line->property("vmlRole").toString(), "separator");
 }
 
 TEST(Theme, TextOnAnAccentIsWhicheverReads) {

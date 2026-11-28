@@ -66,10 +66,9 @@ ExportOutcome refused(const QString& why) { return {{}, why, why}; }
 }  // namespace
 
 void MainWindow::build_tab_corner() {
-    // The tab bar's right end, the same place in both interfaces: the
-    // indicator, then the Export button (the archive's panel), last. The
-    // title buttons join them there, before them, where the window has no
-    // title bar of its own (VML Classic's progress button; make_title_buttons).
+    // The tab bar's right end: the indicator, then the Export button (the
+    // archive's panel), last. The title buttons join them there, before
+    // them, where the window has no title bar of its own (make_title_buttons).
     if (tab_corner_ != nullptr) {
         return;
     }
@@ -77,7 +76,7 @@ void MainWindow::build_tab_corner() {
     auto* corner = new QHBoxLayout(tab_corner_);
     corner->setContentsMargins(0, 0, 0, 0);
     corner->setSpacing(6);
-    // VML Modern: a pixel above its buttons. Qt gives the corner the tab
+    // A pixel above its buttons. Qt gives the corner the tab
     // bar's height and puts its bottom on the tab pane's top, which Modern's
     // style sheet sets a pixel into the tab bar, so the corner's first row
     // lies above the tab widget and is not drawn: the Export button's rounded
@@ -85,13 +84,10 @@ void MainWindow::build_tab_corner() {
     // below: the corner is a row shorter than the button's 28 (Modern's
     // button), and a margin there cut off its bottom border instead.
     theme::modern_margins(tab_corner_, QMargins(0, 1, 2, 0));
-    // The indicator and Export, in a row of their own: in VML Classic two
-    // pixels above the tab pane, which the title buttons there (the progress
-    // button) are not, being placed as when they were the corner alone.
+    // The indicator and Export, in a row of their own.
     auto* exports = new QWidget;
     auto* layout = new QHBoxLayout(exports);
-    layout->setContentsMargins(0, 0, 0, 2);
-    theme::modern_margins(exports, QMargins(0, 0, 0, 0));
+    layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(6);
     corner->addWidget(exports);
     export_indicator_ = new ExportIndicator;  // Details: a tooltip beside it, no window

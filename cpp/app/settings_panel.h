@@ -208,15 +208,12 @@ public:
     QComboBox* decoded_videos = nullptr;
     QComboBox* language = nullptr;
     // Settings > Appearance (settings_appearance.cpp, theme::apply_appearance):
-    // the interface (0 Classic, 1 Modern), its cards; Modern's accent, the
-    // system's ("") or "#rrggbb", its choices (each button's "hex"), the
-    // code shown and typed, and Modern's card's picture of it; light or
-    // dark (each button's "value": "", "light" or "dark").
-    QButtonGroup* interface_buttons = nullptr;
+    // the accent, the system's ("") or "#rrggbb", its choices (each
+    // button's "hex") and the code shown and typed; light or dark (each
+    // button's "value": "", "light" or "dark").
     QButtonGroup* accent_buttons = nullptr;
     QWidget* accent_controls = nullptr;
     QLineEdit* accent_hex = nullptr;
-    QWidget* modern_preview = nullptr;
     QString accent_value;
     QButtonGroup* theme_buttons = nullptr;
     QButtonGroup* light_look_buttons = nullptr;  // Settings.light_look's
@@ -298,8 +295,8 @@ signals:
     // How Saved Results shows a comparison's scores changed (a card for the
     // score used, or for each).
     void saved_scores_changed();
-    // A setting saved shows only once the app starts again (the language,
-    // VML Classic): `what` says so; the window offers to restart. Empty: the
+    // A setting saved shows only once the app starts again (the language):
+    // `what` says so; the window offers to restart. Empty: the
     // setting went back, and no restart is needed any more.
     void restart_needed(const QString& what);
     // How test videos' names are shown changed (Video names).

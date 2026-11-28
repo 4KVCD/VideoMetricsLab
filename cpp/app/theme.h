@@ -1,10 +1,10 @@
 // The window's colours, for a light or a dark theme (the Python app's
 // vmaf_app/ui/theme.py).
 //
-// Qt's windows11 style draws the window in Windows' light or dark colours
-// (or the ones Settings > Window > Theme asks for: apply_theme), or, in the
-// VML Modern interface, Fusion in the app's own (apply_appearance), and every
-// widget that takes its colours from the palette follows. What the app
+// VML Modern draws the window in light or dark colours (Windows', or the
+// ones Settings > Window > Theme asks for: apply_theme) in Fusion with the
+// app's own palette (apply_appearance), and every widget that takes its
+// colours from the palette follows. What the app
 // colours itself (a muted hint, a failed score, a chart) is named here once,
 // with a value for each theme.
 //
@@ -27,7 +27,6 @@
 class QBoxLayout;
 class QPixmap;
 class QFrame;
-class QGroupBox;
 class QMargins;
 class QTableWidgetItem;
 class QWidget;
@@ -51,8 +50,7 @@ bool is_dark();
 // The look the window is drawn in now: Settings' light_look or dark_look
 // ("light", "dim", "paper" or "desert"; "dark", "mocha", "joker", "nitrate" or
 // "phosphor"), whichever its
-// light or dark asks for, in VML Modern; "contrast" in a contrast theme
-// (in_contrast_theme). Classic has no looks: "light" or "dark".
+// light or dark asks for; "contrast" in a contrast theme (in_contrast_theme).
 QString look();
 
 // Whether the window is drawn in Mocha's colours now (look() "mocha").
@@ -97,18 +95,8 @@ ChartColours chart_colours(std::optional<bool> dark = std::nullopt);
 ChartColours export_chart_colours(const std::string& palette, const std::string& background, const std::string& text);
 
 // widget->setStyleSheet(template) with {name}s filled in from this theme's
-// colours, done again by refresh() when the theme changes. {hint_style} is
-// a hint's font-style: italic in Classic, upright in VML Modern.
+// colours, done again by refresh() when the theme changes.
 void style(QWidget* widget, const QString& template_text);
-
-// style(), in VML Classic only: in Modern the widget has no sheet of its
-// own, and Modern's draws it (a role, say).
-void style_classic(QWidget* widget, const QString& template_text);
-
-// A TabPills' look in VML Classic, where the native look can make the
-// current tab hard to tell from the others: framed buttons, the current one
-// filled and underlined. VML Modern's sheet has its own pills.
-void style_pills(QWidget* pills);
 
 // A table cell's text colour; none for the table's own, which follows the
 // palette as the theme changes.
@@ -140,40 +128,29 @@ std::vector<std::pair<QString, QString>> theme_choices();
 // in Settings' light_look or dark_look.
 std::vector<std::pair<QString, QString>> look_choices(bool dark);
 
-// The window's interface (Settings > Window > Interface).
-//
-// Classic is the window as it has always been: the system's style
-// (windows11 on Windows, Fusion on macOS), its palette, no style sheet of
-// the app's own.
-//
-// VML Modern is Qt's Fusion style, which draws every control from the
-// palette and takes a style sheet as written, with the palette and one
-// application style sheet made from modern_colours: cards for group boxes,
-// a strip for a toolbar, and buttons by their role (set_role). Both follow
-// light and dark (refresh applies Modern's again). Modern takes the accent
-// chosen; Classic keeps the system's (apply_palette says why).
-enum class Interface { classic, modern };
-
-// Settings.interface's interface: "modern" is Modern, anything else Classic.
-Interface interface_of(const std::string& name);
+// The window's interface, VML Modern: Qt's Fusion style, which draws every
+// control from the palette and takes a style sheet as written, with the
+// palette and one application style sheet made from modern_colours: cards
+// for group boxes, a strip for a toolbar, and buttons by their role
+// (set_role). It follows light and dark (refresh applies it again) and the
+// accent chosen. (VML Classic, the system's own style, was retired in #249:
+// a setting saved as Classic opens in Modern.)
 
 // The accent colour: Settings.accent_colour ("#rrggbb"), or none for the
 // system's, as the palette has it.
 std::optional<QColor> accent_of(const std::string& colour);
 
-// Applies `ui` and, in Modern, `accent` (none: the system's) to the
-// application, at once: the style, the palette and the style sheet. Classic
-// is the window as it was before either existed; asked for while Modern is
-// shown, it is left for the next start (the system's style does not come
-// back whole once the app has set a palette).
-void apply_appearance(Interface ui, std::optional<QColor> accent);
+// Applies VML Modern with `accent` (none: the system's) to the
+// application, at once: the style, the palette and the style sheet.
+void apply_appearance(std::optional<QColor> accent);
 
-// The interface applied last (Classic until apply_appearance).
-Interface current_interface();
+// Whether apply_appearance has been called: before it (the tests that build
+// a widget alone), the application has the system's style.
+bool appearance_applied();
 
 // While one is alive, VML Modern's style sheet is not set on the
 // application (one set already is taken off); when the last goes, the sheet
-// of the interface and colours applied meanwhile is. Not for while a window
+// of the colours applied meanwhile is. Not for while a window
 // is shown, which would be drawn without it meanwhile.
 //
 // main holds it while the window is built. With the sheet set, Qt matched
@@ -196,38 +173,22 @@ public:
 // "tile" (a figure in a card, such as a saved score) or "toolbar" (a strip
 // of controls). On a tab bar, "segmented": its tabs a row of pills, the
 // current one in the accent (and its QTabWidget's too: no frame). On a
-// label, "notice": a note set apart, a tinted strip. Classic draws every
-// role alike.
+// label, "notice": a note set apart, a tinted strip.
 void set_role(QWidget* widget, const char* role);
 
-// A gap between a toolbar's groups of controls: in Classic `classic_gap`
-// pixels of nothing, as the layout had (none: not there at all); in VML
-// Modern a thin upright line of its border colour (the "separator" role).
-QFrame* separator(int classic_gap = 12);
+// A gap between a toolbar's groups of controls: a thin upright line of the
+// border colour (the "separator" role).
+QFrame* separator();
 
-// Layout that is VML Modern's alone, Classic staying as it has always been.
-//
-// A widget shown in one interface only (a card's title, a label one layout
-// has and the other has not): its visibility follows the interface applied.
-// Only for widgets nothing else shows or hides.
-void modern_only(QWidget* widget);
-void classic_only(QWidget* widget);
 // A widget shown only while a contrast theme is on (in_contrast_theme).
 void contrast_only(QWidget* widget);
-// A group box Classic frames, titled `title`, and Modern leaves unboxed and
-// untitled (role "unboxed"): the cards inside it are Modern's boxes.
-void classic_box(QGroupBox* box, const QString& title);
 
-// `widget`'s layout has `modern` margins in VML Modern and, in Classic, the
-// ones it has now (its style's), set again whenever the interface changes:
-// a layout given Modern's margins only when built keeps Classic's after a
-// switch to Modern while the app runs.
-void modern_margins(QWidget* widget, const QMargins& modern);
+// `widget`'s layout has `margins` (at 100 % text size), at the text size
+// now in use and again whenever it changes (text_scale).
+void modern_margins(QWidget* widget, const QMargins& margins);
 // A widget for a role (a "card", a "toolbar", a "footer", or "padding": room
-// alone) that groups controls in Modern: its layout's margins are Modern's
-// room inside the role, none in Classic, where the role is not drawn, so the
-// controls sit as they did; they follow the interface applied. Its layout
-// runs across (horizontal) or down.
+// alone) that groups controls: its layout's margins are the room inside
+// the role (modern_margins'). Its layout runs across (horizontal) or down.
 QWidget* container(const char* role, bool horizontal, QBoxLayout** layout = nullptr);
 
 // Black or white, whichever reads better on `colour` (text on an accent
@@ -295,8 +256,7 @@ std::optional<SystemColours> system_contrast();
 // While a contrast theme is on (as system_contrast found it when the window
 // was last styled), VML Modern draws in its colours alone: every name of
 // modern_colour, color and chart_colours is one of `system`'s, and
-// Settings' theme, looks and accent do not apply. Classic is the system's
-// anyway.
+// Settings' theme, looks and accent do not apply.
 bool in_contrast_theme();
 
 // The system colour Modern's colour `name` is drawn in, in a contrast

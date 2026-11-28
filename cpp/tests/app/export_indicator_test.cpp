@@ -81,9 +81,9 @@ TEST(ExportIndicator, ANoteSaysWhatAClickDidButNotOverAFailure) {
 TEST(ExportIndicator, KeptAndFailedNotesStayUntilClicked) {
     ExportIndicator indicator;
     indicator.show();
-    indicator.show_note("VML Classic shows when the app is next started.", ExportIndicator::Note::kept);
+    indicator.show_note("The new language shows when the app is next started.", ExportIndicator::Note::kept);
     indicator.show_note("Settings saved.");
-    EXPECT_EQ(indicator.text().toStdString(), "VML Classic shows when the app is next started.");
+    EXPECT_EQ(indicator.text().toStdString(), "The new language shows when the app is next started.");
     indicator.show_note("Could not write a.json", ExportIndicator::Note::failed, "the whole reason");
     EXPECT_TRUE(indicator.failed());
     EXPECT_TRUE(indicator.text().contains("Could not write a.json"));
@@ -100,10 +100,10 @@ TEST(ExportIndicator, KeptAndFailedNotesStayUntilClicked) {
     EXPECT_TRUE(indicator.text().contains("&#x2713;")) << indicator.text().toStdString();
     indicator.show_note("crf20.mkv is already in Metric Graphs.", ExportIndicator::Note::info);
     EXPECT_FALSE(indicator.text().contains("&#x2713;"));
-    indicator.show_note("VML Classic shows when the app is next started.", ExportIndicator::Note::kept);
+    indicator.show_note("The new language shows when the app is next started.", ExportIndicator::Note::kept);
     indicator.dismiss_note("another note");
     EXPECT_TRUE(indicator.isVisible());
-    indicator.dismiss_note("VML Classic shows when the app is next started.");
+    indicator.dismiss_note("The new language shows when the app is next started.");
     EXPECT_FALSE(indicator.isVisible());
 }
 

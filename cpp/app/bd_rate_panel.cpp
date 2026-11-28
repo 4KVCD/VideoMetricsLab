@@ -211,7 +211,7 @@ QGroupBox* BdRatePanel::build_side(Side& side, const QString& title) {
     connect(side.clear_button, &QPushButton::clicked, this, [this, &side] { on_clear(side); });
     buttons->addWidget(side.add_videos_button);
     buttons->addWidget(side.import_button);
-    buttons->addWidget(theme::separator(0));
+    buttons->addWidget(theme::separator());
     buttons->addWidget(side.clear_button);
     buttons->addStretch(1);
     layout->addLayout(buttons);
@@ -221,7 +221,7 @@ QGroupBox* BdRatePanel::build_side(Side& side, const QString& title) {
 
 // Group by, the warnings, Copy as markdown and Export.
 void BdRatePanel::add_options_row(QVBoxLayout* root) {
-    // A toolbar of its own in VML Modern; in Classic the row as it was.
+    // A toolbar of its own.
     QBoxLayout* row = nullptr;
     QWidget* bar = theme::container("toolbar", true, &row);
     bar->setObjectName("options_bar");
@@ -248,8 +248,7 @@ void BdRatePanel::add_options_row(QVBoxLayout* root) {
 // The heading and the table: a column per metric, a row per summary and
 // sequence.
 void BdRatePanel::add_results(QVBoxLayout* root) {
-    // The heading over its table, one card in VML Modern, the heading its
-    // title; in Classic as they were.
+    // The heading over its table, one card, the heading its title.
     QBoxLayout* layout = nullptr;
     QWidget* card = theme::container("card", false, &layout);
     card->setObjectName("results_card");
