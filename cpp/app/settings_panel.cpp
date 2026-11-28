@@ -105,8 +105,7 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
     connect(&file_writes_, &FileWrites::became_idle, this, [this] { on_file_writes_idle(); });
     auto* layout = new QVBoxLayout(this);
     // Shown while metrics are calculated (set_run_active).
-    // A padlock before it in Classic; in VML Modern a tinted strip (the
-    // notice role), its text alone (set_run_active).
+    // A tinted strip (the notice role), its text alone (set_run_active).
     run_lock_note = new QLabel;
     run_lock_note->setObjectName("runLockNote");
     theme::set_role(run_lock_note, "notice");
@@ -854,7 +853,7 @@ QGroupBox* SettingsPanel::build_defaults_box() {
     auto* defaults_layout = new QVBoxLayout(defaults_box);
     auto* hint = new QLabel(app::tr("These are only a starting point -- each video's own settings are "
                                     "edited in the Videos tab."));
-    theme::style(hint, "color: {muted}; font-style: {hint_style};");
+    theme::style(hint, "color: {muted};");
     defaults_layout->addWidget(hint);
     default_gpu = new QCheckBox(app::tr("Use GPU decoding"));
     default_gpu->setChecked(settings_.default_gpu_decode);
@@ -1258,7 +1257,7 @@ void SettingsPanel::pulse_delete_preview() {
     // muted line it is: each result of Delete... (what it deleted, or why
     // it deleted nothing) drawn to the eye once (the user, 2026-11-25),
     // without a window or a sound. The previews under it aren't.
-    // The look's text, both interfaces: the panel's, as the line's own style
+    // The look's text: the panel's, as the line's own style
     // sheet makes its palette the muted colour.
     const QColor from = palette().color(QPalette::WindowText);
     const QColor to = theme::color("muted");
@@ -1495,16 +1494,12 @@ void SettingsPanel::on_edited() {
         emit ffmpeg_folder_changed();  // after the save: the tools are looked for in the folder saved
     }
     // A change that shows only once the app starts again: the window offers
-    // to restart it now. Changed back (VML Modern picked again, the language
-    // the app started in), none is needed: said with an empty `what`, which
-    // takes the note away.
+    // to restart it now. Changed back (the language the app started in),
+    // none is needed: said with an empty `what`, which takes the note away.
     if (!error) {
         const bool language_later = settings_.language != started_language_;
-        const bool interface_later = theme::interface_of(settings_.interface_style) == theme::Interface::classic &&
-                                     theme::current_interface() == theme::Interface::modern;
-        const QString what = language_later  ? app::tr("The new language shows when the app is next started.")
-                             : interface_later ? app::tr("VML Classic shows when the app is next started.")
-                                               : QString();
+        const QString what =
+            language_later ? app::tr("The new language shows when the app is next started.") : QString();
         if (what != restart_said_) {
             restart_said_ = what;
             emit restart_needed(what);
@@ -1589,7 +1584,6 @@ void SettingsPanel::read_controls() {
     settings_.theme = theme_buttons->checkedButton()->property("value").toString().toStdString();
     settings_.light_look = light_look_buttons->checkedButton()->property("value").toString().toStdString();
     settings_.dark_look = dark_look_buttons->checkedButton()->property("value").toString().toStdString();
-    settings_.interface_style = interface_buttons->checkedId() == 1 ? "modern" : "classic";
     settings_.accent_colour = accent_value.toStdString();
     settings_.video_names = video_names->currentData().toString().toStdString();
     settings_.video_name_start = video_name_start->value();
@@ -1629,9 +1623,7 @@ void SettingsPanel::set_run_active(bool active) {
         const QString text = app::tr("Metrics are being calculated: the ffmpeg folder, the saved results' folder and "
                                      "deleting saved results are locked until the run ends, because the run uses "
                                      "them. Everything else can be changed now.");
-        run_lock_note->setText(theme::current_interface() == theme::Interface::modern
-                                   ? text
-                                   : QStringLiteral("\U0001F512 ") + text);
+        run_lock_note->setText(text);
     }
     run_lock_note->setVisible(active);
 }
@@ -1645,11 +1637,10 @@ void SettingsPanel::apply_global_changes(const Settings& before) {
             set_accent(QString());  // the accent box shows the one in use now (the look's, or the system's)
         }
     }
-    // VML Modern at once, its accent too; VML Classic, chosen while Modern
-    // is shown, at the next start (theme::apply_appearance; the status says so).
-    if ((settings_.interface_style != before.interface_style || settings_.accent_colour != before.accent_colour) &&
-        theme::interface_of(settings_.interface_style) == theme::Interface::modern) {
-        theme::apply_appearance(theme::Interface::modern, theme::accent_of(settings_.accent_colour));
+    // The accent at once, where the appearance is the app's (not a panel
+    // alone, in a test, where it would be every later test's style).
+    if (settings_.accent_colour != before.accent_colour && theme::appearance_applied()) {
+        theme::apply_appearance(theme::accent_of(settings_.accent_colour));
     }
 }
 

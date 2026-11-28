@@ -192,6 +192,7 @@ FrameView::FrameView(Zoom& zoom, QWidget* parent)
               }
           }) {
     setFocusPolicy(Qt::StrongFocus);
+    set_accessible_role(this, QAccessible::Graphic);  // the frame shown (its name: FrameComparePanel's)
     // The black screen's text: the message, and the tab's keys under it.
     screen_text_ = new QWidget(this);
     screen_text_->setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -426,8 +427,8 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
     auto* root = new QVBoxLayout(this);
 
     // The rows above the view, a toolbar of their own in VML Modern; the
-    // controls under it (playback, the timeline, the loop) a card. In
-    // Classic the rows as they were (theme::container).
+    // controls under it (playback, the timeline, the loop) a card
+    // (theme::container).
     QBoxLayout* top_layout = nullptr;
     QWidget* top_bar = theme::container("toolbar", false, &top_layout);
     add_video_row(top_layout);
@@ -480,12 +481,17 @@ void FrameComparePanel::add_video_row(QBoxLayout* root) {
                                    "is one pixel of the screen. Drag a zoomed frame to move it."));
     connect(zoom_combo, &QComboBox::activated, this, [this](int index) { on_zoom_chosen(index); });
     connect(zoom_combo->lineEdit(), &QLineEdit::editingFinished, this, [this] { on_zoom_typed(); });
-    top->addWidget(new QLabel(app::tr("Test video:")));
+    // Each box named by its label, to a screen reader (setBuddy).
+    auto* video_label = new QLabel(app::tr("Test video:"));
+    video_label->setBuddy(video_combo);
+    top->addWidget(video_label);
     top->addWidget(previous_video_button);
     top->addWidget(video_combo, 1);
     top->addWidget(next_video_button);
-    top->addWidget(theme::separator(12));
-    top->addWidget(new QLabel(app::tr("Zoom:")));
+    top->addWidget(theme::separator());
+    auto* zoom_label = new QLabel(app::tr("Zoom:"));
+    zoom_label->setBuddy(zoom_combo);
+    top->addWidget(zoom_label);
     top->addWidget(zoom_combo);
     root->addLayout(top);
 }
@@ -511,7 +517,9 @@ void FrameComparePanel::add_colour_row(QBoxLayout* root) {
     connect(color_mode_combo, &QComboBox::currentIndexChanged, this, [this](int index) { on_color_mode_changed(index); });
     color_status_label = new QLabel;
     theme::style(color_status_label, "color: {muted};");
-    color_row->addWidget(new QLabel(app::tr("HDR preview:")));
+    auto* color_mode_label = new QLabel(app::tr("HDR preview:"));
+    color_mode_label->setBuddy(color_mode_combo);
+    color_row->addWidget(color_mode_label);
     color_row->addWidget(color_mode_combo);
     source_resolution_combo = new QComboBox;
     source_resolution_combo->addItem(app::tr("Native resolution"), true);
@@ -526,7 +534,9 @@ void FrameComparePanel::add_colour_row(QBoxLayout* root) {
             load_current_video();
         }
     });
-    color_row->addWidget(new QLabel(app::tr("Reference playback:")));
+    auto* resolution_label = new QLabel(app::tr("Reference playback:"));
+    resolution_label->setBuddy(source_resolution_combo);
+    color_row->addWidget(resolution_label);
     color_row->addWidget(source_resolution_combo);
     // This row would set the window's minimum width: a drop-down is never
     // narrower than its longest choice by default, and in Spanish, with a
@@ -539,7 +549,7 @@ void FrameComparePanel::add_colour_row(QBoxLayout* root) {
         combo->view()->setMinimumWidth(full);
     }
     color_row->addWidget(color_status_label, 1);
-    color_row->addWidget(theme::separator(0));
+    color_row->addWidget(theme::separator());
     advanced_info_button = new QPushButton(app::tr("Advanced info"));
     advanced_info_button->setToolTip(app::tr("Playback's details: how each video is decoded and shown, and its "
                                              "sound. Selectable and copyable."));
@@ -588,6 +598,7 @@ void FrameComparePanel::add_view(QVBoxLayout* root) {
     root->addWidget(showing_label);
 
     viewer = new FrameView(zoom_);
+    viewer->setAccessibleName(app::tr("Frame shown"));
     content_stack_ = new QStackedWidget;
     content_stack_->addWidget(viewer);
     root->addWidget(content_stack_, 1);
@@ -627,16 +638,21 @@ void FrameComparePanel::add_seek_rows(QBoxLayout* root) {
     connect(next_frame_button, &QPushButton::clicked, this, [this] { set_frame(frame_ + 1); });
     seek->addWidget(play_button);
     seek->addWidget(audio_checkbox);
-    seek->addWidget(theme::separator(12));
+    seek->addWidget(theme::separator());
     seek->addWidget(previous_frame_button);
-    seek->addWidget(new QLabel(app::tr("Frame:")));
+    auto* frame_label = new QLabel(app::tr("Frame:"));
+    frame_label->setBuddy(frame_spin);
+    seek->addWidget(frame_label);
     seek->addWidget(frame_spin);
-    seek->addWidget(new QLabel(app::tr("Timestamp:")));
+    auto* timestamp_label = new QLabel(app::tr("Timestamp:"));
+    timestamp_label->setBuddy(timestamp_edit);
+    seek->addWidget(timestamp_label);
     seek->addWidget(timestamp_edit);
     seek->addWidget(next_frame_button);
     root->addLayout(seek);
 
     timeline = new BandSlider(Qt::Horizontal);
+    timeline->setAccessibleName(app::tr("Timeline"));
     timeline->setRange(0, 0);
     connect(timeline, &QSlider::valueChanged, this, [this](int value) { set_frame(value); });
     root->addWidget(timeline);

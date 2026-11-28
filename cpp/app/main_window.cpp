@@ -348,7 +348,10 @@ void MainWindow::changeEvent(QEvent* event) {
     // The palette change comes after the colour scheme's signal; the style
     // sheets resolve palette() from the palette, which the signal may have
     // come before.
-    if (event->type() == QEvent::PaletteChange || event->type() == QEvent::ApplicationPaletteChange) {
+    // A contrast theme turned on or off, or changed, is a ThemeChange alone
+    // while the app has a palette of its own (VML Modern's).
+    if (event->type() == QEvent::PaletteChange || event->type() == QEvent::ApplicationPaletteChange ||
+        event->type() == QEvent::ThemeChange) {
         theme_changed();
     }
     QMainWindow::changeEvent(event);
@@ -370,10 +373,12 @@ void MainWindow::apply_theme_colours() {
     const QPalette palette = QApplication::palette();
     const std::tuple<bool, unsigned, unsigned> applied{theme::is_dark(), palette.window().color().rgba(),
                                                        palette.highlight().color().rgba()};
-    if (theme_applied_ == applied) {
+    const std::optional<theme::SystemColours> contrast = theme::system_contrast();
+    if (theme_applied_ == applied && contrast_applied_ == contrast) {
         return;
     }
     theme_applied_ = applied;
+    contrast_applied_ = contrast;
     theme::refresh();
     make_title_buttons();  // VML Modern chosen in Settings: its buttons too
     if (title_buttons_ != nullptr) {
@@ -523,8 +528,8 @@ void MainWindow::offer_restart(const QString& what) {
         restart_note_.clear();
         return;
     }
-    // A setting that shows only once the app starts again (the language, VML
-    // Classic): offered at once in a question of the app's own, rather than
+    // A setting that shows only once the app starts again (the language):
+    // offered at once in a question of the app's own, rather than
     // a line at Settings' foot that went unnoticed. During a run, restarting
     // would stop it: the title bar says so instead, until clicked.
     if (run_active_) {
@@ -1063,9 +1068,7 @@ void MainWindow::make_title_buttons() {
     if (tabs_ == nullptr) {
         return;  // the window being built: made with its tabs
     }
-    const bool modern = theme::current_interface() == theme::Interface::modern;
     if (title_buttons_ != nullptr) {
-        title_buttons_->set_modern(modern);  // Modern chosen in Settings: its buttons too
         return;
     }
 #ifdef _WIN32
@@ -1074,16 +1077,15 @@ void MainWindow::make_title_buttons() {
     }
 #endif
     if (title_buttons_ == nullptr) {
-        // No bar of the app's own (VML Classic, another system, high
-        // contrast, or Modern chosen since the start): at the tab bar's
-        // right end, before the export indicator and Export, so that Export
-        // is last as it is under Modern's bar (build_tab_corner).
+        // No bar of the app's own (another system, or a contrast theme): at
+        // the tab bar's right end, before the export indicator and Export,
+        // so that Export is last as it is under the app's bar
+        // (build_tab_corner).
         title_buttons_ = new TitleButtons;
         static_cast<QBoxLayout*>(tab_corner_->layout())->insertWidget(0, title_buttons_);
         tab_corner_->layout()->setAlignment(title_buttons_, Qt::AlignBottom);  // as the corner alone: on the tab pane
         title_buttons_->show();
     }
-    title_buttons_->set_modern(modern);
     show_theme_in_title();
     show_progress_badge();
     connect(title_buttons_, &TitleButtons::progress_clicked, this, [this] { tabs_->setCurrentIndex(0); });
@@ -1119,12 +1121,10 @@ void MainWindow::showEvent(QShowEvent* event) {
 }
 
 QWidget* MainWindow::build_files_panel() {
-    // Classic: one box, framed and titled. VML Modern: no box, a card for
-    // the reference and one for the test videos, the table's buttons a
-    // footer along its bottom (theme::classic_box, theme::container: Classic
-    // lays out as it did).
+    // No box of its own: a card for the reference and one for the test
+    // videos, the table's buttons a footer along its bottom.
     files_box_ = new QGroupBox;
-    theme::classic_box(files_box_, app::tr("Videos"));
+    theme::set_role(files_box_, "unboxed");
     auto* files_layout = new QVBoxLayout(files_box_);
 
     QBoxLayout* reference_layout = nullptr;
@@ -1137,15 +1137,13 @@ QWidget* MainWindow::build_files_panel() {
     tests_layout->setContentsMargins(0, 0, 0, 0);
     QBoxLayout* table_area = nullptr;
     tests_layout->addWidget(theme::container("padding", false, &table_area), 1);
-    // One block, heading row and table, with no spacing between them in
-    // Classic, where the metric picker sits on the table's corner. VML
-    // Modern's taller button would touch the table's header there: a gap.
+    // One block, heading row and table, with a gap between them: the
+    // metric picker's button would touch the table's header.
     auto* table_block = new QVBoxLayout;
     table_block->setSpacing(0);
     table_block->addLayout(build_table_heading());
     auto* heading_gap = new QWidget;
-    heading_gap->setFixedHeight(8);
-    theme::modern_only(heading_gap);
+    heading_gap->setFixedHeight(theme::scaled(8));
     table_block->addWidget(heading_gap);
     build_test_table();
     table_block->addWidget(distorted_table_, 1);
@@ -1168,19 +1166,16 @@ QWidget* MainWindow::build_files_panel() {
 
 // The reference's row: its path, Browse..., and what it is.
 void MainWindow::add_reference_row(QBoxLayout* layout) {
-    auto* classic_label = new QLabel(app::tr("Reference video:"));
-    theme::classic_only(classic_label);
-    layout->addWidget(classic_label);
     auto* source_row = new QHBoxLayout;
     auto* title = new QLabel(app::tr("Reference"));
     theme::set_role(title, "title");
     title->setContentsMargins(0, 0, 10, 0);
-    theme::modern_only(title);
     source_row->addWidget(title);
     // A path can be pasted or typed in (Enter, or leaving the box, reads it),
     // and a file dropped on it from a file manager.
     source_edit_ = new QLineEdit;
     source_edit_->setPlaceholderText(app::tr("Drop a video here, paste its path, or click Browse"));
+    source_edit_->setAccessibleName(app::tr("Reference"));
     connect(source_edit_, &QLineEdit::editingFinished, this, [this] { on_source_path_entered(); });
     source_edit_->installEventFilter(this);
     source_browse_button_ = new QPushButton(app::tr("Browse"));
@@ -1208,10 +1203,9 @@ QHBoxLayout* MainWindow::build_table_heading() {
                            metrics_button_->mapToGlobal(metrics_button_->rect().bottomRight()), metrics_button_);
     });
     auto* table_heading = new QHBoxLayout;
-    auto* title = new QLabel(app::tr("Test videos"));  // VML Modern's: the card's title
+    auto* title = new QLabel(app::tr("Test videos"));  // the card's title
     theme::set_role(title, "title");
-    title->setContentsMargins(0, 0, 10, 0);  // its gap to the hint, gone with it in Classic
-    theme::modern_only(title);
+    title->setContentsMargins(0, 0, 10, 0);  // its gap to the hint
     table_heading->addWidget(title, 0, Qt::AlignBottom);
     auto* table_hint = new QLabel(
         app::tr("Test videos to compare against the reference. Check rows to calculate; select rows to edit their "
@@ -1252,6 +1246,7 @@ void MainWindow::build_test_table() {
         other_columns.push_back(item.column);
     }
     distorted_table_ = new FillColumnTable(0, column_count, col_path, other_columns);
+    distorted_table_->setAccessibleName(app::tr("Test videos"));
     distorted_table_->keep_a_row_selected();  // the Options panel always has a row to show
     // Seeded from the same defaults a new row gets, so the headers agree with
     // the Settings tab.
@@ -1535,7 +1530,7 @@ std::vector<QWidget*> MainWindow::add_file_buttons(QBoxLayout* buttons) {
     buttons->addWidget(add_button);
     buttons->addWidget(add_resample_button);
     buttons->addWidget(load_button_);
-    buttons->addWidget(theme::separator(0));  // adding | removing (Modern's line)
+    buttons->addWidget(theme::separator());  // adding | removing (Modern's line)
     buttons->addWidget(remove_button);
     buttons->addWidget(remove_all_button_);
     buttons->addWidget(start_over_button_);

@@ -191,7 +191,7 @@ AppDialog* make_message(QWidget* parent, const Message& message, MessageAnswer& 
     auto* text = new QLabel(message.text);
     text->setObjectName("messageText");
     text->setWordWrap(true);
-    text->setMinimumWidth(420);
+    text->setMinimumWidth(theme::scaled(420));
     text->setMaximumWidth(560);
     text->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::LinksAccessibleByMouse);
     text->setOpenExternalLinks(true);
@@ -215,7 +215,7 @@ AppDialog* make_message(QWidget* parent, const Message& message, MessageAnswer& 
         // Shown on asking, above the buttons, as QMessageBox's details were.
         auto* details = new QPlainTextEdit(message.details);
         details->setReadOnly(true);
-        details->setFixedHeight(180);
+        details->setFixedHeight(theme::scaled(180));
         details->setVisible(false);
         layout->addWidget(details);
         auto* toggle = new QPushButton(app::tr("Show details"));
@@ -326,7 +326,7 @@ std::optional<QString> ask_line(QWidget* parent, const QString& title, const QSt
     layout->setContentsMargins(20, 18, 20, 16);
     layout->addWidget(new QLabel(label));
     auto* entry = new QLineEdit(text);
-    entry->setMinimumWidth(300);
+    entry->setMinimumWidth(theme::scaled(300));
     entry->selectAll();
     layout->addWidget(entry);
     add_dialog_buttons(dialog, layout);
@@ -340,7 +340,7 @@ ProgressDialog::ProgressDialog(QWidget* parent, const QString& title, const QStr
     auto* layout = new QVBoxLayout(body());
     layout->setContentsMargins(20, 18, 20, 16);
     label_ = new QLabel(label);
-    label_->setMinimumWidth(360);
+    label_->setMinimumWidth(theme::scaled(360));
     label_->setWordWrap(true);
     layout->addWidget(label_);
     bar_ = new QProgressBar;

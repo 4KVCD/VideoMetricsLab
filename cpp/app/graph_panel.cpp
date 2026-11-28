@@ -376,7 +376,7 @@ MetricPage::MetricPage(const MetricDefinition& metric, QWidget* parent)
                                         "header before running to see it here.",
                                         {{"label", qt_text(metric.label)}}));
     no_data_label_->setAlignment(Qt::AlignCenter);
-    theme::style(no_data_label_, "color: {faint}; font-style: {hint_style}; padding: 12px;");
+    theme::style(no_data_label_, "color: {faint}; padding: 12px;");
     no_data_label_->setVisible(false);
     layout->addWidget(no_data_label_);
 
@@ -1415,6 +1415,7 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     hint_row->addWidget(stats_save_, 0, Qt::AlignTop);
     top_layout->addLayout(hint_row);
     stats_table_ = new QTableWidget;
+    stats_table_->setAccessibleName(app::tr("Series and statistics"));
     auto* swatches = new ColorSwatchDelegate(stats_table_);
     connect(swatches, &ColorSwatchDelegate::clicked, this, [this](int row) { choose_video_color(row); });
     stats_table_->setItemDelegateForColumn(0, swatches);
@@ -1450,9 +1451,9 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     tabs_->addTab(build_page(first), qt_text(first.label));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
     metric_pills_ = new TabPills(tabs_->tabBar());
-    theme::style_pills(metric_pills_);
-    // VML Modern: the metrics' pills, the chart and its readout one card,
-    // as the stats are; Classic: the tabs as they were (theme::container).
+    metric_pills_->setAccessibleName(app::tr("Metrics"));
+    // The metrics' pills, the chart and its readout one card, as the stats
+    // are (theme::container).
     QBoxLayout* graph_layout = nullptr;
     QWidget* graph_card = theme::container("card", false, &graph_layout);
     graph_card->setObjectName("graphCard");
@@ -1642,9 +1643,9 @@ QWidget* GraphPanel::build_action_bar() {
     restore_button_->setEnabled(false);
     connect(restore_button_, &QPushButton::clicked, this, [this] { emit restore_removed_requested(); });
     layout->addWidget(restore_button_);
-    layout->addWidget(theme::separator(16));
+    layout->addWidget(theme::separator());
     layout->addWidget(frame_controls_);  // made in the constructor
-    layout->addWidget(theme::separator(16));
+    layout->addWidget(theme::separator());
     // Usable once a page shows two lines (refresh_page_controls).
     difference_box_ = new QCheckBox(app::tr("Difference"));
     difference_box_->setEnabled(false);

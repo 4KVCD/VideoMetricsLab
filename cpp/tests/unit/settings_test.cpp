@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <functional>
 #include <map>
 #include <string>
@@ -66,7 +67,6 @@ const std::map<std::string, std::function<Json(const Settings&)>>& settings_by_k
         {"skipped_update_version", [](const Settings& s) { return Json(s.skipped_update_version); }},
         {"language", [](const Settings& s) { return Json(s.language); }},
         {"theme", [](const Settings& s) { return Json(s.theme); }},
-        {"interface", [](const Settings& s) { return Json(s.interface_style); }},
         {"accent_colour", [](const Settings& s) { return Json(s.accent_colour); }},
         {"light_look", [](const Settings& s) { return Json(s.light_look); }},
         {"dark_look", [](const Settings& s) { return Json(s.dark_look); }},
@@ -179,8 +179,6 @@ TEST(Settings, ExportsCarryOverTheOldAfterRunChoices) {
     EXPECT_NE(saved.find("\"export_formats\": [\n    \"csv\"\n  ]"), std::string::npos);
 }
 
-// VML Modern is the default interface, for a settings file from before
-// there was a choice too; one that picked VML Classic keeps it.
 // CAMBI, CIEDE2000 and MS-SSIM went where VMAF went before they had their own
 // setting: one saved without them takes VMAF's.
 TEST(Settings, MetricRoutesSavedBeforeTheirSettingFollowVmaf) {
@@ -197,15 +195,19 @@ TEST(Settings, MetricRoutesSavedBeforeTheirSettingFollowVmaf) {
     EXPECT_FALSE(cpu.default_ms_ssim_on_gpu);
 }
 
-TEST(Settings, ModernIsTheDefaultInterface) {
+// A settings file from when VML Classic could be chosen loads as any other
+// (the window is VML Modern, #249), and its "interface" goes at the next
+// save: nothing to migrate.
+TEST(Settings, ASavedInterfaceIsLeftBehind) {
     const test::Folder folder;
-    const auto load = [&folder](const std::string& text) {
-        std::ofstream(folder / "settings.json", std::ios::binary) << text;
-        return Settings::load_from(folder / "settings.json");
-    };
-    EXPECT_EQ(Settings{}.interface_style, "modern");
-    EXPECT_EQ(load(R"({"theme": "dark"})").interface_style, "modern");
-    EXPECT_EQ(load(R"({"interface": "classic"})").interface_style, "classic");
+    std::ofstream(folder / "settings.json", std::ios::binary) << R"({"interface": "classic", "theme": "dark"})";
+    const Settings settings = Settings::load_from(folder / "settings.json");
+    EXPECT_EQ(settings.theme, "dark");
+    ASSERT_EQ(settings.save_to(folder / "saved.json"), std::nullopt);
+    std::ifstream saved_file(folder / "saved.json", std::ios::binary);
+    const std::string saved((std::istreambuf_iterator<char>(saved_file)), std::istreambuf_iterator<char>());
+    EXPECT_EQ(saved.find("\"interface\""), std::string::npos);
+    EXPECT_NE(saved.find("\"theme\": \"dark\""), std::string::npos);
 }
 
 // Mocha, a theme before there were looks, is Dark in Mocha's look; the

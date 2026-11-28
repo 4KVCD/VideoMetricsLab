@@ -28,8 +28,8 @@ public:
         QWidget* widget;  // the dialog's parent, and this object's
         Settings& settings;  // check_for_updates, skipped_update_version
         std::function<void()> save_settings;
-        // The title buttons, or nullptr (VML Classic): asked at each use, as
-        // they can be made after the window.
+        // The title buttons, or nullptr: asked at each use, as they can be
+        // made after the window.
         std::function<TitleButtons*()> badge;
         std::function<std::filesystem::path()> cache_folder;  // named in the dialog
     };

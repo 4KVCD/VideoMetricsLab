@@ -5,8 +5,7 @@
 // Videos tab), the theme (a menu of the themes), and an update's badge
 // (shown only when one is available; a click shows it). In VML Modern, on
 // Windows they sit in the title bar; elsewhere, and on Windows where the
-// title bar stays the system's, at the right end of the tab bar. VML Classic
-// has the progress button alone, at the tab bar's right end.
+// title bar stays the system's, at the right end of the tab bar.
 //
 // TitleBar (Windows) is the window's title bar drawn by the app, in the
 // theme's colours: the icon, the title, the TitleButtons and the minimize,
@@ -58,8 +57,6 @@ public:
         Tone tone = Tone::normal;
     };
     void set_progress(const Progress& progress);
-    // VML Modern: every button. VML Classic: the progress button alone.
-    void set_modern(bool modern);
     // An update's version on its badge; empty: none, the badge hidden.
     void set_update(const QString& version);
     // The theme ticked in the theme menu ("", "light" or "dark"), and the
@@ -81,7 +78,13 @@ signals:
     // The theme menu is about to open: set_theme, with the theme saved now.
     void theme_menu_opening();
 
+protected:
+    void changeEvent(QEvent* event) override;
+
 private:
+    // The theme button's glyph at the text's size (theme::text_scale).
+    void size_glyphs();
+
     QToolButton* progress_ = nullptr;
     QProgressBar* progress_bar_ = nullptr;
     QToolButton* theme_ = nullptr;
@@ -92,7 +95,6 @@ private:
     QToolButton* update_ = nullptr;
     QString update_version_;
     QString theme_value_;
-    bool modern_ = true;
 };
 
 #ifdef _WIN32

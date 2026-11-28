@@ -23,6 +23,8 @@
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPointer>
+#include <QAccessibleWidget>
 #include <QPainterPath>
 #include <QPaintEvent>
 #include <QPixmap>
@@ -48,6 +50,7 @@
 #include <utility>
 
 #include "i18n.h"
+#include "theme.h"
 
 namespace vml::app {
 
@@ -1251,6 +1254,7 @@ public:
 
 TabPills::TabPills(QTabBar* bar, QWidget* parent) : QWidget(parent), bar_(bar) {
     setFocusPolicy(Qt::TabFocus);
+    set_accessible_role(this, QAccessible::PageTabList);  // its pills are its tabs
     QSizePolicy policy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     policy.setHeightForWidth(true);
     setSizePolicy(policy);
@@ -1577,8 +1581,8 @@ void RemoveMarkDelegate::paint(QPainter* painter, const QStyleOptionViewItem& op
     // sent), so its hover is drawn then too; a locked remove mark's isn't.
     const bool hovered = (!disabled || shape_ == Shape::send) && (option.state & QStyle::State_MouseOver) != 0;
     // The text's colour on a selected row too, as the row's own text is
-    // drawn in both interfaces (Windows' style keeps it on its light
-    // selection; HighlightedText was dark there in Classic's dark theme).
+    // drawn on the selection too (HighlightedText can be dark on a light
+    // selection).
     // Dimmed: a third of it, as the palette's disabled text is close to the
     // text in some looks (VML Modern's).
     QColor colour = option.palette.color(QPalette::Active, QPalette::Text);
@@ -1586,7 +1590,10 @@ void RemoveMarkDelegate::paint(QPainter* painter, const QStyleOptionViewItem& op
         colour.setAlphaF(0.35F);
     }
     QPen pen(colour);
-    pen.setWidthF(hovered ? 2.2 : 1.2);
+    // At the text's size (theme::text_scale), as the row's text is.
+    const double scale = theme::text_scale();
+    const int side = theme::scaled(mark);
+    pen.setWidthF((hovered ? 2.2 : 1.2) * scale);
     pen.setCapStyle(Qt::RoundCap);
     pen.setJoinStyle(Qt::RoundJoin);
     QColor tint = colour;
@@ -1595,28 +1602,28 @@ void RemoveMarkDelegate::paint(QPainter* painter, const QStyleOptionViewItem& op
     painter->setRenderHint(QPainter::Antialiasing);
     painter->setPen(pen);
     painter->setBrush(hovered ? QBrush(tint) : Qt::NoBrush);
-    const QRectF square(QPointF(0, 0), QSizeF(mark - 1, mark - 1));
+    const QRectF square(QPointF(0, 0), QSizeF(side - 1, side - 1));
     const QRectF placed = square.translated(QRectF(option.rect).center() - square.center());
     if (shape_ == Shape::remove) {
         painter->drawEllipse(placed);
-        const double arm = (mark - 1) * 0.2;
+        const double arm = (side - 1) * 0.2;
         const QPointF centre = placed.center();
         painter->drawLine(centre + QPointF(-arm, -arm), centre + QPointF(arm, arm));
         painter->drawLine(centre + QPointF(-arm, arm), centre + QPointF(arm, -arm));
     } else {
         // A box open on its right, an arrow leaving it there.
         const double left = placed.left();
-        const double top = placed.top() + 1.5;
-        const double bottom = placed.bottom() - 1.5;
+        const double top = placed.top() + 1.5 * scale;
+        const double bottom = placed.bottom() - 1.5 * scale;
         const double right = placed.left() + placed.width() * 0.62;
         const double middle = placed.center().y();
         QPainterPath box;
-        box.moveTo(right, middle - 2.6);
+        box.moveTo(right, middle - 2.6 * scale);
         box.lineTo(right, top);
         box.lineTo(left, top);
         box.lineTo(left, bottom);
         box.lineTo(right, bottom);
-        box.lineTo(right, middle + 2.6);
+        box.lineTo(right, middle + 2.6 * scale);
         if (hovered) {
             painter->fillRect(QRectF(QPointF(left, top), QPointF(right, bottom)), tint);
         }
@@ -1640,7 +1647,8 @@ QSize RemoveMarkDelegate::sizeHint(const QStyleOptionViewItem& option, const QMo
     // "✕" (Segoe UI has no such letter) sent Qt through the PC's fonts for
     // one, a quarter of a second the first time and some 20 MB. A line of
     // the cell's font is as tall as the text was.
-    return {mark + 12, std::max(mark + 6, option.fontMetrics.height())};
+    const int side = theme::scaled(mark);
+    return {side + theme::scaled(12), std::max(side + theme::scaled(6), option.fontMetrics.height())};
 }
 
 bool RemoveMarkDelegate::helpEvent(QHelpEvent* event, QAbstractItemView* view, const QStyleOptionViewItem& option,
@@ -1650,6 +1658,46 @@ bool RemoveMarkDelegate::helpEvent(QHelpEvent* event, QAbstractItemView* view, c
     }
     QToolTip::showText(event->globalPos(), tooltip(index), view->viewport(), option.rect);
     return true;
+}
+
+namespace {
+// RemoveMarkDelegate::new_item's: its accessible text the delegate's tooltip.
+class MarkItem : public QTableWidgetItem {
+public:
+    explicit MarkItem(const RemoveMarkDelegate* marks) : marks_(marks) { setFlags(Qt::ItemIsEnabled); }
+
+    QVariant data(int role) const override {
+        if (role == Qt::AccessibleTextRole && !marks_.isNull() && marks_->tooltip && tableWidget() != nullptr) {
+            return marks_->tooltip(tableWidget()->indexFromItem(this));
+        }
+        return QTableWidgetItem::data(role);
+    }
+
+private:
+    QPointer<const RemoveMarkDelegate> marks_;
+};
+}  // namespace
+
+QTableWidgetItem* RemoveMarkDelegate::new_item() const { return new MarkItem(this); }
+
+namespace {
+// set_accessible_role's widgets read as their role; Qt's own reading for
+// every other.
+QAccessibleInterface* role_factory(const QString& /*class_name*/, QObject* object) {
+    auto* widget = qobject_cast<QWidget*>(object);
+    const QVariant role = widget != nullptr ? widget->property("vmlAccessibleRole") : QVariant();
+    return role.isValid() ? new QAccessibleWidget(widget, static_cast<QAccessible::Role>(role.toInt())) : nullptr;
+}
+}  // namespace
+
+void set_accessible_role(QWidget* widget, QAccessible::Role role) {
+    // Installed once, after the application's own factories: read first.
+    static const bool installed = [] {
+        QAccessible::installFactory(role_factory);
+        return true;
+    }();
+    (void)installed;
+    widget->setProperty("vmlAccessibleRole", static_cast<int>(role));
 }
 
 QFont symbol_font(const QFont& font) {

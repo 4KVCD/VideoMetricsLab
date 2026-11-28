@@ -318,7 +318,7 @@ QWidget* WorstFramesTab::build_toolbar() {
     metric_bar_ = new WatchedTabBar(bar);
     metric_bar_->hide();
     metric_pills_ = new TabPills(metric_bar_);
-    theme::style_pills(metric_pills_);
+    metric_pills_->setAccessibleName(app::tr("Metrics"));
     connect(metric_bar_, &QTabBar::currentChanged, this, [this](int index) {
         if (!building_ && index >= 0) {
             choose_metric(metric_bar_->tabData(index).toString().toStdString());

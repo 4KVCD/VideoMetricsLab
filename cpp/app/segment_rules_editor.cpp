@@ -75,12 +75,12 @@ SegmentRulesEditor::SegmentRulesEditor(std::vector<std::string> keys, bool at_le
     form->addRow(app::tr("Weak where:"), combine_combo_);
     min_frames_spin_ = new QSpinBox;
     min_frames_spin_->setRange(1, 1'000'000);
-    min_frames_spin_->setMinimumWidth(120);
+    min_frames_spin_->setMinimumWidth(theme::scaled(120));
     connect(min_frames_spin_, &QSpinBox::valueChanged, this, [this] { edited(); });
     form->addRow(app::tr("Shortest segment (frames):"), min_frames_spin_);
     merge_frames_spin_ = new QSpinBox;
     merge_frames_spin_->setRange(0, 1'000'000);
-    merge_frames_spin_->setMinimumWidth(120);
+    merge_frames_spin_->setMinimumWidth(theme::scaled(120));
     connect(merge_frames_spin_, &QSpinBox::valueChanged, this, [this] { edited(); });
     form->addRow(app::tr("Join segments up to this many frames apart:"), merge_frames_spin_);
     layout->addLayout(form);

@@ -123,7 +123,7 @@ QIcon export_icon(QWidget* button);
 // tooltip is `describe`'s. Looked at again as the pointer comes to it, and on
 // refresh(). A push button, so that VML Modern's style sheet draws it as every
 // other button (its "icon" role: narrower padding, a gap from the button
-// beside it); in Classic its own small square.
+// beside it).
 class SaveButton : public QPushButton {
     Q_OBJECT
 

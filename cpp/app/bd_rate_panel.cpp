@@ -111,7 +111,7 @@ std::vector<int> choose_from_list(QWidget* parent, const QStringList& items) {
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
         item->setCheckState(Qt::Unchecked);
     }
-    list->setMinimumWidth(560);
+    list->setMinimumWidth(theme::scaled(560));
     layout->addWidget(list);
     add_dialog_buttons(dialog, layout);
     std::vector<int> chosen;
@@ -211,7 +211,7 @@ QGroupBox* BdRatePanel::build_side(Side& side, const QString& title) {
     connect(side.clear_button, &QPushButton::clicked, this, [this, &side] { on_clear(side); });
     buttons->addWidget(side.add_videos_button);
     buttons->addWidget(side.import_button);
-    buttons->addWidget(theme::separator(0));
+    buttons->addWidget(theme::separator());
     buttons->addWidget(side.clear_button);
     buttons->addStretch(1);
     layout->addLayout(buttons);
@@ -221,12 +221,14 @@ QGroupBox* BdRatePanel::build_side(Side& side, const QString& title) {
 
 // Group by, the warnings, Copy as markdown and Export.
 void BdRatePanel::add_options_row(QVBoxLayout* root) {
-    // A toolbar of its own in VML Modern; in Classic the row as it was.
+    // A toolbar of its own.
     QBoxLayout* row = nullptr;
     QWidget* bar = theme::container("toolbar", true, &row);
     bar->setObjectName("options_bar");
-    row->addWidget(new QLabel(app::tr("Group by:")));
+    auto* group_label = new QLabel(app::tr("Group by:"));
+    row->addWidget(group_label);
     group_combo = new QComboBox;
+    group_label->setBuddy(group_combo);  // its name, to a screen reader
     group_combo->setToolTip(app::tr("A mean and median for each value of this column of the anchor's CSV files."));
     connect(group_combo, &QComboBox::currentIndexChanged, this, [this] { recalculate(); });
     row->addWidget(group_combo);
@@ -246,8 +248,7 @@ void BdRatePanel::add_options_row(QVBoxLayout* root) {
 // The heading and the table: a column per metric, a row per summary and
 // sequence.
 void BdRatePanel::add_results(QVBoxLayout* root) {
-    // The heading over its table, one card in VML Modern, the heading its
-    // title; in Classic as they were.
+    // The heading over its table, one card, the heading its title.
     QBoxLayout* layout = nullptr;
     QWidget* card = theme::container("card", false, &layout);
     card->setObjectName("results_card");
@@ -272,6 +273,7 @@ void BdRatePanel::add_results(QVBoxLayout* root) {
     head->addWidget(table_save, 0, Qt::AlignTop);
     layout->addLayout(head);
     results = new QTableWidget(0, 1 + static_cast<int>(metrics().size()));
+    results->setAccessibleName(app::tr("Results"));
     // A right-click: the save icon's Save as... items.
     results->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(results, &QWidget::customContextMenuRequested, this, [this](const QPoint& at) {
@@ -309,6 +311,7 @@ void BdRatePanel::add_chart(QVBoxLayout* root) {
     sequence_label->setFont(bold);
     row->addWidget(sequence_label);
     metric_combo = new QComboBox;
+    metric_combo->setAccessibleName(app::tr("Metric"));
     fill_metric_combo();
     connect(metric_combo, &QComboBox::currentIndexChanged, this, [this] { refresh_chart(); });
     row->addWidget(metric_combo);
@@ -330,7 +333,7 @@ void BdRatePanel::add_chart(QVBoxLayout* root) {
             menu.exec(chart->mapToGlobal(at));
         }
     });
-    chart->setMinimumHeight(300);
+    chart->setMinimumHeight(theme::scaled(300));
     layout->addWidget(chart);
     root->addWidget(card);
 }

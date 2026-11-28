@@ -43,9 +43,8 @@ A fixed step between "tests pass" and "commit".
   threads; translations.
 - The real path: run the change in the real app or with real FFmpeg and a real
   video on this PC's GPU, not only the unit tests.
-- The window: a change to it is looked at in VML Classic and VML Modern,
-  light and dark, and a new control has its role where one fits
-  (`docs/ARCHITECTURE.md`, "The window's interfaces").
+- The window: a change to it is looked at in light and dark, and a new control has its role where one fits
+  (`docs/ARCHITECTURE.md`, "The window's interface").
 - Performance: nothing done needlessly often (per frame, per progress tick),
   repeated, or quadratic. It does not have to be maximally fast, just not
   needlessly slow.

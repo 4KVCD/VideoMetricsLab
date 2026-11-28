@@ -1,8 +1,8 @@
 // The Saved results tab: the comparisons saved in the results cache
 // (saved_results.h), listed, opened in Metric Graphs, exported (results,
 // per-frame scores, graphs, weak segments) and deleted. The selected
-// comparison's scores are in a column on the table's left, a card each (a
-// row each in VML Classic), and every detail of them in a panel its ⓘ
+// comparison's scores are in a column on the table's left, a card each,
+// and every detail of them in a panel its ⓘ
 // button opens (SavedScoresPanel). Where a metric has several saved scores,
 // the newest usable one is used unless another is picked. The table's
 // columns are resized by dragging and hidden from the header's right-click
@@ -173,10 +173,6 @@ public:
     // Settings > Saved Results changed how the scores are shown (a card for
     // the score used, or for each): shown again.
     void scores_settings_changed();
-    // The Saved scores box as tiles (VML Modern's) or rows (Classic's), not
-    // as the interface in use has it; shown again. For tests, which run in
-    // Classic.
-    void set_tiles(bool tiles);
     // The score read for `file` (details_read_), or nothing where it could
     // not be read.
     const SavedScore* read_score(const std::filesystem::path& file) const;
@@ -239,12 +235,8 @@ private:
                        const QString& badge, const QString& badge_tip) const;
     // The badge saying how many of a metric's scores are saved.
     static QLabel* saved_badge(const std::string& key, const QString& text, const QString& tip);
-    // Whether the Saved scores box shows tiles: VML Modern's, unless a test
-    // asked (set_tiles).
-    bool showing_tiles() const;
-    // The selected comparison's scores, as cards (VML Modern's) or rows
-    // (Classic's): one for each metric's score used, or for each score
-    // (Settings::saved_score_versions).
+    // The selected comparison's scores, as cards: one for each metric's
+    // score used, or for each score (Settings::saved_score_versions).
     void show_scores(const SavedComparison& saved);
     // How a saved score was made, as its file records it: CPU or GPU, the
     // implementation and its version, the model or CVVDP's display.
@@ -314,7 +306,6 @@ private:
     QScrollArea* details_scroll_ = nullptr;  // the column's cards or rows, scrolled
     QToolButton* details_button_ = nullptr;
     ElidedLabel* details_name_ = nullptr;  // the comparison whose scores are shown
-    std::optional<bool> tiles_;  // set_tiles' choice; none: the interface's
     QString rules_choice_ = QStringLiteral("in-use");
     QPushButton* open_button_ = nullptr;
     QPushButton* delete_button_ = nullptr;

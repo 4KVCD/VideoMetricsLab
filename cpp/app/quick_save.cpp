@@ -238,9 +238,9 @@ QString SaveButton::summary() const {
 }
 
 QSize SaveButton::sizeHint() const {
-    // VML Modern: as its style sheet makes it (the "icon" role); Classic: a
-    // small square, not a push button's usual width.
-    if (theme::current_interface() == theme::Interface::modern) {
+    // As the style sheet makes it (the "icon" role); before the sheet is set
+    // (a panel alone, in a test), a small square, not a push button's width.
+    if (theme::appearance_applied()) {
         return QPushButton::sizeHint();
     }
     return {28, 26};

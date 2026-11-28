@@ -118,7 +118,7 @@ protected:
         painter.drawText(pill, Qt::AlignCenter, text());
     }
     QSize sizeHint() const override {
-        return QSize(fontMetrics().horizontalAdvance(text()) + 24, 30);
+        return QSize(fontMetrics().horizontalAdvance(text()) + 24, theme::scaled(30));
     }
 };
 
@@ -153,9 +153,7 @@ TitleButtons::TitleButtons(QWidget* parent) : QWidget(parent) {
     if (glyph_font().isEmpty()) {
         theme_->setText(QStringLiteral("\u25D0"));  // a circle half dark
     } else {
-        QFont font(glyph_font());
-        font.setPixelSize(14);
-        theme_->setFont(font);
+        size_glyphs();
         theme_->setText(QStringLiteral("\uE790"));  // Color
     }
     // No arrow: the button is its glyph alone.
@@ -196,6 +194,24 @@ TitleButtons::TitleButtons(QWidget* parent) : QWidget(parent) {
     row->addWidget(theme_);
 }
 
+void TitleButtons::size_glyphs() {
+    if (!glyph_font().isEmpty()) {
+        QFont font(glyph_font());
+        font.setPixelSize(theme::scaled(14));
+        theme_->setFont(font);
+    }
+}
+
+void TitleButtons::changeEvent(QEvent* event) {
+    if (event->type() == QEvent::FontChange) {  // a new text size: the glyph's too
+        size_glyphs();
+        for (QWidget* button : findChildren<QToolButton*>()) {
+            button->updateGeometry();
+        }
+    }
+    QWidget::changeEvent(event);
+}
+
 void TitleButtons::set_progress(const Progress& progress) {
     auto* button = static_cast<ProgressButton*>(progress_);
     if (progress_->text() != progress.text) {
@@ -222,18 +238,9 @@ void TitleButtons::set_progress(const Progress& progress) {
     }
 }
 
-void TitleButtons::set_modern(bool modern) {
-    modern_ = modern;
-    // Classic's tab bar draws its tabs to its edges: a little room at its
-    // right end and above the pane's frame.
-    layout()->setContentsMargins(0, 0, modern ? 0 : 6, modern ? 0 : 3);
-    theme_->setVisible(modern);
-    update_->setVisible(modern && !update_version_.isEmpty());
-}
-
 void TitleButtons::set_update(const QString& version) {
     update_version_ = version;
-    update_->setVisible(modern_ && !version.isEmpty());
+    update_->setVisible(!version.isEmpty());
     if (version.isEmpty()) {
         return;
     }
@@ -277,9 +284,6 @@ public:
         setText(std::move(glyph));
         setFocusPolicy(Qt::NoFocus);
         setAttribute(Qt::WA_Hover);
-        QFont font(glyph_font());
-        font.setPixelSize(10);
-        setFont(font);
     }
     void set_hot(bool hot) {
         if (hot_ != hot) {
@@ -294,7 +298,10 @@ public:
         }
     }
     bool pressed() const { return pressed_; }
-    QSize sizeHint() const override { return QSize(46, 32); }
+    // Windows' own size at 100 % text size, larger with the text
+    // (theme::text_scale) so that a larger title fits; Windows' own title
+    // bars keep theirs.
+    QSize sizeHint() const override { return QSize(theme::scaled(46), theme::scaled(32)); }
 
 protected:
     void paintEvent(QPaintEvent*) override {
@@ -314,6 +321,9 @@ protected:
             glyph = ink;
         }
         painter.setPen(glyph);
+        QFont font(glyph_font());
+        font.setPixelSize(theme::scaled(10));
+        painter.setFont(font);
         painter.drawText(rect(), Qt::AlignCenter, text());
     }
     void leaveEvent(QEvent* event) override {
@@ -363,21 +373,14 @@ QPixmap icon_pixmap(const QWidget* window) {
 
 bool TitleBar::wanted() {
     // Windows' own windows: not offscreen (the tests), where there are none.
-    if (theme::current_interface() != theme::Interface::modern ||
-        QGuiApplication::platformName() != QLatin1String("windows")) {
+    if (QGuiApplication::platformName() != QLatin1String("windows")) {
         return false;
     }
-    HIGHCONTRASTW contrast{};
-    contrast.cbSize = sizeof(contrast);
-    if (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) &&
-        (contrast.dwFlags & HCF_HIGHCONTRASTON) != 0) {
-        return false;  // the system's colours, in the system's bar
-    }
-    return true;
+    return !theme::system_contrast();  // in a contrast theme, the system's bar in its colours
 }
 
 TitleBar::TitleBar(QWidget* window, bool dialog) : QWidget(window), window_(window), dialog_(dialog) {
-    setFixedHeight(bar_height);
+    setFixedHeight(theme::scaled(bar_height));
     setAutoFillBackground(false);
     auto* row = new QHBoxLayout(this);
     row->setContentsMargins(10, 0, 0, 0);
@@ -386,6 +389,7 @@ TitleBar::TitleBar(QWidget* window, bool dialog) : QWidget(window), window_(wind
     icon_ = new QLabel;
     icon_->setFixedSize(16, 16);
     icon_->setToolTip(app::tr("Window menu (Alt+Space)"));
+    icon_->setAccessibleName(icon_->toolTip());  // a click opens the menu: named for a screen reader too
     icon_->installEventFilter(this);  // a click opens the system menu
     row->addWidget(icon_);
     title_ = new QLabel;
@@ -673,6 +677,12 @@ void TitleBar::paintEvent(QPaintEvent*) {
 void TitleBar::changeEvent(QEvent* event) {
     if (event->type() == QEvent::PaletteChange) {
         show_active();
+    }
+    if (event->type() == QEvent::FontChange) {  // a new text size: the bar's height, and its buttons'
+        setFixedHeight(theme::scaled(bar_height));
+        for (QAbstractButton* button : findChildren<QAbstractButton*>()) {
+            button->updateGeometry();
+        }
     }
     QWidget::changeEvent(event);
 }

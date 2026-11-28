@@ -266,7 +266,7 @@ BitratePanel::BitratePanel(std::function<std::string()> ffprobe, VideoColors* co
     auto* root = new QVBoxLayout(this);
     // VML Modern: the files a card (their title, buttons and table), the
     // graph a card (its view, the chart and its readout), the footer a
-    // strip; Classic: the rows as they were (theme::container).
+    // strip (theme::container).
     QBoxLayout* files = nullptr;
     QWidget* files_card = theme::container("card", false, &files);
     files_card->setObjectName("filesCard");
@@ -287,10 +287,9 @@ BitratePanel::BitratePanel(std::function<std::string()> ffprobe, VideoColors* co
 // Add files, Remove selected and Calculate bitrate.
 void BitratePanel::add_file_controls(QBoxLayout* root) {
     auto* file_controls = new QHBoxLayout;
-    auto* title = new QLabel(app::tr("Files"));  // VML Modern's: the card's title
+    auto* title = new QLabel(app::tr("Files"));  // the card's title
     theme::set_role(title, "title");
     title->setContentsMargins(0, 0, 10, 0);
-    theme::modern_only(title);
     file_controls->addWidget(title);
     add_button = new QPushButton(app::tr("Add files\xE2\x80\xA6"));
     connect(add_button, &QPushButton::clicked, this, [this] { on_add_files(); });
@@ -311,6 +310,7 @@ void BitratePanel::add_file_controls(QBoxLayout* root) {
 // The files' table.
 void BitratePanel::add_table(QBoxLayout* root) {
     table = new QTableWidget(0, 9);
+    table->setAccessibleName(app::tr("Files"));
     not_exported(table);  // the files to read: their data is the graph card's save
     auto* swatches = new ColorSwatchDelegate(table);
     connect(swatches, &ColorSwatchDelegate::clicked, this, [this](int row) { choose_video_color(row); });
@@ -425,8 +425,7 @@ void BitratePanel::add_chart(QBoxLayout* root) {
 // The footer, as Metric Graphs' is: Go to frame and the frame range, what
 // the table's figures are of, and Export at the right end.
 void BitratePanel::add_frame_controls(QVBoxLayout* root) {
-    // A toolbar of its own in VML Modern, in groups a line apart, as Metric
-    // Graphs' is; in Classic the row as it was.
+    // A toolbar of its own, in groups a line apart, as Metric Graphs' is.
     QBoxLayout* row = nullptr;
     QWidget* bar = theme::container("toolbar", true, &row);
     frame_controls = new FrameControls;
@@ -438,7 +437,7 @@ void BitratePanel::add_frame_controls(QVBoxLayout* root) {
     connect(frame_controls, &FrameControls::frame_requested, this, [this](int frame) { on_frame_requested(frame); });
     connect(frame_controls, &FrameControls::range_changed, this, [this](bool finished) { on_range_changed(finished); });
     row->addWidget(frame_controls);
-    row->addWidget(theme::separator(16));
+    row->addWidget(theme::separator());
     range_label = new QLabel;
     row->addWidget(range_label);
     row->addStretch(1);

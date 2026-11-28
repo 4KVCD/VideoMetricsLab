@@ -46,6 +46,7 @@
 #include "quick_save.h"
 #include "results_export.h"
 #include "saved_results_panel.h"
+#include "theme.h"
 #include "row_state.h"
 #include "run_badge.h"
 #include "worst_frame_list.h"
@@ -401,8 +402,7 @@ private:
 
     // The title buttons (title_bar.h), made with the window: in VML Modern
     // in the app's title bar where the window has one, else at the tab bar's
-    // right end; in VML Classic the progress button alone, at the tab bar's
-    // right end. Modern chosen in Settings shows the others.
+    // right end.
     void make_title_buttons();
     // The title bar's theme menu ticked as Settings has the theme and looks.
     void show_theme_in_title();
@@ -955,6 +955,9 @@ private:
     bool syncing_table_ = false;
     bool theme_refresh_due_ = true;  // until the window is built
     std::optional<std::tuple<bool, unsigned, unsigned>> theme_applied_;
+    // The contrast theme's colours when the theme was last applied: turning
+    // one on or off, or changing it, changes no palette the app set.
+    std::optional<theme::SystemColours> contrast_applied_;
     std::optional<int> sort_column_;
     Qt::SortOrder sort_order_ = Qt::AscendingOrder;
 
@@ -1097,8 +1100,8 @@ private:
     BdRatePanel* bd_rate_panel_ = nullptr;
     // The update check, and the newer release it offers (update_offer.h).
     UpdateOffer* update_offer_ = nullptr;
-    TitleBar* title_bar_ = nullptr;          // Windows, VML Modern: the window's own title bar
-    TitleButtons* title_buttons_ = nullptr;  // the progress, theme and update buttons (Classic: progress)
+    TitleBar* title_bar_ = nullptr;          // Windows: the window's own title bar
+    TitleButtons* title_buttons_ = nullptr;  // the progress, theme and update buttons
     RunBadge run_badge_;                     // what the progress button shows
     bool ticks_check_due_ = false;           // check_ticks_soon's, until it runs
     // The GPU checks a run is waiting for (wait_for_gpu_checks), while it is,
