@@ -36,6 +36,7 @@
 #include "file_writes.h"
 #include "segment_rules_editor.h"
 #include "metric_list.h"
+#include "in_place_name.h"
 #include "settings_panel.h"
 #include "app_dialog.h"
 #include "test_videos.h"
@@ -50,6 +51,16 @@
 
 namespace vml::app {
 namespace {
+
+// A name typed in the profile field and Enter pressed (in_place_name.h).
+void type_name(InPlaceName* field, const QString& name) {
+    ASSERT_TRUE(field->asking());
+    field->line_edit()->setText(name);
+    field->commit();
+}
+
+// Why the name typed was refused, said beside the field; empty: it was not.
+QString refused(const InPlaceName* field) { return field->problem_line()->text(); }
 
 // While a run is active the ffmpeg folder, the saved results' folder and
 // deleting saved results are locked, each telling why; the export folder (and
@@ -465,11 +476,6 @@ TEST(SettingsPanel, WeakSegmentsEditsTheProfiles) {
     FileWrites writes;
     Dialogs dialogs = standard_dialogs(nullptr);
     QStringList answers{"Film", "default", "Film, 35mm", "Grain", "Film"};
-    QString alerted;
-    dialogs.ask_text = [&answers](const QString&, const QString&, const QString&) -> std::optional<QString> {
-        return answers.takeFirst();
-    };
-    dialogs.alert = [&alerted](const QString& title, const QString&) { alerted = title; };
     dialogs.ask_no_default = [](const QString&, const QString&) { return true; };
     SettingsPanel panel(settings, writes, [] { return ToolsStatus{}; }, dialogs);
     QSignalSpy changed(&panel, &SettingsPanel::weak_segment_rules_changed);
@@ -485,6 +491,7 @@ TEST(SettingsPanel, WeakSegmentsEditsTheProfiles) {
     EXPECT_EQ(changed.count(), 1);
 
     panel.new_weak_profile();  // "Film": Default's rules, in use, told to the window
+    type_name(panel.weak_profile_name, answers.takeFirst());
     EXPECT_EQ(settings.weak_segment_profile, "Film");
     EXPECT_EQ(changed.count(), 2);
     EXPECT_EQ(panel.weak_profile->currentText(), "Film");
@@ -495,13 +502,20 @@ TEST(SettingsPanel, WeakSegmentsEditsTheProfiles) {
               (std::vector<std::string>{"ssimulacra2<60", "vmaf<85"}));
     EXPECT_EQ(settings.weak_segment_conditions.size(), 3U);  // Default's as they were
 
-    panel.rename_weak_profile();  // "default": refused
-    EXPECT_EQ(alerted, "Profile not renamed");
-    alerted.clear();
+    panel.rename_weak_profile();  // "default": refused, beside the field, the name still being typed
+    type_name(panel.weak_profile_name, answers.takeFirst());
+    EXPECT_FALSE(refused(panel.weak_profile_name).isEmpty());
+    EXPECT_TRUE(panel.weak_profile_name->asking());
+    panel.weak_profile_name->cancel();  // Esc: the list back, nothing kept
+    EXPECT_FALSE(panel.weak_profile_name->asking());
+    EXPECT_TRUE(refused(panel.weak_profile_name).isEmpty());
     panel.rename_weak_profile();  // "Film, 35mm": a comma, refused
-    EXPECT_EQ(alerted, "Profile not renamed");
+    type_name(panel.weak_profile_name, answers.takeFirst());
+    EXPECT_FALSE(refused(panel.weak_profile_name).isEmpty());
     EXPECT_EQ(settings.weak_segment_profile, "Film");
-    panel.rename_weak_profile();  // "Grain"
+    panel.rename_weak_profile();  // "Grain", typed over the refused name
+    type_name(panel.weak_profile_name, answers.takeFirst());
+    EXPECT_FALSE(panel.weak_profile_name->asking());
     EXPECT_EQ(settings.weak_segment_profile, "Grain");
     EXPECT_FALSE(segment_profile_named(settings, "Film"));
 
@@ -533,6 +547,7 @@ TEST(SettingsPanel, WeakSegmentsEditsTheProfiles) {
     EXPECT_GT(changed.count(), before_preset);
     // Into a named profile: its rules only, Default's left as they are.
     panel.new_weak_profile();  // "Film", from the rules shown
+    type_name(panel.weak_profile_name, answers.takeFirst());
     panel.load_weak_preset("grainy-film");
     EXPECT_EQ(settings.weak_segment_profile, "Film");
     EXPECT_EQ(segment_profiles(settings).size(), 2U);

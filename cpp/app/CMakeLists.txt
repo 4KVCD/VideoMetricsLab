@@ -51,6 +51,8 @@ add_library(vml_app STATIC
     metric_list.cpp
     metric_order.cpp
     popup_panel.cpp
+    ffmpeg_setup_dialog.cpp
+    in_place_name.cpp
     graph_legend.cpp
     text_panel.cpp
     options_panel.cpp

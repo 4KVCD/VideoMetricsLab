@@ -41,6 +41,12 @@ public:
     // Automation's Invoke) and Space emit it too: each opens the panel once.
     static void open_on_press(QAbstractButton* button, std::function<void()> open);
 
+    // Opens it under `anchor`, its right edge on the anchor's (as the Export
+    // panel opens), or its left edge on the anchor's (`left_edges`, for a
+    // button at a card's left), kept on screen: above the anchor where there
+    // is no room below. `anchor` becomes its anchor (set_anchor).
+    void open_under(QWidget* anchor, bool left_edges = false);
+
 protected:
     void hideEvent(QHideEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
