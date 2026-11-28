@@ -46,6 +46,7 @@
 #include "quick_save.h"
 #include "results_export.h"
 #include "saved_results_panel.h"
+#include "theme.h"
 #include "row_state.h"
 #include "run_badge.h"
 #include "worst_frame_list.h"
@@ -955,6 +956,9 @@ private:
     bool syncing_table_ = false;
     bool theme_refresh_due_ = true;  // until the window is built
     std::optional<std::tuple<bool, unsigned, unsigned>> theme_applied_;
+    // The contrast theme's colours when the theme was last applied: turning
+    // one on or off, or changing it, changes no palette the app set.
+    std::optional<theme::SystemColours> contrast_applied_;
     std::optional<int> sort_column_;
     Qt::SortOrder sort_order_ = Qt::AscendingOrder;
 

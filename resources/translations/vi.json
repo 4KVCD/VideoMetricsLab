@@ -1,5 +1,6 @@
 {
  "strings": {
+  "Windows' contrast theme sets the colors while it is on. The accent, theme and looks chosen here apply once it is off.": "Khi chủ đề tương phản của Windows đang bật, nó quyết định màu sắc. Màu nhấn, chủ đề và kiểu dáng chọn ở đây sẽ áp dụng khi tắt nó.",
   "Title on the graph:": "Tiêu đề trên biểu đồ:",
   "Show frame {frame} in Video Compare": "Hiện khung {frame} trong So sánh video",
   "Show frame in Video Compare": "Hiện khung trong So sánh video",

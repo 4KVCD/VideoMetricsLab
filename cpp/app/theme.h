@@ -51,8 +51,8 @@ bool is_dark();
 // The look the window is drawn in now: Settings' light_look or dark_look
 // ("light", "dim", "paper" or "desert"; "dark", "mocha", "joker", "nitrate" or
 // "phosphor"), whichever its
-// light or dark asks for, in VML Modern. Classic has no looks: "light" or
-// "dark".
+// light or dark asks for, in VML Modern; "contrast" in a contrast theme
+// (in_contrast_theme). Classic has no looks: "light" or "dark".
 QString look();
 
 // Whether the window is drawn in Mocha's colours now (look() "mocha").
@@ -212,6 +212,8 @@ QFrame* separator(int classic_gap = 12);
 // Only for widgets nothing else shows or hides.
 void modern_only(QWidget* widget);
 void classic_only(QWidget* widget);
+// A widget shown only while a contrast theme is on (in_contrast_theme).
+void contrast_only(QWidget* widget);
 // A group box Classic frames, titled `title`, and Modern leaves unboxed and
 // untitled (role "unboxed"): the cards inside it are Modern's boxes.
 void classic_box(QGroupBox* box, const QString& title);
@@ -233,10 +235,54 @@ QWidget* container(const char* role, bool horizontal, QBoxLayout** layout = null
 QColor text_on(const QColor& colour);
 
 // The Modern interface's colours by name, for dark or light: the palette's
-// and the style sheet's.
+// and the style sheet's. In a contrast theme, the system's (contrast_colour),
+// whatever `dark`.
 QColor modern_colour(const char* name, bool dark);
 
-// The Modern interface's style sheet for dark or light and `accent`.
+// The Modern interface's style sheet for dark or light and `accent`; in a
+// contrast theme, the system's colours alone (contrast_style_sheet).
 QString modern_style_sheet(bool dark, const QColor& accent);
+
+// A contrast theme's colours (Windows' Aquatic, Desert, Dusk, Night Sky or
+// one of the user's own), as Windows has them: the ones its contrast
+// themes' editor sets.
+struct SystemColours {
+    QColor window;          // COLOR_WINDOW: the background
+    QColor window_text;     // COLOR_WINDOWTEXT: text, and edges
+    QColor gray_text;       // COLOR_GRAYTEXT: what is disabled
+    QColor highlight;       // COLOR_HIGHLIGHT: what is selected or pointed at
+    QColor highlight_text;  // COLOR_HIGHLIGHTTEXT: text on it
+    QColor link;            // COLOR_HOTLIGHT: a link
+    QColor button;          // COLOR_BTNFACE: a button
+    QColor button_text;     // COLOR_BTNTEXT: its text
+    bool operator==(const SystemColours&) const = default;
+};
+
+// The contrast theme's colours while one is on (Windows' Settings >
+// Accessibility > Contrast themes); none while none is, and on macOS, whose
+// "Increase contrast" keeps an app's colours.
+std::optional<SystemColours> system_contrast();
+
+// While a contrast theme is on (as system_contrast found it when the window
+// was last styled), VML Modern draws in its colours alone: every name of
+// modern_colour, color and chart_colours is one of `system`'s, and
+// Settings' theme, looks and accent do not apply. Classic is the system's
+// anyway.
+bool in_contrast_theme();
+
+// The system colour Modern's colour `name` is drawn in, in a contrast
+// theme: `name` one of modern_colour's, color's or the sheet's own
+// ("accent", "accent_text"). Throws for an unknown name.
+QColor contrast_colour(const char* name, const SystemColours& system);
+
+// The names contrast_colour knows: every modern_colour and color name, and
+// the sheet's own.
+std::vector<QString> contrast_names();
+
+// The chart's colours in a contrast theme.
+ChartColours contrast_chart_colours(const SystemColours& system);
+
+// Modern's style sheet in `system`'s colours.
+QString contrast_style_sheet(const SystemColours& system);
 
 }  // namespace vml::app::theme

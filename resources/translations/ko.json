@@ -1,5 +1,6 @@
 {
  "strings": {
+  "Windows' contrast theme sets the colors while it is on. The accent, theme and looks chosen here apply once it is off.": "Windows 대비 테마가 켜져 있는 동안에는 그 테마가 색을 정합니다. 여기서 고른 강조색, 테마, 룩은 대비 테마를 끄면 적용됩니다.",
   "Title on the graph:": "그래프 제목:",
   "Show frame {frame} in Video Compare": "프레임 {frame}을(를) 영상 비교에서 보기",
   "Show frame in Video Compare": "이 프레임을 영상 비교에서 보기",

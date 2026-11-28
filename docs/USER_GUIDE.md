@@ -241,6 +241,10 @@ Phosphor) is the one the theme
 shows, the accent's first choice reads **Theme default** and gives that
 accent. The looks are VML Modern's alone: VML Classic shows Light or Dark.
 
+In a Windows contrast theme, VML Modern takes all its colors from the
+theme, as Windows' own windows do; the accent, theme and looks chosen in
+Settings apply again once it is off.
+
 In VML Modern on Windows, the window's title bar is the app's own, in the
 theme's colours, with Windows' minimize, maximize and close (hovering
 maximize shows Windows 11's snap layouts, and Alt+Space or a click on the
