@@ -1,7 +1,7 @@
-// The window's keyboard shortcuts for its main actions, and the list of them
-// (Keyboard shortcuts, F1). One table, shortcuts(), makes both the window's
-// actions (MainWindow::add_shortcuts) and the list's rows, so the list
-// cannot say a key the window does not have.
+// The window's main actions that have keys, and the list of the keys
+// (Keyboard shortcuts, F1). The keys themselves are key_bindings.h's: its
+// one table makes the window's actions (MainWindow::add_shortcuts) and the
+// list's rows, so the list cannot say a key the window does not have.
 #pragma once
 
 #include <QKeySequence>
@@ -29,37 +29,22 @@ enum class Command {
     shortcuts,         // this list
 };
 
-struct Shortcut {
-    Command command;
-    QKeySequence keys;
-};
-
-// The shortcuts anywhere in the window, in the list's order.
-const std::vector<Shortcut>& shortcuts();
-
-// What a command does, as the list says it (translated).
-QString command_text(Command command);
-
-// The key of the window's tabs, Ctrl+1 for the first, up to the eighth.
-QKeySequence tab_keys(int index);
-
-// Removes the selected test videos, in the Videos table.
-QKeySequence remove_keys();
-
 // Adds `button`'s shortcut to its tooltip ("Shortcut: F5"), after the
 // tooltip it had when first called (none: the shortcut alone), or, `shown`
 // false, takes it away again (the shortcuts turned off in Settings). Called
 // after the tooltip is set.
 void show_shortcut_in_tip(QAbstractButton* button, const QKeySequence& keys, bool shown = true);
 
-// The list: the window's shortcuts, the Videos table's and Video Compare's
-// keys (its key guide's, key_guide.h), each beside what it does, in the
-// app's own dialog. Esc or Close closes it.
+// The list: every action's keys as they are now (key_bindings.h), by where
+// they work, each beside what it does, in the app's own dialog. Esc or
+// Close closes it.
 class ShortcutsDialog : public AppDialog {
     Q_OBJECT
 
 public:
     explicit ShortcutsDialog(QWidget* parent = nullptr);
+    // The rows again, from the keys in use now.
+    void refresh();
 
 private:
     void add_heading(const QString& text);

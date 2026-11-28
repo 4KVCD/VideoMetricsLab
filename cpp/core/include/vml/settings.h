@@ -170,6 +170,11 @@ struct Settings {
     // The window's shortcut keys (F5, Ctrl+O, Ctrl+1 to Ctrl+8...): off, they
     // do nothing; Tab, Ctrl+Tab and Video Compare's keys work either way.
     bool keyboard_shortcuts = true;
+    // Settings > Shortcuts: the keys and Video Compare's mouse gestures the
+    // user changed, as JSON objects (app/key_bindings.h reads them): action
+    // id to its keys, gesture id to its action. Written only when not empty.
+    std::string key_bindings_json = "{}";
+    std::string mouse_bindings_json = "{}";
     std::string skipped_update_version;
     std::string language;
     std::string theme;

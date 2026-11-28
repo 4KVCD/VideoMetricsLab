@@ -8,6 +8,7 @@
 #include <QKeyEvent>
 #include <QPushButton>
 #include <QTabWidget>
+#include <QKeySequenceEdit>
 #include <QTableWidget>
 #include <QTest>
 #include <QTimeEdit>
@@ -21,7 +22,9 @@
 #include "keyboard.h"
 #include "main_window.h"
 #include "options_panel.h"
+#include "key_bindings.h"
 #include "shortcuts.h"
+#include "shortcuts_page.h"
 #include "vml/options.h"
 
 namespace vml::app {
@@ -150,6 +153,100 @@ TEST_F(KeyboardInWindow, TheShortcutsCanBeTurnedOff) {
     tabs->setCurrentIndex(0);
 }
 
+// A key changed in Settings > Shortcuts works at once, and the old one no
+// longer does; Settings' page refuses a key another action has, or one the
+// window keeps, and saves only what changed.
+TEST_F(KeyboardInWindow, AChangedKeyWorksAndTheOldOneNoLonger) {
+    window_->activateWindow();
+    ASSERT_TRUE(QTest::qWaitForWindowActive(window_));
+    auto* tabs = window_->findChild<QTabWidget*>();
+    ASSERT_NE(tabs, nullptr);
+    tabs->setCurrentIndex(tabs->count() - 1);  // Settings, and its Shortcuts page
+    QApplication::processEvents();
+    window_->activateWindow();  // as in TheShortcutsCanBeTurnedOff
+    ASSERT_TRUE(QTest::qWaitForWindowActive(window_));
+    auto* page = window_->findChild<ShortcutsPage*>();
+    ASSERT_NE(page, nullptr);
+    EXPECT_FALSE(page->bind("tab_3", 0, QKeySequence(Qt::CTRL | Qt::Key_2)));  // Tab 2's
+    EXPECT_TRUE(page->note().contains("Metric Graphs")) << page->note().toStdString();
+    EXPECT_FALSE(page->bind("tab_3", 0, QKeySequence(Qt::CTRL | Qt::Key_Tab)));  // the window's own
+    EXPECT_FALSE(page->bind("tab_3", 0, QKeySequence(Qt::Key_K)));                // would stop typing
+    ASSERT_TRUE(page->bind("tab_3", 0, QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_3)));
+    tabs->setCurrentIndex(0);
+    tabs->tabBar()->setFocus();
+    QTest::keyClick(tabs->tabBar(), Qt::Key_3, Qt::ControlModifier);
+    EXPECT_EQ(tabs->currentIndex(), 0);  // the old key: nothing
+    QTest::keyClick(tabs->tabBar(), Qt::Key_3, Qt::ControlModifier | Qt::ShiftModifier);
+    EXPECT_EQ(tabs->currentIndex(), 2);
+    page->reset_all();
+    tabs->setCurrentIndex(0);
+    QTest::keyClick(tabs->tabBar(), Qt::Key_3, Qt::ControlModifier);
+    EXPECT_EQ(tabs->currentIndex(), 2);
+    // In the page: a double-click on Calculate's key opens a key box that
+    // takes the next key, a window shortcut's too (Ctrl+1 is refused, as
+    // Videos' tab has it, rather than switching tabs).
+    tabs->setCurrentIndex(tabs->count() - 1);
+    QApplication::processEvents();
+    auto* sections = window_->findChild<QTabWidget*>("settingsSections");
+    ASSERT_NE(sections, nullptr);
+    sections->setCurrentWidget(page);
+    QApplication::processEvents();
+    auto* table = page->findChild<QTableWidget*>("shortcutsTable");
+    ASSERT_NE(table, nullptr);
+    int calculate = -1;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        if (table->item(row, 0) != nullptr && table->item(row, 0)->data(Qt::UserRole).toString() == "calculate") {
+            calculate = row;
+        }
+    }
+    ASSERT_GE(calculate, 0);
+    table->scrollToItem(table->item(calculate, 1));
+    const QPoint cell = table->visualRect(table->model()->index(calculate, 1)).center();
+    // As Windows sends it: a click, then the double-click (Qt's item views
+    // answer a double-click only on the item the press was on).
+    QTest::mouseClick(table->viewport(), Qt::LeftButton, Qt::NoModifier, cell);
+    QTest::mouseDClick(table->viewport(), Qt::LeftButton, Qt::NoModifier, cell);
+    auto* editor = table->findChild<QKeySequenceEdit*>();
+    ASSERT_NE(editor, nullptr);
+    editor->setFocus();
+    QTest::keyClick(editor, Qt::Key_1, Qt::ControlModifier);
+    QApplication::processEvents();
+    EXPECT_EQ(tabs->currentIndex(), tabs->count() - 1);  // still Settings
+    EXPECT_FALSE(page->note().isEmpty());
+    EXPECT_EQ(table->item(calculate, 1)->text(), "F5");
+    table->setCurrentCell(calculate, 1);
+    table->setFocus();
+    QTest::keyClick(table, Qt::Key_F2);
+    editor = nullptr;  // the one shown: the first is hidden until deleted
+    for (QKeySequenceEdit* box : table->findChildren<QKeySequenceEdit*>()) {
+        if (box->isVisible()) {
+            editor = box;
+        }
+    }
+    ASSERT_NE(editor, nullptr);
+    editor->setFocus();
+    QTest::keyClick(editor, Qt::Key_NumLock);  // a lock key alone is no binding: still waiting
+    QTest::keyClick(editor, Qt::Key_R, Qt::ControlModifier);
+    QApplication::processEvents();
+    EXPECT_EQ(table->item(calculate, 1)->text(), QKeySequence(Qt::CTRL | Qt::Key_R).toString(QKeySequence::NativeText));
+    page->reset_all();
+    tabs->setCurrentIndex(0);
+}
+
+// settings.json keeps only the actions changed, by id; an unknown action or
+// a key Qt can't read is left out, and an unbound action stays unbound.
+TEST(Keyboard, KeyBindingsAreSavedByActionAndReadBack) {
+    const KeyBindings bindings{{"calculate", {QKeySequence(Qt::CTRL | Qt::Key_R)}}, {"cancel", {}}};
+    const std::string json = key_bindings_json(bindings);
+    EXPECT_EQ(parse_key_bindings(json), bindings);
+    const KeyBindings read = parse_key_bindings(R"({"calculate": ["Ctrl+R", "not a key at all+++"], "gone": ["F9"]})");
+    ASSERT_EQ(read.size(), 1U);
+    EXPECT_EQ(read.at("calculate"), std::vector<QKeySequence>{QKeySequence(Qt::CTRL | Qt::Key_R)});
+    const MouseBindings mouse{{"click", ""}, {"wheel_up", "zoom_in"}};
+    EXPECT_EQ(parse_mouse_bindings(mouse_bindings_json(mouse)), mouse);
+    EXPECT_TRUE(parse_mouse_bindings(R"({"click": "launch_rockets", "nope": "play_pause"})").empty());
+}
+
 // With the focus inside Settings, Ctrl+Tab switches the window's tabs, not
 // Settings' sections; Ctrl+PgDn and Ctrl+PgUp step through the sections.
 TEST_F(KeyboardInWindow, CtrlTabIsTheWindowsTabsEvenInsideSettings) {
@@ -213,33 +310,45 @@ TEST_F(KeyboardInWindow, TabFromTheTabsGoesIntoSettings) {
 // No two of the window's keys are the same, and none is a key the text
 // boxes, the tables or Video Compare already take for themselves.
 TEST(Keyboard, TheShortcutsTakeNoKeyAlreadyTaken) {
-    std::vector<QKeySequence> taken;
+    // Keys of the system's and the text boxes' a window-wide action must not
+    // take, beyond those refused_key refuses.
+    std::vector<QKeySequence> system;
     for (const QKeySequence::StandardKey standard :
-         {QKeySequence::Copy, QKeySequence::Cut, QKeySequence::Paste, QKeySequence::Undo, QKeySequence::Redo,
-          QKeySequence::SelectAll, QKeySequence::Delete, QKeySequence::Find, QKeySequence::Save,
-          QKeySequence::Close, QKeySequence::Quit, QKeySequence::Print, QKeySequence::NextChild,
-          QKeySequence::PreviousChild}) {
+         {QKeySequence::Find, QKeySequence::Save, QKeySequence::Close, QKeySequence::Quit, QKeySequence::Print,
+          QKeySequence::NextChild, QKeySequence::PreviousChild}) {
         for (const QKeySequence& keys : QKeySequence::keyBindings(standard)) {
-            taken.push_back(keys);
+            system.push_back(keys);
         }
     }
-    for (const int key : {int(Qt::Key_S), int(Qt::Key_Space), int(Qt::Key_Left), int(Qt::Key_Right)}) {
-        taken.emplace_back(key);  // Video Compare's
+    system.emplace_back(Qt::CTRL | Qt::Key_PageDown);  // Settings' sections, Metric Graphs' metrics
+    system.emplace_back(Qt::CTRL | Qt::Key_PageUp);
+    for (const KeyAction& action : key_actions()) {
+        EXPECT_FALSE(action_text(action.id).isEmpty()) << action.id;
+        EXPECT_LE(action.defaults.size(), 2U) << action.id;
+        for (const QKeySequence& keys : action.defaults) {
+            EXPECT_TRUE(refused_key(keys, action.group).isEmpty())
+                << action.id << " " << keys.toString().toStdString();
+            EXPECT_FALSE(clashing_action(action.id, keys, {})) << action.id << " " << keys.toString().toStdString();
+            if (action.group == KeyGroup::window || action.group == KeyGroup::tabs) {
+                EXPECT_EQ(std::count(system.begin(), system.end(), keys), 0) << action.id;
+            }
+        }
     }
-    taken.emplace_back(Qt::CTRL | Qt::Key_Tab);
-    taken.emplace_back(Qt::CTRL | Qt::SHIFT | Qt::Key_Tab);
-    taken.emplace_back(Qt::CTRL | Qt::Key_PageDown);  // Settings' sections, Metric Graphs' metrics
-    taken.emplace_back(Qt::CTRL | Qt::Key_PageUp);
-    for (int index = 0; index < 8; ++index) {
-        taken.push_back(tab_keys(index));
+    // The developers' keys (Ctrl+Alt+Shift+F1 to F7) and the window's own
+    // can't be given to any action.
+    for (const KeyGroup group : {KeyGroup::window, KeyGroup::video_compare}) {
+        for (int key = Qt::Key_F1; key <= Qt::Key_F7; ++key) {
+            EXPECT_FALSE(refused_key(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | key), group).isEmpty());
+        }
+        for (const QKeySequence& keys : {QKeySequence(Qt::Key_Tab), QKeySequence(Qt::CTRL | Qt::Key_Tab),
+                                         QKeySequence(Qt::CTRL | Qt::Key_PageDown),
+                                         QKeySequence(Qt::Key_Escape), QKeySequence(QKeySequence::Copy)}) {
+            EXPECT_FALSE(refused_key(keys, group).isEmpty()) << keys.toString().toStdString();
+        }
     }
-    for (const Shortcut& shortcut : shortcuts()) {
-        EXPECT_FALSE(shortcut.keys.isEmpty());
-        EXPECT_EQ(std::count(taken.begin(), taken.end(), shortcut.keys), 0)
-            << shortcut.keys.toString().toStdString();
-        taken.push_back(shortcut.keys);
-        EXPECT_FALSE(command_text(shortcut.command).isEmpty());
-    }
+    // A plain letter stops typing everywhere but Video Compare.
+    EXPECT_FALSE(refused_key(QKeySequence(Qt::Key_K), KeyGroup::window).isEmpty());
+    EXPECT_TRUE(refused_key(QKeySequence(Qt::Key_K), KeyGroup::video_compare).isEmpty());
 }
 
 // What the property means: Tab from a table with rows reaches the next

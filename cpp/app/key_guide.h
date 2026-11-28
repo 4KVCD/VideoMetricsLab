@@ -20,8 +20,9 @@ struct KeyRow {
     QString action;
 };
 
-// Video Compare's keys, as its guide shows them and Keyboard shortcuts lists
-// them (shortcuts.h).
+// Video Compare's main keys as its guide shows them, from the keys in use
+// (key_bindings.h): the source, the test video, play and pause. An action
+// with no key is left out.
 std::vector<KeyRow> video_compare_keys();
 
 class KeyGuide : public QFrame {
@@ -39,6 +40,8 @@ protected:
     void changeEvent(QEvent* event) override;
 
 private:
+    // The rows from the keys in use (again, when Settings changes them).
+    void build_rows();
     void add_row(int row, const std::vector<QString>& keys, const QString& action);
     void set_scale(double scale);
     void show_look();

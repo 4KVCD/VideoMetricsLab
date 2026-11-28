@@ -233,6 +233,7 @@ public:
     QCheckBox* check_updates = nullptr;
     QCheckBox* confirm_close = nullptr;
     QCheckBox* keyboard_shortcuts = nullptr;
+    QPushButton* shortcuts_list_button = nullptr;
     // Notifications (settings_notifications.cpp): when, the services and
     // their keys, how the keys are stored, and the message's templates with
     // their preview.

@@ -61,6 +61,7 @@
 #include "saved_deletion.h"
 #include "saved_score_details.h"
 #include "segment_rules_editor.h"
+#include "shortcuts_page.h"
 #include "theme.h"
 #include "vml/app_log.h"
 #include "vml/crop_detect.h"
@@ -138,6 +139,9 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
         sections->addTab(page, name);
     };
     add_section(app::tr("General"), {build_ffmpeg_box(), build_window_box(), build_compare_box()});
+    // The keys and the mouse (key_bindings.h), and whether the shortcuts work.
+    sections->addTab(new ShortcutsPage(settings_, {keyboard_shortcuts, shortcuts_list_button}, [this] { on_edited(); }),
+                     app::tr("Shortcuts"));
     sections->addTab(build_appearance_page(), app::tr("Appearance"));
     add_section(app::tr("Metrics"), {build_defaults_box(), build_gpu_box()});
     add_section(app::tr("Weak segments"), {build_weak_segments_box()});
@@ -1178,14 +1182,10 @@ QGroupBox* SettingsPanel::build_window_box() {
                                            "rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work."));
     keyboard_shortcuts->setChecked(settings_.keyboard_shortcuts);
     connect(keyboard_shortcuts, &QCheckBox::toggled, this, [this] { on_edited(); });
-    window_layout->addWidget(keyboard_shortcuts);
-    auto* keys_button = new QPushButton(app::tr("Keyboard shortcuts"));
-    keys_button->setObjectName("keyboardShortcuts");
-    connect(keys_button, &QPushButton::clicked, this, &SettingsPanel::shortcuts_requested);
-    auto* keys_row = new QHBoxLayout;
-    keys_row->addWidget(keys_button);
-    keys_row->addStretch(1);
-    window_layout->addLayout(keys_row);
+    // Both shown at the top of the Shortcuts section (shortcuts_page.h).
+    shortcuts_list_button = new QPushButton(app::tr("Keyboard shortcuts"));
+    shortcuts_list_button->setObjectName("keyboardShortcuts");
+    connect(shortcuts_list_button, &QPushButton::clicked, this, &SettingsPanel::shortcuts_requested);
     return window_box;
 }
 

@@ -21,14 +21,18 @@
 #include <QStackedWidget>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QWheelEvent>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <set>
 #include <stdexcept>
 #include <thread>
 
 #include "i18n.h"
+#include "key_bindings.h"
+#include "shortcuts.h"
 #include "keyboard.h"
 #include "key_guide.h"
 #include "metric_order.h"
@@ -425,6 +429,13 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
     qRegisterMetaType<DetectedCrops>();
     // The frame line's scores in the metrics' new order (score_text).
     connect(&metric_order_signal(), &MetricOrderSignal::changed, this, [this] { update_frame_line(); });
+    // A click on the video, once a double-click can no longer follow it.
+    click_timer_.setSingleShot(true);
+    connect(&click_timer_, &QTimer::timeout, this, [this] {
+        if (const std::string action = action_for_gesture("click"); !action.empty()) {
+            run_compare_action(action);
+        }
+    });
     auto* root = new QVBoxLayout(this);
 
     // The rows above the view, a toolbar of their own in VML Modern; the
@@ -458,7 +469,6 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
 void FrameComparePanel::add_video_row(QBoxLayout* root) {
     auto* top = new QHBoxLayout;
     previous_video_button = new QPushButton(QString::fromUtf8("\xE2\x86\x90"));  // ←
-    previous_video_button->setToolTip(app::tr("Previous test video (Left arrow)"));
     connect(previous_video_button, &QPushButton::clicked, this, [this] { cycle_distorted(-1); });
     video_combo = new QComboBox;
     // The whole names (issue #200), cut to the room the row gives it: as wide
@@ -467,7 +477,6 @@ void FrameComparePanel::add_video_row(QBoxLayout* root) {
     video_combo->setMinimumContentsLength(30);
     connect(video_combo, &QComboBox::currentIndexChanged, this, [this](int index) { on_video_selected(index); });
     next_video_button = new QPushButton(QString::fromUtf8("\xE2\x86\x92"));  // →
-    next_video_button->setToolTip(app::tr("Next test video (Right arrow)"));
     connect(next_video_button, &QPushButton::clicked, this, [this] { cycle_distorted(1); });
     // One zoom for the still frames and playback alike: switching between
     // them, or between the source and an encode, keeps the same view.
@@ -652,12 +661,29 @@ void FrameComparePanel::add_labels(QVBoxLayout* root) {
     detail_label->setAlignment(Qt::AlignCenter);
     detail_label->set_text(app::tr("No frame selected."));
     root->addWidget(detail_label);
-    guide_label = new QLabel(app::tr("Hold S: show source   \xC2\xB7   \xE2\x86\x90/\xE2\x86\x92: switch test video   "
-                                     "\xC2\xB7   Space: play/pause"));
+    guide_label = new QLabel;
     guide_label->setAlignment(Qt::AlignCenter);
     theme::style(guide_label, "color: {muted};");
     guide_label->setWordWrap(true);
     root->addWidget(guide_label);
+    // The keys in that line and in the buttons' tooltips are the ones in use
+    // (Settings > Shortcuts).
+    show_keys();
+    connect(key_bindings_signal(), &KeyBindingsSignal::changed, this, [this] { show_keys(); });
+}
+
+void FrameComparePanel::show_keys() {
+    guide_label->setText(video_compare_hint());
+    previous_video_button->setToolTip(action_text("previous_video"));
+    next_video_button->setToolTip(action_text("next_video"));
+    previous_video_button->setProperty("vmlTipWithoutShortcut", QVariant());  // the tooltip above is the base
+    next_video_button->setProperty("vmlTipWithoutShortcut", QVariant());
+    for (const auto& [button, id] : {std::pair{previous_video_button, "previous_video"}, std::pair{next_video_button, "next_video"}}) {
+        const std::vector<QKeySequence> keys = keys_for(id);
+        if (!keys.empty()) {
+            show_shortcut_in_tip(button, keys.front());
+        }
+    }
 }
 
 void FrameComparePanel::make_timers() {
@@ -991,8 +1017,9 @@ void FrameComparePanel::hideEvent(QHideEvent* event) {
 }
 
 bool FrameComparePanel::eventFilter(QObject* watched, QEvent* event) {
-    // The tab's keys anywhere in the window (S, Space, Left and Right), and
-    // the window's moves between displays.
+    // The tab's keys anywhere in the window (key_bindings.h: S, Space, the
+    // arrows, by default), its mouse on the video, and the window's moves
+    // between displays.
     if (!isVisible()) {
         return QWidget::eventFilter(watched, event);
     }
@@ -1001,44 +1028,15 @@ bool FrameComparePanel::eventFilter(QObject* watched, QEvent* event) {
         // Asked once the system has finished the move.
         display_timer_->start();
     }
+    if (on_video_mouse(watched, event)) {
+        return true;
+    }
     const bool key_event = type == QEvent::KeyPress || type == QEvent::KeyRelease;
     const auto* key = key_event ? static_cast<QKeyEvent*>(event) : nullptr;
-    // No modifier the user pressed: macOS's arrow keys come with Qt's keypad
-    // modifier (as the keypad's do elsewhere), and its keys just after one
-    // can too.
-    const bool unmodified = key != nullptr && (key->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier;
-    // A release counts with a modifier held too: it pressed none of its own.
-    if (key != nullptr && key->key() == Qt::Key_S && (unmodified || type == QEvent::KeyRelease)) {
-        if (!key->isAutoRepeat()) {
-            showing_source_ = type == QEvent::KeyPress;
-            update_labels();
-            show_or_request();
+    if (key != nullptr) {
+        if (std::optional<bool> taken = on_compare_key(*key)) {
+            return *taken ? true : QWidget::eventFilter(watched, event);
         }
-        return true;
-    }
-    if (key != nullptr && type == QEvent::KeyPress && key->key() == Qt::Key_Space && unmodified) {
-        QWidget* focus = QApplication::focusWidget();
-        // A button or check box the keys moved to (its focus ring shown)
-        // takes Space, as on Windows; one clicked last leaves it to play.
-        const bool focus_takes_space = keyboard::focus_visible() && qobject_cast<QAbstractButton*>(focus) != nullptr;
-        if (qobject_cast<QLineEdit*>(focus) == nullptr && qobject_cast<QAbstractSpinBox*>(focus) == nullptr &&
-            qobject_cast<QComboBox*>(focus) == nullptr && !focus_takes_space) {
-            if (!key->isAutoRepeat()) {
-                on_play_clicked();
-            }
-            return true;
-        }
-    }
-    if (key != nullptr && type == QEvent::KeyPress && (key->key() == Qt::Key_Left || key->key() == Qt::Key_Right)) {
-        QWidget* focus = QApplication::focusWidget();
-        if (qobject_cast<QLineEdit*>(focus) != nullptr || qobject_cast<QAbstractSpinBox*>(focus) != nullptr ||
-            qobject_cast<QSlider*>(focus) != nullptr || qobject_cast<QComboBox*>(focus) != nullptr) {
-            return QWidget::eventFilter(watched, event);
-        }
-        if (!key->isAutoRepeat() && unmodified) {
-            cycle_distorted(key->key() == Qt::Key_Left ? -1 : 1);
-        }
-        return true;
     }
     // The panel or the window going: the filter also sees its children hide,
     // as the frame's own text does when the frame arrives.
@@ -1049,6 +1047,174 @@ bool FrameComparePanel::eventFilter(QObject* watched, QEvent* event) {
         show_or_request();
     }
     return QWidget::eventFilter(watched, event);
+}
+
+std::optional<bool> FrameComparePanel::on_compare_key(const QKeyEvent& key) {
+    // The tab's keys are the user's (Settings > Shortcuts), else the defaults
+    // (key_bindings.h). Returns whether the key is taken, or nothing for a
+    // key that is none of the tab's. "Hold to see the source": while its key
+    // is down; its release counts with a modifier held too, as it pressed
+    // none of its own.
+    const QEvent::Type type = key.type();
+    const auto same_key = [&key](std::string_view id) {
+        for (const QKeySequence& keys : keys_for(id)) {
+            if (keys[0].key() == key.key()) {
+                return true;
+            }
+        }
+        return false;
+    };
+    if ((type == QEvent::KeyPress && matches(key, "show_source")) ||
+        (type == QEvent::KeyRelease && same_key("show_source"))) {
+        if (!key.isAutoRepeat()) {
+            showing_source_ = type == QEvent::KeyPress;
+            update_labels();
+            show_or_request();
+        }
+        return true;
+    }
+    if (type != QEvent::KeyPress) {
+        return std::nullopt;
+    }
+    QWidget* focus = QApplication::focusWidget();
+    const bool typing = qobject_cast<QLineEdit*>(focus) != nullptr ||
+                        qobject_cast<QAbstractSpinBox*>(focus) != nullptr ||
+                        qobject_cast<QComboBox*>(focus) != nullptr;
+    if (matches(key, "play_pause")) {
+        // A button or check box the keys moved to (its focus ring shown)
+        // takes Space, as on Windows; one clicked last leaves it to play.
+        const bool focus_takes_space = key.key() == Qt::Key_Space && keyboard::focus_visible() &&
+                                       qobject_cast<QAbstractButton*>(focus) != nullptr;
+        if (typing || focus_takes_space) {
+            return false;
+        }
+        if (!key.isAutoRepeat()) {
+            run_compare_action("play_pause");
+        }
+        return true;
+    }
+    for (const char* id : {"previous_video", "next_video", "previous_frame", "next_frame", "zoom_fit", "zoom_100",
+                           "zoom_toggle", "zoom_in", "zoom_out"}) {
+        if (!matches(key, id)) {
+            continue;
+        }
+        if (typing || qobject_cast<QSlider*>(focus) != nullptr) {
+            return false;
+        }
+        // Switching videos on a held key would race through them; a frame
+        // step repeats, as a held button would.
+        if (!key.isAutoRepeat() || std::string_view(id).ends_with("_frame")) {
+            run_compare_action(id);
+        }
+        return true;
+    }
+    return std::nullopt;
+}
+
+void FrameComparePanel::run_compare_action(std::string_view id) {
+    // What Video Compare's keys and mouse gestures do (key_bindings.h).
+    static constexpr std::array zoom_steps{0.25, 0.5, 1.0, 2.0, 4.0, 8.0};
+    if (id == "play_pause") {
+        on_play_clicked();
+    } else if (id == "show_source") {
+        showing_source_ = !showing_source_;  // a gesture that is not held: on, then off
+        update_labels();
+        show_or_request();
+    } else if (id == "previous_video" || id == "next_video") {
+        cycle_distorted(id == "previous_video" ? -1 : 1);
+    } else if (id == "previous_frame" || id == "next_frame") {
+        set_frame(frame_ + (id == "previous_frame" ? -1 : 1));
+    } else if (id == "zoom_fit") {
+        apply_zoom(std::nullopt);
+    } else if (id == "zoom_100") {
+        apply_zoom(1.0);
+    } else if (id == "zoom_toggle") {
+        apply_zoom(zoom_.factor ? std::nullopt : std::optional(1.0));
+    } else if (id == "zoom_in") {
+        // The next step from the zoom in force; fitted counts as 100%.
+        const double now = zoom_.factor.value_or(1.0);
+        const auto next = std::find_if(zoom_steps.begin(), zoom_steps.end(), [now](double step) { return step > now; });
+        apply_zoom(next != zoom_steps.end() ? *next : zoom_steps.back());
+    } else if (id == "zoom_out") {
+        const double now = zoom_.factor.value_or(1.0);
+        const auto next =
+            std::find_if(zoom_steps.rbegin(), zoom_steps.rend(), [now](double step) { return step < now; });
+        apply_zoom(next != zoom_steps.rend() ? *next : zoom_steps.front());
+    }
+}
+
+bool FrameComparePanel::on_video_mouse(QObject* watched, QEvent* event) {
+    // The mouse on the video or still frame (Settings > Shortcuts' gestures).
+    // A click is a press and release in one place: a press that moves is
+    // the drag that pans a zoomed frame, as before. It acts once a
+    // double-click can no longer follow, so a double-click is not two
+    // clicks as well. Returns whether the event is taken.
+    if (!watched->inherits("vml::app::FrameView") && !watched->inherits("vml::app::StreamSurface")) {
+        return false;
+    }
+    const auto run = [this](const char* gesture) {
+        const std::string action = action_for_gesture(gesture);
+        if (!action.empty()) {
+            run_compare_action(action);
+        }
+        return !action.empty();
+    };
+    const auto show_source_while = [this](bool down) {
+        showing_source_ = down;
+        update_labels();
+        show_or_request();
+    };
+    switch (event->type()) {
+    case QEvent::MouseButtonPress: {
+        const auto* mouse = static_cast<QMouseEvent*>(event);
+        if (mouse->button() == Qt::LeftButton) {
+            click_from_ = mouse->globalPosition().toPoint();
+            return false;  // the drag's, too
+        }
+        if (mouse->button() == Qt::MiddleButton) {
+            if (action_for_gesture("middle") == "show_source") {  // held: shown while down
+                show_source_while(true);
+                return true;
+            }
+            return run("middle");
+        }
+        if (mouse->button() == Qt::BackButton || mouse->button() == Qt::ForwardButton) {
+            return run(mouse->button() == Qt::BackButton ? "back" : "forward");
+        }
+        return false;
+    }
+    case QEvent::MouseButtonRelease: {
+        const auto* mouse = static_cast<QMouseEvent*>(event);
+        if (mouse->button() == Qt::MiddleButton && action_for_gesture("middle") == "show_source") {
+            show_source_while(false);
+            return true;
+        }
+        if (mouse->button() == Qt::LeftButton && click_from_ &&
+            (mouse->globalPosition().toPoint() - *click_from_).manhattanLength() <= QApplication::startDragDistance()) {
+            click_timer_.start(QApplication::doubleClickInterval());
+        }
+        click_from_.reset();
+        return false;
+    }
+    case QEvent::MouseButtonDblClick:
+        if (static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
+            click_timer_.stop();  // not a click as well
+            click_from_.reset();
+            return run("double_click");
+        }
+        return false;
+    case QEvent::Wheel: {
+        const auto* wheel = static_cast<QWheelEvent*>(event);
+        const int steps = wheel->angleDelta().y();
+        if (steps == 0) {
+            return false;
+        }
+        const bool ctrl = wheel->modifiers().testFlag(Qt::ControlModifier);
+        return run(steps > 0 ? (ctrl ? "ctrl_wheel_up" : "wheel_up") : (ctrl ? "ctrl_wheel_down" : "wheel_down"));
+    }
+    default:
+        return false;
+    }
 }
 
 // ------------------------------------------------------------------- playback

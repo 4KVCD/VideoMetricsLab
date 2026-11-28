@@ -9,6 +9,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <unordered_map>
+#include <utility>
 #include <variant>
 
 #include "vml/app_log.h"
@@ -453,6 +454,16 @@ Settings Settings::load_from(const std::filesystem::path& path) {
             }
             continue;
         }
+        if (item.key() == "key_bindings" || item.key() == "mouse_bindings") {
+            // Objects; kept as JSON for the window to read (key_bindings.h).
+            if (item.value().is_object()) {
+                (item.key() == "key_bindings" ? settings.key_bindings_json : settings.mouse_bindings_json) =
+                    item.value().dump();
+            } else {
+                log_unfit(item.key(), item.value(), "dict");
+            }
+            continue;
+        }
         if (item.key() == "cvvdp_presets") {
             // A list of objects; kept as JSON for the CVVDP presets to read.
             if (item.value().is_array() &&
@@ -591,6 +602,14 @@ std::string Settings::text() const {
     data["check_for_updates"] = check_for_updates;
     data["confirm_close_during_run"] = confirm_close_during_run;
     data["keyboard_shortcuts"] = keyboard_shortcuts;
+    // Only when the user changed a key or gesture: files stay as they were.
+    for (const auto& [name, text] : {std::pair{"key_bindings", &key_bindings_json},
+                                     std::pair{"mouse_bindings", &mouse_bindings_json}}) {
+        const Json changed = Json::parse(*text, nullptr, false);
+        if (changed.is_object() && !changed.empty()) {
+            data[name] = changed;
+        }
+    }
     data["skipped_update_version"] = skipped_update_version;
     data["language"] = language;
     data["theme"] = theme;

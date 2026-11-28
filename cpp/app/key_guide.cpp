@@ -13,6 +13,7 @@
 #include <cmath>
 
 #include "i18n.h"
+#include "key_bindings.h"
 
 namespace vml::app {
 
@@ -34,22 +35,58 @@ QFont scaled(const QFont& font, double factor) {
 }  // namespace
 
 std::vector<KeyRow> video_compare_keys() {
-    return {
-        {{QStringLiteral("S")}, app::tr("Hold to see the source")},
-        {{QString::fromUtf8("\xE2\x86\x90"), QString::fromUtf8("\xE2\x86\x92")}, app::tr("Switch test video")},  // ← →
-        {{app::tr("Space")}, app::tr("Play / pause")},
-    };
+    const auto cap = [](const QKeySequence& keys) { return key_cap_text(keys); };
+    std::vector<KeyRow> rows;
+    if (const std::vector<QKeySequence> source = keys_for("show_source"); !source.empty()) {
+        rows.push_back({{cap(source.front())}, app::tr("Hold to see the source")});
+    }
+    const std::vector<QKeySequence> previous = keys_for("previous_video");
+    const std::vector<QKeySequence> next = keys_for("next_video");
+    if (!previous.empty() && !next.empty()) {
+        rows.push_back({{cap(previous.front()), cap(next.front())}, app::tr("Switch test video")});
+    }
+    if (const std::vector<QKeySequence> play = keys_for("play_pause"); !play.empty()) {
+        rows.push_back({{cap(play.front())}, app::tr("Play / pause")});
+    }
+    return rows;
 }
 
 KeyGuide::KeyGuide(QWidget* parent) : QFrame(parent) {
     setObjectName(QStringLiteral("keyGuide"));
     grid_ = new QGridLayout(this);
+    build_rows();
+    set_scale(scales.front());
+    show_look();
+    connect(key_bindings_signal(), &KeyBindingsSignal::changed, this, [this] {
+        build_rows();
+        set_scale(scale_ != 0 ? scale_ : scales.front());
+        show_look();
+        if (room_.isValid()) {
+            scale_ = 0;  // fitted again to the room it has
+            fit(room_);
+        }
+    });
+}
+
+void KeyGuide::build_rows() {
+    // Clearing a layout deletes only its own items: each row's caps are a
+    // layout of their own, emptied too.
+    while (QLayoutItem* item = grid_->takeAt(0)) {
+        if (QLayout* inner = item->layout()) {
+            while (QLayoutItem* cap = inner->takeAt(0)) {
+                delete cap->widget();
+                delete cap;
+            }
+        }
+        delete item->widget();
+        delete item;
+    }
+    keys_.clear();
+    actions_.clear();
     int row = 0;
     for (const KeyRow& keys : video_compare_keys()) {
         add_row(row++, keys.keys, keys.action);
     }
-    set_scale(scales.front());
-    show_look();
 }
 
 void KeyGuide::set_themed(bool themed) {
