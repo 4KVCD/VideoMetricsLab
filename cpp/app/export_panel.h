@@ -62,7 +62,7 @@ public:
     // The ticks changed (settings' export choices): saved, and shown on
     // the Settings tab.
     std::function<void()> choices_changed;
-    // The open tab's own save icon, for the link; none on a tab without one.
+    // The open tab's own save button, for the link; none on a tab without one.
     std::function<SaveButton*()> tab_save;
     // Export: of the selection (`selection`) or of every scored video.
     std::function<void(bool selection)> export_videos;

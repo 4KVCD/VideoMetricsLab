@@ -1,5 +1,5 @@
 // The quick saves (issue #224, docs/ARCHITECTURE.md, "Exports"): each
-// card's save icon (SaveButton), which saves what the card shows at one click
+// card's save button (SaveButton), which saves what the card shows at one click
 // into the export folder, in the formats Settings' Quick saves names, and
 // says how it went on the indicator (export_indicator.h).
 #pragma once
@@ -34,7 +34,7 @@ struct QuickFile;
 // it went, on the window's thread.
 using QuickSaveRunner = std::function<void(std::function<ExportOutcome()> save, ExportReport done)>;
 
-// What a tab's save icons need of the window: the export folder they save in
+// What a tab's save buttons need of the window: the export folder they save in
 // (Settings' Export folder, or Documents where it is blank), the formats a
 // quick save writes data in (quick_formats), and where its files are written
 // (`background`: the window's file writer, file_writes.h). Unset: no folder,
@@ -70,13 +70,13 @@ QString no_format_text();
 // The refusal of a save of a card that shows nothing yet.
 QString nothing_shown_text();
 
-// What a save icon's tooltip says it saves: "Save {what}, as {formats}, in the
+// What a save button's tooltip says it saves: "Save {what}, as {formats}, in the
 // export folder.", or, for an image or images alone, "Save {what} in the
 // export folder."; then where Save as... is. `formats` empty: images alone.
 QString quick_save_tooltip(const QString& what, const std::vector<std::string>& formats);
 
 // Marks `view` (a table, list or chart) as not data to save: a list of files
-// to read, a list to pick from. Every other one is on a card with a save icon
+// to read, a list to pick from. Every other one is on a card with a save button
 // (the appearance tests check it: EveryCardThatShowsDataHasASaveIcon).
 void not_exported(QWidget* view);
 // Whether `view` is marked so.
@@ -85,7 +85,7 @@ bool is_not_exported(const QWidget* view);
 // One file of a quick save: its name, and what writes it at the path given
 // (the error, empty when written). `write` runs off the window's thread
 // (QuickSaves::save): it must not touch a widget, so it holds plain data,
-// taken when the save icon was clicked.
+// taken when the save button was clicked.
 struct QuickFile {
     QString name;
     std::function<QString(const QString& path)> write;
@@ -117,29 +117,44 @@ ExportOutcome save_quick(const QString& folder, const std::vector<QuickFile>& fi
 // the button's text.
 QIcon export_icon(QWidget* button);
 
-// A card's save icon, in its top-right corner: one click saves what the card
-// shows (`save`); a right-click offers Save as... (`save_as` fills the menu).
-// Greyed while `why_not` gives a reason, which its tooltip says; else its
-// tooltip is `describe`'s. Looked at again as the pointer comes to it, and on
-// refresh(). A push button, so that VML Modern's style sheet draws it as every
-// other button (its "icon" role: narrower padding, a gap from the button
-// beside it); in Classic its own small square.
+// What a save button saves: a picture (PNG) or data (JSON, CSV). Each kind
+// has its own glyph, so the two never look alike (issue #261).
+enum class SaveKind { picture, data };
+
+// A card's save button, in its top-right corner (issue #261): a glyph for
+// its kind, words saying what it saves ("Save graph"), and an arrow on its
+// right, divided from the words by a line: a split button. A click on the
+// words saves what the card shows at once (`save`); the arrow (on the press,
+// as a menu opens), Alt+Down, the menu key or a right-click opens Save as...
+// (`save_as` fills the menu). Greyed while `why_not` gives a reason, which
+// its tooltip says; else its tooltip is `describe`'s. Looked at again as the
+// pointer comes to it, and on refresh(). Its accessible name is its words.
+// Words when there's room: its minimum width is its glyph and arrow alone,
+// so its row never widens the window; given less than its words need (a
+// narrow window, a long translation), it shows the glyph and arrow only.
 class SaveButton : public QPushButton {
     Q_OBJECT
 
 public:
-    explicit SaveButton(QWidget* parent = nullptr);
+    SaveButton(const QString& label, SaveKind kind, QWidget* parent = nullptr);
 
     std::function<QString()> why_not;
     std::function<QString()> describe;
     std::function<void()> save;
     std::function<void(QMenu&)> save_as;
 
+    SaveKind kind() const { return kind_; }
     // Greyed or not, and its tooltip, as things are now.
     void refresh();
     // What it saves, or why it can't: its tooltip's first line, as plain
     // text (the window may show tooltips as rich text).
     QString summary() const;
+    // Opens Save as... under the button.
+    void open_menu();
+    // The arrow's part of the button, at its right.
+    QRect arrow_rect() const;
+    // Whether it is wide enough to show its words (else glyph and arrow).
+    bool shows_words() const;
 
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
@@ -147,7 +162,17 @@ public:
 protected:
     bool event(QEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
+
+private:
+    // The glyph's part of the button when it shows no words.
+    static constexpr int glyph_only_width = 30;
+    // How much of its side padding it gives up before showing no words.
+    static constexpr int padding_given_up = 12;
+    int arrow_width() const;
+    SaveKind kind_;
 };
 
 }  // namespace vml::app

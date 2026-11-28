@@ -388,14 +388,12 @@ void BitratePanel::add_plot_controls(QBoxLayout* root) {
     plot_controls->addStretch(1);
     reset_zoom_button = new QPushButton(app::tr("Reset zoom"));
     plot_controls->addWidget(reset_zoom_button);
-    // The card's save icon, in its top-right corner (issue #224).
-    graph_save = new SaveButton;
+    // The card's save button, in its top-right corner (issues #224, #261):
+    // the graph alone; the bitrate data is its Save as... menu's.
+    graph_save = new SaveButton(app::tr("Save graph"), SaveKind::picture);
     graph_save->why_not = [this] { return chart->has_data() ? QString() : nothing_shown_text(); };
     graph_save->describe = [this] {
-        const std::vector<std::string> formats = quick_saves.data_formats();
-        return quick_save_tooltip(formats.empty() ? app::tr("the graph as PNG")
-                                                  : app::tr("the graph as PNG and the bitrate data"),
-                                  formats);
+        return quick_save_tooltip(app::tr("the graph as PNG"), {});
     };
     graph_save->save = [this] { save_graph(); };
     graph_save->save_as = [this](QMenu& menu) { fill_graph_menu(menu); };
@@ -442,7 +440,7 @@ void BitratePanel::add_frame_controls(QVBoxLayout* root) {
     range_label = new QLabel;
     row->addWidget(range_label);
     row->addStretch(1);
-    // A right-click on the graph: the save icon's Save as... items.
+    // A right-click on the graph: the save button's Save as... items.
     chart->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(chart, &QWidget::customContextMenuRequested, this, [this](const QPoint& at) {
         if (chart->has_data()) {
@@ -1604,9 +1602,6 @@ void BitratePanel::save_graph() {
         return;
     }
     std::vector<QuickFile> files{image_file(png_name(), [this] { return render_export_image(); })};
-    for (QuickFile& file : data_files_of(quick_saves.data_formats())) {
-        files.push_back(std::move(file));
-    }
     quick_saves.save(quick_saves.export_folder(), std::move(files), export_report);
 }
 

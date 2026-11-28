@@ -114,7 +114,7 @@ SavedScoresPanel::SavedScoresPanel(const QString& title, std::vector<SavedScoreR
     heading->setTextFormat(Qt::PlainText);
     auto* head = new QHBoxLayout;
     head->addWidget(heading, 1);
-    save_button_ = new SaveButton;  // the window says what it saves (SavedResultsPanel::open_details)
+    save_button_ = new SaveButton(app::tr("Save summary"), SaveKind::data);  // the window says what it saves (SavedResultsPanel::open_details)
     head->addWidget(save_button_);
     layout->addLayout(head);
 

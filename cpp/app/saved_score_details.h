@@ -65,7 +65,7 @@ public:
     // A metric's other score clicked: it is to be the one used.
     std::function<void(const std::string& key, const std::filesystem::path& file)> picked;
 
-    // The save icon at its top right: the window sets what it saves.
+    // The save button at its top right: the window sets what it saves.
     SaveButton* save_button() const { return save_button_; }
 
     // Opens under `anchor`, its left edge on the anchor's, kept on screen.

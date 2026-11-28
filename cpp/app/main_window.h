@@ -684,7 +684,7 @@ private:
     // why it failed. `quiet` (the after-run export): only a failure is said.
     // No export opens a window, for success or failure.
     void submit_export(const QString& description, std::function<QStringList()> write, bool quiet = false);
-    // What every tab's save icons save by: the export folder and Settings'
+    // What every tab's save buttons save by: the export folder and Settings'
     // Quick saves formats, read at each save; their files made and written
     // on file_writes_ (written_by), the indicator saying "Saving..." until
     // they are.
@@ -713,7 +713,7 @@ private:
     // user says, suggested after `name`.
     // Score summary (score_summary.h): of saved comparisons; saved where the
     // user says (Score summary as JSON / CSV...), or at one click in the
-    // quick saves' formats (the details panel's save icon).
+    // quick saves' formats (the details panel's save button).
     std::vector<ScoreSummaryEntry> saved_score_summary(const std::vector<LoadedSavedResult>& results) const;
     void save_score_summary(std::vector<ScoreSummaryEntry> entries, const QString& name, bool csv);
     void quick_save_score_summary(std::vector<ScoreSummaryEntry> entries, const QString& name);
@@ -722,7 +722,7 @@ private:
     // user picks, each file named after its label.
     void save_per_frame_files(const std::vector<std::pair<std::shared_ptr<const ComparisonResult>, QString>>& results,
                               bool json);
-    // The Videos card's save icon's Save as...: each kind on its own, of the
+    // The Videos card's save button's Save as...: each kind on its own, of the
     // rows export_menu_rows gives.
     void fill_videos_quick_menu(QMenu& menu);
     // A row's video for the Videos tab's Export menu: a finished run of the
@@ -745,9 +745,9 @@ private:
     // The menu's export of one kind, of its rows as they are now.
     void export_rows_as(SavedResultsPanel::Export kind);
     // Saves `document` (Export results') in Settings' Quick saves formats,
-    // into the export folder, named after `name`: a save icon's results.
+    // into the export folder, named after `name`: a save button's results.
     void quick_save_results(nlohmann::ordered_json document, const QString& name);
-    // The Videos card's save icon: the selected rows' results (else every
+    // The Videos card's save button: the selected rows' results (else every
     // scored row's), what it would save, and why it cannot.
     void save_rows_results();
     QString rows_save_text() const;
@@ -1118,7 +1118,7 @@ private:
     // The rows ticked when the run started, those already scored too: their
     // results go to the graph when it ends.
     std::vector<std::shared_ptr<RowData>> checked_rows_for_run_;
-    // The test videos' card's save icon (issue #224).
+    // The test videos' card's save button (issue #224).
     SaveButton* videos_save_ = nullptr;
     // The tab bar's right end (build_tab_corner), and the indicator there
     // that says how each export went.

@@ -59,7 +59,7 @@ public:
     // Where its exports say how they went: the window's indicator
     // (export_indicator.h). Not set: nowhere.
     ExportReport export_report;
-    // The export folder and formats its save icons save in (quick_save.h).
+    // The export folder and formats its save buttons save in (quick_save.h).
     QuickSaves quick_saves;
     // Which of `items` (the scored videos) to add: their places in the list;
     // none for Cancel.
@@ -92,7 +92,7 @@ public:
     QComboBox* group_combo = nullptr;
     QPushButton* warnings_button = nullptr;
     QPushButton* copy_button = nullptr;
-    // The save icons of the table's card and the chart's (issue #224).
+    // The save buttons of the table's card and the chart's (issue #224).
     SaveButton* table_save = nullptr;
     SaveButton* chart_save = nullptr;
     QLabel* heading_label = nullptr;

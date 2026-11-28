@@ -1,12 +1,17 @@
-// A card's save icon's one-click save (quick_save.h, issue #224): the formats
+// A card's save button's one-click save (quick_save.h, issue #224): the formats
 // in Settings' order, and a save that stops at the first file it cannot
 // write, saying why.
 #include "quick_save.h"
 
 #include <gtest/gtest.h>
 
+#include <QApplication>
+#include <QContextMenuEvent>
 #include <QCoreApplication>
+#include <QMenu>
 #include <QPixmap>
+#include <QTest>
+#include <QTimer>
 
 #include <chrono>
 #include <filesystem>
@@ -48,7 +53,7 @@ TEST(QuickSave, WritesInSettingsOrderAndStopsAtAFailure) {
     EXPECT_EQ(outcome.error.toStdString(), "Could not write a.csv");
 }
 
-// A save icon's files are made at the click where they read the card
+// A save button's files are made at the click where they read the card
 // (data_files' text, image_file's picture), then written on the window's
 // file writer (written_by), on its thread, so that the window answers
 // meanwhile: a 2-hour film's bitrate data took about 300 ms to make and
@@ -99,6 +104,77 @@ TEST(QuickSave, WritesOnTheFileWriterThenSaysHowItWent) {
     QCoreApplication::sendPostedEvents();
     ASSERT_EQ(heard.size(), 2U);
     EXPECT_EQ(heard.back().error.toStdString(), "out of memory");
+}
+
+// Issue #261: a save button says what it saves, as its words and its
+// accessible name; a click on the words saves, and a press on its arrow opens
+// Save as... instead, without saving; neither moves or resizes it.
+TEST(QuickSave, SaveButtonsWordsSaveItsArrowOpensSaveAsAndItNarrowsToItsGlyph) {
+    SaveButton button(QStringLiteral("Save graph"), SaveKind::picture);
+    EXPECT_EQ(button.text().toStdString(), "Save graph");
+    EXPECT_EQ(button.accessibleName().toStdString(), "Save graph");
+    EXPECT_EQ(button.kind(), SaveKind::picture);
+    int saved = 0;
+    int menus = 0;
+    button.save = [&saved] { ++saved; };
+    button.save_as = [&menus](QMenu& menu) {
+        ++menus;
+        menu.addAction(QStringLiteral("Graph as PNG..."));
+    };
+    button.describe = [] { return QStringLiteral("Save this graph as PNG in the export folder.\nArrow: Save as..."); };
+    button.resize(button.sizeHint());
+    button.show();
+    button.refresh();
+    EXPECT_EQ(button.accessibleDescription().toStdString(), "Save this graph as PNG in the export folder.");
+    const QRect before = button.geometry();
+    QTest::mouseClick(&button, Qt::LeftButton, {}, QPoint(button.arrow_rect().left() / 2, button.height() / 2));
+    EXPECT_EQ(saved, 1);
+    EXPECT_EQ(menus, 0);
+    // The menu opens on the press; closed here as soon as it shows.
+    bool shown = false;
+    QTimer::singleShot(0, [&shown] {
+        if (QWidget* popup = QApplication::activePopupWidget()) {
+            shown = true;
+            popup->close();
+        }
+    });
+    QTest::mousePress(&button, Qt::LeftButton, {}, button.arrow_rect().center());
+    QTest::mouseRelease(&button, Qt::LeftButton, {}, button.arrow_rect().center());
+    EXPECT_TRUE(shown);
+    EXPECT_EQ(menus, 1);
+    EXPECT_EQ(saved, 1);
+    EXPECT_EQ(button.geometry(), before);
+
+    // From the keyboard: Alt+Down, and the menu key as a context menu.
+    const auto close_popup = [&shown] {
+        shown = false;
+        QTimer::singleShot(0, [&shown] {
+            if (QWidget* popup = QApplication::activePopupWidget()) {
+                shown = true;
+                popup->close();
+            }
+        });
+    };
+    close_popup();
+    QTest::keyClick(&button, Qt::Key_Down, Qt::AltModifier);
+    EXPECT_TRUE(shown);
+    EXPECT_EQ(menus, 2);
+    close_popup();
+    QContextMenuEvent from_keyboard(QContextMenuEvent::Keyboard, QPoint(2, 2), button.mapToGlobal(QPoint(2, 2)));
+    QApplication::sendEvent(&button, &from_keyboard);
+    EXPECT_TRUE(shown);
+    EXPECT_EQ(menus, 3);
+    EXPECT_EQ(saved, 1);
+
+    // Words when there's room: down to its glyph and arrow, which still save
+    // and open Save as... (a narrow window never grows for its words).
+    EXPECT_TRUE(button.shows_words());
+    EXPECT_LT(button.minimumSizeHint().width() + 40, button.sizeHint().width());
+    button.resize(button.minimumSizeHint());
+    EXPECT_FALSE(button.shows_words());
+    EXPECT_EQ(button.accessibleName().toStdString(), "Save graph");
+    QTest::mouseClick(&button, Qt::LeftButton, {}, QPoint(button.arrow_rect().left() / 2, button.height() / 2));
+    EXPECT_EQ(saved, 2);
 }
 
 }  // namespace

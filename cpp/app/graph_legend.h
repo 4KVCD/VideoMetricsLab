@@ -1,4 +1,4 @@
-// What Worst Frames' graph shows, opened by the ⓘ beside its save icon: a
+// What Worst Frames' graph shows, opened by the ⓘ beside its save button: a
 // row for each mark it draws (the scores' line, a worst frame's dot, a weak
 // segment's shading, the segment selected, the frame selected), each with
 // a swatch drawn in the colours the graph draws it in now, so that it reads

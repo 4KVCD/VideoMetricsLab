@@ -210,7 +210,7 @@ void ExportPanel::refresh() {
     tab_label_->setVisible(save != nullptr);
     tab_link_->setVisible(save != nullptr);
     if (save != nullptr) {
-        // What its save icon would save, as its tooltip says it (the first
+        // What its save button would save, as its tooltip says it (the first
         // line), or why it can't, greyed.
         save->refresh();
         // Cut to the panel's width (a long video name would widen it past

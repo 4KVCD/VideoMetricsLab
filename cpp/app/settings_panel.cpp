@@ -613,7 +613,7 @@ void SettingsPanel::show_export_choices() {
 }
 
 QWidget* SettingsPanel::build_quick_save_choices() {
-    // The formats each card's save icon writes what it shows in (issue
+    // The formats each card's save button writes what it shows in (issue
     // #224): a box for each, as Exports include has; graphs are images.
     auto* quick = new QWidget;
     auto* row = new QHBoxLayout(quick);
@@ -621,7 +621,7 @@ QWidget* SettingsPanel::build_quick_save_choices() {
     for (const std::string& key : export_format_keys()) {
         auto* box = new QCheckBox(QString::fromStdString(key).toUpper());
         box->setToolTip(Qt::convertFromPlainText(
-            app::tr("The formats a table's or list's save icon writes what it shows in. With neither ticked, "
+            app::tr("The formats a table's or list's save button writes what it shows in. With neither ticked, "
                     "only graphs are saved at one click."),
             Qt::WhiteSpaceNormal));
         box->setChecked(std::find(settings_.quick_save_formats.begin(), settings_.quick_save_formats.end(), key) !=
@@ -631,7 +631,7 @@ QWidget* SettingsPanel::build_quick_save_choices() {
         row->addWidget(box);
     }
     row->addSpacing(12);
-    auto* note = new QLabel(app::tr("Graphs: always PNG. Each table's, list's and graph's save icon saves what it "
+    auto* note = new QLabel(app::tr("Graphs: always PNG. Each table's, list's and graph's save button saves what it "
                                     "shows, at one click, in the export folder."));
     note->setWordWrap(true);
     theme::style(note, "color: {muted};");

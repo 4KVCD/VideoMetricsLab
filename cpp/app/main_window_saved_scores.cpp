@@ -444,7 +444,7 @@ void MainWindow::show_table_menu(const QPoint& position) {
         this_video = menu.addAction(export_action_text(ExportScope::this_video, items));
         this_video->setEnabled(anything);
     }
-    // Then the quick grabs (the save icon's Save as...), of the same rows.
+    // Then the quick grabs (the save button's Save as...), of the same rows.
     menu.addSeparator();
     SavedResultsPanel::add_quick_grabs(menu, !export_menu_rows().empty(),
                                        [this](SavedResultsPanel::Export kind) { export_rows_as(kind); },

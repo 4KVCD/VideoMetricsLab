@@ -545,9 +545,9 @@ void FrameComparePanel::add_colour_row(QBoxLayout* root) {
                                              "sound. Selectable and copyable."));
     PopupPanel::open_on_press(advanced_info_button, [this] { open_advanced_info(); });
     color_row->addWidget(advanced_info_button);
-    // The frame pair's save icon, at the top card's right end (issue #224):
+    // The frame pair's save button, at the top card's right end (issue #224):
     // this frame of the reference and of the test video, as PNG.
-    save_still_button = new SaveButton;
+    save_still_button = new SaveButton(app::tr("Save stills"), SaveKind::picture);
     save_still_button->why_not = [this] {
         return current_entry() == nullptr ? nothing_shown_text()
                : still_worker_ != nullptr ? app::tr("Saving...")

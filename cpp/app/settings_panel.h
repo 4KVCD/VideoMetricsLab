@@ -179,7 +179,7 @@ public:
     std::map<std::string, QCheckBox*> export_item_boxes;
     std::map<std::string, QCheckBox*> export_format_boxes;  // by export_format_keys' key
     QComboBox* export_form = nullptr;
-    // Quick saves: a box for each format a save icon writes data in.
+    // Quick saves: a box for each format a save button writes data in.
     std::map<std::string, QCheckBox*> quick_format_boxes;  // by export_format_keys' key
     QCheckBox* after_run_box = nullptr;
     QComboBox* after_run_place = nullptr;

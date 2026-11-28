@@ -55,7 +55,7 @@ QString header(const QTableWidget& table, int column) { return table.horizontalH
 
 // Every Export menu's items, as each shows them when opened.
 QList<QAction*> export_items(const WorstFramesTab& tab) {
-    // Every card's save icon's Save as... items.
+    // Every card's save button's Save as... items.
     QList<QAction*> items;
     for (SaveButton* button : tab.findChildren<SaveButton*>()) {
         auto* menu = new QMenu(button);
@@ -172,7 +172,7 @@ TEST(WorstFramesTab, ListsTheDipsAndTheSegmentsAndOpensThemInVideoCompare) {
     EXPECT_EQ(tab.segments().size(), 1U);
 
     // The exports are named after the metrics they cover; each is on a
-    // right-click on its card's save icon.
+    // right-click on its card's save button.
     QStringList suggested;
     Dialogs dialogs;
     dialogs.save_file = [&suggested](const QString&, const QString& name, const QString&) {

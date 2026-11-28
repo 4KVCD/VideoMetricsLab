@@ -3,6 +3,9 @@
 #include <QContextMenuEvent>
 #include <QEvent>
 #include <QIconEngine>
+#include <QKeyEvent>
+#include <QMouseEvent>
+#include <QStylePainter>
 #include <QImage>
 #include <QPointer>
 #include <QMenu>
@@ -16,7 +19,6 @@
 
 #include "file_writes.h"
 #include "i18n.h"
-#include "theme.h"
 #include "vml/export_csv.h"
 #include "vml/settings.h"
 #include "window_helpers.h"
@@ -105,7 +107,7 @@ QString quick_save_tooltip(const QString& what, const std::vector<std::string>& 
         formats.empty()
             ? app::tr("Save {what} in the export folder.", {{"what", what}})
             : app::tr("Save {what}, as {formats}, in the export folder.", {{"what", what}, {"formats", formats_text(formats)}});
-    return saves + QStringLiteral("\n") + app::tr("Right-click: Save as...");
+    return saves + QStringLiteral("\n") + app::tr("Arrow: Save as...");
 }
 
 std::vector<QString> quick_save_paths(const QString& folder, const std::vector<QString>& names,
@@ -211,12 +213,88 @@ private:
 
 QIcon export_icon(QWidget* button) { return QIcon(new ExportIconEngine(button)); }
 
-// ------------------------------------------------------------ the save icon
+// ------------------------------------------------------------ the save button
 
-SaveButton::SaveButton(QWidget* parent) : QPushButton(parent) {
+namespace {
+
+// A save button's glyph (issue #261), drawn as the Export button's is: in
+// the button's text color, greyed when disabled, a square at the left of
+// the icon's size. A picture: a frame with hills and a sun. Data: a small
+// table, its heading row and a column line.
+class SaveGlyphEngine : public QIconEngine {
+public:
+    SaveGlyphEngine(QWidget* button, SaveKind kind) : button_(button), kind_(kind) {}
+
+    void paint(QPainter* painter, const QRect& rect, QIcon::Mode mode, QIcon::State) override {
+        const QPalette colors = button_ != nullptr ? button_->palette() : QPalette();
+        const QColor ink =
+            colors.color(mode == QIcon::Disabled ? QPalette::Disabled : QPalette::Active, QPalette::ButtonText);
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing);
+        QPen pen(ink, std::max<qreal>(1.3, rect.height() / 11.0));
+        pen.setCapStyle(Qt::RoundCap);
+        pen.setJoinStyle(Qt::RoundJoin);
+        painter->setPen(pen);
+        painter->setBrush(Qt::NoBrush);
+        const QRectF box = QRectF(rect.left(), rect.top(), rect.height(), rect.height()).adjusted(1.5, 2.0, -1.5, -2.0);
+        painter->drawRoundedRect(box, 1.5, 1.5);
+        if (kind_ == SaveKind::picture) {
+            // Solid hills and a sun, as a photo's icon: an outline hill read
+            // as a line chart at 16 px.
+            QPainterPath hills;
+            hills.moveTo(box.left(), box.bottom());
+            hills.lineTo(box.left(), box.bottom() - box.height() * 0.12);
+            hills.lineTo(box.left() + box.width() * 0.36, box.top() + box.height() * 0.45);
+            hills.lineTo(box.left() + box.width() * 0.6, box.top() + box.height() * 0.72);
+            hills.lineTo(box.left() + box.width() * 0.74, box.top() + box.height() * 0.58);
+            hills.lineTo(box.right(), box.bottom() - box.height() * 0.15);
+            hills.lineTo(box.right(), box.bottom());
+            hills.closeSubpath();
+            painter->setBrush(ink);
+            painter->drawPath(hills);
+            painter->setPen(Qt::NoPen);
+            painter->drawEllipse(QPointF(box.left() + box.width() * 0.7, box.top() + box.height() * 0.28),
+                                 box.width() * 0.13, box.width() * 0.13);
+        } else {
+            const qreal heading = box.top() + box.height() * 0.33;
+            painter->drawLine(QPointF(box.left(), heading), QPointF(box.right(), heading));
+            const qreal row = box.top() + box.height() * 0.66;
+            painter->drawLine(QPointF(box.left(), row), QPointF(box.right(), row));
+            const qreal column = box.left() + box.width() * 0.4;
+            painter->drawLine(QPointF(column, heading), QPointF(column, box.bottom()));
+        }
+        painter->restore();
+    }
+
+    QPixmap pixmap(const QSize& size, QIcon::Mode mode, QIcon::State state) override {
+        return scaledPixmap(size, mode, state, 1.0);
+    }
+
+    QPixmap scaledPixmap(const QSize& size, QIcon::Mode mode, QIcon::State state, qreal scale) override {
+        QPixmap drawn(size * scale);
+        drawn.setDevicePixelRatio(scale);
+        drawn.fill(Qt::transparent);
+        QPainter painter(&drawn);
+        paint(&painter, QRect(QPoint(0, 0), size), mode, state);
+        return drawn;
+    }
+
+    QIconEngine* clone() const override { return new SaveGlyphEngine(button_, kind_); }
+
+private:
+    QPointer<QWidget> button_;
+    SaveKind kind_;
+};
+
+}  // namespace
+
+SaveButton::SaveButton(const QString& label, SaveKind kind, QWidget* parent) : QPushButton(parent), kind_(kind) {
     setFocusPolicy(Qt::TabFocus);
-    theme::set_role(this, "icon");
-    setAccessibleName(app::tr("Save"));
+    setText(label);
+    setIcon(QIcon(new SaveGlyphEngine(this, kind)));
+    setIconSize(QSize(20, 16));  // the glyph is square at the left: the rest is room before the words
+    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);  // down to its glyph and arrow where room is short
+    setAccessibleName(label);
     connect(this, &QPushButton::clicked, this, [this] {
         refresh();  // what it saves may have changed since it was last looked at
         if (isEnabled() && save) {
@@ -229,6 +307,7 @@ void SaveButton::refresh() {
     const QString why = why_not ? why_not() : QString();
     setEnabled(why.isEmpty());
     setToolTip(!why.isEmpty() ? why : describe ? describe() : QString());
+    setAccessibleDescription(summary());
 }
 
 QString SaveButton::summary() const {
@@ -237,16 +316,27 @@ QString SaveButton::summary() const {
     return text.section(QLatin1Char('\n'), 0, 0);
 }
 
+int SaveButton::arrow_width() const { return fontMetrics().height() + 4; }
+
+QRect SaveButton::arrow_rect() const { return {width() - arrow_width(), 0, arrow_width(), height()}; }
+
 QSize SaveButton::sizeHint() const {
-    // VML Modern: as its style sheet makes it (the "icon" role); Classic: a
-    // small square, not a push button's usual width.
-    if (theme::current_interface() == theme::Interface::modern) {
-        return QPushButton::sizeHint();
-    }
-    return {28, 26};
+    // The words and glyph as a push button sizes them, and the arrow.
+    const QSize words = QPushButton::sizeHint();
+    return {words.width() + arrow_width(), words.height()};
 }
 
-QSize SaveButton::minimumSizeHint() const { return sizeHint(); }
+QSize SaveButton::minimumSizeHint() const {
+    // The glyph with a little room each side, and the arrow: no wider than
+    // the icon-only button it replaces needs, with its arrow.
+    return {glyph_only_width + arrow_width(), sizeHint().height()};
+}
+
+bool SaveButton::shows_words() const {
+    // Its side padding gives way before its words do: a row a few pixels
+    // short keeps them.
+    return width() >= sizeHint().width() - padding_given_up;
+}
 
 bool SaveButton::event(QEvent* event) {
     // A disabled widget is still told of the pointer and asked its tooltip.
@@ -256,7 +346,7 @@ bool SaveButton::event(QEvent* event) {
     return QPushButton::event(event);
 }
 
-void SaveButton::contextMenuEvent(QContextMenuEvent* event) {
+void SaveButton::open_menu() {
     if (!save_as || !isEnabled()) {
         return;
     }
@@ -264,43 +354,76 @@ void SaveButton::contextMenuEvent(QContextMenuEvent* event) {
     menu.setToolTipsVisible(true);
     save_as(menu);
     if (!menu.isEmpty()) {
-        menu.exec(event->globalPos());
+        setDown(true);
+        menu.exec(mapToGlobal(QPoint(0, height())));
+        setDown(false);
     }
 }
 
-void SaveButton::paintEvent(QPaintEvent* event) {
-    QPushButton::paintEvent(event);  // the button, without icon or text
-    // A disk, drawn in the text's color (greyed when disabled), as the
-    // title bar draws its glyphs: no icon file to keep in two themes.
-    QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
-    const QColor ink = palette().color(isEnabled() ? QPalette::Active : QPalette::Disabled, QPalette::ButtonText);
-    const qreal side = 14;
-    // Centered in the button as drawn: VML Modern's style sheet gives it a
-    // margin at the left (its gap from the button beside it).
+void SaveButton::contextMenuEvent(QContextMenuEvent* event) {
+    event->accept();
+    open_menu();
+}
+
+void SaveButton::mousePressEvent(QMouseEvent* event) {
+    // The arrow opens Save as... on the press, as a menu button does.
+    if (event->button() == Qt::LeftButton && arrow_rect().contains(event->position().toPoint())) {
+        event->accept();
+        open_menu();
+        return;
+    }
+    QPushButton::mousePressEvent(event);
+}
+
+void SaveButton::keyPressEvent(QKeyEvent* event) {
+    // Alt+Down, as a drop-down opens its list; the menu key and Shift+F10
+    // come as a context menu (contextMenuEvent).
+    if (event->key() == Qt::Key_Down && (event->modifiers() & Qt::AltModifier)) {
+        open_menu();
+        return;
+    }
+    QPushButton::keyPressEvent(event);
+}
+
+void SaveButton::paintEvent(QPaintEvent* /*event*/) {
+    // The button, its glyph and words left of the arrow; then the divider
+    // and the arrow, in the text's color (greyed when disabled).
+    QStylePainter painter(this);
     QStyleOptionButton option;
     initStyleOption(&option);
-    const QRectF drawn = style()->subElementRect(QStyle::SE_PushButtonContents, &option, this);
-    const QRectF box(drawn.center().x() - side / 2.0, drawn.center().y() - side / 2.0, side, side);
-    QPainterPath outline;
-    const qreal cut = 3.5;
-    outline.moveTo(box.left() + 1.5, box.top());
-    outline.lineTo(box.right() - cut, box.top());
-    outline.lineTo(box.right(), box.top() + cut);
-    outline.lineTo(box.right(), box.bottom() - 1.5);
-    outline.quadTo(box.right(), box.bottom(), box.right() - 1.5, box.bottom());
-    outline.lineTo(box.left() + 1.5, box.bottom());
-    outline.quadTo(box.left(), box.bottom(), box.left(), box.bottom() - 1.5);
-    outline.lineTo(box.left(), box.top() + 1.5);
-    outline.quadTo(box.left(), box.top(), box.left() + 1.5, box.top());
-    QPen pen(ink, 1.3);
-    pen.setJoinStyle(Qt::RoundJoin);
-    painter.setPen(pen);
-    painter.setBrush(Qt::NoBrush);
-    painter.drawPath(outline);
-    // The shutter at the top, the label at the bottom.
-    painter.drawRect(QRectF(box.left() + 3.5, box.top(), side - 8, 4.5));
-    painter.drawRect(QRectF(box.left() + 3, box.top() + side * 0.55, side - 6, side * 0.45));
+    painter.drawControl(QStyle::CE_PushButtonBevel, option);
+    QStyleOptionButton words = option;
+    words.rect = style()->subElementRect(QStyle::SE_PushButtonContents, &option, this);
+    words.rect.setRight(arrow_rect().left() - 1);
+    if (shows_words() && width() < sizeHint().width()) {
+        // Short of its full width: the words take the padding's room.
+        words.rect = QRect(4, 0, arrow_rect().left() - 4, height());
+    }
+    if (!shows_words()) {
+        // The glyph alone, centered left of the arrow; the words stay its
+        // tooltip's and accessible name.
+        words.text.clear();
+        words.iconSize = QSize(16, 16);
+        words.rect = QRect(0, 0, arrow_rect().left(), height());
+    }
+    painter.drawControl(QStyle::CE_PushButtonLabel, words);
+    const QColor ink = palette().color(isEnabled() ? QPalette::Active : QPalette::Disabled, QPalette::ButtonText);
+    painter.setRenderHint(QPainter::Antialiasing);
+    const QRect arrow = arrow_rect();
+    QColor line = ink;
+    line.setAlphaF(0.35F);
+    painter.setPen(QPen(line, 1));
+    painter.drawLine(QPointF(arrow.left() + 0.5, arrow.top() + 6), QPointF(arrow.left() + 0.5, arrow.bottom() - 5));
+    QPen chevron(ink, 1.4);
+    chevron.setCapStyle(Qt::RoundCap);
+    chevron.setJoinStyle(Qt::RoundJoin);
+    painter.setPen(chevron);
+    const QPointF middle(arrow.center().x() + 1.0, arrow.center().y() + 1.0);
+    QPainterPath path;
+    path.moveTo(middle + QPointF(-3.5, -1.75));
+    path.lineTo(middle + QPointF(0, 1.75));
+    path.lineTo(middle + QPointF(3.5, -1.75));
+    painter.drawPath(path);
 }
 
 }  // namespace vml::app

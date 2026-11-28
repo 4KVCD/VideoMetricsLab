@@ -123,7 +123,7 @@ TEST_F(BitratePanelTest, AFileReadFillsItsRowAndEachGraph) {
     EXPECT_EQ(panel->analyze_button->text().toStdString(), "Calculate bitrate");
     panel->graph_save->refresh();
     EXPECT_FALSE(panel->graph_save->isEnabled());  // no graph yet
-    // The graph card's save icon, at its top right above the graph
+    // The graph card's save button, at its top right above the graph
     // (docs/ARCHITECTURE.md, "Exports"); Save as... on a right-click.
     QMenu items;
     panel->graph_save->save_as(items);
@@ -166,8 +166,9 @@ TEST_F(BitratePanelTest, AFileReadFillsItsRowAndEachGraph) {
     EXPECT_FALSE(QImage(QString::fromStdString(platform::path_text(png))).isNull());
     EXPECT_EQ(suggested.toStdString(), "encode_bitrate.png");  // named after the one video shown
 
-    // At one click: the graph and the data, in the export folder, as the
-    // command line names the data; again, all numbered alike.
+    // At one click: the graph alone, in the export folder, whatever data
+    // formats Quick saves ticks (issue #261: the data is Save as...'s);
+    // again, numbered.
     const std::filesystem::path out = folder / "out";
     // No background runner: the files are written at once.
     panel->quick_saves = {[&out] { return QString::fromStdString(platform::path_text(out)); },
@@ -176,15 +177,12 @@ TEST_F(BitratePanelTest, AFileReadFillsItsRowAndEachGraph) {
     panel->export_report = [&told](const ExportOutcome& outcome) { told.push_back(outcome); };
     panel->graph_save->click();
     ASSERT_EQ(told.size(), 1U);
-    EXPECT_EQ(told.back().files.size(), 5);
-    for (const char* name : {"encode_bitrate.png", "encode_bitrate.json", "encode_bitrate_frames.csv",
-                             "encode_bitrate_seconds.csv", "encode_bitrate_gops.csv"}) {
-        EXPECT_TRUE(std::filesystem::exists(out / name)) << name;
-    }
+    ASSERT_EQ(told.back().files.size(), 1);
+    EXPECT_TRUE(std::filesystem::exists(out / "encode_bitrate.png"));
+    EXPECT_FALSE(std::filesystem::exists(out / "encode_bitrate.json"));
     panel->graph_save->click();
     ASSERT_EQ(told.size(), 2U);
     EXPECT_TRUE(std::filesystem::exists(out / "encode_bitrate_2.png"));
-    EXPECT_TRUE(std::filesystem::exists(out / "encode_bitrate_frames_2.csv"));
 
     panel->table->item(0, col_use)->setCheckState(Qt::Unchecked);
     EXPECT_FALSE(panel->chart->has_data());

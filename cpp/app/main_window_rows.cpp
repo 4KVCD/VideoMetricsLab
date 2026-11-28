@@ -1446,7 +1446,7 @@ void MainWindow::schedule_best_worst() { best_worst_timer_->start(); }
 
 void MainWindow::apply_best_worst() {
     // Run once whatever lands in the table has landed (schedule_best_worst):
-    // the test videos card's save icon greyed or not for it too.
+    // the test videos card's save button greyed or not for it too.
     videos_save_->refresh();
     // Colours each metric's best score green and its worst red, among the
     // test videos' (MetricDefinition::best_and_worst), while Highlight
