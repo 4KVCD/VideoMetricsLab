@@ -162,6 +162,39 @@ TEST_F(ChartTest, ManyShadedStretchesTintAsOne) {
     EXPECT_EQ(many, single);
 }
 
+// The value axis's ends are the frame's rows, with no empty stretch past the
+// best score: a VMAF line at 100 is drawn on the frame's top row, over it, not
+// on the row above it (the user's report), and an inverted unbounded axis
+// (CAMBI) ends at its best score, 0, labelled on that row.
+TEST_F(ChartTest, TheAxisEndsAreTheFramesRows) {
+    std::vector<double> times(1001);
+    std::vector<float> values(1001, 100.0F);
+    for (std::size_t i = 0; i < times.size(); ++i) {
+        times[i] = static_cast<double>(i) / 10.0;  // 0 to 100 s
+        values[i] = i < 500 ? 70.0F + static_cast<float>(i % 7) : 100.0F;
+    }
+    ChartWidget vmaf(QStringLiteral("VMAF"), 100.0);
+    vmaf.resize(800, 400);
+    vmaf.set_series(0, line_of(times, values));
+    const QImage image = vmaf.render_to_pixmap().toImage();
+    const QRect rect = vmaf.lines_rect();
+    const int x = rect.left() + rect.width() * 3 / 4;  // where the line is at 100
+    EXPECT_EQ(image.pixelColor(x, rect.top()), QColor("#4C72B0"));
+    EXPECT_NE(image.pixelColor(x, rect.top() - 1), QColor("#4C72B0"));
+    ASSERT_FALSE(vmaf.value_ticks().empty());
+    EXPECT_EQ(vmaf.value_ticks().back(), std::pair(rect.top(), QStringLiteral("100")));
+
+    for (float& value : values) {
+        value = (100.0F - value) / 6.0F;  // 0 to 5, lower is better
+    }
+    ChartWidget cambi(QStringLiteral("CAMBI"), std::nullopt, true);
+    cambi.resize(800, 400);
+    cambi.set_series(0, line_of(times, values));
+    EXPECT_EQ(cambi.y_range(), std::pair(0.0, 5.0));
+    ASSERT_FALSE(cambi.value_ticks().empty());
+    EXPECT_EQ(cambi.value_ticks().front(), std::pair(cambi.lines_rect().top(), QStringLiteral("0")));
+}
+
 // A dot on a marked point among unmarked ones (Worst Frames' worst frame of
 // a dip) is drawn however far out the graph is: the dots were thinned to one
 // a few pixels, the point kept the column's largest, a neighbour above the
@@ -365,7 +398,7 @@ TEST_F(ChartTest, DraggingMovesTheLinesWithoutChangingThem) {
                             moved_left(before, after, columns, shift_up))
                     << where << ", dragged " << dx;
                 expect_frame_at(after, low_frame, plot.bottom());
-                expect_frame_at(after, high_frame, plot.top() - 1);
+                expect_frame_at(after, high_frame, plot.top());
                 before = after;
             }
         }

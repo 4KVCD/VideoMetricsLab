@@ -160,6 +160,19 @@ constexpr int frames_without_a_frame = 3;
 // 95-99% at 3 ms and 75-99% at 2 ms; the report takes about 0.8 ms.
 constexpr int hover_lead_ms = 4;
 
+// The rows a value axis spans in `rect`: from its bottom row (the lowest
+// value) to its top row (the highest), both on the frame drawn around it.
+// Spanning the rect's height instead put the highest value on the row above
+// the frame: a VMAF line at 100 over the line for 100.
+double rows_spanned(const QRect& rect) {
+    return std::max(1, rect.height() - 1);
+}
+
+// The row, in `rect`, of a value `fraction` of the way up its axis.
+double row_at(const QRect& rect, double fraction) {
+    return rect.bottom() - fraction * rows_spanned(rect);
+}
+
 }  // namespace
 
 double nice_time_step(double span) {
@@ -404,19 +417,21 @@ void ChartWidget::recompute_y_range() {
     }
     if (fixed_y_max_) {
         // A bounded scale (VMAF): the metric's ceiling when the scores fit
-        // under it, a higher axis when a model can go above it (VMAF v1's 4K
-        // models): real scores are never cut off.
-        const double top = std::max(*fixed_y_max_, std::ceil(hi / 5.0) * 5.0);
+        // under it, else the highest score, so that real scores are never cut
+        // off and no empty stretch is left above them.
+        const double top = std::max(*fixed_y_max_, hi);
         const double bottom = std::min(std::floor(lo / 5.0) * 5.0, top - 5);
         y_range_ = {bottom, top};
+    } else if (hi > lo) {
+        // Unbounded (decibels, SSIM, CAMBI): from the lowest score to the
+        // highest, each on the frame (rows_spanned), no empty stretch beyond
+        // the best score or the worst.
+        y_range_ = {lo, hi};
     } else {
-        // Unbounded (decibels, SSIM): a little room, so that the extremes are
-        // not drawn on the frame.
-        double pad = (hi - lo) * 0.05;
-        if (pad == 0) {
-            pad = std::max(std::abs(hi) * 0.01, 0.5);
-        }
-        y_range_ = {lo - pad, hi + pad};
+        // A flat line: room either side, not below 0 for scores that cannot
+        // be (a clean video's CAMBI of 0 at the frame, not in the middle).
+        const double pad = std::max(std::abs(hi) * 0.01, 0.5);
+        y_range_ = {lo >= 0 ? std::max(0.0, lo - pad) : lo - pad, hi + pad};
     }
 }
 
@@ -474,7 +489,7 @@ double ChartWidget::value_at(int py) const {
         return invert_y_ ? -infinity : infinity;
     }
     const auto [y0, y1] = y_range_;
-    const double fraction = height_fraction((rect.bottom() - py) / static_cast<double>(std::max(1, rect.height())));
+    const double fraction = height_fraction((rect.bottom() - py) / rows_spanned(rect));
     return y0 + fraction * (y1 - y0);
 }
 
@@ -521,9 +536,10 @@ std::vector<std::pair<int, QString>> ChartWidget::ticks_for(const QRect& rect, s
         const double fraction = height_fraction((value - y0) / std::max(1e-9, y1 - y0));
         // The sum of steps lands next to 0, not on it, for a range across it
         // (5.55e-17 for a band of +-0.0015), and ceil() gives -0.0 for a range
-        // starting just below it (Butteraugli's room): both are labelled "0".
+        // starting just below it: both are labelled "0".
         const double shown = std::abs(value) < step * 1e-9 ? 0.0 : value;
-        ticks.emplace_back(rect.bottom() - static_cast<int>(fraction * rect.height()), qt_text(format_general(shown)));
+        // On the row the lines draw the value on (draw_series' to_y), rounded.
+        ticks.emplace_back(static_cast<int>(std::lround(row_at(rect, fraction))), qt_text(format_general(shown)));
     }
     return ticks;
 }
@@ -673,11 +689,13 @@ void ChartWidget::draw(QPixmap& pixmap, const theme::ChartColours& colours) cons
     if (band) {
         draw_highlight(painter, *band, colours.highlight);
     }
+    // The frame under the lines: the axis's ends are its top and bottom rows,
+    // and a line there (VMAF at 100) is drawn on it, not hidden by it.
+    painter.setPen(QPen(colours.axis, 1));
+    painter.drawRect(lines.adjusted(0, 0, -1, -1));
     for (const ChartSeries* series : visible_series()) {
         draw_series(painter, lines, *series, y_range_);
     }
-    painter.setPen(QPen(colours.axis, 1));
-    painter.drawRect(lines.adjusted(0, 0, -1, -1));
     if (band) {
         draw_band(painter, *band, colours);
     }
@@ -707,14 +725,13 @@ void ChartWidget::draw_band(QPainter& painter, const QRect& rect, const theme::C
     // are draw_axes').
     const auto [y0, y1] = band_range_;
     const double zero_fraction = height_fraction((0.0 - y0) / std::max(1e-9, y1 - y0));
-    const int zero_row = rect.bottom() - static_cast<int>(zero_fraction * rect.height());
+    const auto zero_row = static_cast<int>(std::lround(row_at(rect, zero_fraction)));
     painter.setPen(QPen(colours.axis, 1));
     painter.drawLine(rect.left(), zero_row, rect.right(), zero_row);
+    painter.drawRect(rect.adjusted(0, 0, -1, -1));  // under the line, as the lines' frame
     ChartSeries line = band_->series;  // spans and a shared owner: cheap to copy
     line.color = colours.difference;
     draw_series(painter, rect, line, band_range_);
-    painter.setPen(QPen(colours.axis, 1));
-    painter.drawRect(rect.adjusted(0, 0, -1, -1));
     // Over the line, on a patch of the background, so that it stays
     // readable where the line runs under it (a difference near the top of
     // its range, as most are).
@@ -872,7 +889,7 @@ void ChartWidget::draw_series(QPainter& painter, const QRect& rect, const ChartS
     const auto to_x = [=](double t) { return t / seconds_per_screen_pixel - origin; };
     const double y_span = std::max(1e-9, y1 - y0);
     const auto to_y = [&](double value) {
-        return (rect.bottom() - height_fraction((value - y0) / y_span) * rect.height()) * ratio;
+        return row_at(rect, height_fraction((value - y0) / y_span)) * ratio;
     };
     // The frames in view, those of the edge columns' pixels outside it, and
     // one more each side, which a line in view is joined to.
@@ -890,8 +907,9 @@ void ChartWidget::draw_series(QPainter& painter, const QRect& rect, const ChartS
     const std::span<const float> shown_values = series.values.subspan(lo, hi - lo);
     painter.save();
     // What lies outside the view stays out of the side margins. Not clipped
-    // above and below: the axis's top value is drawn on the row above the
-    // plot (to_y), and a VMAF line at 100 would be lost.
+    // above and below: a line at the axis's top or bottom is drawn on the
+    // frame's row (to_y), and a pen wider than a screen pixel would lose half
+    // of it.
     painter.setClipRect(QRect(rect.left(), 0, rect.width(), height()));
     painter.scale(1.0 / ratio, 1.0 / ratio);
     painter.setPen(QPen(series.color, ratio));  // a pixel of the mouse wide, as before
