@@ -4,6 +4,7 @@
 
 #include <QMenu>
 #include <QAbstractItemView>
+#include <QAction>
 #include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
@@ -41,6 +42,7 @@
 #include "graph_panel.h"
 #include "worst_frames_tab.h"
 #include "i18n.h"
+#include "keyboard.h"
 #include "metric_list.h"
 #include "metric_order.h"
 #include "notifier.h"
@@ -294,6 +296,8 @@ MainWindow::MainWindow() {
     open_videos_timer_->setSingleShot(true);
     open_videos_timer_->setInterval(0);
     connect(open_videos_timer_, &QTimer::timeout, this, [this] { save_open_videos(); });
+    // Where the focus is, shown while it is moved with the keys (VML Modern's ring).
+    keyboard::install();
     build_ui();
     // At least 1050x650, and never smaller than the window's contents need.
     setMinimumSize(QSize(1050, 650).expandedTo(minimumSizeHint()));
@@ -1017,6 +1021,129 @@ void MainWindow::build_ui() {
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
     build_tab_corner();
     make_title_buttons();
+    // The focus starts on the tabs, so Ctrl+Tab and the arrows switch them at
+    // once. Left to Qt, the window's first control took it, VML Modern's
+    // title bar progress button, outside the tabs: Ctrl+Tab did nothing
+    // until a Tab or a click moved it. Taken when the window is first shown.
+    tabs_->tabBar()->setFocus(Qt::OtherFocusReason);
+    add_shortcuts();
+}
+
+void MainWindow::add_shortcuts() {
+    // Window-wide, while the window is the active one (not over a dialog),
+    // whatever has the focus: a shortcut presses its button, so it does what
+    // a click would, and nothing while the button is grayed. The keys are
+    // the user's (Settings > Shortcuts), else the defaults (key_bindings.h).
+    use_bindings(parse_key_bindings(settings_.key_bindings_json), parse_mouse_bindings(settings_.mouse_bindings_json));
+    for (const KeyAction& action : key_actions()) {
+        if (action.group == KeyGroup::video_compare) {
+            continue;  // Video Compare's own (frame_compare_panel.cpp)
+        }
+        const std::string id = action.id;
+        QAction* added = nullptr;
+        if (action.group == KeyGroup::videos) {
+            // Delete in the test videos' table removes the selected rows.
+            added = new QAction(distorted_table_);
+            added->setShortcutContext(Qt::WidgetShortcut);
+            distorted_table_->addAction(added);
+        } else {
+            added = new QAction(this);
+            added->setShortcutContext(Qt::WindowShortcut);
+            addAction(added);
+        }
+        connect(added, &QAction::triggered, this, [this, id] { run_action(id); });
+        shortcut_actions_[id] = added;
+    }
+    connect(key_bindings_signal(), &KeyBindingsSignal::changed, this, [this] { use_keyboard_shortcuts(); });
+    use_keyboard_shortcuts();
+}
+
+void MainWindow::run_action(const std::string& id) {
+    static const std::map<std::string, Command> commands{
+        {"add_videos", Command::add_videos}, {"choose_reference", Command::choose_reference},
+        {"import_run", Command::import_run}, {"calculate", Command::calculate},
+        {"pause", Command::pause},           {"cancel", Command::cancel},
+        {"export_all", Command::export_all}, {"settings", Command::settings},
+        {"shortcuts", Command::shortcuts},
+    };
+    if (const auto command = commands.find(id); command != commands.end()) {
+        run_command(command->second);
+    } else if (id.starts_with("tab_")) {
+        tabs_->setCurrentIndex(std::stoi(id.substr(4)) - 1);
+    } else if (id == "remove_selected") {
+        remove_selected_button_->click();
+    }
+}
+
+void MainWindow::use_keyboard_shortcuts() {
+    // Each action with its keys now; off (Settings), a disabled action lets
+    // its key through to the focused control, as if there were no shortcut.
+    const bool on = settings_.keyboard_shortcuts;
+    for (const auto& [id, action] : shortcut_actions_) {
+        const std::vector<QKeySequence> keys = keys_for(id);
+        action->setShortcuts(QList<QKeySequence>(keys.begin(), keys.end()));
+        action->setEnabled(on);
+    }
+    // Each button's first key in its tooltip, while the keys work.
+    const auto tip = [on](QAbstractButton* button, const char* id) {
+        const std::vector<QKeySequence> keys = keys_for(id);
+        show_shortcut_in_tip(button, keys.empty() ? QKeySequence() : keys.front(), on && !keys.empty());
+    };
+    tip(add_files_button_, "add_videos");
+    tip(source_browse_button_, "choose_reference");
+    tip(load_button_, "import_run");
+    tip(run_button_, "calculate");
+    tip(pause_button_, "pause");
+    tip(cancel_button_, "cancel");
+    tip(tab_export_button_, "export_all");
+    tip(remove_selected_button_, "remove_selected");
+}
+
+void MainWindow::run_command(Command command) {
+    switch (command) {
+    case Command::add_videos:
+    case Command::choose_reference:
+    case Command::import_run: {
+        // On the Videos tab, where the videos go; nothing, the tab left as
+        // it is, while the button is grayed (during a run).
+        QPushButton* button = command == Command::add_videos         ? add_files_button_
+                              : command == Command::choose_reference ? source_browse_button_
+                                                                     : load_button_;
+        if (button->isEnabled()) {
+            tabs_->setCurrentIndex(tab_videos);
+            button->click();
+        }
+        break;
+    }
+    case Command::calculate:
+        run_button_->click();
+        break;
+    case Command::pause:
+        pause_button_->click();
+        break;
+    case Command::cancel:
+        cancel_button_->click();
+        break;
+    case Command::export_all:
+        tab_export_button_->click();  // its panel opens on the press (PopupPanel::open_on_press)
+        break;
+    case Command::settings:
+        tabs_->setCurrentIndex(tab_settings);
+        break;
+    case Command::shortcuts:
+        show_shortcuts();
+        break;
+    }
+}
+
+void MainWindow::show_shortcuts() {
+    if (shortcuts_dialog_ == nullptr) {
+        shortcuts_dialog_ = new ShortcutsDialog(this);
+    }
+    shortcuts_dialog_->refresh();  // the keys as they are now
+    shortcuts_dialog_->show();
+    shortcuts_dialog_->raise();
+    shortcuts_dialog_->activateWindow();
 }
 
 SettingsPanel& MainWindow::settings_panel() {
@@ -1033,6 +1160,8 @@ SettingsPanel& MainWindow::settings_panel() {
     connect(settings_panel_, &SettingsPanel::decoded_videos_changed, frame_compare_panel_,
             &FrameComparePanel::set_decoded_videos);
     connect(settings_panel_, &SettingsPanel::ffmpeg_folder_changed, this, [this] { check_ffmpeg(false); });
+    connect(settings_panel_, &SettingsPanel::shortcuts_requested, this, [this] { show_shortcuts(); });
+    connect(settings_panel_, &SettingsPanel::keyboard_shortcuts_changed, this, [this] { use_keyboard_shortcuts(); });
     connect(settings_panel_, &SettingsPanel::saved_results_cleared, this, [this] { on_saved_results_cleared(); });
     connect(settings_panel_, &SettingsPanel::video_names_changed, this, [this] {
         graph_panel_->set_video_name_rule(video_name_rule(settings_));
@@ -1050,6 +1179,29 @@ SettingsPanel& MainWindow::settings_panel() {
     // uses, as set_run_ui_active does for a panel built already.
     settings_panel_->set_run_active(run_active_);
     settings_page_->setWidget(settings_panel_);  // the placeholder deleted
+    // Built after the rest of the window, its controls came last in the Tab
+    // order, after the tab bar's corner (Export, the title bar's buttons),
+    // where every other tab has its own before them: the corner's go back to
+    // the end.
+    // (QWidget::setTabOrder moves only controls that take focus.)
+    std::vector<QWidget*> corner;
+    QWidget* last = nullptr;  // the last control that takes focus, not the corner's
+    for (QWidget* widget = nextInFocusChain(); widget != this; widget = widget->nextInFocusChain()) {
+        if (widget->focusPolicy() == Qt::NoFocus) {
+            continue;
+        }
+        if (tab_corner_->isAncestorOf(widget)) {
+            corner.push_back(widget);
+        } else {
+            last = widget;
+        }
+    }
+    for (QWidget* widget : corner) {
+        if (last != nullptr) {
+            QWidget::setTabOrder(last, widget);
+        }
+        last = widget;
+    }
     settings_panel_->setAutoFillBackground(false);  // the tab's pane behind it, as ScrollingPage makes its page
     return *settings_panel_;
 }
@@ -1500,6 +1652,7 @@ void MainWindow::fit_table_columns() {
 // buttons a run freezes.
 std::vector<QWidget*> MainWindow::add_file_buttons(QBoxLayout* buttons) {
     auto* add_button = new QPushButton(app::tr("Add files"));
+    add_files_button_ = add_button;
     connect(add_button, &QPushButton::clicked, this, [this] { on_add_distorted(); });
     auto* add_resample_button = new QPushButton(app::tr("Add resolution test"));
     add_resample_button->setToolTip(

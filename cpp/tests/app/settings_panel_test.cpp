@@ -171,8 +171,8 @@ TEST(SettingsPanel, DeleteSaysWhatItDeletesAndDeletesIt) {
     EXPECT_TRUE(panel.delete_preview->styleSheet().contains("font-weight: 700"));  // at first; then it fades to muted
 }
 
-// Settings is in sub-tabs: General, Metrics, Weak segments, Storage and
-// Notifications, each
+// Settings is in sub-tabs: General, Shortcuts, Appearance, Metrics, Weak
+// segments, Saved Results, Storage and Notifications, each
 // with its own settings. The note on what a run locks is above them, not on
 // one of them, so it shows whichever is open.
 TEST(SettingsPanel, SubTabsHoldTheSettings) {
@@ -186,8 +186,8 @@ TEST(SettingsPanel, SubTabsHoldTheSettings) {
         names.push_back(panel.sections->tabText(index));
     }
     EXPECT_EQ(names,
-              (std::vector<QString>{"General", "Appearance", "Metrics", "Weak segments", "Saved Results", "Storage",
-                                    "Notifications"}));
+              (std::vector<QString>{"General", "Shortcuts", "Appearance", "Metrics", "Weak segments", "Saved Results",
+                                    "Storage", "Notifications"}));
     const auto section_of = [&panel](const QWidget* control) {
         for (int index = 0; index < panel.sections->count(); ++index) {
             if (panel.sections->widget(index)->isAncestorOf(control)) {
@@ -200,6 +200,7 @@ TEST(SettingsPanel, SubTabsHoldTheSettings) {
     EXPECT_EQ(section_of(panel.theme_buttons->buttons().front()), "Appearance");
     EXPECT_EQ(section_of(panel.accent_hex), "Appearance");
     EXPECT_EQ(section_of(panel.decoded_videos), "General");
+    EXPECT_EQ(section_of(panel.keyboard_shortcuts), "Shortcuts");
     EXPECT_EQ(section_of(panel.default_gpu), "Metrics");
     EXPECT_EQ(section_of(panel.gpu_together), "Metrics");
     EXPECT_EQ(section_of(panel.weak_profile), "Weak segments");

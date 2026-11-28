@@ -9,9 +9,11 @@
 #include <QImage>
 #include <QMetaType>
 #include <QPixmap>
+#include <QPoint>
 #include <QPointer>
 #include <QString>
 #include <QThread>
+#include <QTimer>
 #include <QWidget>
 
 #include <compare>
@@ -22,6 +24,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -50,6 +53,8 @@ class QStackedWidget;
 class QTimer;
 class QBoxLayout;
 class QVBoxLayout;
+
+class QKeyEvent;
 
 namespace vml::app {
 
@@ -367,6 +372,17 @@ protected:
     void showEvent(QShowEvent* event) override;
     void hideEvent(QHideEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
+    // The tab's keys (key_bindings.h): whether one is taken, or nothing for
+    // a key that is none of the tab's.
+    std::optional<bool> on_compare_key(const QKeyEvent& key);
+    // What a key or mouse gesture of the tab does (key_bindings.h's ids).
+    void run_compare_action(std::string_view id);
+    // The mouse on the video or still frame; whether it took the event.
+    bool on_video_mouse(QObject* watched, QEvent* event);
+    // The tab's keys as they are now in its hint line and its buttons' tooltips.
+    void show_keys();
+    std::optional<QPoint> click_from_;  // where a left press began, until released
+    QTimer click_timer_;                // a click, once no double-click can follow
 
 private:
     friend class FramePanelTest;  // the panel's tests (tests/app)

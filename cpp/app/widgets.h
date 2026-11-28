@@ -400,6 +400,11 @@ private:
 // from the keyboard (Ctrl+Tab) still takes the focus along, as Qt has it.
 void keep_focus_on_tab_click(QTabWidget* tabs);
 
+// A tab widget inside one of the window's tabs (Settings' sections, Metric
+// Graphs' metrics): Ctrl+Tab and Ctrl+Shift+Tab pass it by, to the window's
+// tabs, wherever the focus is; Ctrl+PgDn and Ctrl+PgUp step through its own.
+void pass_ctrl_tab_up(QTabWidget* tabs);
+
 // A QTabWidget that lays itself out again, and repaints, only when that can
 // change something. Qt's QTabWidget lays itself out again at every
 // LayoutRequest, and repaints the whole of itself with it, so a label's text

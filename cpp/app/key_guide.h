@@ -5,6 +5,7 @@
 
 #include <QFrame>
 #include <QSize>
+#include <QString>
 
 #include <vector>
 
@@ -12,6 +13,17 @@ class QGridLayout;
 class QLabel;
 
 namespace vml::app {
+
+// One of Video Compare's keys (or a pair, ← →) and what it does.
+struct KeyRow {
+    std::vector<QString> keys;
+    QString action;
+};
+
+// Video Compare's main keys as its guide shows them, from the keys in use
+// (key_bindings.h): the source, the test video, play and pause. An action
+// with no key is left out.
+std::vector<KeyRow> video_compare_keys();
 
 class KeyGuide : public QFrame {
     Q_OBJECT
@@ -28,6 +40,8 @@ protected:
     void changeEvent(QEvent* event) override;
 
 private:
+    // The rows from the keys in use (again, when Settings changes them).
+    void build_rows();
     void add_row(int row, const std::vector<QString>& keys, const QString& action);
     void set_scale(double scale);
     void show_look();

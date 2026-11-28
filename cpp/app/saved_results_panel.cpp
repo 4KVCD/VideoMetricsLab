@@ -169,6 +169,8 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     layout->addLayout(top);
 
     table_ = new QTableWidget(0, column_count);
+    // Tab leaves the table for the next control; the arrows move between its cells.
+    table_->setTabKeyNavigation(false);
     table_->setHorizontalHeaderLabels(
         {app::tr("Test video"), app::tr("Reference"), app::tr("Saved"), app::tr("Metrics"), app::tr("Size")});
     table_->verticalHeader()->setVisible(false);

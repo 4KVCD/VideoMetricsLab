@@ -33,7 +33,9 @@ add_library(vml_app STATIC
     graph_bundle.cpp
     graph_panel.cpp
     i18n.cpp
+    key_bindings.cpp
     key_guide.cpp
+    keyboard.cpp
     job_lines.cpp
     main_window.cpp
     main_window_compare.cpp
@@ -69,6 +71,8 @@ add_library(vml_app STATIC
     self_test.cpp
     series_colors.cpp
     settings_panel.cpp
+    shortcuts.cpp
+    shortcuts_page.cpp
     settings_appearance.cpp
     settings_notifications.cpp
     run_badge.cpp
