@@ -1071,8 +1071,17 @@ void MainWindow::show_footer_note() {
         return;
     }
     footer_note_->setStyleSheet(QString());  // its role's: muted (hint)
-    footer_note_->setText(length_note_);
-    footer_note_->setToolTip(length_note_tip_);
+    QStringList text;
+    QStringList tip;
+    for (const auto& [note, note_tip] : {std::pair(removed_note_, removed_note_tip_),
+                                         std::pair(length_note_, length_note_tip_)}) {
+        if (!note.isEmpty()) {
+            text.append(note);
+            tip.append(note_tip);
+        }
+    }
+    footer_note_->setText(text.join(QString::fromUtf8(" \xC2\xB7 ")));
+    footer_note_->setToolTip(tip.join(QStringLiteral("\n\n")));
 }
 
 bool MainWindow::settle_frame_rates(const std::vector<int>& checked) {

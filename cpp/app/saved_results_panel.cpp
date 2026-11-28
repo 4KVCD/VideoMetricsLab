@@ -16,6 +16,7 @@
 #include <QHeaderView>
 #include <QItemSelection>
 #include <QLabel>
+#include <QSizePolicy>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMouseEvent>
@@ -284,6 +285,13 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     connect(open_button_, &QPushButton::clicked, this, [this] { emit open_requested(selected_results()); });
     buttons->addWidget(open_button_);
     buttons->addStretch(1);
+    delete_note_ = new QLabel;
+    delete_note_->setObjectName("savedDeleteNote");
+    delete_note_->setTextFormat(Qt::PlainText);
+    delete_note_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    delete_note_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);  // never widens the tab
+    buttons->addWidget(delete_note_, 1);
+    buttons->addSpacing(8);
     delete_button_ = new QPushButton(app::tr("Delete..."));
     theme::set_role(delete_button_, "danger");
     connect(delete_button_, &QPushButton::clicked, this, [this] { delete_selected(); });
@@ -1264,6 +1272,7 @@ void SavedResultsPanel::delete_selected() {
     // folder deleted back, or leave one without its context.json, which the
     // tab can neither list nor delete (issue #133).
     deleting_ = std::make_shared<Deleting>();
+    delete_note_->clear();
     update_buttons();
     file_writes_.submit(app::tr("delete saved results"),
                         [folder = base(), chosen = std::move(chosen), deleting = deleting_] {
@@ -1286,10 +1295,14 @@ void SavedResultsPanel::on_writes_idle() {
     deleting_.reset();
     update_buttons();
     if (failed > 0) {
-        dialogs_.alert(app::tr("Not all deleted"),
-                       ntr("{count} comparison's saved scores could not be deleted: a file of theirs may be open.",
-                           "{count} comparisons' saved scores could not be deleted: a file of theirs may be open.",
-                           failed));
+        // In the tab, beside Delete..., not a window: kept until the next
+        // Delete, as the rows not deleted stay in the list.
+        delete_note_->setStyleSheet(
+            QStringLiteral("QLabel { color: %1; font-weight: 600; }").arg(theme::color("failed").name()));
+        delete_note_->setText(
+            QString::fromUtf8("\xE2\x9C\x95 ") +
+            ntr("{count} comparison's saved scores could not be deleted: a file of theirs may be open.",
+                "{count} comparisons' saved scores could not be deleted: a file of theirs may be open.", failed));
     }
     emit deleted();
     refresh();

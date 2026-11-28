@@ -318,6 +318,9 @@ private:
     QString rules_choice_ = QStringLiteral("in-use");
     QPushButton* open_button_ = nullptr;
     QPushButton* delete_button_ = nullptr;
+    // Beside it: the comparisons the last Delete could not delete, in the
+    // failure colour, until the next Delete; empty when it deleted them all.
+    QLabel* delete_note_ = nullptr;
     // A Delete queued on file_writes_: set by it as it ends (done last),
     // read once the queue says it is idle (on_writes_idle).
     struct Deleting {

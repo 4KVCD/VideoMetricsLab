@@ -14,9 +14,11 @@
 #include <QMenu>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPoint>
 #include <QPushButton>
 #include <QSaveFile>
 #include <QSignalBlocker>
+#include <QSizePolicy>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QVBoxLayout>
@@ -29,7 +31,9 @@
 #include "app_dialog.h"
 #include "i18n.h"
 #include "metric_order.h"
+#include "popup_panel.h"
 #include "rate_curve_chart.h"
+#include "text_panel.h"
 #include "theme.h"
 #include "vml/append.h"
 #include "vml/bd_rate.h"
@@ -215,6 +219,15 @@ QGroupBox* BdRatePanel::build_side(Side& side, const QString& title) {
     buttons->addWidget(side.clear_button);
     buttons->addStretch(1);
     layout->addLayout(buttons);
+    // Under the buttons, a line of its own (the card is half the tab wide),
+    // kept from the start so the card doesn't grow as it comes.
+    side.note = new QLabel;
+    side.note->setObjectName("bdRateSideNote");
+    side.note->setTextFormat(Qt::PlainText);
+    side.note->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);  // never widens the card
+    side.note->setMinimumHeight(side.note->fontMetrics().height());
+    theme::set_role(side.note, "hint");
+    layout->addWidget(side.note);
     refresh_side_table(side);
     return side.box;
 }
@@ -231,7 +244,9 @@ void BdRatePanel::add_options_row(QVBoxLayout* root) {
     connect(group_combo, &QComboBox::currentIndexChanged, this, [this] { recalculate(); });
     row->addWidget(group_combo);
     warnings_button = new QPushButton;
-    connect(warnings_button, &QPushButton::clicked, this, [this] { on_show_warnings(); });
+    // A panel under the button, as Add/remove metrics': the warnings to read
+    // and copy, gone at a click outside.
+    PopupPanel::open_on_press(warnings_button, [this] { on_show_warnings(); });
     row->addWidget(warnings_button);
     row->addStretch(1);
     // Copy as markdown is the clipboard's, not an export: the table's and
@@ -380,11 +395,7 @@ void BdRatePanel::on_add_videos(Side& side) {
             side.whole_file_rates[key] = name;
         }
     }
-    if (!unknown.isEmpty()) {
-        dialogs.inform(app::tr("Bitrate unknown"),
-                       app::tr("These videos were not added, as their bitrate is not known:\n{videos}",
-                               {{"videos", unknown.join(QLatin1Char('\n'))}}));
-    }
+    show_bitrate_note(side, unknown, false);
     side_changed(side);
 }
 
@@ -402,17 +413,26 @@ void BdRatePanel::bring_videos_up_to_date() {
         return;
     }
     const std::vector<GraphPanel::Run> runs = runs_();
-    QStringList without_rate;
     for (Side* side : {&anchor, &test}) {
+        QStringList without_rate;
         if (update_videos_of(*side, runs, without_rate)) {
             side_changed(*side);
         }
+        if (!without_rate.isEmpty()) {
+            show_bitrate_note(*side, without_rate, true);
+        }
     }
-    if (!without_rate.isEmpty()) {
-        dialogs.inform(app::tr("Bitrate unknown"),
-                       app::tr("These videos were taken out, as their bitrate is no longer known:\n{videos}",
-                               {{"videos", without_rate.join(QLatin1Char('\n'))}}));
-    }
+}
+
+void BdRatePanel::show_bitrate_note(Side& side, const QStringList& videos, bool taken_out) {
+    const auto count = static_cast<long long>(videos.size());
+    side.note->setText(videos.isEmpty() ? QString()
+                       : taken_out
+                           ? ntr("{count} video taken out: its bitrate is no longer known.",
+                                 "{count} videos taken out: their bitrate is no longer known.", count)
+                           : ntr("{count} video not added: its bitrate is not known.",
+                                 "{count} videos not added: their bitrate is not known.", count));
+    side.note->setToolTip(videos.join(QLatin1Char('\n')));
 }
 
 bool BdRatePanel::update_videos_of(Side& side, const std::vector<GraphPanel::Run>& runs, QStringList& without_rate) {
@@ -491,8 +511,11 @@ void BdRatePanel::on_import(Side& side) {
 
 void BdRatePanel::import_file(Side& side, const QString& path) {
     QFile file(path);
+    const QString failed_line = app::tr("Not imported: {file}", {{"file", QFileInfo(path).fileName()}});
     if (!file.open(QIODevice::ReadOnly)) {
-        dialogs.alert(app::tr("Import failed"), app::tr("Could not read {path}", {{"path", path}}));
+        if (notify_failed) {
+            notify_failed(failed_line, app::tr("Could not read {path}", {{"path", path}}));
+        }
         return;
     }
     const QByteArray bytes = file.readAll();
@@ -501,7 +524,9 @@ void BdRatePanel::import_file(Side& side, const QString& path) {
         table = read_rate_file(std::string_view(bytes.constData(), static_cast<std::size_t>(bytes.size())),
                                QFileInfo(path).fileName().toStdString());
     } catch (const std::exception& error) {
-        dialogs.alert(app::tr("Import failed"), qt_text(error.what()));
+        if (notify_failed) {
+            notify_failed(failed_line, qt_text(error.what()));
+        }
         return;
     }
     const QString key = QStringLiteral("file:") + QFileInfo(path).absoluteFilePath();
@@ -527,6 +552,7 @@ void BdRatePanel::on_clear(Side& side) {
     side.whole_file_rates.clear();
     side.video_files.clear();
     side.name_edit->clear();  // it named what was cleared
+    show_bitrate_note(side, {}, false);
     side_changed(side);
 }
 
@@ -907,6 +933,17 @@ void BdRatePanel::on_copy() {
     }
 }
 
-void BdRatePanel::on_show_warnings() { dialogs.inform(app::tr("BD-rate warnings"), warnings_.join(QLatin1Char('\n'))); }
+void BdRatePanel::on_show_warnings() {
+    if (warnings_panel_ == nullptr) {
+        warnings_panel_ = new TextPanel(app::tr("BD-rate warnings"), this);
+        // Wide enough that a warning reads as a line, not a column of words.
+        warnings_panel_->setMinimumWidth(warnings_panel_->fontMetrics().averageCharWidth() * 60);
+    }
+    warnings_panel_->set_text(warnings_.join(QLatin1Char('\n')));
+    warnings_panel_->open_under(warnings_button);
+    // Its left edge on the button's: the button is at the tab's left, and
+    // lined up by their right edges the panel hung off the window's.
+    warnings_panel_->move(warnings_button->mapToGlobal(QPoint(0, 0)).x(), warnings_panel_->y());
+}
 
 }  // namespace vml::app

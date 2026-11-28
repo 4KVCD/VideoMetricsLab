@@ -87,7 +87,8 @@ void MainWindow::on_source_path_entered() {
         // copy the rest of the path, keeps what was typed.
         if (source_edit_->hasFocus()) {
             source_edit_->setText(shown_source_path());
-            dialogs_.warn(app::tr("No such video"), app::tr("There is no file at {path}.", {{"path", text}}));
+            notify_failed(app::tr("No such video: {file}", {{"file", QFileInfo(text).fileName()}}),
+                          app::tr("There is no file at {path}.", {{"path", text}}));
         }
         return;
     }
@@ -195,7 +196,8 @@ void MainWindow::on_source_probed(int generation, const Probed& probed) {
     if (!probed.info) {
         source_edit_->setText(shown_source_path());  // a path typed in that would not read
         show_source_label();
-        dialogs_.alert(app::tr("Could not read video"), tr_message(probed.error));
+        notify_failed(app::tr("Could not read {file}", {{"file", name_of(path_of(probed.path))}}),
+                      tr_message(probed.error));
         return;
     }
     apply_source_info(path_of(probed.path), *probed.info);
@@ -301,17 +303,24 @@ void MainWindow::check_rows_against_new_source(const std::filesystem::path& path
         paths.push_back(rows_[static_cast<std::size_t>(row)]->path);
     }
     start_cache_lookup(paths);
+    // The resolution tests removed, the old reference's: in the footer, as
+    // the length note, until the table next changes.
+    removed_note_.clear();
+    removed_note_tip_.clear();
     if (!dropped.empty()) {
         QStringList names;
         for (const QString& name : dropped) {
             names.append("  " + name);
         }
-        dialogs_.inform(app::tr("Resolution tests removed"),
-                        ntr("{count} resolution test belonged to the previous source and has been removed:\n\n",
-                            "{count} resolution tests belonged to the previous source and have been removed:\n\n",
-                            static_cast<long long>(dropped.size())) +
-                            names.join("\n") + app::tr("\n\nAdd them again to test the new source."));
+        const auto count = static_cast<long long>(dropped.size());
+        removed_note_ = ntr("{count} resolution test removed: it was the previous reference's.",
+                            "{count} resolution tests removed: they were the previous reference's.", count);
+        removed_note_tip_ =
+            ntr("{count} resolution test belonged to the previous source and has been removed:\n\n",
+                "{count} resolution tests belonged to the previous source and have been removed:\n\n", count) +
+            names.join("\n") + app::tr("\n\nAdd them again to test the new source.");
     }
+    show_footer_note();
 }
 
 std::vector<QString> MainWindow::remove_rows_owned_by_the_previous_source() {

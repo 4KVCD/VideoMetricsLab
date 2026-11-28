@@ -138,6 +138,7 @@ if(TARGET vml_app)
         app/export_panel_test.cpp
         app/film_grain_control_test.cpp
         app/frame_drag_test.cpp
+        app/cvvdp_display_dialog_test.cpp
         app/resample_target_dialog_test.cpp
         app/run_badge_test.cpp
         app/frame_compare_test.cpp
