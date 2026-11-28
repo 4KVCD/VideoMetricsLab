@@ -75,6 +75,13 @@ long long first_frame_at(long long milliseconds, double fps) {
 
 }  // namespace
 
+ComparedRange time_range_of(long long start_ms, long long end_ms) {
+    if (start_ms % 1000 != 0 || end_ms % 1000 != 0) {
+        return {start_ms, end_ms, false, true};
+    }
+    return {start_ms / 1000, end_ms / 1000};
+}
+
 ComparedRange in_frames_at(const ComparedRange& range, double fps) {
     if (!range.in_milliseconds || range.in_frames) {
         return range;

@@ -47,6 +47,8 @@ Json values_of(const Arguments& parsed) {
     }
     const CompareArguments& a = parsed.compare;
     const auto either = [](const auto& value) { return value ? Json(*value) : Json(nullptr); };
+    // A time as the reference holds it: whole seconds, else seconds with their fraction.
+    const auto seconds = [](long long ms) { return ms % 1000 == 0 ? Json(ms / 1000) : Json(ms / 1000.0); };
     const auto path = [](const std::optional<std::string>& text) {
         return text ? Json(platform::path_text(python_path(*text))) : Json(nullptr);
     };
@@ -60,8 +62,8 @@ Json values_of(const Arguments& parsed) {
         {"black_bars", a.black_bars},
         {"scale_to", a.scale_to},
         {"scaler", a.scaler},
-        {"duration", either(a.duration)},
-        {"range", a.range ? Json::array({a.range->first, a.range->second}) : Json(nullptr)},
+        {"duration", a.duration_ms ? seconds(*a.duration_ms) : Json(nullptr)},
+        {"range", a.range_ms ? Json::array({seconds(a.range_ms->first), seconds(a.range_ms->second)}) : Json(nullptr)},
         {"colour", either(a.colour)},
         {"film_grain", either(a.film_grain)},
         {"fps", either(a.fps)},

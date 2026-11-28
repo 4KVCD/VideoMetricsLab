@@ -202,14 +202,9 @@ struct VmafOptions {
     ComparedRange compared_range() const {
         return {range_start, range_end, range_in_frames, range_in_milliseconds && !range_in_frames};
     }
-    // A range of time, from `start` to `end` in milliseconds (an end of 0: to
-    // the end): whole seconds where both are, so that such a range is the one
-    // it has always been, else milliseconds.
+    // A range of time, from `start` to `end` in milliseconds (time_range_of).
     void set_time_range(long long start_ms, long long end_ms) {
-        range_in_frames = false;
-        range_in_milliseconds = start_ms % 1000 != 0 || end_ms % 1000 != 0;
-        range_start = range_in_milliseconds ? start_ms : start_ms / 1000;
-        range_end = range_in_milliseconds ? end_ms : end_ms / 1000;
+        set_compared_range(time_range_of(start_ms, end_ms));
     }
     // The range `range`, in its unit.
     void set_compared_range(const ComparedRange& range) {

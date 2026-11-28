@@ -67,8 +67,8 @@ struct CompareArguments {
     std::optional<CropEdges> test_crop;
     std::string scale_to = "test";
     std::string scaler = "bicubic";
-    std::optional<long long> duration;  // whole seconds from the start of the videos
-    std::optional<std::pair<long long, long long>> range;  // whole seconds; an end of 0: to the end
+    std::optional<long long> duration_ms;  // milliseconds from the start of the videos
+    std::optional<std::pair<long long, long long>> range_ms;  // milliseconds; an end of 0: to the end
     // The first frame and the one past the last (--frames); an end of 0: to the end.
     std::optional<std::pair<long long, long long>> frames;
     std::optional<std::string> colour;

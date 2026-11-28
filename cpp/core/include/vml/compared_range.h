@@ -31,6 +31,11 @@ struct ComparedRange {
     bool operator==(const ComparedRange&) const = default;
 };
 
+// A range of time from `start_ms` to `end_ms` (an end of 0: to the end):
+// whole seconds where both are, so that such a range keeps the identity
+// it has always had, else milliseconds.
+ComparedRange time_range_of(long long start_ms, long long end_ms);
+
 // A range of milliseconds as the range of frames it covers at the
 // reference's `fps`; any other range as it is.
 ComparedRange in_frames_at(const ComparedRange& range, double fps);

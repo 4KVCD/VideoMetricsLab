@@ -258,15 +258,17 @@ options:
                         differ (default: test)
   --scaler {bicubic,bilinear,lanczos,spline}
                         scaling algorithm (default: bicubic)
-  --duration SECONDS    compare only the first SECONDS of each video, whole
-                        seconds or H:MM:SS
+  --duration SECONDS    compare only the first SECONDS of each video, in
+                        seconds or H:MM:SS, to the millisecond (90, 1.5,
+                        1:30.25)
   --range START-END     compare only that part of each video, from START to
-                        END, each whole seconds or H:MM:SS (1:00-1:30);
+                        END, each as --duration reads it (1:00-1:30.5);
                         without END, to the videos' end
   --frames FIRST-LAST   compare only frames FIRST to LAST of each video, both
                         included, counted from 0; without LAST, to the
-                        videos' end. CVVDP scores whole seconds: its part is
-                        rounded to the nearest seconds
+                        videos' end. CVVDP scores whole seconds: its part of
+                        frames, or of a time not in whole seconds, is rounded
+                        to the nearest seconds
   --colour, --color {pq-bt2020,hlg-bt2020,bt709}
                         the colours of a video with no colour tags (y4m, say):
                         pq-bt2020 (HDR10), hlg-bt2020 or bt709 (SDR). A tagged
@@ -1301,51 +1303,66 @@ int int_up_to(const std::string& text, int most) {
     return static_cast<int>(value);
 }
 
-// A time in whole seconds: "90", "1:30" or "1:01:30" (the minutes and
-// seconds after the first part in two digits, under 60); nothing for other
-// text, a part of a second included.
-std::optional<long long> whole_seconds(std::string_view text) {
-    static const std::regex time("([0-9]{1,9})(?::([0-9]{2}))?(?::([0-9]{2}))?");  // no overflow
+// A time in milliseconds: "90", "1:30" or "1:01:30" (the minutes and
+// seconds after the first part in two digits, under 60); with `fraction`,
+// its seconds may have up to 3 decimals ("1.5", "1:30.25", as the window's
+// range is to the millisecond). Nothing for other text.
+std::optional<long long> time_ms(std::string_view text, bool fraction) {
+    static const std::regex time(R"re(([0-9]{1,9})(?::([0-9]{2}))?(?::([0-9]{2}))?(?:\.([0-9]{1,3}))?)re");
     const std::string stripped(python_strip(text));
     std::smatch parts;
-    if (!std::regex_match(stripped, parts, time)) {
+    if (!std::regex_match(stripped, parts, time) || (parts[4].matched && !fraction)) {
         return std::nullopt;
     }
-    long long seconds = 0;
-    for (std::size_t part = 1; part < parts.size() && parts[part].matched; ++part) {
+    long long seconds = 0;  // no overflow: 9 digits of hours
+    for (std::size_t part = 1; part <= 3 && parts[part].matched; ++part) {
         const long long value = std::stoll(parts[part].str());
         if (part > 1 && value >= 60) {
             return std::nullopt;
         }
         seconds = seconds * 60 + value;
     }
-    return seconds;
+    std::string decimals = parts[4].str();  // "5" is 500 ms
+    decimals.resize(3, '0');
+    return seconds * 1000 + std::stoll(decimals);
 }
 
-// --duration: the first whole seconds of the videos.
+// --timeout and --video-timeout: whole seconds, above 0.
 long long duration_seconds(const std::string& text) {
-    const std::optional<long long> seconds = whole_seconds(text);
-    if (!seconds) {
+    const std::optional<long long> ms = time_ms(text, false);
+    if (!ms) {
         throw ArgumentError{"invalid time: " + python_string_repr(text) + " (whole seconds, or H:MM:SS)"};
     }
-    if (*seconds <= 0) {
+    if (*ms <= 0) {
         throw ArgumentError{"must be above 0"};
     }
-    return *seconds;
+    return *ms / 1000;
 }
 
-// --range: START-END in whole seconds, each as whole_seconds reads it; no
+// --duration: the first milliseconds of the videos, above 0.
+long long duration_ms(const std::string& text) {
+    const std::optional<long long> ms = time_ms(text, true);
+    if (!ms) {
+        throw ArgumentError{"invalid time: " + python_string_repr(text) + " (seconds or H:MM:SS, to the millisecond)"};
+    }
+    if (*ms <= 0) {
+        throw ArgumentError{"must be above 0"};
+    }
+    return *ms;
+}
+
+// --range: START-END in milliseconds, each as --duration reads it; no
 // END: to the videos' end (0). An END written, 0 included, is after START.
-std::pair<long long, long long> time_range(const std::string& text) {
+std::pair<long long, long long> time_range_ms(const std::string& text) {
     const std::size_t dash = text.find('-');
     const std::optional<long long> start =
-        dash == std::string::npos ? std::nullopt : whole_seconds(text.substr(0, dash));
+        dash == std::string::npos ? std::nullopt : time_ms(text.substr(0, dash), true);
     const std::string end_text = dash == std::string::npos ? std::string() : text.substr(dash + 1);
     const bool to_the_end = python_strip(end_text).empty();
-    const std::optional<long long> end = to_the_end ? std::optional(0LL) : whole_seconds(end_text);
+    const std::optional<long long> end = to_the_end ? std::optional(0LL) : time_ms(end_text, true);
     if (!start || !end) {
         throw ArgumentError{"invalid time range: " + python_string_repr(text) +
-                            " (START-END, each whole seconds or H:MM:SS; no END: to the end)"};
+                            " (START-END, each seconds or H:MM:SS, to the millisecond; no END: to the end)"};
     }
     if (!to_the_end && *end <= *start) {
         throw ArgumentError{"its end must be after its start"};
@@ -1530,8 +1547,8 @@ Parser compare_parser(CompareArguments& parsed) {
                [&parsed](const std::string& value) {
                    parsed.scaler = choice(value, {"bicubic", "bilinear", "lanczos", "spline"});
                }),
-        option({"--duration"}, [&parsed](const std::string& value) { parsed.duration = duration_seconds(value); }),
-        option({"--range"}, [&parsed](const std::string& value) { parsed.range = time_range(value); }),
+        option({"--duration"}, [&parsed](const std::string& value) { parsed.duration_ms = duration_ms(value); }),
+        option({"--range"}, [&parsed](const std::string& value) { parsed.range_ms = time_range_ms(value); }),
         option({"--frames"}, [&parsed](const std::string& value) { parsed.frames = frame_span(value); }),
         option({"--colour", "--color"},
                [&parsed](const std::string& value) {

@@ -382,15 +382,16 @@ std::optional<std::string> vmaf_where(const CompareArguments& arguments) {
 }
 
 // The range compared (an end of 0: to the end): --frames', --range's, or
-// --duration's first seconds; both 0: the whole videos.
+// --duration's first milliseconds, in whole seconds where they are, as
+// the window's range (time_range_of); both 0: the whole videos.
 ComparedRange range_of(const CompareArguments& arguments) {
     if (arguments.frames) {
         return {arguments.frames->first, arguments.frames->second, true};
     }
-    if (arguments.range) {
-        return {arguments.range->first, arguments.range->second, false};
+    if (arguments.range_ms) {
+        return time_range_of(arguments.range_ms->first, arguments.range_ms->second);
     }
-    return {0, arguments.duration.value_or(0), false};
+    return time_range_of(0, arguments.duration_ms.value_or(0));
 }
 
 // The Vship build SSIMULACRA2, Butteraugli and CVVDP run on: --vship's, or
@@ -451,10 +452,7 @@ VmafOptions row_options(const CompareArguments& arguments, const Settings& setti
     options.scale_algorithm = arguments.scaler;
     options.scale_direction = arguments.scale_to == "reference" ? ScaleDirection::distorted_to_source
                                                                 : ScaleDirection::source_to_distorted;
-    const ComparedRange range = range_of(arguments);
-    options.range_start = range.start;
-    options.range_end = range.end;
-    options.range_in_frames = range.in_frames;
+    options.set_compared_range(range_of(arguments));
     options.crop_mode = arguments.black_bars == "auto"     ? CropMode::automatic
                         : arguments.black_bars == "source" ? CropMode::source_only
                                                            : CropMode::none;
@@ -1486,11 +1484,16 @@ std::string different_durations_hint(const VideoInfo& source, const VideoInfo& t
         return " Here: --frames " + std::to_string(range.start) + "-" + std::to_string(shorter_frames - 1) +
                " compares to the shorter video's last frame.";
     }
-    const long long range_start = range.start;
+    // The range's start as --range reads it: whole seconds, or seconds to the millisecond (11.5).
+    std::string start = std::to_string(range.start);
+    if (range.in_milliseconds) {
+        std::string decimals = std::to_string(1000 + range.start % 1000).substr(1);
+        decimals.erase(decimals.find_last_not_of('0') + 1);
+        start = std::to_string(range.start / 1000) + (decimals.empty() ? "" : "." + decimals);
+    }
     const long long end = end_second_of(shorter_frames, source.fps);
-    const std::string to_the_end = range_start > 0
-                                       ? "--range " + std::to_string(range_start) + "-" + std::to_string(end)
-                                       : "--duration " + std::to_string(end);
+    const std::string to_the_end = range.start > 0 ? "--range " + start + "-" + std::to_string(end)
+                                                   : "--duration " + std::to_string(end);
     return " Here: " + to_the_end + " compares to the shorter video's end; --range START-END compares a part of both.";
 }
 
