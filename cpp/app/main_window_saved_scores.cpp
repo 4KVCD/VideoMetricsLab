@@ -336,7 +336,7 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
     }
     if (previous) {
         // The row's line updated in place: its colour, and whether it is
-        // hidden or removed, stay. Replaced under a new identity, they were
+        // hidden, stay. Replaced under a new identity, they were
         // reset whenever a display switched back to had a saved CVVDP score.
         run->graph_identity = previous->graph_identity;
     }
@@ -381,8 +381,8 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
     // The graph kept in step as scores arrive, so that the tab shows them all
     // when opened.
     const std::shared_ptr<CompletedRun>& shown = row_data.completed_run;
-    graph_panel_->add_run({std::shared_ptr<const ComparisonResult>(shown, &shown->result), shown->label,
-                           shown->graph_identity, previous == nullptr});
+    graph_panel_->add_run(
+        {std::shared_ptr<const ComparisonResult>(shown, &shown->result), shown->label, shown->graph_identity});
     sync_frame_compare_soon();
 }
 
@@ -573,13 +573,13 @@ void MainWindow::drop_metric_results(int row, const std::vector<std::string>& ke
         rest->label = run->label;
         rest->result.metric_results = std::move(kept);
         // The same line, updated: under a new identity it took a new colour
-        // and came back even if hidden or removed from the graph.
+        // and came back even if hidden.
         rest->graph_identity = run->graph_identity;
         rest->facts = run->facts;
         rest->record = run->record;
         rest->from_saved_scores = run->from_saved_scores;
-        graph_panel_->add_run({std::shared_ptr<const ComparisonResult>(rest, &rest->result), rest->label,
-                               rest->graph_identity, false});
+        graph_panel_->add_run(
+            {std::shared_ptr<const ComparisonResult>(rest, &rest->result), rest->label, rest->graph_identity});
         row_data.completed_run = std::move(rest);
     }
     set_row_metrics(row);

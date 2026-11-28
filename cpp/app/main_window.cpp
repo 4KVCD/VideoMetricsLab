@@ -889,18 +889,6 @@ void MainWindow::build_ui() {
         }
         return identities;
     };
-    // Every row's line back, those removed with the cross too, as Open
-    // metric graphs brought them back before the Videos tab lost it.
-    connect(graph_panel_, &GraphPanel::lines_changed, this, [this] { repaint_row_marks(); });
-    connect(graph_panel_, &GraphPanel::restore_removed_requested, this, [this] {
-        std::vector<std::shared_ptr<CompletedRun>> runs;
-        for (const std::shared_ptr<RowData>& row_data : rows_) {
-            if (row_data->completed_run) {
-                runs.push_back(row_data->completed_run);
-            }
-        }
-        open_or_update_graph(runs, false);
-    });
     bitrate_panel_->export_colours = export_colours;
     tabs_->addTab(new ScrollingPage(bitrate_panel_), app::tr("Bitrate Viewer"));
     // Its encodes from the runs Metric Graphs lists, brought up to date first.
@@ -1247,7 +1235,7 @@ QHBoxLayout* MainWindow::build_table_heading() {
 // The test videos' table (distorted_table_), its metric columns' header
 // with their tick boxes, and how it behaves.
 void MainWindow::build_test_table() {
-    std::vector<int> other_columns{col_remove, col_graph, col_check, col_info, col_black_bars, col_scaling, col_bitrate};
+    std::vector<int> other_columns{col_remove, col_check, col_info, col_black_bars, col_scaling, col_bitrate};
     for (const MetricColumn& item : metric_columns()) {
         other_columns.push_back(item.column);
     }
@@ -1293,7 +1281,7 @@ void MainWindow::build_test_table() {
         header_of("psnr_yuv_u"), header_of("psnr_yuv_v"),
         header_of("ssim_yuv_y"), header_of("ssim_yuv_u"), header_of("ssim_yuv_v"), header_of("ms_ssim_yuv_y"),
         header_of("ms_ssim_yuv_u"), header_of("ms_ssim_yuv_v"), header_of("psnr_hvs_y"), header_of("psnr_hvs_u"),
-        header_of("psnr_hvs_v"), header_of("vmaf_yuv_y"), header_of("vmaf_yuv_u"), header_of("vmaf_yuv_v"), "", "",
+        header_of("psnr_hvs_v"), header_of("vmaf_yuv_y"), header_of("vmaf_yuv_u"), header_of("vmaf_yuv_v"), "",
     });
     // A row's remove mark first, at the start of its row, as Metric Graphs'
     // lines have it; frozen with the tick box and File name.
@@ -1308,24 +1296,7 @@ void MainWindow::build_test_table() {
         return remove_selected_button_ != nullptr && !remove_selected_button_->isEnabled();
     };
     distorted_table_->setItemDelegateForColumn(col_remove, remove_marks);
-    // Beside it, the row's line sent back to Metric Graphs, where the user
-    // removed it there: before, only Show removed videos (every row's) or a
-    // run brought it back.
-    auto* send_marks = new RemoveMarkDelegate(distorted_table_, RemoveMarkDelegate::Shape::send);
-    send_marks->tooltip = [this](const QModelIndex& index) {
-        const QTableWidgetItem* item = distorted_table_->item(index.row(), col_path);
-        const QString name = item != nullptr ? item->text() : QString();
-        const std::shared_ptr<CompletedRun> run =
-            index.row() < static_cast<int>(rows_.size()) ? rows_[static_cast<std::size_t>(index.row())]->completed_run
-                                                         : nullptr;
-        return run == nullptr ? app::tr("{name} has no scores yet to show in Metric Graphs.", {{"name", name}})
-               : graph_panel_->removed(run->graph_identity)
-                   ? app::tr("Show {name} in Metric Graphs again", {{"name", name}})
-                   : app::tr("{name} is already in Metric Graphs.", {{"name", name}});
-    };
-    send_marks->off = [this](const QModelIndex& index) { return !line_removed(index.row()); };
-    distorted_table_->setItemDelegateForColumn(col_graph, send_marks);
-    distorted_table_->unselecting_columns = {col_remove, col_graph};  // a press on a mark leaves the selection
+    distorted_table_->unselecting_columns = {col_remove};  // a press on the mark leaves the selection
     RemoveMarkDelegate::track_hover(distorted_table_);
     connect(distorted_table_, &QAbstractItemView::clicked, this, [this](const QModelIndex& index) {
         if (index.row() >= static_cast<int>(rows_.size())) {
@@ -1333,23 +1304,6 @@ void MainWindow::build_test_table() {
         }
         if (index.column() == col_remove && remove_selected_button_->isEnabled()) {
             remove_distorted_rows({index.row()});
-        } else if (index.column() == col_graph) {
-            // Never a second line of one video: one already shown, or none
-            // to show, says so in the title bar's indicator.
-            const QTableWidgetItem* item = distorted_table_->item(index.row(), col_path);
-            const QString name = item != nullptr ? item->text() : QString();
-            const std::shared_ptr<CompletedRun>& run = rows_[static_cast<std::size_t>(index.row())]->completed_run;
-            if (run == nullptr) {
-                export_indicator_->show_note(
-                    app::tr("{name} has no scores yet to show in Metric Graphs.", {{"name", name}}),
-                    ExportIndicator::Note::info);
-            } else if (!line_removed(index.row())) {
-                export_indicator_->show_note(app::tr("{name} is already in Metric Graphs.", {{"name", name}}),
-                                             ExportIndicator::Note::info);
-            } else {
-                open_or_update_graph({run}, false);
-                export_indicator_->show_note(app::tr("{name} is back in Metric Graphs.", {{"name", name}}));
-            }
         }
     });
     // What each metric measures, as Add/remove metrics says (metric_tip): a
@@ -1409,9 +1363,9 @@ void MainWindow::build_test_table() {
     header->setStretchLastSection(false);
     distorted_table_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     fit_table_columns();
-    // The two marks, the tick box and File name stay in place while the
+    // The remove mark, the tick box and File name stay in place while the
     // metrics scroll sideways, so a row's scores are always beside its name.
-    distorted_table_->freeze_leading_columns(4);
+    distorted_table_->freeze_leading_columns(3);
 }
 
 void MainWindow::lay_out_metric_columns() {
@@ -1423,7 +1377,7 @@ void MainWindow::lay_out_metric_columns() {
         }
         ++visual;
     };
-    for (const int column : {col_remove, col_graph, col_check, col_path, col_info, col_black_bars, col_scaling,
+    for (const int column : {col_remove, col_check, col_path, col_info, col_black_bars, col_scaling,
                              col_bitrate}) {
         place(column);
     }
@@ -1478,7 +1432,7 @@ void MainWindow::fit_table_columns() {
     // metrics hidden at first, shown later, kept a guessed width and their
     // headings were cut at both ends.
     std::map<int, int> starting_widths{
-        {col_remove, 26}, {col_graph, 26}, {col_check, 28}, {col_info, 150}, {col_black_bars, 78}, {col_scaling, 90}, {col_bitrate, 65},
+        {col_remove, 26}, {col_check, 28}, {col_info, 150}, {col_black_bars, 78}, {col_scaling, 90}, {col_bitrate, 65},
     };
     for (const MetricColumn& item : metric_columns()) {
         starting_widths[item.column] = 78;

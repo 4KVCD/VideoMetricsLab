@@ -72,24 +72,21 @@ void MainWindow::sync_graph() {
     // Every row's result on the graph. add_runs updates a line of the same
     // identity rather than adding another, leaves one already showing its
     // result alone, and brings the table up to date once, so this is safe at
-    // every visit to the tab. A line the user removed stays removed.
+    // every visit to the tab.
     std::vector<GraphPanel::Run> runs;
     for (const std::shared_ptr<RowData>& row_data : rows_) {
         if (const std::shared_ptr<CompletedRun>& run = row_data->completed_run) {
-            runs.push_back(
-                {std::shared_ptr<const ComparisonResult>(run, &run->result), run->label, run->graph_identity, false});
+            runs.push_back({std::shared_ptr<const ComparisonResult>(run, &run->result), run->label, run->graph_identity});
         }
     }
     graph_panel_->add_runs(runs);
 }
 
 void MainWindow::open_or_update_graph(const std::vector<std::shared_ptr<CompletedRun>>& runs, bool show) {
-    // The runs on the graph, removed lines too; with `show`, the tab brought
-    // to the front.
+    // The runs on the graph; with `show`, the tab brought to the front.
     std::vector<GraphPanel::Run> lines;
     for (const std::shared_ptr<CompletedRun>& run : runs) {
-        lines.push_back(
-            {std::shared_ptr<const ComparisonResult>(run, &run->result), run->label, run->graph_identity, true});
+        lines.push_back({std::shared_ptr<const ComparisonResult>(run, &run->result), run->label, run->graph_identity});
     }
     graph_panel_->add_runs(lines);
     if (show) {

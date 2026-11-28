@@ -1244,9 +1244,6 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
         }
         return std::nullopt;
     }
-    const std::shared_ptr<CompletedRun> previous = row_data.completed_run;
-    // The video's own result so far, before this piece: its line is updated.
-    const bool continuing = previous && previous->partial;
     const std::shared_ptr<CompletedRun> run = make_completed_run(row_data, result, label, final);
     take_current_rates(run->result);  // a rate sampled since the video started
     if (final) {
@@ -1273,8 +1270,7 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
     set_row_metrics(*row);
     // Straight onto the graph: a finished video is a line, and waiting for a
     // button to see it serves nobody.
-    graph_panel_->add_run({std::shared_ptr<const ComparisonResult>(run, &run->result), run->label,
-                           run->graph_identity, !continuing});
+    graph_panel_->add_run({std::shared_ptr<const ComparisonResult>(run, &run->result), run->label, run->graph_identity});
     sync_frame_compare();
     if (tabs_->currentIndex() == tab_worst_frames) {
         sync_worst_frames();  // shown: its videos as they are scored (else as it opens)

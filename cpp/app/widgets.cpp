@@ -1572,10 +1572,11 @@ void RemoveMarkDelegate::paint(QPainter* painter, const QStyleOptionViewItem& op
     const QWidget* widget = option.widget;
     QStyle* style = widget != nullptr ? widget->style() : QApplication::style();
     style->drawControl(QStyle::CE_ItemViewItem, &plain, painter, widget);  // the row's background
+    if (absent && absent(index)) {
+        return;
+    }
     const bool disabled = off && off(index);
-    // The send mark is clicked dimmed too (the indicator says why nothing is
-    // sent), so its hover is drawn then too; a locked remove mark's isn't.
-    const bool hovered = (!disabled || shape_ == Shape::send) && (option.state & QStyle::State_MouseOver) != 0;
+    const bool hovered = !disabled && (option.state & QStyle::State_MouseOver) != 0;
     // The text's colour on a selected row too, as the row's own text is
     // drawn in both interfaces (Windows' style keeps it on its light
     // selection; HighlightedText was dark there in Classic's dark theme).
@@ -1597,36 +1598,11 @@ void RemoveMarkDelegate::paint(QPainter* painter, const QStyleOptionViewItem& op
     painter->setBrush(hovered ? QBrush(tint) : Qt::NoBrush);
     const QRectF square(QPointF(0, 0), QSizeF(mark - 1, mark - 1));
     const QRectF placed = square.translated(QRectF(option.rect).center() - square.center());
-    if (shape_ == Shape::remove) {
-        painter->drawEllipse(placed);
-        const double arm = (mark - 1) * 0.2;
-        const QPointF centre = placed.center();
-        painter->drawLine(centre + QPointF(-arm, -arm), centre + QPointF(arm, arm));
-        painter->drawLine(centre + QPointF(-arm, arm), centre + QPointF(arm, -arm));
-    } else {
-        // A box open on its right, an arrow leaving it there.
-        const double left = placed.left();
-        const double top = placed.top() + 1.5;
-        const double bottom = placed.bottom() - 1.5;
-        const double right = placed.left() + placed.width() * 0.62;
-        const double middle = placed.center().y();
-        QPainterPath box;
-        box.moveTo(right, middle - 2.6);
-        box.lineTo(right, top);
-        box.lineTo(left, top);
-        box.lineTo(left, bottom);
-        box.lineTo(right, bottom);
-        box.lineTo(right, middle + 2.6);
-        if (hovered) {
-            painter->fillRect(QRectF(QPointF(left, top), QPointF(right, bottom)), tint);
-        }
-        painter->setBrush(Qt::NoBrush);
-        painter->drawPath(box);
-        const double tip = placed.right();
-        painter->drawLine(QPointF(left + 3.0, middle), QPointF(tip, middle));
-        painter->drawLine(QPointF(tip - 3.2, middle - 3.2), QPointF(tip, middle));
-        painter->drawLine(QPointF(tip - 3.2, middle + 3.2), QPointF(tip, middle));
-    }
+    painter->drawEllipse(placed);
+    const double arm = (mark - 1) * 0.2;
+    const QPointF centre = placed.center();
+    painter->drawLine(centre + QPointF(-arm, -arm), centre + QPointF(arm, arm));
+    painter->drawLine(centre + QPointF(-arm, arm), centre + QPointF(arm, -arm));
     painter->restore();
 }
 
@@ -1645,7 +1621,7 @@ QSize RemoveMarkDelegate::sizeHint(const QStyleOptionViewItem& option, const QMo
 
 bool RemoveMarkDelegate::helpEvent(QHelpEvent* event, QAbstractItemView* view, const QStyleOptionViewItem& option,
                                    const QModelIndex& index) {
-    if (!tooltip || event->type() != QEvent::ToolTip) {
+    if (!tooltip || event->type() != QEvent::ToolTip || (absent && absent(index))) {
         return QStyledItemDelegate::helpEvent(event, view, option, index);
     }
     QToolTip::showText(event->globalPos(), tooltip(index), view->viewport(), option.rect);

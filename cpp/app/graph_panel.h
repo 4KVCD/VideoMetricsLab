@@ -44,8 +44,6 @@
 
 class QCheckBox;
 class QLabel;
-class QPushButton;
-class QStyledItemDelegate;
 class QTableWidget;
 class QTableWidgetItem;
 class QTabWidget;
@@ -314,13 +312,11 @@ public:
     ~GraphPanel() override;
 
     // A run to show: its line is updated when one with `identity` is shown
-    // already. `restore`: a line the user removed (identity remembered as
-    // removed) comes back; otherwise it stays away.
+    // already.
     struct Run {
         std::shared_ptr<const ComparisonResult> result;
         QString label;  // empty: the test video's name
         std::string identity;  // empty: the test video's path
-        bool restore = true;
         // Given by runs() only: the line's name as the window shows it (the
         // Video names setting: SeriesEntry::shown). add_run ignores it.
         QString shown{};
@@ -336,9 +332,8 @@ public:
     bool remove_by_identity(const std::string& identity);
     void remove_by_identities(const std::vector<std::string>& identities,
                               const std::vector<std::filesystem::path>& paths = {});
-    // Removes lines by series; `suppress`: the user removed them, so a later
-    // add without restore leaves them away.
-    void remove_runs(const std::vector<int>& series_ids, bool suppress = true);
+    // Removes lines by series.
+    void remove_runs(const std::vector<int>& series_ids);
     // Shows or hides a line on every page; its row stays, to show it again.
     void set_series_visible(int series_id, bool visible);
 
@@ -398,16 +393,11 @@ public:
     std::vector<std::string> selected_identities();
     // The statistics' save icon, the tab's own one-click save.
     SaveButton* stats_save() const { return stats_save_; }
-    // The identities of the Videos tab's rows' lines: those removed with
-    // their row still there are what Show removed videos brings back.
+    // The identities of the Videos tab's rows' lines. A line with a row is
+    // hidden with its tick box and goes with its row; only a line of none
+    // (Import run file... here, Saved Results' Open) has a remove mark in
+    // the statistics table (issue #257). Not set: no line has a row.
     std::function<std::vector<std::string>()> row_identities;
-    // Show removed videos enabled where one of row_identities was removed
-    // here. Called as lines are added or removed, so at each visit to the
-    // tab too (the window's sync_graph adds every row's).
-    void refresh_restore_button();
-    // Whether the user removed the line of `identity` (a row's): the row's
-    // send mark on the Videos tab brings it back.
-    bool removed(const std::string& identity) const { return suppressed_identities_.contains(identity); }
 
 signals:
     // The metric the user chose to look at.
@@ -418,12 +408,6 @@ signals:
     // The graph's right-click: frame `frame` of a line's video in Video
     // Compare.
     void video_compare_requested(const std::string& identity, int frame);
-    // Show removed videos: the rows' lines removed here, to add again with
-    // restore (the window has their results).
-    void restore_removed_requested();
-    // Lines were added or removed (at refresh_restore_button): the Videos
-    // tab's send marks are drawn again.
-    void lines_changed();
 
 protected:
     // Brings the view up to date with the lines changed while hidden.
@@ -464,6 +448,9 @@ private:
     void on_video_color_changed(const QString& path_key, const QColor& color);
     std::optional<int> series_id_at_row(int row) const;
     void on_stats_cell_clicked(int row, int column);
+    // Whether the line of `identity` can be removed here: one of no Videos
+    // row (row_identities).
+    bool removable(const std::string& identity) const;
     void on_stats_header_clicked(int column);
     void show_metric_detail(int index);
     void on_stats_item_changed(QTableWidgetItem* item);
@@ -542,7 +529,6 @@ private:
     VideoNameRule name_rule_;
     // The lines' identities in the order wanted, the Videos table's.
     std::vector<std::string> order_;
-    std::set<std::string> suppressed_identities_;
     int next_id_ = 0;
     std::string preferred_metric_ = "vmaf";
     bool selecting_available_metric_ = false;
@@ -556,7 +542,7 @@ private:
 
     QLabel* stats_hint_ = nullptr;
     QTableWidget* stats_table_ = nullptr;
-    QStyledItemDelegate* remove_marks_ = nullptr;  // the remove column's, moved to it as columns change
+    RemoveMarkDelegate* remove_marks_ = nullptr;  // the remove column's, moved to it as columns change
     QTabWidget* tabs_ = nullptr;
     TabPills* metric_pills_ = nullptr;  // tabs_' tabs, in rows that wrap (its own bar hidden)
     std::map<std::string, MetricPage*> pages_;
@@ -570,7 +556,6 @@ private:
     // shows exactly two lines.
     bool difference_on_ = false;
     QCheckBox* difference_box_ = nullptr;
-    QPushButton* restore_button_ = nullptr;  // Show removed videos
     QLabel* metric_hint_ = nullptr;
 };
 

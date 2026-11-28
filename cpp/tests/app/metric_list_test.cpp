@@ -406,16 +406,14 @@ TEST_F(MetricsPanelInWindow, AVideosRemoveMarkStartsItsRow) {
     ASSERT_NE(table, nullptr);
     const QHeaderView* header = table->horizontalHeader();
     EXPECT_EQ(header->logicalIndex(0), col_remove);
-    EXPECT_EQ(header->logicalIndex(1), col_graph);  // its line sent back to Metric Graphs
-    EXPECT_EQ(header->logicalIndex(2), col_check);
-    EXPECT_EQ(header->logicalIndex(3), col_path);
+    EXPECT_EQ(header->logicalIndex(1), col_check);
+    EXPECT_EQ(header->logicalIndex(2), col_path);
     EXPECT_NE(dynamic_cast<RemoveMarkDelegate*>(table->itemDelegateForColumn(col_remove)), nullptr);
-    EXPECT_NE(dynamic_cast<RemoveMarkDelegate*>(table->itemDelegateForColumn(col_graph)), nullptr);
     EXPECT_TRUE(table->viewport()->testAttribute(Qt::WA_Hover));  // its hover drawn
     const auto* frozen = table->findChild<QTableView*>(QStringLiteral("frozenColumns"));
     ASSERT_NE(frozen, nullptr);
     EXPECT_EQ(frozen->itemDelegateForColumn(col_remove), table->itemDelegateForColumn(col_remove));
-    for (const int column : {col_remove, col_graph, col_check, col_path}) {
+    for (const int column : {col_remove, col_check, col_path}) {
         EXPECT_FALSE(frozen->horizontalHeader()->isSectionHidden(column)) << column;  // frozen
     }
     EXPECT_TRUE(frozen->horizontalHeader()->isSectionHidden(col_info));
@@ -448,14 +446,14 @@ TEST_F(MetricsPanelInWindow, ADraggedMetricColumnSetsTheOrderShown) {
     EXPECT_EQ(std::vector<std::string>(saved.begin(), saved.begin() + 6), first_keys(6));
     header->moveSection(header->visualIndex(col_ciede2000), header->visualIndex(col_info));
     EXPECT_EQ(first_keys(2), (std::vector<std::string>{"ciede2000", "vmaf"}));
-    EXPECT_EQ(header->logicalIndex(4), col_info);  // the video's columns back in place
+    EXPECT_EQ(header->logicalIndex(3), col_info);  // the video's columns back in place
     const std::vector<std::string> before = saved_order();
     const int plane_at = header->visualIndex(col_psnr_yuv_y);
     header->moveSection(plane_at, header->visualIndex(col_vmaf));
     EXPECT_EQ(header->visualIndex(col_psnr_yuv_y), plane_at);
     EXPECT_EQ(header->visualIndex(col_psnr_yuv_y), header->visualIndex(col_psnr_yuv) + 1);  // after its metric
     header->moveSection(header->visualIndex(col_scaling), header->visualIndex(col_vmaf));
-    EXPECT_EQ(header->logicalIndex(6), col_scaling);
+    EXPECT_EQ(header->logicalIndex(5), col_scaling);
     EXPECT_EQ(saved_order(), before);
     // With the mouse, the header's own drag: the columns put back from inside
     // its release. The metric after the first, dropped on the video's info
@@ -476,7 +474,7 @@ TEST_F(MetricsPanelInWindow, ADraggedMetricColumnSetsTheOrderShown) {
     mouse(QEvent::MouseMove, centre(col_info), Qt::LeftButton);
     mouse(QEvent::MouseButtonRelease, centre(col_info), Qt::NoButton);
     EXPECT_EQ(header->visualIndex(dragged) + 1, header->visualIndex(col_ciede2000));
-    EXPECT_EQ(header->logicalIndex(4), col_info);
+    EXPECT_EQ(header->logicalIndex(3), col_info);
     EXPECT_EQ(saved_order().front(), first_keys(1).front());
     EXPECT_EQ(first_keys(2).back(), "ciede2000");
     MetricList* list = open_panel();

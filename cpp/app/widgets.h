@@ -99,26 +99,23 @@ public:
 // its own rows dragged within it (rowsMoved), moving nothing itself: what a
 // row is lives with its owner. Its leading columns can stay in place while
 // the others scroll sideways (freeze_leading_columns).
-// A row's mark, a click on which acts on that row, drawn rather than a
+// A row's remove mark, a click on which removes that row (Metric Graphs'
+// lines, the Videos table's videos): a circled cross drawn rather than a
 // character (U+2BBE and the like are in few fonts) in the text's colour, its
-// pen heavier and its shape tinted under the pointer:
-// - `remove`: a circled cross that removes the row (Metric Graphs' lines, the
-//   Videos table's videos). Not the danger colour: a row removed deletes
-//   nothing (docs/ARCHITECTURE.md, "Removing and deleting").
-// - `send`: an arrow out of a box, which sends the row's line back to
-//   Metric Graphs (the Videos table's).
-// The cell's text is not drawn. `tooltip`, where set, says what a click on
-// the cell does (else the cell's own tooltip); where `off` says so, the mark
-// is drawn disabled, and the caller ignores its clicks.
+// pen heavier and its shape tinted under the pointer. Not the danger colour:
+// a row removed deletes nothing (docs/ARCHITECTURE.md, "Removing and
+// deleting"). The cell's text is not drawn. `tooltip`, where set, says what
+// a click on the cell does (else the cell's own tooltip); where `off` says
+// so, the mark is drawn disabled, and the caller ignores its clicks; where
+// `absent` says so, the cell is drawn empty (a row with nothing to remove).
 class RemoveMarkDelegate : public QStyledItemDelegate {
 public:
-    enum class Shape { remove, send };
-    explicit RemoveMarkDelegate(QObject* parent = nullptr, Shape shape = Shape::remove)
-        : QStyledItemDelegate(parent), shape_(shape) {}
+    using QStyledItemDelegate::QStyledItemDelegate;
 
     static constexpr int mark = 14;  // the shape's size, in pixels
     std::function<QString(const QModelIndex&)> tooltip;
     std::function<bool(const QModelIndex&)> off;
+    std::function<bool(const QModelIndex&)> absent;
 
     void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override;
     QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override;
@@ -128,9 +125,6 @@ public:
     // Hovering drawn on `view`: its viewport told of the pointer's moves
     // (Qt::WA_Hover), which an item view's viewport is not by default.
     static void track_hover(QAbstractItemView* view);
-
-private:
-    Shape shape_;
 };
 
 class FillColumnTable : public QTableWidget {
