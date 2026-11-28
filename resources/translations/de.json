@@ -1506,6 +1506,12 @@
   "Ready": "Bereit",
   "Ready: no test videos ticked.": "Bereit: keine Testvideos angehakt.",
   "Ready: {videos}, {metrics}.": "Bereit: {videos}, {metrics}.",
+  "Frame shown": "Angezeigtes Bild",
+  "Timeline": "Zeitleiste",
+  "Loop: seconds before": "Schleife: Sekunden davor",
+  "Loop: frames before": "Schleife: Bilder davor",
+  "Loop: seconds after": "Schleife: Sekunden danach",
+  "Loop: frames after": "Schleife: Bilder danach",
   "{low} to {high} metrics": "{low} bis {high} Metriken"
  },
  "plurals": {

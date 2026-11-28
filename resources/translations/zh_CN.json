@@ -1506,6 +1506,12 @@
   "Ready": "就绪",
   "Ready: no test videos ticked.": "就绪：未勾选测试视频。",
   "Ready: {videos}, {metrics}.": "就绪：{videos}，{metrics}。",
+  "Frame shown": "显示的帧",
+  "Timeline": "时间轴",
+  "Loop: seconds before": "循环：之前的秒数",
+  "Loop: frames before": "循环：之前的帧数",
+  "Loop: seconds after": "循环：之后的秒数",
+  "Loop: frames after": "循环：之后的帧数",
   "{low} to {high} metrics": "{low} 到 {high} 个指标"
  },
  "plurals": {

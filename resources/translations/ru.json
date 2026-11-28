@@ -1506,6 +1506,12 @@
   "Ready": "Готово к запуску",
   "Ready: no test videos ticked.": "Готово к запуску: не отмечено ни одного тестового видео.",
   "Ready: {videos}, {metrics}.": "Готово к запуску: {videos}, {metrics}.",
+  "Frame shown": "Показанный кадр",
+  "Timeline": "Шкала времени",
+  "Loop: seconds before": "Повтор: секунд до",
+  "Loop: frames before": "Повтор: кадров до",
+  "Loop: seconds after": "Повтор: секунд после",
+  "Loop: frames after": "Повтор: кадров после",
   "{low} to {high} metrics": "от {low} до {high} метрик"
  },
  "plurals": {

@@ -3,6 +3,7 @@
 // is slightly wrong for how the app uses it.
 #pragma once
 
+#include <QAccessible>
 #include <QColor>
 #include <QFont>
 #include <QFontMetrics>
@@ -128,6 +129,11 @@ public:
     // Hovering drawn on `view`: its viewport told of the pointer's moves
     // (Qt::WA_Hover), which an item view's viewport is not by default.
     static void track_hover(QAbstractItemView* view);
+
+    // An item for a cell this draws, for a table with none there: what a
+    // screen reader says for the cell is what a click on it does (`tooltip`,
+    // asked as it is read, so it follows the row as it moves and changes).
+    QTableWidgetItem* new_item() const;
 
 private:
     Shape shape_;
@@ -499,6 +505,12 @@ public:
 private:
     void show_focus(QWidget* old, QWidget* now);
 };
+
+// `widget`'s role to a screen reader, for a widget the app draws itself that
+// Qt would read as a plain pane (QAccessible::Client): a status line, a
+// picture, a row of tabs. Its name is its accessibleName. Set before the
+// widget is first read (as it is built).
+void set_accessible_role(QWidget* widget, QAccessible::Role role);
 
 // The font for text with a symbol the window's font lacks (Metric Graphs'
 // "✕"): on Windows Segoe UI Symbol, which has them, at `font`'s size;

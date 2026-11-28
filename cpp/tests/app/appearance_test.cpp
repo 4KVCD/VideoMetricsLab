@@ -14,6 +14,9 @@
 // With VML_UI_SNAPSHOTS set to a folder, each test also saves the window's
 // tabs there as PNGs (classic-01-videos.png, modern-dark-01-videos.png, ...),
 // for a review to look at both interfaces without starting the app.
+#include <QAbstractButton>
+#include <QAbstractSpinBox>
+#include <QAccessible>
 #include <QApplication>
 #include <QComboBox>
 #include <QDir>
@@ -49,6 +52,7 @@
 #include <vector>
 
 #include "chart.h"
+#include "export_indicator.h"
 #include "main_window.h"
 #include "quick_save.h"
 #include "theme.h"
@@ -370,6 +374,96 @@ TEST_F(Appearance, NoLineAboveTheWindowsTabsInModern) {
         EXPECT_EQ(bar.pixelColor(selected.center().x(), y), ground) << "above the selected tab, row " << y;
         EXPECT_EQ(bar.pixelColor(other.center().x(), y), ground) << "above another tab, row " << y;
     }
+}
+
+// The names of `widget`'s named parents, nearest first: where a control
+// listed without a name is.
+QString named_parents(const QWidget* widget) {
+    QStringList names;
+    for (const QWidget* parent = widget->parentWidget(); parent != nullptr; parent = parent->parentWidget()) {
+        if (!parent->objectName().isEmpty()) {
+            names << parent->objectName();
+        }
+    }
+    return names.join('/');
+}
+
+// Issue #249: a row's mark (the Videos table's remove and send-to-graph
+// marks) is said to a screen reader as what a click on it does, for the row
+// it is on now: the delegate's tooltip, asked as it is read.
+TEST(RowMarks, AreSaidAsWhatAClickDoes) {
+    QTableWidget table(2, 1);
+    auto* marks = new RemoveMarkDelegate(&table);
+    marks->tooltip = [](const QModelIndex& index) { return QStringLiteral("Remove row %1").arg(index.row()); };
+    table.setItemDelegateForColumn(0, marks);
+    table.setItem(0, 0, marks->new_item());
+    table.setItem(1, 0, marks->new_item());
+    QTableWidgetItem* first = table.takeItem(0, 0);
+    QTableWidgetItem* second = table.takeItem(1, 0);
+    table.setItem(0, 0, second);  // the rows swapped, as the Videos table reorders them
+    table.setItem(1, 0, first);
+    EXPECT_EQ(table.model()->index(0, 0).data(Qt::AccessibleTextRole).toString(), "Remove row 0");
+    EXPECT_EQ(first->data(Qt::AccessibleTextRole).toString(), "Remove row 1");
+    EXPECT_TRUE(first->text().isEmpty());  // nothing drawn under the mark
+}
+
+// Issue #249: every control in VML Modern that can be clicked or reached
+// with Tab says what it is to a screen reader: a name, and a role that is
+// not a plain widget's. Each tab is shown in turn, so its controls are
+// visible; the test lists every one that has no name or no role.
+TEST_F(Appearance, EveryControlInModernHasANameAndARole) {
+    theme::apply_appearance(theme::Interface::modern, accent);
+    auto* tabs = window_->findChild<QTabWidget*>();
+    ASSERT_NE(tabs, nullptr);
+    // The export indicator, shown with a note kept until clicked, as after
+    // an export: said to a screen reader as its line reads.
+    auto* indicator = window_->findChild<ExportIndicator*>();
+    ASSERT_NE(indicator, nullptr);
+    indicator->show_note(QStringLiteral("Saved example.csv"), ExportIndicator::Note::kept);
+    EXPECT_EQ(indicator->accessibleName(), QStringLiteral("Saved example.csv"));
+    QStringList missing;
+    QSet<QWidget*> seen;
+    for (int index = 0; index < tabs->count(); ++index) {
+        tabs->setCurrentIndex(index);
+        QApplication::processEvents();
+        for (QWidget* widget : window_->findChildren<QWidget*>()) {
+            if (!widget->isVisible() || seen.contains(widget)) {
+                continue;
+            }
+            // Not a control of its own: a tab widget (its tab bar is), a
+            // spin box's or drop-down's text box (the box is), a scroll area
+            // (what it holds is).
+            const QWidget* parent = widget->parentWidget();
+            const bool part = qobject_cast<QTabWidget*>(widget) != nullptr ||
+                              (qobject_cast<QLineEdit*>(widget) != nullptr &&
+                               (qobject_cast<const QAbstractSpinBox*>(parent) != nullptr ||
+                                qobject_cast<const QComboBox*>(parent) != nullptr)) ||
+                              QString::fromLatin1(widget->metaObject()->className()) == "QScrollArea";
+            // Drawn by Modern and read, not reached: the export indicator,
+            // the saved scores' tiles.
+            const bool drawn = widget->inherits("vml::app::ExportIndicator") ||
+                               widget->property("vmlRole").toString() == "tile";
+            const bool reachable = (widget->focusPolicy() & Qt::TabFocus) != 0 ||
+                                   qobject_cast<QAbstractButton*>(widget) != nullptr;
+            if (part || !(reachable || drawn)) {
+                continue;
+            }
+            seen.insert(widget);
+            QAccessibleInterface* control = QAccessible::queryAccessibleInterface(widget);
+            const QString name = control != nullptr ? control->text(QAccessible::Name).trimmed() : QString();
+            const QAccessible::Role role = control != nullptr ? control->role() : QAccessible::NoRole;
+            if (name.isEmpty() || role == QAccessible::NoRole || role == QAccessible::Client) {
+                missing << QStringLiteral("%1 %2 \"%3\" (tab %4)%5")
+                               .arg(QString::fromLatin1(widget->metaObject()->className()), widget->objectName(),
+                                    widget->toolTip().left(40) + " in " + named_parents(widget), tabs->tabText(index),
+                                    name.isEmpty() ? QStringLiteral(": no name") : QStringLiteral(": no role"));
+            }
+        }
+    }
+    tabs->setCurrentIndex(0);
+    indicator->dismiss_note(QStringLiteral("Saved example.csv"));
+    EXPECT_GT(seen.size(), 50);
+    EXPECT_TRUE(missing.isEmpty()) << missing.size() << " without:\n" << missing.join('\n').toStdString();
 }
 
 // Issue #203: a left click on a slider jumps to the click in Modern, as in

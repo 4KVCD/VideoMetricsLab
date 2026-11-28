@@ -23,6 +23,8 @@
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPointer>
+#include <QAccessibleWidget>
 #include <QPainterPath>
 #include <QPaintEvent>
 #include <QPixmap>
@@ -1251,6 +1253,7 @@ public:
 
 TabPills::TabPills(QTabBar* bar, QWidget* parent) : QWidget(parent), bar_(bar) {
     setFocusPolicy(Qt::TabFocus);
+    set_accessible_role(this, QAccessible::PageTabList);  // its pills are its tabs
     QSizePolicy policy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     policy.setHeightForWidth(true);
     setSizePolicy(policy);
@@ -1650,6 +1653,46 @@ bool RemoveMarkDelegate::helpEvent(QHelpEvent* event, QAbstractItemView* view, c
     }
     QToolTip::showText(event->globalPos(), tooltip(index), view->viewport(), option.rect);
     return true;
+}
+
+namespace {
+// RemoveMarkDelegate::new_item's: its accessible text the delegate's tooltip.
+class MarkItem : public QTableWidgetItem {
+public:
+    explicit MarkItem(const RemoveMarkDelegate* marks) : marks_(marks) { setFlags(Qt::ItemIsEnabled); }
+
+    QVariant data(int role) const override {
+        if (role == Qt::AccessibleTextRole && !marks_.isNull() && marks_->tooltip && tableWidget() != nullptr) {
+            return marks_->tooltip(tableWidget()->indexFromItem(this));
+        }
+        return QTableWidgetItem::data(role);
+    }
+
+private:
+    QPointer<const RemoveMarkDelegate> marks_;
+};
+}  // namespace
+
+QTableWidgetItem* RemoveMarkDelegate::new_item() const { return new MarkItem(this); }
+
+namespace {
+// set_accessible_role's widgets read as their role; Qt's own reading for
+// every other.
+QAccessibleInterface* role_factory(const QString& /*class_name*/, QObject* object) {
+    auto* widget = qobject_cast<QWidget*>(object);
+    const QVariant role = widget != nullptr ? widget->property("vmlAccessibleRole") : QVariant();
+    return role.isValid() ? new QAccessibleWidget(widget, static_cast<QAccessible::Role>(role.toInt())) : nullptr;
+}
+}  // namespace
+
+void set_accessible_role(QWidget* widget, QAccessible::Role role) {
+    // Installed once, after the application's own factories: read first.
+    static const bool installed = [] {
+        QAccessible::installFactory(role_factory);
+        return true;
+    }();
+    (void)installed;
+    widget->setProperty("vmlAccessibleRole", static_cast<int>(role));
 }
 
 QFont symbol_font(const QFont& font) {

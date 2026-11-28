@@ -1415,6 +1415,7 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     hint_row->addWidget(stats_save_, 0, Qt::AlignTop);
     top_layout->addLayout(hint_row);
     stats_table_ = new QTableWidget;
+    stats_table_->setAccessibleName(app::tr("Series and statistics"));
     auto* swatches = new ColorSwatchDelegate(stats_table_);
     connect(swatches, &ColorSwatchDelegate::clicked, this, [this](int row) { choose_video_color(row); });
     stats_table_->setItemDelegateForColumn(0, swatches);
@@ -1450,6 +1451,7 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     tabs_->addTab(build_page(first), qt_text(first.label));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
     metric_pills_ = new TabPills(tabs_->tabBar());
+    metric_pills_->setAccessibleName(app::tr("Metrics"));
     theme::style_pills(metric_pills_);
     // VML Modern: the metrics' pills, the chart and its readout one card,
     // as the stats are; Classic: the tabs as they were (theme::container).

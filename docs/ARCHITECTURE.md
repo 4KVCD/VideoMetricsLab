@@ -296,6 +296,18 @@ button with `set_anchor`, opened with `open_on_press`. Not a `QDialog`, not a
 popup of its own, not `clicked`. `MetricsPanelInWindow.APressOpensThePanelAtOnce`
 checks each such button; add a new one to it.
 
+Every control a click or Tab reaches says what it is to a screen reader: a
+name (its text, the label beside it as its buddy, or `setAccessibleName`
+where there is neither) and a role. A widget the app draws itself, which
+Qt would read as a plain pane, is given its role with
+`set_accessible_role` (`app/widgets.h`): the export indicator a status
+line that is announced as it changes, Video Compare's frame a picture,
+Metric Graphs' metric pills a row of tabs. A row's drawn mark (the ✕, the
+send-to-graph arrow) has an item whose accessible text is the delegate's
+tooltip (`RemoveMarkDelegate::new_item`), and a saved score's tile is
+read as its metric and score. `Appearance.EveryControlInModernHasANameAndARole`
+lists any control on any tab without one.
+
 ## Asking and telling the user
 
 A window that stops the user is the last way to tell or ask them anything,

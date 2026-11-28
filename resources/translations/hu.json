@@ -1506,6 +1506,12 @@
   "Ready": "Készen áll",
   "Ready: no test videos ticked.": "Készen áll: nincs bejelölt tesztvideó.",
   "Ready: {videos}, {metrics}.": "Készen áll: {videos}, {metrics}.",
+  "Frame shown": "Megjelenített képkocka",
+  "Timeline": "Idővonal",
+  "Loop: seconds before": "Ismétlés: másodperc előtte",
+  "Loop: frames before": "Ismétlés: képkocka előtte",
+  "Loop: seconds after": "Ismétlés: másodperc utána",
+  "Loop: frames after": "Ismétlés: képkocka utána",
   "{low} to {high} metrics": "{low}–{high} metrika"
  },
  "plurals": {

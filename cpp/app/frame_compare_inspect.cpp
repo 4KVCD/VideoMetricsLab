@@ -233,6 +233,11 @@ void FrameComparePanel::add_inspect_row(QBoxLayout* root) {
     loop_after_spin = seconds_spin();
     loop_before_frames_spin = frames_spin(loop_before_spin);
     loop_after_frames_spin = frames_spin(loop_after_spin);
+    // Their tooltips say more; these say which box a screen reader is on.
+    loop_before_spin->setAccessibleName(app::tr("Loop: seconds before"));
+    loop_before_frames_spin->setAccessibleName(app::tr("Loop: frames before"));
+    loop_after_spin->setAccessibleName(app::tr("Loop: seconds after"));
+    loop_after_frames_spin->setAccessibleName(app::tr("Loop: frames after"));
     // Each side's seconds and frames one value: the two boxes side by side
     // with "=" between.
     const auto pair = [](QWidget* seconds, QWidget* frames) {

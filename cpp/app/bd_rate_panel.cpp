@@ -225,8 +225,10 @@ void BdRatePanel::add_options_row(QVBoxLayout* root) {
     QBoxLayout* row = nullptr;
     QWidget* bar = theme::container("toolbar", true, &row);
     bar->setObjectName("options_bar");
-    row->addWidget(new QLabel(app::tr("Group by:")));
+    auto* group_label = new QLabel(app::tr("Group by:"));
+    row->addWidget(group_label);
     group_combo = new QComboBox;
+    group_label->setBuddy(group_combo);  // its name, to a screen reader
     group_combo->setToolTip(app::tr("A mean and median for each value of this column of the anchor's CSV files."));
     connect(group_combo, &QComboBox::currentIndexChanged, this, [this] { recalculate(); });
     row->addWidget(group_combo);
@@ -272,6 +274,7 @@ void BdRatePanel::add_results(QVBoxLayout* root) {
     head->addWidget(table_save, 0, Qt::AlignTop);
     layout->addLayout(head);
     results = new QTableWidget(0, 1 + static_cast<int>(metrics().size()));
+    results->setAccessibleName(app::tr("Results"));
     // A right-click: the save icon's Save as... items.
     results->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(results, &QWidget::customContextMenuRequested, this, [this](const QPoint& at) {
@@ -309,6 +312,7 @@ void BdRatePanel::add_chart(QVBoxLayout* root) {
     sequence_label->setFont(bold);
     row->addWidget(sequence_label);
     metric_combo = new QComboBox;
+    metric_combo->setAccessibleName(app::tr("Metric"));
     fill_metric_combo();
     connect(metric_combo, &QComboBox::currentIndexChanged, this, [this] { refresh_chart(); });
     row->addWidget(metric_combo);

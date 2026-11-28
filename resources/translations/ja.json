@@ -1506,6 +1506,12 @@
   "Ready": "準備完了",
   "Ready: no test videos ticked.": "準備完了：チェックされたテスト動画はありません。",
   "Ready: {videos}, {metrics}.": "準備完了：{videos}、{metrics}。",
+  "Frame shown": "表示中のフレーム",
+  "Timeline": "タイムライン",
+  "Loop: seconds before": "ループ: 前の秒数",
+  "Loop: frames before": "ループ: 前のフレーム数",
+  "Loop: seconds after": "ループ: 後の秒数",
+  "Loop: frames after": "ループ: 後のフレーム数",
   "{low} to {high} metrics": "{low}〜{high} 個の指標"
  },
  "plurals": {
