@@ -1269,7 +1269,9 @@ from (deleted, moved, unreachable, or another file there now) shows its
 reference as "*name* (not found)", in italics: its saved scores are the only
 ones there are, and could not be calculated again without it. Both
 **Delete...** buttons, here and in Settings > Saved Results, say how many
-such they would delete before they do.
+such they would delete before they do. The list is shown first and the
+references are looked for after it, so the "(not found)" marks can follow a
+moment later (references on a network share take longest).
 
 The list comes from an index of the saved results, kept beside them in the
 folder (`saved_results.sqlite`), so it shows at once however many there are.

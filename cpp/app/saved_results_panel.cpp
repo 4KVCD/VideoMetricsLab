@@ -1,6 +1,7 @@
 #include "saved_results_panel.h"
 
 #include <QAction>
+#include <QApplication>
 #include <QButtonGroup>
 #include <QComboBox>
 #include <QCoreApplication>
@@ -123,6 +124,8 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     });
     connect(reading_, &QFutureWatcher<std::vector<SavedComparison>>::finished, this,
             [this] { show_list(reading_->result()); });
+    checking_ = new QFutureWatcher<std::vector<bool>>(this);
+    connect(checking_, &QFutureWatcher<std::vector<bool>>::finished, this, [this] { show_references(); });
     connect(&metric_order_signal(), &MetricOrderSignal::changed, this, [this] { reorder_metrics(); });
     auto* layout = new QVBoxLayout(this);
     auto* note = new QLabel(app::tr("Every comparison the app has saved scores of. Open them in Metric Graphs, or "
@@ -299,6 +302,10 @@ SavedResultsPanel::~SavedResultsPanel() {
         *listing_stopped_ = true;
     }
     reading_->waitForFinished();
+    if (checking_stopped_) {
+        *checking_stopped_ = true;
+    }
+    checking_->waitForFinished();
     stop_details_read();
     details_reading_->waitForFinished();
 }
@@ -328,8 +335,69 @@ void SavedResultsPanel::refresh() {
     }
     listing_stopped_ = std::make_shared<std::atomic<bool>>(false);
     reading_->setFuture(QtConcurrent::run([folder = base(), stopped = listing_stopped_] {
-        return list_saved_comparisons(folder, [&stopped] { return stopped->load(); });
+        return list_saved_comparisons(folder, [&stopped] { return stopped->load(); }, ReferenceCheck::later);
     }));
+}
+
+void SavedResultsPanel::check_references() {
+    if (checking_stopped_) {
+        *checking_stopped_ = true;  // the last listing's: this one replaces it
+    }
+    checking_stopped_ = std::make_shared<std::atomic<bool>>(false);
+    checking_listing_ = listing_;
+    checking_->setFuture(QtConcurrent::run([list = list_, stopped = checking_stopped_] {
+        return references_found(list, [&stopped] { return stopped->load(); });
+    }));
+}
+
+void SavedResultsPanel::show_references() {
+    // Taken once: a Delete that waited for it (delete_selected) takes it
+    // first, and the finished signal that follows finds nothing to do.
+    const QFuture<std::vector<bool>> future = checking_->future();
+    if (checking_listing_ != listing_ || !future.isValid() || !future.isFinished() || future.resultCount() == 0) {
+        return;
+    }
+    const std::vector<bool> found = future.result();
+    checking_->setFuture(QFuture<std::vector<bool>>());
+    if (found.size() != list_.size()) {
+        return;  // stopped
+    }
+    for (std::size_t i = 0; i < list_.size(); ++i) {
+        list_[i].reference_found = found[i];
+        list_[i].reference_checked = true;
+    }
+    {
+        const QSignalBlocker blocker(table_);
+        const bool sorting = table_->isSortingEnabled();
+        table_->setSortingEnabled(false);  // a row sorted elsewhere as its text changed would be passed over
+        for (int row = 0; row < table_->rowCount(); ++row) {
+            const QTableWidgetItem* test = table_->item(row, col_test);
+            QTableWidgetItem* reference = table_->item(row, col_reference);
+            const int place = test ? test->data(Qt::UserRole).toInt() : -1;
+            if (reference && place >= 0 && place < static_cast<int>(list_.size())) {
+                show_reference(reference, list_[static_cast<std::size_t>(place)]);
+            }
+        }
+        table_->setSortingEnabled(sorting);
+    }
+    fit_columns();
+    emit references_checked();
+}
+
+void SavedResultsPanel::show_reference(QTableWidgetItem* item, const SavedComparison& saved) const {
+    QFont font = item->font();
+    font.setItalic(!saved.reference_found);
+    item->setFont(font);
+    if (saved.reference_found) {
+        item->setText(name_of(saved.source));
+        item->setToolTip(text_of(saved.source));
+        return;
+    }
+    // Its scores are the only ones there are: said where it is seen.
+    item->setText(app::tr("{name} (not found)", {{"name", name_of(saved.source)}}));
+    item->setToolTip(app::tr("{path}\n\nNot found there: without it, these scores could not be "
+                             "calculated again.",
+                             {{"path", text_of(saved.source)}}));
 }
 
 // The Metrics column's text: the comparison's metrics in the order shown.
@@ -375,18 +443,8 @@ void SavedResultsPanel::show_list(std::vector<SavedComparison> list) {
         test->setToolTip(text_of(saved.distorted));
         test->setData(Qt::UserRole, row);  // its place in list_, whatever the sort
         table_->setItem(row, col_test, test);
-        auto* reference = new QTableWidgetItem(name_of(saved.source));
-        reference->setToolTip(text_of(saved.source));
-        if (!saved.reference_found) {
-            // Its scores are the only ones there are: said where it is seen.
-            reference->setText(app::tr("{name} (not found)", {{"name", name_of(saved.source)}}));
-            reference->setToolTip(app::tr("{path}\n\nNot found there: without it, these scores could not be "
-                                          "calculated again.",
-                                          {{"path", text_of(saved.source)}}));
-            QFont font = reference->font();
-            font.setItalic(true);
-            reference->setFont(font);
-        }
+        auto* reference = new QTableWidgetItem();
+        show_reference(reference, saved);
         table_->setItem(row, col_reference, reference);
         table_->setItem(row, col_saved,
                         new SortItem(time_text(saved.saved),
@@ -399,6 +457,9 @@ void SavedResultsPanel::show_list(std::vector<SavedComparison> list) {
     apply_filter();
     show_details();
     update_buttons();
+    // Its references looked for now it is shown, not before (on a share,
+    // seconds): one gone is marked "(not found)" when they are back.
+    check_references();
 }
 
 bool SavedResultsPanel::eventFilter(QObject* watched, QEvent* event) {
@@ -1253,6 +1314,23 @@ void SavedResultsPanel::delete_selected() {
     };
     if (chosen.empty() || locked()) {
         return;
+    }
+    // Its references looked for first: the question says which scores
+    // could not be calculated again (a wait only while they are still being
+    // looked for, on a share's first look).
+    if (checking_->isRunning()) {
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        checking_->waitForFinished();
+        QApplication::restoreOverrideCursor();
+    }
+    show_references();
+    for (SavedComparison& saved : chosen) {
+        const auto same = std::find_if(list_.begin(), list_.end(), [&saved](const SavedComparison& listed) {
+            return listed.folder == saved.folder;
+        });
+        if (same != list_.end()) {
+            saved.reference_found = same->reference_found;
+        }
     }
     // The question every deletion of saved results asks (saved_deletion.h),
     // Settings' Delete... too: what goes, and what can't be scored again.

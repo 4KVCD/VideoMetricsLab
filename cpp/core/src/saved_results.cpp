@@ -1,9 +1,11 @@
 #include "vml/saved_results.h"
 
 #include <algorithm>
+#include <atomic>
 #include <map>
 #include <random>
 #include <system_error>
+#include <thread>
 #include <tuple>
 #include <variant>
 
@@ -93,12 +95,11 @@ void sort_scores(std::vector<SavedScoreFile>& scores) {
     });
 }
 
-// The comparisons as the index has them: their references checked once each
-// (most comparisons share a reference with others).
+// The comparisons as the index has them, their references not yet looked
+// for (references_found).
 std::vector<SavedComparison> from_index(const std::filesystem::path& base, std::vector<IndexedComparison> indexed) {
     std::vector<SavedComparison> list;
     list.reserve(indexed.size());
-    std::map<std::tuple<std::string, std::string, std::string>, bool> references;
     const std::filesystem::path root = base / "v2";
     for (IndexedComparison& comparison : indexed) {
         if (!comparison.readable) {
@@ -111,13 +112,9 @@ std::vector<SavedComparison> from_index(const std::filesystem::path& base, std::
         saved.distorted = platform::path_from_text(comparison.distorted);
         saved.saved = comparison.saved;
         saved.bytes = comparison.bytes;
-        const auto [found, added] = references.try_emplace(
-            {comparison.source, comparison.source_identity, comparison.source_sampled}, false);
-        if (added) {
-            found->second =
-                reference_still_there(saved.source, comparison.source_identity, comparison.source_sampled);
-        }
-        saved.reference_found = found->second;
+        saved.reference_checked = false;
+        saved.source_identity = std::move(comparison.source_identity);
+        saved.source_sampled = std::move(comparison.source_sampled);
         saved.scores.reserve(comparison.scores.size());
         for (const IndexedComparison::Score& score : comparison.scores) {
             saved.scores.push_back({saved.folder / platform::path_from_text(score.file), score.key, score.saved,
@@ -134,10 +131,68 @@ std::vector<SavedComparison> from_index(const std::filesystem::path& base, std::
 
 }  // namespace
 
+std::vector<bool> references_found(const std::vector<SavedComparison>& list, const std::function<bool()>& stopped) {
+    // Each distinct reference once, by what its check reads.
+    using Reference = std::tuple<std::filesystem::path, std::string, std::string>;
+    std::map<Reference, std::size_t> places;
+    std::vector<Reference> distinct;
+    std::vector<std::size_t> of(list.size(), 0);
+    for (std::size_t i = 0; i < list.size(); ++i) {
+        if (!list[i].reference_checked) {
+            Reference reference{list[i].source, list[i].source_identity, list[i].source_sampled};
+            const auto [found, added] = places.try_emplace(reference, distinct.size());
+            if (added) {
+                distinct.push_back(std::move(reference));
+            }
+            of[i] = found->second;
+        }
+    }
+    // Several at a time: on a share each look is a few round trips to the
+    // server, waited for (8 at once took 30 on one from 0.6-1.0 s to 0.2 s,
+    // its file details no longer cached).
+    std::vector<char> there(distinct.size(), 0);
+    std::atomic<std::size_t> next = 0;
+    std::atomic<bool> ended = false;
+    const auto check = [&] {
+        for (std::size_t i = next++; i < distinct.size(); i = next++) {
+            if (ended || (stopped && stopped())) {
+                ended = true;
+                return;
+            }
+            const auto& [source, identity, sampled] = distinct[i];
+            there[i] = reference_still_there(source, identity, sampled) ? 1 : 0;
+        }
+    };
+    {
+        std::vector<std::jthread> workers;
+        const std::size_t count = std::min<std::size_t>(8, distinct.size());
+        for (std::size_t i = 1; i < count; ++i) {
+            workers.emplace_back(check);
+        }
+        check();
+    }
+    if (ended) {
+        return {};
+    }
+    std::vector<bool> found(list.size());
+    for (std::size_t i = 0; i < list.size(); ++i) {
+        found[i] = list[i].reference_checked ? list[i].reference_found : there[of[i]] != 0;
+    }
+    return found;
+}
+
 std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path& base,
-                                                    const std::function<bool()>& stopped) {
+                                                    const std::function<bool()>& stopped, ReferenceCheck references) {
     if (std::optional<std::vector<IndexedComparison>> indexed = saved_index::comparisons(base, stopped)) {
-        return from_index(base, std::move(*indexed));
+        std::vector<SavedComparison> list = from_index(base, std::move(*indexed));
+        if (references == ReferenceCheck::now) {
+            const std::vector<bool> found = references_found(list, stopped);
+            for (std::size_t i = 0; i < list.size(); ++i) {
+                list[i].reference_found = found.empty() || found[i];
+                list[i].reference_checked = !found.empty();
+            }
+        }
+        return list;
     }
     if (stopped && stopped()) {
         return {};  // a first reading of the index stopped: nobody waits for the list

@@ -1035,8 +1035,47 @@ TEST(MetricCache, AFirstReadingOfTheSavedComparisonsStopsWhenAsked) {
     EXPECT_TRUE(list_saved_comparisons(cache, [&asked] { return ++asked > 1; }).empty());
     EXPECT_EQ(list_saved_comparisons(cache).size(), 3U);
     asked = 0;
-    EXPECT_EQ(list_saved_comparisons(cache, [&asked] { return ++asked > 1; }).size(), 3U);
+    EXPECT_EQ(list_saved_comparisons(cache, [&asked] { return ++asked > 1; }, ReferenceCheck::later).size(), 3U);
     EXPECT_EQ(asked, 0);  // nothing to read: nothing asked
+}
+
+// The Saved Results tab's listing: shown before its references are looked
+// for (on a share, a cold start took seconds), then each reference looked
+// for once, the comparisons of one gone marked; asked to stop, nothing.
+TEST(MetricCache, SavedComparisonsReferencesAreLookedForAfterTheListing) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    const AnalysisRequest request = request_from(stored);
+    const std::filesystem::path cache = folder / "cache";
+    touch(folder / "s.mp4", "s");
+    touch(folder / "r.mp4", "r");
+    for (const char* name : {"a.mp4", "b.mp4", "c.mp4"}) {
+        touch(folder / name, name);
+        ComparisonResult result = test::result_from(stored.at("result"));
+        result.source = folder / (name[0] == 'c' ? "r.mp4" : "s.mp4");
+        result.distorted = folder / name;
+        store_result(cache, result.source, result.distorted, request.recipe, result, name, request.metrics);
+    }
+    std::filesystem::remove(folder / "s.mp4");
+    const std::vector<SavedComparison> later = list_saved_comparisons(cache, {}, ReferenceCheck::later);
+    ASSERT_EQ(later.size(), 3U);
+    std::vector<bool> expected;
+    for (const SavedComparison& saved : later) {
+        EXPECT_FALSE(saved.reference_checked);
+        EXPECT_TRUE(saved.reference_found);  // not known yet: not marked
+        expected.push_back(saved.source.filename() == "r.mp4");
+    }
+    EXPECT_EQ(references_found(later), expected);
+    int asked = 0;
+    EXPECT_TRUE(references_found(later, [&asked] { return ++asked > 0; }).empty());
+    const std::vector<SavedComparison> now = list_saved_comparisons(cache);
+    ASSERT_EQ(now.size(), 3U);
+    for (std::size_t i = 0; i < now.size(); ++i) {
+        EXPECT_TRUE(now[i].reference_checked);
+        EXPECT_EQ(now[i].reference_found, now[i].source.filename() == "r.mp4");
+    }
+    EXPECT_EQ(references_found(now), std::vector<bool>({now[0].reference_found, now[1].reference_found,
+                                                        now[2].reference_found}));  // kept, not looked for again
 }
 
 // The index (saved_index.h) holds what the folders hold: a comparison
