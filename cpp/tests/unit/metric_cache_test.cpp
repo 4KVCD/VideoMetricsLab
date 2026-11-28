@@ -42,6 +42,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
 #include "vml/result_json.h"
+#include "vml/saved_index.h"
 #include "vml/saved_results.h"
 #include "vml/bitrate_store.h"
 #include "vml/file_fingerprint.h"
@@ -939,6 +940,7 @@ TEST(MetricCache, SavedComparisonsAreListedReadAndDeleted) {
     const std::filesystem::path broken = first / "vmaf_ffff.npz";
     touch(broken, "not a score");
     std::filesystem::last_write_time(broken, std::filesystem::last_write_time(broken) + std::chrono::minutes(5));
+    saved_index::changed(first);  // put there by hand: the index is told, as this app tells it of its own
     list = list_saved_comparisons(cache);
     const auto vmaf_files = std::count_if(list[0].scores.begin(), list[0].scores.end(),
                                           [](const SavedScoreFile& file) { return file.key == "vmaf"; });
@@ -1012,8 +1014,10 @@ TEST(MetricCache, SavedComparisonsAreListedReadAndDeleted) {
 // #205: the Saved Results tab lists the saved comparisons each time it is
 // shown; a listing nobody waited for any more (a newer one, or the window
 // closing, which waited for it) still read every folder, minutes on a slow
-// share. Asked to stop, it ends at the next folder.
-TEST(MetricCache, AListingOfSavedComparisonsStopsWhenAsked) {
+// share. With the index (saved_index.h) only its first reading reads every
+// folder: asked to stop, it ends at the next folder, and the next listing
+// goes on from there.
+TEST(MetricCache, AFirstReadingOfTheSavedComparisonsStopsWhenAsked) {
     const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
     const test::Folder folder;
     const AnalysisRequest request = request_from(stored);
@@ -1026,11 +1030,182 @@ TEST(MetricCache, AListingOfSavedComparisonsStopsWhenAsked) {
         result.distorted = folder / name;
         store_result(cache, result.source, result.distorted, request.recipe, result, name, request.metrics);
     }
-    EXPECT_EQ(list_saved_comparisons(cache).size(), 3U);
+    ASSERT_FALSE(std::filesystem::exists(saved_index::file(cache)));  // none made by saving
     int asked = 0;
-    const std::vector<SavedComparison> stopped = list_saved_comparisons(cache, [&asked] { return ++asked > 1; });
-    EXPECT_EQ(stopped.size(), 1U);
-    EXPECT_EQ(asked, 2);
+    EXPECT_TRUE(list_saved_comparisons(cache, [&asked] { return ++asked > 1; }).empty());
+    EXPECT_EQ(list_saved_comparisons(cache).size(), 3U);
+    asked = 0;
+    EXPECT_EQ(list_saved_comparisons(cache, [&asked] { return ++asked > 1; }, ReferenceCheck::later).size(), 3U);
+    EXPECT_EQ(asked, 0);  // nothing to read: nothing asked
+}
+
+// The Saved Results tab's listing: shown before its references are looked
+// for (on a share, a cold start took seconds), then each reference looked
+// for once, the comparisons of one gone marked; asked to stop, nothing.
+TEST(MetricCache, SavedComparisonsReferencesAreLookedForAfterTheListing) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    const AnalysisRequest request = request_from(stored);
+    const std::filesystem::path cache = folder / "cache";
+    touch(folder / "s.mp4", "s");
+    touch(folder / "r.mp4", "r");
+    for (const char* name : {"a.mp4", "b.mp4", "c.mp4"}) {
+        touch(folder / name, name);
+        ComparisonResult result = test::result_from(stored.at("result"));
+        result.source = folder / (name[0] == 'c' ? "r.mp4" : "s.mp4");
+        result.distorted = folder / name;
+        store_result(cache, result.source, result.distorted, request.recipe, result, name, request.metrics);
+    }
+    std::filesystem::remove(folder / "s.mp4");
+    const std::vector<SavedComparison> later = list_saved_comparisons(cache, {}, ReferenceCheck::later);
+    ASSERT_EQ(later.size(), 3U);
+    std::vector<bool> expected;
+    for (const SavedComparison& saved : later) {
+        EXPECT_FALSE(saved.reference_checked);
+        EXPECT_TRUE(saved.reference_found);  // not known yet: not marked
+        expected.push_back(saved.source.filename() == "r.mp4");
+    }
+    EXPECT_EQ(references_found(later), expected);
+    int asked = 0;
+    EXPECT_TRUE(references_found(later, [&asked] { return ++asked > 0; }).empty());
+    const std::vector<SavedComparison> now = list_saved_comparisons(cache);
+    ASSERT_EQ(now.size(), 3U);
+    for (std::size_t i = 0; i < now.size(); ++i) {
+        EXPECT_TRUE(now[i].reference_checked);
+        EXPECT_EQ(now[i].reference_found, now[i].source.filename() == "r.mp4");
+    }
+    EXPECT_EQ(references_found(now), std::vector<bool>({now[0].reference_found, now[1].reference_found,
+                                                        now[2].reference_found}));  // kept, not looked for again
+}
+
+// The index (saved_index.h) holds what the folders hold: a comparison
+// another program saves or deletes (an older version, a folder copied or
+// deleted by hand) is found or dropped at the next listing, and a change of
+// this app's cut short (a crash between its files and the index) is read
+// again.
+TEST(MetricCache, TheSavedResultsIndexFollowsTheFolders) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    const AnalysisRequest request = request_from(stored);
+    const std::filesystem::path cache = folder / "cache";
+    touch(folder / "s.mp4", "s");
+    std::vector<std::filesystem::path> saved;
+    for (const char* name : {"a.mp4", "b.mp4"}) {
+        touch(folder / name, name);
+        ComparisonResult result = test::result_from(stored.at("result"));
+        result.source = folder / "s.mp4";
+        result.distorted = folder / name;
+        saved.push_back(
+            store_result(cache, result.source, result.distorted, request.recipe, result, name, request.metrics));
+    }
+    const auto labels = [&cache] {
+        std::set<std::string> found;
+        for (const SavedComparison& comparison : list_saved_comparisons(cache)) {
+            found.insert(comparison.label + ":" + std::to_string(comparison.scores.size()));
+        }
+        return found;
+    };
+    const std::string scores = std::to_string(list_saved_comparisons(cache).front().scores.size());
+    EXPECT_EQ(labels(), (std::set<std::string>{"a.mp4:" + scores, "b.mp4:" + scores}));
+    ASSERT_TRUE(std::filesystem::exists(saved_index::file(cache)));
+
+    // Saved by this app after the index was made: in it at once.
+    touch(folder / "c.mp4", "c");
+    ComparisonResult result = test::result_from(stored.at("result"));
+    result.source = folder / "s.mp4";
+    result.distorted = folder / "c.mp4";
+    const std::filesystem::path third =
+        store_result(cache, result.source, result.distorted, request.recipe, result, "c.mp4", request.metrics);
+    EXPECT_EQ(labels().size(), 3U);
+
+    // Copied in and deleted by hand.
+    const std::filesystem::path copy = cache / "v2" / "copied";
+    std::filesystem::copy(saved[0], copy);
+    std::filesystem::remove_all(saved[1]);
+    EXPECT_EQ(labels(), (std::set<std::string>{"a.mp4:" + scores, "c.mp4:" + scores}));
+    EXPECT_EQ(list_saved_comparisons(cache).size(), 3U);  // a.mp4 twice: its copy
+
+    // A save cut short: marked, a score file written, the index never told.
+    const std::filesystem::path extra = third / "vmaf_0000.npz";
+    const std::filesystem::path a_score = list_saved_comparisons(cache).front().scores.front().file;
+    saved_index::changing(third);
+    std::filesystem::copy_file(a_score, extra);
+    const auto scores_of = [&cache](const std::filesystem::path& comparison) {
+        for (const SavedComparison& listed : list_saved_comparisons(cache)) {
+            if (listed.folder == comparison) {
+                return listed.scores.size();
+            }
+        }
+        return std::size_t{0};
+    };
+    EXPECT_EQ(scores_of(third), std::stoul(scores) + 1);
+}
+
+// A Delete of many tells the index once for them all (one transaction, not
+// one each: 25 ms a comparison on a VM runner's disk); what it lists after
+// is what is left, read from the index.
+TEST(MetricCache, ManySavedComparisonsAreDeletedAtOnce) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    const AnalysisRequest request = request_from(stored);
+    const std::filesystem::path cache = folder / "cache";
+    touch(folder / "s.mp4", "s");
+    for (const char* name : {"a.mp4", "b.mp4", "c.mp4"}) {
+        touch(folder / name, name);
+        ComparisonResult result = test::result_from(stored.at("result"));
+        result.source = folder / "s.mp4";
+        result.distorted = folder / name;
+        store_result(cache, result.source, result.distorted, request.recipe, result, name, request.metrics);
+    }
+    std::vector<SavedComparison> list = list_saved_comparisons(cache);
+    ASSERT_EQ(list.size(), 3U);
+    ASSERT_TRUE(std::filesystem::exists(saved_index::file(cache)));
+    SavedComparison outside;
+    outside.folder = folder / "elsewhere";  // not one of v2's: refused, the rest deleted
+    const std::vector<bool> gone = delete_saved_comparisons(cache, {list[0], outside, list[2]});
+    EXPECT_EQ(gone, std::vector<bool>({true, false, true}));
+    const std::optional<std::vector<IndexedComparison>> indexed = saved_index::comparisons(cache);
+    ASSERT_TRUE(indexed.has_value());
+    ASSERT_EQ(indexed->size(), 1U);
+    EXPECT_EQ(indexed->front().name, platform::path_text(list[1].folder.filename()));
+    EXPECT_EQ(list_saved_comparisons(cache).size(), 1U);
+}
+
+// The index made again: by Rebuild, which reads every folder again with
+// what another program changed inside one, and on its own where its file is
+// damaged (it holds nothing the folders do not).
+TEST(MetricCache, TheSavedResultsIndexIsMadeAgain) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    const AnalysisRequest request = request_from(stored);
+    const std::filesystem::path cache = folder / "cache";
+    touch(folder / "s.mp4", "s");
+    touch(folder / "a.mp4", "a");
+    ComparisonResult result = test::result_from(stored.at("result"));
+    result.source = folder / "s.mp4";
+    result.distorted = folder / "a.mp4";
+    const std::filesystem::path saved =
+        store_result(cache, result.source, result.distorted, request.recipe, result, "a", request.metrics);
+    const std::size_t scores = list_saved_comparisons(cache).front().scores.size();
+
+    // Changed inside by hand: seen once the index is made again.
+    std::filesystem::remove(list_saved_comparisons(cache).front().scores.front().file);
+    EXPECT_EQ(list_saved_comparisons(cache).front().scores.size(), scores);
+    EXPECT_EQ(saved_index::rebuild(cache), 1);
+    EXPECT_EQ(list_saved_comparisons(cache).front().scores.size(), scores - 1);
+
+    // Damaged: made again from the folders.
+    {
+        std::ofstream damaged(saved_index::file(cache), std::ios::binary | std::ios::trunc);
+        damaged << std::string(8192, 'x');
+    }
+    EXPECT_EQ(cache_summary(cache).comparisons, 1);
+
+    // All of it deleted: listed as none.
+    EXPECT_EQ(clear_saved_results(cache, false).removed, 1);
+    EXPECT_TRUE(list_saved_comparisons(cache).empty());
+    EXPECT_EQ(cache_summary(cache).comparisons, 0);
+    EXPECT_FALSE(std::filesystem::exists(saved));
 }
 
 // A file is known by its content where its path changed: the sampled hash

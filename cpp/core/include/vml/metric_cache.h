@@ -329,6 +329,12 @@ CacheSummary cache_summary(const std::filesystem::path& base);
 // only ones there are.
 bool reference_where_saved(const std::filesystem::path& folder);
 
+// The same check from what was read of the folder already (the index,
+// saved_index.h): the reference's path as context.json says it, and the
+// identity and sampled hash its identity.json recorded (empty for none).
+bool reference_still_there(const std::filesystem::path& source, const std::string& recorded,
+                           const std::string& sampled);
+
 // What clear_saved_results did: how many comparisons it deleted (0 when not
 // all it meant to could be, as the Python app counted them), and how many it
 // kept.

@@ -43,6 +43,7 @@
 #include "vml/python_json.h"
 #include "vml/python_text.h"
 #include "vml/result_json.h"
+#include "vml/saved_index.h"
 #include "vml/score_identity.h"
 #include "vml/settings.h"
 #include "vml/sha256.h"
@@ -1902,6 +1903,7 @@ bool record_test_stream(const std::filesystem::path& base, const std::filesystem
         try {
             write_atomically(folder / "identity.json", python_json_compact(*identity));
             recorded_changed(folder);
+            saved_index::changed(folder);
             recorded_any = true;
         } catch (const std::exception&) {
             // a record only: the scores stay found by the file's path and sampled hash
@@ -2011,7 +2013,10 @@ std::filesystem::path recipe_directory(const std::filesystem::path& base, const 
     for (std::size_t i = 1; i < legacy.size(); ++i) {
         merge_legacy(legacy[i], directory);
         recorded_changed(legacy[i]);
+        saved_index::changed(legacy[i]);
     }
+    saved_index::changed(legacy.front());
+    saved_index::changed(directory);
     return directory;
 }
 
@@ -2108,6 +2113,9 @@ std::filesystem::path store_result(const std::filesystem::path& base, const std:
                                    const ComparisonResult& result, const std::string& label,
                                    const std::vector<MetricRequestSpec>& specs) {
     const std::filesystem::path directory = recipe_directory(base, source, distorted, recipe);
+    // Should this end half-way (a crash, a file that cannot be written), the
+    // index reads the folder again at its next listing.
+    saved_index::changing(directory);
     const std::string context = python_json_compact(context_json(result, label, recipe));
     forget_scores_of_another_picture(directory, nlohmann::json::parse(context));
     write_atomically(directory / "context.json", context);
@@ -2186,6 +2194,7 @@ std::filesystem::path store_result(const std::filesystem::path& base, const std:
     }
     // What the files are, to know them by when their paths change.
     record_identity(directory, source, distorted, recipe, false);
+    saved_index::changed(directory);
     return directory;
 }
 
@@ -2193,6 +2202,7 @@ int clear_metrics(const std::filesystem::path& base, const std::filesystem::path
                   const std::filesystem::path& distorted, const ComparisonRecipe& recipe,
                   const std::vector<MetricRequestSpec>& specs) {
     const std::filesystem::path directory = recipe_directory(base, source, distorted, recipe);
+    saved_index::changing(directory);
     int removed = 0;
     const auto remove = [&removed](const std::filesystem::path& path) {
         std::error_code error;
@@ -2237,6 +2247,7 @@ int clear_metrics(const std::filesystem::path& base, const std::filesystem::path
         std::filesystem::remove_all(directory, error);
         recorded_changed(directory);
     }
+    saved_index::changed(directory);
     return removed;
 }
 
@@ -2252,10 +2263,40 @@ std::string lookup_token(const std::filesystem::path& source, const std::filesys
                           .dump());
 }
 
+namespace {
+
+// The bitrate saved beside the scores (bitrate_store.h): saved results too.
+std::uintmax_t saved_bitrate_bytes(const std::filesystem::path& base) {
+    std::uintmax_t bytes = 0;
+    std::error_code error;
+    std::filesystem::directory_iterator bitrate(bitrate_store_folder(base), error);
+    for (; !error && bitrate != std::filesystem::directory_iterator(); bitrate.increment(error)) {
+        std::error_code ignored;
+        if (const std::uintmax_t size = bitrate->file_size(ignored); !ignored) {
+            bytes += size;
+        }
+    }
+    return bytes;
+}
+
+}  // namespace
+
 CacheSummary cache_summary(const std::filesystem::path& base) {
-    // Walked by directory entries, which come with their sizes and times on
-    // Windows: asking each file for them takes about ten times as long.
     CacheSummary summary;
+    // From the index (saved_index.h), which knows each comparison's files.
+    if (const std::optional<std::vector<IndexedComparison>> indexed = saved_index::comparisons(base)) {
+        for (const IndexedComparison& comparison : *indexed) {
+            ++summary.comparisons;
+            summary.bytes += comparison.bytes;
+            summary.saved.push_back({base / format_folder / platform::path_from_text(comparison.name),
+                                     comparison.saved, comparison.bytes});
+        }
+        summary.bytes += saved_bitrate_bytes(base);
+        return summary;
+    }
+    // Without one, walked by directory entries, which come with their sizes
+    // and times on Windows: asking each file for them takes about ten times
+    // as long.
     std::map<std::filesystem::path, CacheSummary::Comparison> comparisons;
     const auto file_now = std::filesystem::file_time_type::clock::now();
     const auto system_now = std::chrono::system_clock::now();
@@ -2298,14 +2339,7 @@ CacheSummary cache_summary(const std::filesystem::path& base) {
     }
     std::sort(summary.saved.begin(), summary.saved.end(),
               [](const CacheSummary::Comparison& a, const CacheSummary::Comparison& b) { return a.saved > b.saved; });
-    // The bitrate saved beside them (bitrate_store.h) is saved results too.
-    std::filesystem::directory_iterator bitrate(bitrate_store_folder(base), error);
-    for (; !error && bitrate != std::filesystem::directory_iterator(); bitrate.increment(error)) {
-        std::error_code ignored;
-        if (const std::uintmax_t size = bitrate->file_size(ignored); !ignored) {
-            summary.bytes += size;
-        }
-    }
+    summary.bytes += saved_bitrate_bytes(base);
     return summary;
 }
 
@@ -2314,14 +2348,19 @@ bool reference_where_saved(const std::filesystem::path& folder) {
     if (!context || !context->is_object() || !context->contains("source")) {
         return true;  // not a comparison this app can read: nothing to keep it for
     }
-    const std::filesystem::path source = platform::path_from_text(python_str(context->at("source")));
+    const std::optional<nlohmann::json> identity = read_json(folder / "identity.json");
+    const bool recorded = identity && identity->is_object();
+    return reference_still_there(platform::path_from_text(python_str(context->at("source"))),
+                                 recorded ? text_at(*identity, "source", "path") : std::string(),
+                                 recorded ? text_at(*identity, "source", "sampled") : std::string());
+}
+
+bool reference_still_there(const std::filesystem::path& source, const std::string& recorded,
+                           const std::string& sampled) {
     std::error_code error;
     if (source.empty() || !std::filesystem::is_regular_file(source, error)) {
         return false;
     }
-    const std::optional<nlohmann::json> identity = read_json(folder / "identity.json");
-    const std::string recorded =
-        identity && identity->is_object() ? text_at(*identity, "source", "path") : std::string();
     if (recorded.empty() || recorded == file_identity(source)) {
         return true;
     }
@@ -2329,7 +2368,6 @@ bool reference_where_saved(const std::filesystem::path& folder) {
     // by its content, as the saved scores' lookup knows it (sampled_of,
     // read once for each of the file's times). Else the Videos tab would use
     // these scores while Saved Results called their reference gone.
-    const std::string sampled = text_at(*identity, "source", "sampled");
     return !sampled.empty() && sampled_of(source) == sampled;
 }
 

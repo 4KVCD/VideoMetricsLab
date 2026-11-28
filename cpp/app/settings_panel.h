@@ -154,6 +154,10 @@ public:
     QLabel* ffmpeg_status = nullptr;
     QLineEdit* cache_edit = nullptr;
     QLabel* cache_summary = nullptr;
+    // Rebuild index: the saved results' index read again from their folders
+    // (saved_index.h), and what it found, beside it.
+    QPushButton* rebuild_index_button = nullptr;
+    QLabel* rebuild_index_note = nullptr;
     // Settings > Saved Results' Saved scores box: a card for the score used
     // or for each, and the details panel's columns by their keys.
     QComboBox* saved_pick = nullptr;    // Use: which score (Settings::saved_score_pick)
@@ -389,6 +393,11 @@ private:
     // newer count replaces an older one before it is shown.
     QFutureWatcher<CacheSummary>* counting_ = nullptr;
     std::filesystem::path counted_folder_;
+    // The index being made again (Rebuild index): how many it holds, or
+    // nothing where it could not be made.
+    QFutureWatcher<std::optional<int>>* rebuilding_ = nullptr;
+    void rebuild_index();
+    void show_index_rebuilt();
     // How many saved results deleting them removed, while it is under way.
     std::shared_ptr<ClearedResults> cleared_;
     // The saved comparisons read for Delete...'s question, and the folder.

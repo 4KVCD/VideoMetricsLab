@@ -162,6 +162,21 @@ Each score's provenance says which build of the app calculated it
 (`saved_by`, `commit`). They are history only: no lookup reads them, so an
 older app reads these files as before.
 
+The saved comparisons are listed (the Saved Results tab, Settings > Saved
+Results, `vml-cli saved`) from an index beside them, `<cache>/saved_results.sqlite`
+(`saved_index.h`; SQLite, vendored in `cpp/third_party/sqlite`): each
+comparison's folder name, label, videos, time, size and score files, and
+what its `identity.json` recorded of the reference. It is an index, not a
+store: the folders stay what the scores are, and the index can always be
+made again from them (a damaged file, an index of another form, Settings >
+Saved Results > Rebuild index). Every writer in core marks a folder before
+changing it and updates the index after (`changing`, `changed`); a mark left
+by a crash has the folder read again at the next listing. Each listing reads
+the cache folder's names once, to read in folders made by other programs and
+drop those deleted; a change another program makes *inside* a folder is
+seen only after a rebuild. A write-ahead log on a local drive; a rollback
+journal on a network drive, where the log's shared memory can't work.
+
 User data lives under `~/.videometricslab/` (settings, the saved scores by
 default, the log), whatever folder the app runs from.
 

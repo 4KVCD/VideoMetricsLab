@@ -1492,7 +1492,11 @@
   "Ready": "Siap",
   "Ready: no test videos ticked.": "Siap: tidak ada video uji yang dicentang.",
   "Ready: {videos}, {metrics}.": "Siap: {videos}, {metrics}.",
-  "{low} to {high} metrics": "{low} hingga {high} metrik"
+  "{low} to {high} metrics": "{low} hingga {high} metrik",
+  "Rebuild index": "Bangun ulang indeks",
+  "Reading the saved results' folders...": "Membaca folder hasil tersimpan...",
+  "Only needed if saved comparisons were changed outside this version of the app: reads every saved folder again into the index. Nothing is deleted or scored again.": "Hanya diperlukan jika perbandingan tersimpan diubah di luar versi aplikasi ini: membaca ulang setiap folder tersimpan ke dalam indeks. Tidak ada yang dihapus atau dinilai ulang.",
+  "The index could not be made in this folder; the saved results are read from their folders.": "Indeks tidak dapat dibuat di folder ini; hasil tersimpan dibaca dari foldernya."
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [
@@ -1617,6 +1621,7 @@
   "Click to open the Videos tab: the failed video's row says more.": ["Klik untuk membuka tab Video: baris video yang gagal menjelaskan lebih lanjut."],
   "{count} metric": ["{count} metrik"],
   "{count} metric each": ["masing-masing {count} metrik"],
-  "{count} test video ticked": ["{count} video uji dicentang"]
+  "{count} test video ticked": ["{count} video uji dicentang"],
+  "Read {count} saved comparison into the index.": ["{count} perbandingan tersimpan dibaca ke dalam indeks."]
  }
 }

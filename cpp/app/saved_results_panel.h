@@ -48,6 +48,7 @@ class QMenu;
 class QPushButton;
 class QScrollArea;
 class QTableWidget;
+class QTableWidgetItem;
 class QToolButton;
 template <typename T>
 class QFutureWatcher;
@@ -218,6 +219,9 @@ signals:
     void scores_settings_requested();
     // The list was read again: what was known of its comparisons may be gone.
     void listed();
+    // Each reference of the listing shown has been looked for, and marked
+    // "(not found)" where gone.
+    void references_checked();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -290,6 +294,14 @@ private:
     // Set to stop the listing running: a newer one has started, or the tab
     // is going (it can take minutes on a slow share).
     std::shared_ptr<std::atomic<bool>> listing_stopped_;
+    // The references of the listing shown, looked for after it is shown
+    // (references_found): on a share that can take seconds, the list not.
+    QFutureWatcher<std::vector<bool>>* checking_ = nullptr;
+    std::shared_ptr<std::atomic<bool>> checking_stopped_;
+    std::uint64_t checking_listing_ = 0;  // the listing they are looked for in (listing_)
+    void check_references();
+    void show_references();
+    void show_reference(QTableWidgetItem* item, const SavedComparison& saved) const;
     bool run_active_ = false;
     // The run's pairs and folders, each as locked_by_run compares them
     // (run_key), and whether its folders are known yet.

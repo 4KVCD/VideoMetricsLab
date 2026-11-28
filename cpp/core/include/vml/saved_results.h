@@ -41,6 +41,12 @@ struct SavedComparison {
     // (metric_cache.h's reference_where_saved). Where not, its scores are the
     // only ones there are: they could not be calculated again.
     bool reference_found = true;
+    // Whether reference_found was found out (ReferenceCheck::later leaves
+    // it to references_found), and what that needs: the reference's
+    // identity and sampled hash as its scores were saved (identity.json).
+    bool reference_checked = true;
+    std::string source_identity;
+    std::string source_sampled;
     // By metric in the app's order, each metric's newest first.
     std::vector<SavedScoreFile> scores;
 
@@ -56,8 +62,24 @@ struct SavedComparison {
 // where given, is asked before each folder: once it says so, the listing
 // ends with what it has (a listing nobody waits for any more, on a slow
 // share, stops rather than reading every folder).
+//
+// Each one's reference is looked for (reference_found) before the list is
+// given back, unless `references` says later: references are often on a
+// share, where a first look waits on the server (seconds, its disks woken
+// from sleep), and the list itself does not. Then reference_checked is
+// false and references_found does it. A listing read from the folders, the
+// index unusable, has always looked.
+enum class ReferenceCheck { now, later };
 std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path& base,
-                                                    const std::function<bool()>& stopped = {});
+                                                    const std::function<bool()>& stopped = {},
+                                                    ReferenceCheck references = ReferenceCheck::now);
+
+// Whether each comparison's reference is still where its scores were saved
+// from, in the list's order: each reference once (comparisons share them),
+// several at a time (each waits on its share's server, not on the others).
+// Those already checked keep what they have. Empty once `stopped` says so.
+std::vector<bool> references_found(const std::vector<SavedComparison>& list,
+                                   const std::function<bool()>& stopped = {});
 
 // The comparison's result and label with one score per metric: the file
 // `chosen` gives for it, else its newest. A file that cannot be read, or
@@ -123,6 +145,11 @@ std::map<std::string, std::filesystem::path> saved_scores_by_rule(const SavedCom
 // moved out of the comparisons (v2/.deleted) and what was in use is deleted
 // at the next delete.
 bool delete_saved_comparison(const std::filesystem::path& base, const SavedComparison& comparison);
+
+// Deletes each, as delete_saved_comparison does, the index brought up to
+// date once for them all: whether each is gone, in the list's order.
+std::vector<bool> delete_saved_comparisons(const std::filesystem::path& base,
+                                           const std::vector<SavedComparison>& comparisons);
 
 // Deletes the comparisons under `base` last saved (their newest file's time)
 // from `from` up to, not including, `to` (none: no bound on that side), each

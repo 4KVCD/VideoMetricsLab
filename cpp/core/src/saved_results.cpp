@@ -1,13 +1,18 @@
 #include "vml/saved_results.h"
 
 #include <algorithm>
+#include <atomic>
+#include <map>
 #include <random>
 #include <system_error>
+#include <thread>
+#include <tuple>
 #include <variant>
 
 #include "vml/metric_cache.h"
 #include "vml/metrics.h"
 #include "vml/platform/system.h"
+#include "vml/saved_index.h"
 #include "vml/settings.h"
 
 namespace vml {
@@ -24,9 +29,16 @@ std::chrono::system_clock::time_point system_time(std::filesystem::file_time_typ
 
 // The metric's place in the app's order (unknown metrics last).
 std::size_t order_of(const std::string& key) {
-    const auto& all = metrics();
-    const auto found = std::find_if(all.begin(), all.end(), [&key](const MetricDefinition& d) { return d.key == key; });
-    return static_cast<std::size_t>(found - all.begin());
+    static const std::map<std::string, std::size_t> places = [] {
+        std::map<std::string, std::size_t> found;
+        const auto& all = metrics();
+        for (std::size_t i = 0; i < all.size(); ++i) {
+            found.emplace(all[i].key, i);
+        }
+        return found;
+    }();
+    const auto found = places.find(key);
+    return found == places.end() ? metrics().size() : found->second;
 }
 
 // A YUV metric's Y plane is saved in its plain metric's file (metric_path):
@@ -72,8 +84,120 @@ std::vector<std::string> SavedComparison::filter_texts() const {
     return {label, platform::path_text(distorted), platform::path_text(source)};
 }
 
+namespace {
+
+// The metric's scores in the app's order, each metric's newest first.
+void sort_scores(std::vector<SavedScoreFile>& scores) {
+    std::stable_sort(scores.begin(), scores.end(), [](const SavedScoreFile& a, const SavedScoreFile& b) {
+        const std::size_t x = order_of(a.key);
+        const std::size_t y = order_of(b.key);
+        return x != y ? x < y : a.key != b.key ? a.key < b.key : a.saved > b.saved;
+    });
+}
+
+// The comparisons as the index has them, their references not yet looked
+// for (references_found).
+std::vector<SavedComparison> from_index(const std::filesystem::path& base, std::vector<IndexedComparison> indexed) {
+    std::vector<SavedComparison> list;
+    list.reserve(indexed.size());
+    const std::filesystem::path root = base / "v2";
+    for (IndexedComparison& comparison : indexed) {
+        if (!comparison.readable) {
+            continue;  // as the folders' listing leaves it out
+        }
+        SavedComparison saved;
+        saved.folder = root / platform::path_from_text(comparison.name);
+        saved.label = std::move(comparison.label);
+        saved.source = platform::path_from_text(comparison.source);
+        saved.distorted = platform::path_from_text(comparison.distorted);
+        saved.saved = comparison.saved;
+        saved.bytes = comparison.bytes;
+        saved.reference_checked = false;
+        saved.source_identity = std::move(comparison.source_identity);
+        saved.source_sampled = std::move(comparison.source_sampled);
+        saved.scores.reserve(comparison.scores.size());
+        for (const IndexedComparison::Score& score : comparison.scores) {
+            saved.scores.push_back({saved.folder / platform::path_from_text(score.file), score.key, score.saved,
+                                    score.bytes});
+        }
+        list_luma_planes(saved.scores);
+        sort_scores(saved.scores);
+        list.push_back(std::move(saved));
+    }
+    std::stable_sort(list.begin(), list.end(),
+                     [](const SavedComparison& a, const SavedComparison& b) { return a.saved > b.saved; });
+    return list;
+}
+
+}  // namespace
+
+std::vector<bool> references_found(const std::vector<SavedComparison>& list, const std::function<bool()>& stopped) {
+    // Each distinct reference once, by what its check reads.
+    using Reference = std::tuple<std::filesystem::path, std::string, std::string>;
+    std::map<Reference, std::size_t> places;
+    std::vector<Reference> distinct;
+    std::vector<std::size_t> of(list.size(), 0);
+    for (std::size_t i = 0; i < list.size(); ++i) {
+        if (!list[i].reference_checked) {
+            Reference reference{list[i].source, list[i].source_identity, list[i].source_sampled};
+            const auto [found, added] = places.try_emplace(reference, distinct.size());
+            if (added) {
+                distinct.push_back(std::move(reference));
+            }
+            of[i] = found->second;
+        }
+    }
+    // Several at a time: on a share each look is a few round trips to the
+    // server, waited for (8 at once took 30 on one from 0.6-1.0 s to 0.2 s,
+    // its file details no longer cached).
+    std::vector<char> there(distinct.size(), 0);
+    std::atomic<std::size_t> next = 0;
+    std::atomic<bool> ended = false;
+    const auto check = [&] {
+        for (std::size_t i = next++; i < distinct.size(); i = next++) {
+            if (ended || (stopped && stopped())) {
+                ended = true;
+                return;
+            }
+            const auto& [source, identity, sampled] = distinct[i];
+            there[i] = reference_still_there(source, identity, sampled) ? 1 : 0;
+        }
+    };
+    {
+        std::vector<std::jthread> workers;
+        const std::size_t count = std::min<std::size_t>(8, distinct.size());
+        for (std::size_t i = 1; i < count; ++i) {
+            workers.emplace_back(check);
+        }
+        check();
+    }
+    if (ended) {
+        return {};
+    }
+    std::vector<bool> found(list.size());
+    for (std::size_t i = 0; i < list.size(); ++i) {
+        found[i] = list[i].reference_checked ? list[i].reference_found : there[of[i]] != 0;
+    }
+    return found;
+}
+
 std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path& base,
-                                                    const std::function<bool()>& stopped) {
+                                                    const std::function<bool()>& stopped, ReferenceCheck references) {
+    if (std::optional<std::vector<IndexedComparison>> indexed = saved_index::comparisons(base, stopped)) {
+        std::vector<SavedComparison> list = from_index(base, std::move(*indexed));
+        if (references == ReferenceCheck::now) {
+            const std::vector<bool> found = references_found(list, stopped);
+            for (std::size_t i = 0; i < list.size(); ++i) {
+                list[i].reference_found = found.empty() || found[i];
+                list[i].reference_checked = !found.empty();
+            }
+        }
+        return list;
+    }
+    if (stopped && stopped()) {
+        return {};  // a first reading of the index stopped: nobody waits for the list
+    }
+    // Without an index: every folder read.
     std::vector<SavedComparison> list;
     std::error_code error;
     std::filesystem::directory_iterator folder(base / "v2", error);
@@ -109,12 +233,7 @@ std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path&
             }
         }
         list_luma_planes(saved.scores);
-        std::stable_sort(saved.scores.begin(), saved.scores.end(),
-                         [](const SavedScoreFile& a, const SavedScoreFile& b) {
-                             const std::size_t x = order_of(a.key);
-                             const std::size_t y = order_of(b.key);
-                             return x != y ? x < y : a.key != b.key ? a.key < b.key : a.saved > b.saved;
-                         });
+        sort_scores(saved.scores);
         list.push_back(std::move(saved));
     }
     std::stable_sort(list.begin(), list.end(),
@@ -283,13 +402,17 @@ std::map<std::string, std::filesystem::path> saved_scores_by_rule(const SavedCom
     return chosen;
 }
 
-bool delete_saved_comparison(const std::filesystem::path& base, const SavedComparison& comparison) {
+namespace {
+
+// delete_saved_comparison's work, the index left to the caller: the folder
+// gone from v2 (nothing where it was not).
+std::optional<std::filesystem::path> delete_one(const std::filesystem::path& base, const SavedComparison& comparison) {
     // Only a comparison's own folder, directly under v2: never more.
     std::error_code error;
     const std::filesystem::path v2 = std::filesystem::weakly_canonical(base / "v2", error);
     const std::filesystem::path folder = std::filesystem::weakly_canonical(comparison.folder, error);
     if (error || folder.parent_path() != v2 || !std::filesystem::exists(folder / "context.json", error)) {
-        return false;
+        return std::nullopt;
     }
     // Moved aside first, whole or not at all, then deleted: deleted where it
     // is, file by file, a file open without leave to delete it (a details
@@ -312,7 +435,7 @@ bool delete_saved_comparison(const std::filesystem::path& base, const SavedCompa
     std::error_code ignored;
     const std::filesystem::file_type aside_type = std::filesystem::symlink_status(aside, ignored).type();
     if (aside_type != std::filesystem::file_type::directory && aside_type != std::filesystem::file_type::not_found) {
-        return false;
+        return std::nullopt;
     }
     ignored.clear();
     std::filesystem::directory_iterator left(aside, ignored);
@@ -329,11 +452,34 @@ bool delete_saved_comparison(const std::filesystem::path& base, const SavedCompa
         std::filesystem::rename(folder, moved, error);
     }
     if (error) {
-        return false;  // refused (one of its files in use): nothing of it deleted
+        return std::nullopt;  // refused (one of its files in use): nothing of it deleted
     }
     saved_comparison_deleted(folder);  // gone from v2: the kept listing reads it again
     std::filesystem::remove_all(moved, ignored);
-    return true;
+    return folder;
+}
+
+}  // namespace
+
+bool delete_saved_comparison(const std::filesystem::path& base, const SavedComparison& comparison) {
+    return delete_saved_comparisons(base, {comparison}).front();
+}
+
+std::vector<bool> delete_saved_comparisons(const std::filesystem::path& base,
+                                           const std::vector<SavedComparison>& comparisons) {
+    // The index told once, after all of them: should the process end before
+    // that, the next listing drops what is gone from v2 (it reads v2's names).
+    std::vector<bool> gone;
+    std::vector<std::filesystem::path> folders;
+    for (const SavedComparison& comparison : comparisons) {
+        std::optional<std::filesystem::path> folder = delete_one(base, comparison);
+        gone.push_back(folder.has_value());
+        if (folder) {
+            folders.push_back(std::move(*folder));
+        }
+    }
+    saved_index::changed(folders);
+    return gone;
 }
 
 ClearedResults delete_saved_between(const std::filesystem::path& base,
@@ -342,16 +488,18 @@ ClearedResults delete_saved_between(const std::filesystem::path& base,
     // The comparisons Settings counted and said would go (cache_summary): every
     // folder with a context.json, one this app can't read among them, which
     // list_saved_comparisons leaves out.
-    ClearedResults done;
+    std::vector<SavedComparison> chosen;
     for (const CacheSummary::Comparison& comparison : cache_summary(base).saved) {
         if ((from && comparison.saved < *from) || (to && comparison.saved >= *to)) {
             continue;
         }
         SavedComparison folder;
         folder.folder = comparison.folder;
-        if (delete_saved_comparison(base, folder)) {
-            ++done.removed;
-        }
+        chosen.push_back(std::move(folder));
+    }
+    ClearedResults done;
+    for (const bool gone : delete_saved_comparisons(base, chosen)) {
+        done.removed += gone ? 1 : 0;
     }
     return done;
 }

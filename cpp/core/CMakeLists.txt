@@ -73,6 +73,7 @@ add_library(vml_core
     src/run_json.cpp
     src/run_line.cpp
     src/run_record.cpp
+    src/saved_index.cpp
     src/saved_results.cpp
     src/score_summary.cpp
     src/score_logs.cpp
@@ -185,7 +186,7 @@ target_include_directories(vml_core PUBLIC ../../native)
 # libvmaf-fast's public headers, at the commit of the library the app ships
 # (third_party/README.md). SYSTEM: their warnings are not ours to fix.
 target_include_directories(vml_core SYSTEM PUBLIC ../third_party/libvmaf-fast/include)
-target_link_libraries(vml_core PUBLIC vml_platform nlohmann_json PRIVATE vml_compile_options vml_miniz vml_hwy)
+target_link_libraries(vml_core PUBLIC vml_platform nlohmann_json PRIVATE vml_compile_options vml_miniz vml_hwy vml_sqlite)
 if(APPLE)
     # Which codecs the Mac's GPU decodes (hardware_decoding.cpp).
     target_link_libraries(vml_core PUBLIC "-framework VideoToolbox" "-framework CoreMedia")

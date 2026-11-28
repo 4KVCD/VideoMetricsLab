@@ -1492,7 +1492,11 @@
   "Ready": "พร้อม",
   "Ready: no test videos ticked.": "พร้อม: ไม่มีวิดีโอทดสอบที่ทำเครื่องหมาย",
   "Ready: {videos}, {metrics}.": "พร้อม: {videos}, {metrics}",
-  "{low} to {high} metrics": "ตัวชี้วัด {low} ถึง {high} รายการ"
+  "{low} to {high} metrics": "ตัวชี้วัด {low} ถึง {high} รายการ",
+  "Rebuild index": "สร้างดัชนีใหม่",
+  "Reading the saved results' folders...": "กำลังอ่านโฟลเดอร์ของผลลัพธ์ที่บันทึก...",
+  "Only needed if saved comparisons were changed outside this version of the app: reads every saved folder again into the index. Nothing is deleted or scored again.": "จำเป็นเฉพาะเมื่อการเปรียบเทียบที่บันทึกไว้ถูกเปลี่ยนนอกแอปเวอร์ชันนี้ โดยจะอ่านทุกโฟลเดอร์ที่บันทึกไว้เข้าสู่ดัชนีอีกครั้ง ไม่มีสิ่งใดถูกลบหรือให้คะแนนใหม่",
+  "The index could not be made in this folder; the saved results are read from their folders.": "สร้างดัชนีในโฟลเดอร์นี้ไม่ได้ ผลลัพธ์ที่บันทึกจะอ่านจากโฟลเดอร์ของมัน"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [
@@ -1617,6 +1621,7 @@
   "Click to open the Videos tab: the failed video's row says more.": ["คลิกเพื่อเปิดแท็บ วิดีโอ แถวของวิดีโอที่ล้มเหลวมีรายละเอียดเพิ่มเติม"],
   "{count} metric": ["ตัวชี้วัด {count} รายการ"],
   "{count} metric each": ["ตัวชี้วัด {count} รายการต่อวิดีโอ"],
-  "{count} test video ticked": ["ทำเครื่องหมายวิดีโอทดสอบ {count} รายการ"]
+  "{count} test video ticked": ["ทำเครื่องหมายวิดีโอทดสอบ {count} รายการ"],
+  "Read {count} saved comparison into the index.": ["อ่านการเปรียบเทียบที่บันทึกไว้ {count} รายการเข้าดัชนีแล้ว"]
  }
 }

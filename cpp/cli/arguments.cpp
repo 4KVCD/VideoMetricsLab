@@ -104,7 +104,7 @@ const char* const saved_usage = R"(usage: VideoMetricsLab-cli saved [-h] [--filt
                                  [--stills-count N] [-q]
                                  [--settings FILE | --no-settings]
                                  [--cache-dir FOLDER]
-                                 {list,show,delete} [ITEM ...]
+                                 {list,show,delete,rebuild} [ITEM ...]
 )";
 
 const char* const report_usage = R"(usage: VideoMetricsLab-cli report [-h] [--json FILE] [--csv FOLDER]
@@ -591,9 +591,13 @@ The comparisons the app has saved (Settings > Saved Results > Folder, the
 Saved Results tab), without their videos: their files may be gone.
 
 positional arguments:
-  {list,show,delete}    list: every saved comparison, newest first, with its
+  {list,show,delete,rebuild}
+                        list: every saved comparison, newest first, with its
                         ID; show: the scores of those ITEM names, as compare
-                        gives them; delete: those ITEM names (asks nothing)
+                        gives them; delete: those ITEM names (asks nothing);
+                        rebuild: read every saved comparison's folder into
+                        the index again (Settings > Saved Results > Rebuild
+                        index)
   ITEM                  a saved comparison's ID, or the first hex digits of
                         it (at least 6; 12 to delete), or for show a test
                         video's path: every comparison of that video
@@ -1747,9 +1751,9 @@ Parser saved_parser(SavedArguments& parsed) {
     Parser parser;
     parser.actions = {
         help(std::string(saved_usage) + saved_sections + examples),
-        {{}, "{list,show,delete}", Nargs::one, true,
+        {{}, "{list,show,delete,rebuild}", Nargs::one, true,
          [&parsed](const std::vector<std::string>& values) {
-             parsed.action = choice(values.front(), {"list", "show", "delete"});
+             parsed.action = choice(values.front(), {"list", "show", "delete", "rebuild"});
          }},
         {{}, "ITEM", Nargs::one_or_more, false,
          [&parsed](const std::vector<std::string>& values) { parsed.items = values; }},
@@ -1788,7 +1792,10 @@ std::optional<std::string> saved_misuse(const SavedArguments& parsed) {
     if (parsed.action == "list" && !parsed.items.empty()) {
         return "list takes no ITEM (--filter narrows it)";
     }
-    if (parsed.action != "list" && parsed.items.empty()) {
+    if (parsed.action == "rebuild" && !parsed.items.empty()) {
+        return "rebuild takes no ITEM: it reads every saved comparison";
+    }
+    if (parsed.action != "list" && parsed.action != "rebuild" && parsed.items.empty()) {
         return parsed.action + " needs at least one ITEM: a saved comparison's ID (saved list gives them)";
     }
     if (parsed.action != "list" && parsed.filter) {
@@ -1800,7 +1807,7 @@ std::optional<std::string> saved_misuse(const SavedArguments& parsed) {
     if (parsed.action != "show" && writes) {
         return "the scores' options (--csv, --segments...) are show's";
     }
-    if (parsed.action == "delete" && output.json_path) {
+    if ((parsed.action == "delete" || parsed.action == "rebuild") && output.json_path) {
         return "argument --json: only with list and show";
     }
     return std::nullopt;

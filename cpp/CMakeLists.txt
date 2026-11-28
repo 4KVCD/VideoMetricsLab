@@ -85,6 +85,26 @@ add_library(vml_hwy STATIC
 target_include_directories(vml_hwy SYSTEM PUBLIC third_party/highway)
 set_target_properties(vml_hwy PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# SQLite, vendored (third_party/README.md): the saved results' index
+# (core's saved_index.cpp), shared by the window and vml-cli with nothing
+# else to ship. Its own recommended options: no extensions loaded, no
+# deprecated or shared-cache code, double-quoted text never taken for a
+# name. Without our warnings, which are not ours to fix.
+add_library(vml_sqlite STATIC third_party/sqlite/sqlite3.c)
+target_include_directories(vml_sqlite SYSTEM PUBLIC third_party/sqlite)
+target_compile_definitions(vml_sqlite PRIVATE
+    SQLITE_DQS=0
+    SQLITE_THREADSAFE=1
+    SQLITE_DEFAULT_MEMSTATUS=0
+    SQLITE_DEFAULT_WAL_SYNCHRONOUS=1
+    SQLITE_LIKE_DOESNT_MATCH_BLOBS
+    SQLITE_MAX_EXPR_DEPTH=0
+    SQLITE_OMIT_DEPRECATED
+    SQLITE_OMIT_LOAD_EXTENSION
+    SQLITE_OMIT_SHARED_CACHE
+    SQLITE_USE_ALLOCA)
+set_target_properties(vml_sqlite PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 add_subdirectory(platform)
 add_subdirectory(core)
 add_subdirectory(cli)

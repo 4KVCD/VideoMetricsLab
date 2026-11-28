@@ -1492,7 +1492,11 @@
   "Ready": "Pronto",
   "Ready: no test videos ticked.": "Pronto: nessun video di prova spuntato.",
   "Ready: {videos}, {metrics}.": "Pronto: {videos}, {metrics}.",
-  "{low} to {high} metrics": "da {low} a {high} metriche"
+  "{low} to {high} metrics": "da {low} a {high} metriche",
+  "Rebuild index": "Ricostruisci l'indice",
+  "Reading the saved results' folders...": "Lettura delle cartelle dei risultati salvati...",
+  "Only needed if saved comparisons were changed outside this version of the app: reads every saved folder again into the index. Nothing is deleted or scored again.": "Necessario solo se i confronti salvati sono stati modificati al di fuori di questa versione dell'app: rilegge ogni cartella salvata nell'indice. Nulla viene eliminato o ricalcolato.",
+  "The index could not be made in this folder; the saved results are read from their folders.": "Impossibile creare l'indice in questa cartella; i risultati salvati vengono letti dalle loro cartelle."
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [
@@ -1653,6 +1657,7 @@
   "Click to open the Videos tab: the failed video's row says more.": ["Fai clic per aprire la scheda Video: la riga del video non riuscito dice di più.", "Fai clic per aprire la scheda Video: le righe dei video non riusciti dicono di più."],
   "{count} metric": ["{count} metrica", "{count} metriche"],
   "{count} metric each": ["{count} metrica ciascuno", "{count} metriche ciascuno"],
-  "{count} test video ticked": ["{count} video di prova spuntato", "{count} video di prova spuntati"]
+  "{count} test video ticked": ["{count} video di prova spuntato", "{count} video di prova spuntati"],
+  "Read {count} saved comparison into the index.": ["{count} confronto salvato letto nell'indice.", "{count} confronti salvati letti nell'indice."]
  }
 }

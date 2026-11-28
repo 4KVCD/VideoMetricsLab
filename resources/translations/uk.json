@@ -1492,7 +1492,11 @@
   "Ready": "Готово до запуску",
   "Ready: no test videos ticked.": "Готово до запуску: не позначено жодного тестового відео.",
   "Ready: {videos}, {metrics}.": "Готово до запуску: {videos}, {metrics}.",
-  "{low} to {high} metrics": "від {low} до {high} метрик"
+  "{low} to {high} metrics": "від {low} до {high} метрик",
+  "Rebuild index": "Перебудувати індекс",
+  "Reading the saved results' folders...": "Читання тек збережених результатів...",
+  "Only needed if saved comparisons were changed outside this version of the app: reads every saved folder again into the index. Nothing is deleted or scored again.": "Потрібно, лише якщо збережені порівняння змінювалися поза цією версією застосунку: знову читає кожну збережену папку в індекс. Нічого не видаляється й не оцінюється знову.",
+  "The index could not be made in this folder; the saved results are read from their folders.": "У цій теці не можна створити індекс; збережені результати читаються з їхніх тек."
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [
@@ -1689,6 +1693,7 @@
   "Click to open the Videos tab: the failed video's row says more.": ["Натисніть, щоб відкрити вкладку «Відео»: у рядку відео з помилкою є подробиці.", "Натисніть, щоб відкрити вкладку «Відео»: у рядках відео з помилкою є подробиці.", "Натисніть, щоб відкрити вкладку «Відео»: у рядках відео з помилкою є подробиці."],
   "{count} metric": ["{count} метрика", "{count} метрики", "{count} метрик"],
   "{count} metric each": ["по {count} метриці", "по {count} метрики", "по {count} метрик"],
-  "{count} test video ticked": ["позначено {count} тестове відео", "позначено {count} тестові відео", "позначено {count} тестових відео"]
+  "{count} test video ticked": ["позначено {count} тестове відео", "позначено {count} тестові відео", "позначено {count} тестових відео"],
+  "Read {count} saved comparison into the index.": ["До індексу зчитано {count} збережене порівняння.", "До індексу зчитано {count} збережені порівняння.", "До індексу зчитано {count} збережених порівнянь."]
  }
 }

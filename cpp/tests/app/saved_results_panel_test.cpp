@@ -497,6 +497,59 @@ TEST(SavedResultsPanel, DeleteDeletesWhatWasSelectedWhenTheListChangesUnderItsQu
     EXPECT_TRUE(std::filesystem::exists(list[1].folder));
 }
 
+// A cold start took seconds to list 68 comparisons: each reference, on a
+// share, looked for before the list was shown. The list is shown first;
+// those of a reference gone are marked when it has been looked for, and a
+// Delete asked before then waits for it (its question says what could not
+// be scored again).
+TEST(SavedResultsPanel, ReferencesAreMarkedAfterTheListIsShown) {
+    const test::Folder folder;
+    Settings settings;
+    settings.cache_dir = (folder / "cache").string();
+    const std::filesystem::path v2 = folder / "cache" / "v2";
+    std::ofstream(folder / "here.mkv") << "here";
+    std::vector<SavedComparison> list(2);
+    for (std::size_t i = 0; i < list.size(); ++i) {
+        list[i].folder = v2 / ("comparison" + std::to_string(i));
+        list[i].label = "t" + std::to_string(i);
+        list[i].source = folder / (i == 0 ? "here.mkv" : "gone.mkv");
+        list[i].reference_checked = false;
+        std::filesystem::create_directories(list[i].folder);
+        std::ofstream(list[i].folder / "context.json") << "{}";
+    }
+    Dialogs dialogs = standard_dialogs(nullptr);
+    QString asked;
+    dialogs.message = [&asked](const Message& message) {
+        asked = message.text;
+        return MessageAnswer{1, false};  // not deleted
+    };
+    FileWrites writes;
+    SavedResultsPanel panel(settings, dialogs, writes);
+    QSignalSpy checked(&panel, &SavedResultsPanel::references_checked);
+    panel.show_list(list);
+    const auto reference_text = [&panel](const char* label) {
+        for (int row = 0; row < panel.table()->rowCount(); ++row) {
+            if (panel.table()->item(row, 0)->text() == label) {
+                return panel.table()->item(row, 1)->text();
+            }
+        }
+        return QString();
+    };
+    if (checked.isEmpty()) {
+        EXPECT_FALSE(reference_text("t1").contains("not found"));  // not known yet: not marked
+    }
+    ASSERT_TRUE(checked.wait(10000) || !checked.isEmpty());
+    EXPECT_FALSE(reference_text("t0").contains("not found"));
+    EXPECT_TRUE(reference_text("t1").contains("not found"));
+
+    // Delete asked while they are still being looked for.
+    panel.show_list(list);
+    panel.table()->selectAll();
+    panel.delete_selected();
+    EXPECT_TRUE(asked.contains("not found")) << asked.toStdString();
+    EXPECT_TRUE(reference_text("t1").contains("not found"));
+}
+
 // Issue #133: Delete removed the folders at once, while a run's saves could
 // still be queued to be written: a save then brought a deleted folder back.
 // Delete goes through the same queue, after them.
