@@ -1443,6 +1443,7 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     // drawing, its main cost, so pages are built when first shown. Until a
     // line comes, the preferred metric's tab alone.
     tabs_ = new QuietTabWidget;
+    pass_ctrl_tab_up(tabs_);  // Ctrl+Tab: the window's tabs; Ctrl+PgDn and PgUp: the metrics
     theme::set_role(tabs_, "segmented");
     // The metrics are pills in rows that wrap (TabPills), every name whole:
     // the tab bar, scrolling, cut one at an end. The bar stays, hidden.

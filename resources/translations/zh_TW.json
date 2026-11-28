@@ -1515,7 +1515,8 @@
   "Pause / resume": "暫停 / 繼續",
   "Shortcut: {keys}": "快速鍵：{keys}",
   "Use the keyboard shortcuts": "使用鍵盤快速鍵",
-  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "關閉後，清單中的快速鍵（F5、Ctrl+O、Ctrl+1 到 Ctrl+8 等）不起作用。Tab、Ctrl+Tab 和影片比較的按鍵仍可使用。"
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "關閉後，清單中的快速鍵（F5、Ctrl+O、Ctrl+1 到 Ctrl+8 等）不起作用。Tab、Ctrl+Tab 和影片比較的按鍵仍可使用。",
+  "Next or previous section of Settings, or metric of Metric Graphs": "設定的下一個或上一個區段，或指標圖表的指標"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

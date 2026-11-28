@@ -1515,7 +1515,8 @@
   "Pause / resume": "Pause / reprise",
   "Shortcut: {keys}": "Raccourci : {keys}",
   "Use the keyboard shortcuts": "Utiliser les raccourcis clavier",
-  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Désactivés, les raccourcis de la liste (F5, Ctrl+O, Ctrl+1 à Ctrl+8 et les autres) ne font rien. Tab, Ctrl+Tab et les touches de Comparaison vidéo fonctionnent toujours."
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Désactivés, les raccourcis de la liste (F5, Ctrl+O, Ctrl+1 à Ctrl+8 et les autres) ne font rien. Tab, Ctrl+Tab et les touches de Comparaison vidéo fonctionnent toujours.",
+  "Next or previous section of Settings, or metric of Metric Graphs": "Section suivante ou précédente de Paramètres, ou métrique de Graphiques des métriques"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

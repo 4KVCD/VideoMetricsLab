@@ -1515,7 +1515,8 @@
   "Pause / resume": "Pozastavit / pokračovat",
   "Shortcut: {keys}": "Zkratka: {keys}",
   "Use the keyboard shortcuts": "Používat klávesové zkratky",
-  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Vypnuto: zkratky ze seznamu (F5, Ctrl+O, Ctrl+1 až Ctrl+8 a ostatní) nic nedělají. Tab, Ctrl+Tab a klávesy Porovnání videa fungují dál."
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Vypnuto: zkratky ze seznamu (F5, Ctrl+O, Ctrl+1 až Ctrl+8 a ostatní) nic nedělají. Tab, Ctrl+Tab a klávesy Porovnání videa fungují dál.",
+  "Next or previous section of Settings, or metric of Metric Graphs": "Další nebo předchozí oddíl v Nastavení, nebo metrika v Grafy metrik"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

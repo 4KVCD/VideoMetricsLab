@@ -94,6 +94,9 @@ ShortcutsDialog::ShortcutsDialog(QWidget* parent) : AppDialog(parent, app::tr("K
     add_row(key_text(QKeySequence(Qt::CTRL | Qt::Key_Tab)) + QStringLiteral(", ") +
                 key_text(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Tab)),
             app::tr("Next or previous tab"));
+    add_row(key_text(QKeySequence(Qt::CTRL | Qt::Key_PageDown)) + QStringLiteral(", ") +
+                key_text(QKeySequence(Qt::CTRL | Qt::Key_PageUp)),
+            app::tr("Next or previous section of Settings, or metric of Metric Graphs"));
     add_row(key_text(tab_keys(0)) + QString::fromUtf8(" \xE2\x80\xA6 ") + key_text(tab_keys(7)),  // Ctrl+1 … Ctrl+8
             app::tr("Go to a tab"));
 

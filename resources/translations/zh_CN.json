@@ -1515,7 +1515,8 @@
   "Pause / resume": "暂停 / 继续",
   "Shortcut: {keys}": "快捷键：{keys}",
   "Use the keyboard shortcuts": "使用键盘快捷键",
-  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "关闭后，列表中的快捷键（F5、Ctrl+O、Ctrl+1 到 Ctrl+8 等）不起作用。Tab、Ctrl+Tab 和视频对比的按键仍然可用。"
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "关闭后，列表中的快捷键（F5、Ctrl+O、Ctrl+1 到 Ctrl+8 等）不起作用。Tab、Ctrl+Tab 和视频对比的按键仍然可用。",
+  "Next or previous section of Settings, or metric of Metric Graphs": "设置的下一个或上一个分区，或指标图表的指标"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

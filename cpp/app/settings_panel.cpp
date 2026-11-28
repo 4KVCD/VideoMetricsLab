@@ -122,6 +122,7 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
     sections->setObjectName("settingsSections");
     sections->setDocumentMode(true);
     keep_focus_on_tab_click(sections);  // a section clicked focuses none of its boxes
+    pass_ctrl_tab_up(sections);         // Ctrl+Tab: the window's tabs; Ctrl+PgDn and PgUp: these
     theme::set_role(sections, "segmented");  // VML Modern: a row of pills
     theme::set_role(sections->tabBar(), "segmented");
     const auto add_section = [this](const QString& name, std::initializer_list<QGroupBox*> boxes) {

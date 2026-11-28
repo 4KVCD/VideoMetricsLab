@@ -1515,7 +1515,8 @@
   "Pause / resume": "หยุดชั่วคราว / ทำต่อ",
   "Shortcut: {keys}": "แป้นพิมพ์ลัด: {keys}",
   "Use the keyboard shortcuts": "ใช้แป้นพิมพ์ลัด",
-  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "เมื่อปิด แป้นพิมพ์ลัดในรายการ (F5, Ctrl+O, Ctrl+1 ถึง Ctrl+8 และอื่น ๆ) จะไม่ทำอะไร Tab, Ctrl+Tab และแป้นของการเปรียบเทียบวิดีโอยังใช้ได้"
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "เมื่อปิด แป้นพิมพ์ลัดในรายการ (F5, Ctrl+O, Ctrl+1 ถึง Ctrl+8 และอื่น ๆ) จะไม่ทำอะไร Tab, Ctrl+Tab และแป้นของการเปรียบเทียบวิดีโอยังใช้ได้",
+  "Next or previous section of Settings, or metric of Metric Graphs": "ส่วนถัดไปหรือก่อนหน้าของ การตั้งค่า หรือเมตริกของ กราฟเมตริก"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

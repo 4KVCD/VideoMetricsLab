@@ -1515,7 +1515,8 @@
   "Pause / resume": "Pausar / continuar",
   "Shortcut: {keys}": "Atalho: {keys}",
   "Use the keyboard shortcuts": "Usar os atalhos de teclado",
-  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Desligados, os atalhos da lista (F5, Ctrl+O, Ctrl+1 a Ctrl+8 e os demais) não fazem nada. Tab, Ctrl+Tab e as teclas da Comparação de vídeo continuam funcionando."
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Desligados, os atalhos da lista (F5, Ctrl+O, Ctrl+1 a Ctrl+8 e os demais) não fazem nada. Tab, Ctrl+Tab e as teclas da Comparação de vídeo continuam funcionando.",
+  "Next or previous section of Settings, or metric of Metric Graphs": "Seção seguinte ou anterior de Configurações, ou métrica de Gráficos de métricas"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

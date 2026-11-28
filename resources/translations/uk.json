@@ -1515,7 +1515,8 @@
   "Pause / resume": "Пауза / продовжити",
   "Shortcut: {keys}": "Комбінація клавіш: {keys}",
   "Use the keyboard shortcuts": "Використовувати комбінації клавіш",
-  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Якщо вимкнено, комбінації зі списку (F5, Ctrl+O, Ctrl+1–Ctrl+8 та інші) нічого не роблять. Tab, Ctrl+Tab і клавіші порівняння відео працюють і далі."
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Якщо вимкнено, комбінації зі списку (F5, Ctrl+O, Ctrl+1–Ctrl+8 та інші) нічого не роблять. Tab, Ctrl+Tab і клавіші порівняння відео працюють і далі.",
+  "Next or previous section of Settings, or metric of Metric Graphs": "Наступний або попередній розділ «Налаштування» чи метрика «Графіки метрик»"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

@@ -150,6 +150,36 @@ TEST_F(KeyboardInWindow, TheShortcutsCanBeTurnedOff) {
     tabs->setCurrentIndex(0);
 }
 
+// With the focus inside Settings, Ctrl+Tab switches the window's tabs, not
+// Settings' sections; Ctrl+PgDn and Ctrl+PgUp step through the sections.
+TEST_F(KeyboardInWindow, CtrlTabIsTheWindowsTabsEvenInsideSettings) {
+    window_->activateWindow();
+    ASSERT_TRUE(QTest::qWaitForWindowActive(window_));
+    auto* tabs = window_->findChild<QTabWidget*>();
+    ASSERT_NE(tabs, nullptr);
+    const int settings_tab = tabs->count() - 1;
+    tabs->setCurrentIndex(settings_tab);
+    QApplication::processEvents();
+    window_->activateWindow();  // as in TheShortcutsCanBeTurnedOff
+    ASSERT_TRUE(QTest::qWaitForWindowActive(window_));
+    auto* sections = window_->findChild<QTabWidget*>("settingsSections");
+    ASSERT_NE(sections, nullptr);
+    sections->setCurrentIndex(0);
+    auto* field = window_->findChild<QWidget*>("ffmpegFolder");  // a control inside Settings
+    ASSERT_NE(field, nullptr);
+    field->setFocus();
+    QTest::keyClick(field, Qt::Key_PageDown, Qt::ControlModifier);
+    EXPECT_EQ(sections->currentIndex(), 1);
+    EXPECT_EQ(tabs->currentIndex(), settings_tab);
+    QTest::keyClick(sections->currentWidget(), Qt::Key_PageUp, Qt::ControlModifier);
+    EXPECT_EQ(sections->currentIndex(), 0);
+    field->setFocus();
+    QTest::keyClick(field, Qt::Key_Tab, Qt::ControlModifier);
+    EXPECT_EQ(tabs->currentIndex(), 0);  // past the last tab: the first
+    EXPECT_EQ(sections->currentIndex(), 0);
+    tabs->setCurrentIndex(0);
+}
+
 // Settings' panel is built when first wanted, after the rest of the window
 // (title bar buttons included): Tab from the tab bar still goes into it,
 // not to the title bar, and on through it before leaving.
@@ -198,6 +228,8 @@ TEST(Keyboard, TheShortcutsTakeNoKeyAlreadyTaken) {
     }
     taken.emplace_back(Qt::CTRL | Qt::Key_Tab);
     taken.emplace_back(Qt::CTRL | Qt::SHIFT | Qt::Key_Tab);
+    taken.emplace_back(Qt::CTRL | Qt::Key_PageDown);  // Settings' sections, Metric Graphs' metrics
+    taken.emplace_back(Qt::CTRL | Qt::Key_PageUp);
     for (int index = 0; index < 8; ++index) {
         taken.push_back(tab_keys(index));
     }

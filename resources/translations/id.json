@@ -1515,7 +1515,8 @@
   "Pause / resume": "Jeda / lanjutkan",
   "Shortcut: {keys}": "Pintasan: {keys}",
   "Use the keyboard shortcuts": "Gunakan pintasan keyboard",
-  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Jika mati, pintasan dalam daftar (F5, Ctrl+O, Ctrl+1 sampai Ctrl+8, dan lainnya) tidak melakukan apa pun. Tab, Ctrl+Tab, dan tombol Perbandingan Video tetap berfungsi."
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Jika mati, pintasan dalam daftar (F5, Ctrl+O, Ctrl+1 sampai Ctrl+8, dan lainnya) tidak melakukan apa pun. Tab, Ctrl+Tab, dan tombol Perbandingan Video tetap berfungsi.",
+  "Next or previous section of Settings, or metric of Metric Graphs": "Bagian berikutnya atau sebelumnya di Pengaturan, atau metrik di Grafik metrik"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

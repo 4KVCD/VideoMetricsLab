@@ -1515,7 +1515,8 @@
   "Pause / resume": "Pauzeren / hervatten",
   "Shortcut: {keys}": "Sneltoets: {keys}",
   "Use the keyboard shortcuts": "Sneltoetsen gebruiken",
-  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Uit doen de sneltoetsen uit de lijst (F5, Ctrl+O, Ctrl+1 tot Ctrl+8 en de rest) niets. Tab, Ctrl+Tab en de toetsen van Videovergelijking blijven werken."
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Uit doen de sneltoetsen uit de lijst (F5, Ctrl+O, Ctrl+1 tot Ctrl+8 en de rest) niets. Tab, Ctrl+Tab en de toetsen van Videovergelijking blijven werken.",
+  "Next or previous section of Settings, or metric of Metric Graphs": "Volgende of vorige sectie van Instellingen, of metriek van Metriekgrafieken"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [
