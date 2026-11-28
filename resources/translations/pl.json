@@ -1507,6 +1507,12 @@
   "Ready": "Gotowe",
   "Ready: no test videos ticked.": "Gotowe: nie zaznaczono żadnych wideo testowych.",
   "Ready: {videos}, {metrics}.": "Gotowe: {videos}, {metrics}.",
+  "Frame shown": "Wyświetlana klatka",
+  "Timeline": "Oś czasu",
+  "Loop: seconds before": "Pętla: sekundy przed",
+  "Loop: frames before": "Pętla: klatki przed",
+  "Loop: seconds after": "Pętla: sekundy po",
+  "Loop: frames after": "Pętla: klatki po",
   "{low} to {high} metrics": "od {low} do {high} metryk"
  },
  "plurals": {

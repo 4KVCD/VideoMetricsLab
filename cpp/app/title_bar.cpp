@@ -380,6 +380,7 @@ TitleBar::TitleBar(QWidget* window, bool dialog) : QWidget(window), window_(wind
     icon_ = new QLabel;
     icon_->setFixedSize(16, 16);
     icon_->setToolTip(app::tr("Window menu (Alt+Space)"));
+    icon_->setAccessibleName(icon_->toolTip());  // a click opens the menu: named for a screen reader too
     icon_->installEventFilter(this);  // a click opens the system menu
     row->addWidget(icon_);
     title_ = new QLabel;

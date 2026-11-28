@@ -1,5 +1,6 @@
 #include "export_indicator.h"
 
+#include <QAccessible>
 #include <QSizePolicy>
 #include <QDesktopServices>
 #include <QEvent>
@@ -8,12 +9,14 @@
 #include <QLabel>
 #include <QPropertyAnimation>
 #include <QSaveFile>
+#include <QTextDocumentFragment>
 #include <QTimer>
 #include <QToolTip>
 #include <QUrl>
 
 #include "i18n.h"
 #include "theme.h"
+#include "widgets.h"
 #include "window_helpers.h"
 
 namespace vml::app {
@@ -75,6 +78,7 @@ QString saved_folder(const QStringList& files) {
 ExportIndicator::ExportIndicator(QWidget* parent) : QWidget(parent) {
     auto* layout = new QHBoxLayout(this);
     layout->setContentsMargins(6, 0, 6, 0);
+    set_accessible_role(this, QAccessible::StatusBar);  // a status line, said as it changes (show_text)
     label_ = new QLabel;
     label_->setTextFormat(Qt::RichText);
     label_->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::LinksAccessibleByKeyboard);
@@ -244,7 +248,17 @@ void ExportIndicator::show_text() {
                        : state_ == State::saved ? outcome_.files.join(QLatin1Char('\n'))
                        : state_ == State::note  ? QString()
                                                 : saving_why_);
+    const bool appearing = isHidden();
     show();
+    // Said to a screen reader as it appears or changes, as Windows' own
+    // notices are: the indicator takes no focus, so nothing else would
+    // read it. Not again when only restyled (changeEvent).
+    const QString said = QTextDocumentFragment::fromHtml(text).toPlainText().simplified();
+    if (appearing || said != accessibleName()) {  // the same line again, after it went, is said again
+        setAccessibleName(said);
+        QAccessibleAnnouncementEvent announcement(this, said);
+        QAccessible::updateAccessibility(&announcement);
+    }
 }
 
 void ExportIndicator::fade() {

@@ -1507,6 +1507,12 @@
   "Ready": "Sẵn sàng",
   "Ready: no test videos ticked.": "Sẵn sàng: chưa đánh dấu video thử nào.",
   "Ready: {videos}, {metrics}.": "Sẵn sàng: {videos}, {metrics}.",
+  "Frame shown": "Khung hình đang hiện",
+  "Timeline": "Dòng thời gian",
+  "Loop: seconds before": "Lặp: số giây trước",
+  "Loop: frames before": "Lặp: số khung hình trước",
+  "Loop: seconds after": "Lặp: số giây sau",
+  "Loop: frames after": "Lặp: số khung hình sau",
   "{low} to {high} metrics": "{low} đến {high} chỉ số"
  },
  "plurals": {

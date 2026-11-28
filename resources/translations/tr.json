@@ -1507,6 +1507,12 @@
   "Ready": "Hazır",
   "Ready: no test videos ticked.": "Hazır: işaretli test videosu yok.",
   "Ready: {videos}, {metrics}.": "Hazır: {videos}, {metrics}.",
+  "Frame shown": "Gösterilen kare",
+  "Timeline": "Zaman çizelgesi",
+  "Loop: seconds before": "Döngü: önceki saniye",
+  "Loop: frames before": "Döngü: önceki kare",
+  "Loop: seconds after": "Döngü: sonraki saniye",
+  "Loop: frames after": "Döngü: sonraki kare",
   "{low} to {high} metrics": "{low} ile {high} arası metrik"
  },
  "plurals": {

@@ -1507,6 +1507,12 @@
   "Ready": "Gereed",
   "Ready: no test videos ticked.": "Gereed: geen testvideo's aangevinkt.",
   "Ready: {videos}, {metrics}.": "Gereed: {videos}, {metrics}.",
+  "Frame shown": "Getoond frame",
+  "Timeline": "Tijdlijn",
+  "Loop: seconds before": "Lus: seconden ervoor",
+  "Loop: frames before": "Lus: frames ervoor",
+  "Loop: seconds after": "Lus: seconden erna",
+  "Loop: frames after": "Lus: frames erna",
   "{low} to {high} metrics": "{low} tot {high} metrieken"
  },
  "plurals": {

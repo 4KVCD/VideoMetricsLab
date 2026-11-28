@@ -180,6 +180,12 @@ int MainWindow::add_table_row(const std::filesystem::path& path) {
     check_item->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
     check_item->setCheckState(Qt::Checked);
     distorted_table_->setItem(row, col_check, check_item);
+    // The marks' cells, for what a screen reader says of them (new_item).
+    for (const int column : {col_remove, col_graph}) {
+        if (const auto* marks = dynamic_cast<const RemoveMarkDelegate*>(distorted_table_->itemDelegateForColumn(column))) {
+            distorted_table_->setItem(row, column, marks->new_item());
+        }
+    }
 
     auto* path_item = new QTableWidgetItem(name_of(path));
     path_item->setToolTip(text_of(path));  // the full path on hover

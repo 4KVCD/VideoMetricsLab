@@ -1507,6 +1507,12 @@
   "Ready": "Готово до запуску",
   "Ready: no test videos ticked.": "Готово до запуску: не позначено жодного тестового відео.",
   "Ready: {videos}, {metrics}.": "Готово до запуску: {videos}, {metrics}.",
+  "Frame shown": "Показаний кадр",
+  "Timeline": "Шкала часу",
+  "Loop: seconds before": "Повтор: секунд до",
+  "Loop: frames before": "Повтор: кадрів до",
+  "Loop: seconds after": "Повтор: секунд після",
+  "Loop: frames after": "Повтор: кадрів після",
   "{low} to {high} metrics": "від {low} до {high} метрик"
  },
  "plurals": {

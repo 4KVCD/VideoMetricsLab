@@ -1507,6 +1507,12 @@
   "Ready": "พร้อม",
   "Ready: no test videos ticked.": "พร้อม: ไม่มีวิดีโอทดสอบที่ทำเครื่องหมาย",
   "Ready: {videos}, {metrics}.": "พร้อม: {videos}, {metrics}",
+  "Frame shown": "เฟรมที่แสดง",
+  "Timeline": "ไทม์ไลน์",
+  "Loop: seconds before": "วนซ้ำ: วินาทีก่อน",
+  "Loop: frames before": "วนซ้ำ: เฟรมก่อน",
+  "Loop: seconds after": "วนซ้ำ: วินาทีหลัง",
+  "Loop: frames after": "วนซ้ำ: เฟรมหลัง",
   "{low} to {high} metrics": "ตัวชี้วัด {low} ถึง {high} รายการ"
  },
  "plurals": {

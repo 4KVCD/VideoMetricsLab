@@ -1507,6 +1507,12 @@
   "Ready": "준비됨",
   "Ready: no test videos ticked.": "준비됨: 체크된 테스트 영상이 없습니다.",
   "Ready: {videos}, {metrics}.": "준비됨: {videos}, {metrics}.",
+  "Frame shown": "표시된 프레임",
+  "Timeline": "타임라인",
+  "Loop: seconds before": "반복: 앞 초",
+  "Loop: frames before": "반복: 앞 프레임",
+  "Loop: seconds after": "반복: 뒤 초",
+  "Loop: frames after": "반복: 뒤 프레임",
   "{low} to {high} metrics": "지표 {low}~{high}개"
  },
  "plurals": {

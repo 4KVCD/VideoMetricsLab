@@ -1507,6 +1507,12 @@
   "Ready": "Připraveno",
   "Ready: no test videos ticked.": "Připraveno: nejsou zaškrtnuta žádná testovací videa.",
   "Ready: {videos}, {metrics}.": "Připraveno: {videos}, {metrics}.",
+  "Frame shown": "Zobrazený snímek",
+  "Timeline": "Časová osa",
+  "Loop: seconds before": "Smyčka: sekundy před",
+  "Loop: frames before": "Smyčka: snímky před",
+  "Loop: seconds after": "Smyčka: sekundy po",
+  "Loop: frames after": "Smyčka: snímky po",
   "{low} to {high} metrics": "{low} až {high} metrik"
  },
  "plurals": {

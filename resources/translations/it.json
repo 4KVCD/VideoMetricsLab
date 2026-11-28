@@ -1507,6 +1507,12 @@
   "Ready": "Pronto",
   "Ready: no test videos ticked.": "Pronto: nessun video di prova spuntato.",
   "Ready: {videos}, {metrics}.": "Pronto: {videos}, {metrics}.",
+  "Frame shown": "Fotogramma mostrato",
+  "Timeline": "Sequenza temporale",
+  "Loop: seconds before": "Ciclo: secondi prima",
+  "Loop: frames before": "Ciclo: fotogrammi prima",
+  "Loop: seconds after": "Ciclo: secondi dopo",
+  "Loop: frames after": "Ciclo: fotogrammi dopo",
   "{low} to {high} metrics": "da {low} a {high} metriche"
  },
  "plurals": {

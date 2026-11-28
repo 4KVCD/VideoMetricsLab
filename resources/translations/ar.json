@@ -1507,6 +1507,12 @@
   "Ready": "جاهز",
   "Ready: no test videos ticked.": "جاهز: لا توجد فيديوهات اختبار محددة.",
   "Ready: {videos}, {metrics}.": "جاهز: {videos}، {metrics}.",
+  "Frame shown": "الإطار المعروض",
+  "Timeline": "المخطط الزمني",
+  "Loop: seconds before": "التكرار: ثوانٍ قبل",
+  "Loop: frames before": "التكرار: إطارات قبل",
+  "Loop: seconds after": "التكرار: ثوانٍ بعد",
+  "Loop: frames after": "التكرار: إطارات بعد",
   "{low} to {high} metrics": "من {low} إلى {high} مقاييس"
  },
  "plurals": {

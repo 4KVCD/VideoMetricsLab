@@ -1507,6 +1507,12 @@
   "Ready": "Siap",
   "Ready: no test videos ticked.": "Siap: tidak ada video uji yang dicentang.",
   "Ready: {videos}, {metrics}.": "Siap: {videos}, {metrics}.",
+  "Frame shown": "Bingkai yang ditampilkan",
+  "Timeline": "Lini masa",
+  "Loop: seconds before": "Putar ulang: detik sebelum",
+  "Loop: frames before": "Putar ulang: bingkai sebelum",
+  "Loop: seconds after": "Putar ulang: detik sesudah",
+  "Loop: frames after": "Putar ulang: bingkai sesudah",
   "{low} to {high} metrics": "{low} hingga {high} metrik"
  },
  "plurals": {
