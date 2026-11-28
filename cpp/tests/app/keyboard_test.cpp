@@ -89,6 +89,36 @@ TEST_F(KeyboardInWindow, ShortcutsWorkAnywhereInTheWindow) {
     }
 }
 
+// Settings' panel is built when first wanted, after the rest of the window
+// (title bar buttons included): Tab from the tab bar still goes into it,
+// not to the title bar, and on through it before leaving.
+TEST_F(KeyboardInWindow, TabFromTheTabsGoesIntoSettings) {
+    auto* tabs = window_->findChild<QTabWidget*>();
+    ASSERT_NE(tabs, nullptr);
+    tabs->setCurrentIndex(tabs->count() - 1);
+    QApplication::processEvents();
+    QWidget* settings = tabs->widget(tabs->count() - 1);
+    // The Tab stops, as Qt's Tab goes through the window's focus chain
+    // (visible, enabled, taking Tab): the first after the tab bar and its
+    // own scroll arrows is Settings'.
+    std::vector<QWidget*> stops;
+    for (QWidget* widget = window_->nextInFocusChain(); widget != window_; widget = widget->nextInFocusChain()) {
+        if ((widget->focusPolicy() & Qt::TabFocus) != 0 && widget->focusProxy() == nullptr && widget->isVisible() &&
+            widget->isEnabled() && widget->window() == window_) {
+            stops.push_back(widget);
+        }
+    }
+    auto next = std::find(stops.begin(), stops.end(), tabs->tabBar());
+    ASSERT_NE(next, stops.end());
+    while (next != stops.end() && (*next == tabs->tabBar() || tabs->tabBar()->isAncestorOf(*next))) {
+        ++next;
+    }
+    ASSERT_NE(next, stops.end());
+    EXPECT_TRUE(settings->isAncestorOf(*next)) << (*next)->metaObject()->className() << " "
+                                               << (*next)->objectName().toStdString();
+    tabs->setCurrentIndex(0);
+}
+
 // No two of the window's keys are the same, and none is a key the text
 // boxes, the tables or Video Compare already take for themselves.
 TEST(Keyboard, TheShortcutsTakeNoKeyAlreadyTaken) {

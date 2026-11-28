@@ -1147,6 +1147,29 @@ SettingsPanel& MainWindow::settings_panel() {
     // uses, as set_run_ui_active does for a panel built already.
     settings_panel_->set_run_active(run_active_);
     settings_page_->setWidget(settings_panel_);  // the placeholder deleted
+    // Built after the rest of the window, its controls came last in the Tab
+    // order, after the tab bar's corner (Export, the title bar's buttons),
+    // where every other tab has its own before them: the corner's go back to
+    // the end.
+    // (QWidget::setTabOrder moves only controls that take focus.)
+    std::vector<QWidget*> corner;
+    QWidget* last = nullptr;  // the last control that takes focus, not the corner's
+    for (QWidget* widget = nextInFocusChain(); widget != this; widget = widget->nextInFocusChain()) {
+        if (widget->focusPolicy() == Qt::NoFocus) {
+            continue;
+        }
+        if (tab_corner_->isAncestorOf(widget)) {
+            corner.push_back(widget);
+        } else {
+            last = widget;
+        }
+    }
+    for (QWidget* widget : corner) {
+        if (last != nullptr) {
+            QWidget::setTabOrder(last, widget);
+        }
+        last = widget;
+    }
     settings_panel_->setAutoFillBackground(false);  // the tab's pane behind it, as ScrollingPage makes its page
     return *settings_panel_;
 }
