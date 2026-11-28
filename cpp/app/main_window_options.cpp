@@ -703,7 +703,8 @@ void MainWindow::save_cvvdp_preset(const CvvdpDisplayDialog& dialog, const Cvvdp
 }
 
 void MainWindow::on_cvvdp_delete_preset() {
-    // Deletes the user's chosen CVVDP preset, after asking.
+    // Deletes the user's chosen CVVDP preset: Delete preset was clicked
+    // twice (OptionsPanel), its line saying what the second click deletes.
     const QVariant chosen = options_panel_->cvvdp_preset_combo->currentData();
     const std::string name = chosen.isValid() ? chosen.toString().toStdString() : std::string();
     const std::optional<CvvdpPreset> preset =
@@ -712,11 +713,6 @@ void MainWindow::on_cvvdp_delete_preset() {
         return;
     }
     const QString quoted = QString::fromStdString(name);
-    if (!dialogs_.ask_no_default(
-            app::tr("Delete CVVDP preset"),
-            app::tr("Delete your preset \"{name}\"?\n\nVideos using it keep their settings.", {{"name", quoted}}))) {
-        return;
-    }
     settings_.cvvdp_presets_json = without_user_preset(settings_.cvvdp_presets_json, name);
     if (settings_.cvvdp_default_preset == name) {
         settings_.cvvdp_default_preset.clear();  // Automatic

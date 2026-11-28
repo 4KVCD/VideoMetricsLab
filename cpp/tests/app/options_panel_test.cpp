@@ -4,12 +4,15 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QLabel>
+#include <QPushButton>
+#include <QSignalSpy>
 #include <QSpinBox>
 #include <QTimeEdit>
 
 #include <gtest/gtest.h>
 
 #include "options_panel.h"
+#include "vml/cvvdp.h"
 #include "vml/options.h"
 
 namespace vml::app {
@@ -170,6 +173,36 @@ TEST(OptionsPanel, EachMetricWithAGpuRouteHasItsOwnRow) {
     EXPECT_FALSE(no_gpu.metric_route_combos[0]->isEnabled());
     EXPECT_EQ(no_gpu.metric_route_combos[0]->currentIndex(), 1);
 #endif
+}
+
+// Delete preset is clicked twice (click_twice.h): the first arms it, its line
+// naming the preset; the second asks the window to delete it. Showing
+// another preset (another video selected) lets go; showing the same one
+// again (a refresh) does not.
+TEST(OptionsPanel, DeletePresetIsClickedTwice) {
+    OptionsPanel panel({});
+    const CvvdpDisplay display = builtin_cvvdp_presets().front().settings.display;
+    std::string mine = with_user_preset("", "My TV", display);
+    mine = with_user_preset(mine, "Den", display);
+    CvvdpSettings tv;
+    tv.display = display;
+    panel.show_cvvdp({tv}, "My TV", mine, false);
+    ASSERT_TRUE(panel.cvvdp_delete_button->isEnabled());
+    QSignalSpy deleted(&panel, &OptionsPanel::cvvdp_delete_requested);
+
+    panel.cvvdp_delete_button->click();
+    EXPECT_EQ(deleted.count(), 0);
+    EXPECT_TRUE(panel.cvvdp_delete_line->text().contains("My TV"));
+    panel.show_cvvdp({tv}, "My TV", mine, false);  // the same preset shown again
+    EXPECT_FALSE(panel.cvvdp_delete_line->text().isEmpty());
+    panel.show_cvvdp({tv}, "Den", mine, false);  // another
+    EXPECT_TRUE(panel.cvvdp_delete_line->text().isEmpty());
+    panel.cvvdp_delete_button->click();
+    EXPECT_EQ(deleted.count(), 0);
+    EXPECT_TRUE(panel.cvvdp_delete_line->text().contains("Den"));
+    panel.cvvdp_delete_button->click();
+    EXPECT_EQ(deleted.count(), 1);
+    EXPECT_TRUE(panel.cvvdp_delete_line->text().isEmpty());
 }
 
 }  // namespace

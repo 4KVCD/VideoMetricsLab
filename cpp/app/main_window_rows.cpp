@@ -1064,13 +1064,12 @@ void MainWindow::show_footer_note() {
         return;  // the footer is not built yet
     }
     if (click_twice_->armed() != nullptr) {
-        footer_note_->setStyleSheet(
-            QStringLiteral("QLabel { color: %1; font-weight: 600; }").arg(theme::color("failed").name()));
+        ClickTwice::style_as_armed(footer_note_, true);
         footer_note_->setText(click_twice_->line());
         footer_note_->setToolTip(QString());
         return;
     }
-    footer_note_->setStyleSheet(QString());  // its role's: muted (hint)
+    ClickTwice::style_as_armed(footer_note_, false);  // its role's: muted (hint)
     footer_note_->setText(length_note_);
     footer_note_->setToolTip(length_note_tip_);
 }

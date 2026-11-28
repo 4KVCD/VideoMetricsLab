@@ -12,6 +12,7 @@
 #include <QPointer>
 #include <QString>
 
+class QLabel;
 class QPushButton;
 class QTimer;
 
@@ -31,6 +32,16 @@ public:
 
     QPushButton* armed() const { return armed_; }
     const QString& line() const { return line_; }
+
+    // `label` shows the armed button's line, in the error colour and bold,
+    // and nothing while none is armed: the line beside or under a button
+    // the owner has no other use for (Delete profile's, Delete preset's).
+    // The label keeps a line's height empty and never widens its row, so
+    // nothing beside or under it moves as the line comes and goes.
+    void show_line_in(QLabel* label);
+    // The look of an armed button's line, for a label that shows other
+    // text too (the Videos footer's length note).
+    static void style_as_armed(QLabel* label, bool armed);
 
 signals:
     // A button armed or let go.

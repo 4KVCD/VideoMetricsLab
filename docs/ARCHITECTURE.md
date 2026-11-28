@@ -328,8 +328,9 @@ not the first. Each rule here is one a reviewer can check.
 - **A destructive action that can be redone is clicked twice**
   (`ClickTwice`, `app/click_twice.h`): the first click arms the button in the
   danger colour and puts a line beside it saying what the second click does;
-  the second, while armed, does it (Remove all, Start over). Saved scores
-  are kept by such actions, so they can be had again.
+  the second, while armed, does it (Remove all, Start over, Delete profile,
+  Delete preset). Saved scores are kept by such actions, so they can be had
+  again; a profile or a preset is made again from its values.
 - **A modal only where the action can't go on without an answer:** a
   decision partway through an action (Calculate the rest?), closing the
   window during a run, a form whose values the action needs (the frame rate

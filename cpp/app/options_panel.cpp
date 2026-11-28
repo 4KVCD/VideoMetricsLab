@@ -23,6 +23,7 @@
 #include <set>
 #include <stdexcept>
 
+#include "click_twice.h"
 #include "formatting.h"
 #include "i18n.h"
 #include "theme.h"
@@ -463,13 +464,26 @@ void OptionsPanel::build_cvvdp(QFormLayout* form) {
                 "the display as a new one."));
     connect(cvvdp_edit_button, &QPushButton::clicked, this, &OptionsPanel::cvvdp_edit_requested);
     cvvdp_delete_button = new QPushButton(app::tr("Delete preset"));
-    cvvdp_delete_button->setToolTip(app::tr("Delete this preset of yours. Built-in presets cannot be deleted."));
-    connect(cvvdp_delete_button, &QPushButton::clicked, this, &OptionsPanel::cvvdp_delete_requested);
+    cvvdp_delete_button->setToolTip(app::tr("Delete this preset of yours, clicked twice. Videos using it keep their "
+                                            "settings. Built-in presets cannot be deleted."));
+    connect(cvvdp_delete_button, &QPushButton::clicked, this, [this] { on_cvvdp_delete_clicked(); });
     for (QPushButton* button : {cvvdp_add_button, cvvdp_edit_button, cvvdp_delete_button}) {
         buttons->addWidget(button);
     }
+    // Clicked twice, as Remove all: the line under the buttons says what
+    // the second click deletes. Another button, or another preset chosen,
+    // lets go.
+    cvvdp_delete_guard_ = new ClickTwice(this);
+    cvvdp_delete_line = new QLabel;
+    cvvdp_delete_line->setObjectName("cvvdpDeleteLine");
+    cvvdp_delete_guard_->show_line_in(cvvdp_delete_line);
     buttons->addStretch(1);
+    for (QPushButton* other : {cvvdp_add_button, cvvdp_edit_button}) {
+        connect(other, &QPushButton::clicked, cvvdp_delete_guard_, &ClickTwice::disarm);
+    }
+    connect(cvvdp_preset_combo, &QComboBox::currentIndexChanged, cvvdp_delete_guard_, &ClickTwice::disarm);
     form->addRow(QString(), buttons);
+    form->addRow(cvvdp_delete_line);  // under the buttons, the row's whole width: the panel is narrow
 
     // Another display beside the videos' own, each scored in a row of its own.
     cvvdp_other_button = new QPushButton(app::tr("Also score CVVDP on"));
@@ -792,6 +806,21 @@ void OptionsPanel::show_metric_route_rows(const std::function<bool(std::string_v
     }
 }
 
+void OptionsPanel::on_cvvdp_delete_clicked() {
+    const QString name = cvvdp_preset_combo->currentData().toString();
+    if (name.isEmpty()) {
+        return;
+    }
+    if (cvvdp_delete_guard_->armed() != nullptr && name != cvvdp_delete_armed_) {
+        cvvdp_delete_guard_->disarm();
+    }
+    cvvdp_delete_armed_ = name;
+    if (cvvdp_delete_guard_->click(cvvdp_delete_button,
+                                   app::tr("Click again to delete \"{name}\".", {{"name", name}}))) {
+        emit cvvdp_delete_requested();
+    }
+}
+
 void OptionsPanel::show_cvvdp(const std::vector<CvvdpSettings>& selected, const std::string& preferred,
                               const std::string& user_presets_json, bool automatic) {
     const CvvdpSettings& settings = selected.front();
@@ -836,6 +865,9 @@ void OptionsPanel::show_cvvdp(const std::vector<CvvdpSettings>& selected, const 
         }
     }
     cvvdp_delete_button->setEnabled(!automatic && match && !match->builtin);
+    if (!cvvdp_delete_button->isEnabled() || cvvdp_preset_combo->currentData().toString() != cvvdp_delete_armed_) {
+        cvvdp_delete_guard_->disarm();  // the armed preset is no longer the one shown
+    }
     QString description = mixed_display ? app::tr("The selected videos use different displays; choosing a preset "
                                                   "sets them all.")
                                         : display_description(settings.display);

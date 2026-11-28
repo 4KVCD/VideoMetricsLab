@@ -35,6 +35,8 @@ class QTimeEdit;
 
 namespace vml::app {
 
+class ClickTwice;
+
 // The VMAF v0.6.1 column's models, in the dropdown's order. (VMAF v1's,
 // v1_model_choices, are the core's: the command line takes them too.)
 const std::vector<ModelChoice>& model_choices();
@@ -151,6 +153,8 @@ public:
     QPushButton* cvvdp_add_button = nullptr;
     QPushButton* cvvdp_edit_button = nullptr;
     QPushButton* cvvdp_delete_button = nullptr;
+    // Delete preset's line while it is armed: clicked twice (click_twice.h).
+    QLabel* cvvdp_delete_line = nullptr;
     QPushButton* cvvdp_other_button = nullptr;
     QCheckBox* cvvdp_resize_check = nullptr;
     QCheckBox* gpu_checkbox = nullptr;
@@ -172,6 +176,7 @@ signals:
     void cvvdp_resize_toggled(bool checked);
     void cvvdp_add_requested();
     void cvvdp_edit_requested();
+    // Delete preset clicked twice: the preset chosen is to be deleted.
     void cvvdp_delete_requested();
     // "Also score CVVDP on...": the selected videos are to be scored on
     // another display too.
@@ -191,6 +196,10 @@ private:
     void build_cvvdp(QFormLayout* form);
     void build_performance(QFormLayout* form, const std::vector<GpuVendor>& gpu_vendors);
     void build_metric_routes(QFormLayout* form);
+    void on_cvvdp_delete_clicked();
+
+    ClickTwice* cvvdp_delete_guard_ = nullptr;
+    QString cvvdp_delete_armed_;  // the preset the armed Delete preset deletes
 
     // Whether there is a GPU here for VMAF: without one, its choice is CPU.
     const bool vmaf_gpu_possible_;

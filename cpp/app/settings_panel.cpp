@@ -52,6 +52,7 @@
 #include <utility>
 
 #include "app_dialog.h"
+#include "click_twice.h"
 #include "file_writes.h"
 #include "formatting.h"
 #include "i18n.h"
@@ -710,10 +711,22 @@ QGroupBox* SettingsPanel::build_weak_segments_box() {
     connect(weak_profile_rename, &QPushButton::clicked, this, [this] { rename_weak_profile(); });
     profile_row->addWidget(weak_profile_rename);
     weak_profile_delete = new QPushButton(app::tr("Delete"));
-    connect(weak_profile_delete, &QPushButton::clicked, this, [this] { delete_weak_profile(); });
+    weak_profile_delete->setToolTip(app::tr("Delete this profile, clicked twice. Default is used in its place."));
+    connect(weak_profile_delete, &QPushButton::clicked, this, [this] { on_weak_profile_delete_clicked(); });
     profile_row->addWidget(weak_profile_delete);
+    // Clicked twice, as Remove all: the line under the row says what the
+    // second click deletes. Another button, or another profile picked, lets
+    // go.
+    weak_profile_guard_ = new ClickTwice(this);
+    weak_profile_delete_line = new QLabel;
+    weak_profile_delete_line->setObjectName("weakProfileDeleteLine");
+    weak_profile_guard_->show_line_in(weak_profile_delete_line);
+    for (QPushButton* other : {new_profile, from_preset, weak_profile_rename}) {
+        connect(other, &QPushButton::pressed, weak_profile_guard_, &ClickTwice::disarm);
+    }
     profile_row->addStretch(1);
     layout->addLayout(profile_row);
+    layout->addWidget(weak_profile_delete_line);  // under the row: the sentence doesn't fit beside the buttons
     const auto shown_keys = [] {
         std::vector<std::string> keys;
         for (const MetricDefinition* definition : shown_metrics()) {
@@ -758,6 +771,7 @@ void SettingsPanel::fill_weak_profiles() {
     weak_profile->setCurrentIndex(std::max(weak_profile->findData(text_of(in_use.name)), 0));
     weak_profile_rename->setEnabled(!in_use.name.empty());  // Default keeps its name
     weak_profile_delete->setEnabled(!in_use.name.empty());  // and is always there
+    weak_profile_guard_->disarm();  // the profile shown may be another
     weak_segments->set_remembered(in_use.rules.conditions);
     weak_segments->set_rules(in_use.rules);
 }
@@ -831,13 +845,22 @@ void SettingsPanel::rename_weak_profile() {
     emit weak_segment_rules_changed();
 }
 
+void SettingsPanel::on_weak_profile_delete_clicked() {
+    const std::string current = segment_profile_in_use(settings_).name;
+    if (current.empty() ||
+        !weak_profile_guard_->click(weak_profile_delete,
+                                    app::tr("Click Delete again to delete the profile {name}. Default is used in "
+                                            "its place.",
+                                            {{"name", text_of(current)}}))) {
+        return;
+    }
+    delete_weak_profile();
+}
+
 void SettingsPanel::delete_weak_profile() {
     std::vector<SegmentProfile> profiles = segment_profiles(settings_);
     const std::string current = segment_profile_in_use(settings_).name;
-    if (current.empty() ||
-        !dialogs_.ask_no_default(app::tr("Delete profile"),
-                                 app::tr("Delete the weak segment profile {name}? Default is used in its place.",
-                                         {{"name", text_of(current)}}))) {
+    if (current.empty()) {
         return;
     }
     std::erase_if(profiles, [&current](const SegmentProfile& profile) { return profile.name == current; });
