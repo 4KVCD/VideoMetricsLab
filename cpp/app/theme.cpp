@@ -836,12 +836,20 @@ void refresh() {
     // below set what they need anew; the app sets no palette of its own but
     // for a widget that says it keeps one.
     const QColor window = QApplication::palette().window().color();
+    const bool modern = appearance().ui == Interface::modern;
     for (QWidget* widget : widgets) {
         if (widget->property("keeps_its_palette").toBool()) {
             continue;
         }
         if (widget->testAttribute(Qt::WA_SetPalette) || widget->palette().window().color() != window) {
             widget->setPalette(QPalette());
+            // The reset also drops what Modern's sheet set in the palette, a
+            // table's selection tint: polished again, the widget takes it
+            // anew. Without, a selected row was the accent itself after a
+            // switch between light and dark, and a ticked box a bare tick.
+            if (modern) {
+                widget->style()->polish(widget);
+            }
         }
     }
     const QHash<QWidget*, QString>& templates = styled();
