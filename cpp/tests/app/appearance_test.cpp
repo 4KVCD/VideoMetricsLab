@@ -352,6 +352,26 @@ TEST_F(Appearance, ModernLight) {
     check_modern(false);
 }
 
+// The window's tabs have nothing drawn above them in Modern. Qt's base line
+// for a tab bar ran along their top, broken under the selected tab: a
+// thinner edge there in the light looks, none in the dark ones.
+TEST_F(Appearance, NoLineAboveTheWindowsTabsInModern) {
+    theme::apply_theme("light", "light", "dark");
+    theme::apply_appearance(theme::Interface::modern, accent);
+    auto* tabs = window_->findChild<QTabWidget*>();
+    ASSERT_NE(tabs, nullptr);
+    tabs->setCurrentIndex(0);
+    QApplication::processEvents();
+    const QImage bar = tabs->tabBar()->grab().toImage();
+    const QRect selected = tabs->tabBar()->tabRect(0);
+    const QRect other = tabs->tabBar()->tabRect(1);
+    const QColor ground = bar.pixelColor(selected.left() + 2, selected.center().y());  // the padding, not the text
+    for (int y = 0; y < 3; ++y) {
+        EXPECT_EQ(bar.pixelColor(selected.center().x(), y), ground) << "above the selected tab, row " << y;
+        EXPECT_EQ(bar.pixelColor(other.center().x(), y), ground) << "above another tab, row " << y;
+    }
+}
+
 // Issue #203: a left click on a slider jumps to the click in Modern, as in
 // Classic. Fusion, which Modern's style is drawn over, paged toward it by
 // the page step instead (10 frames a click on Video Compare's timeline).
