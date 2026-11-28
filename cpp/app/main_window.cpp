@@ -1181,6 +1181,7 @@ void MainWindow::add_reference_row(QBoxLayout* layout) {
     // and a file dropped on it from a file manager.
     source_edit_ = new QLineEdit;
     source_edit_->setPlaceholderText(app::tr("Drop a video here, paste its path, or click Browse"));
+    source_edit_->setAccessibleName(app::tr("Reference"));
     connect(source_edit_, &QLineEdit::editingFinished, this, [this] { on_source_path_entered(); });
     source_edit_->installEventFilter(this);
     source_browse_button_ = new QPushButton(app::tr("Browse"));
@@ -1252,6 +1253,7 @@ void MainWindow::build_test_table() {
         other_columns.push_back(item.column);
     }
     distorted_table_ = new FillColumnTable(0, column_count, col_path, other_columns);
+    distorted_table_->setAccessibleName(app::tr("Test videos"));
     distorted_table_->keep_a_row_selected();  // the Options panel always has a row to show
     // Seeded from the same defaults a new row gets, so the headers agree with
     // the Settings tab.

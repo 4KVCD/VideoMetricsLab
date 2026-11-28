@@ -15,6 +15,7 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QItemSelection>
+#include <QAbstractButton>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
@@ -136,6 +137,7 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     top->addWidget(folder_label_, 1);
     filter_ = new QLineEdit;
     filter_->setPlaceholderText(app::tr("Filter by file name"));
+    filter_->setAccessibleName(app::tr("Filter by file name"));
     filter_->setClearButtonEnabled(true);
     filter_->setMinimumWidth(240);
     connect(filter_, &QLineEdit::textChanged, this, [this] { apply_filter(); });
@@ -169,6 +171,7 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     layout->addLayout(top);
 
     table_ = new QTableWidget(0, column_count);
+    table_->setAccessibleName(app::tr("Saved results"));
     table_->setHorizontalHeaderLabels(
         {app::tr("Test video"), app::tr("Reference"), app::tr("Saved"), app::tr("Metrics"), app::tr("Size")});
     table_->verticalHeader()->setVisible(false);
@@ -921,6 +924,13 @@ QWidget* SavedResultsPanel::make_tile(const std::string& key, QWidget* name, con
     theme::style(made, "color: {muted};");
     tile_layout->addWidget(made);
     tile_layout->addStretch(1);
+    // Read as one by a screen reader: the metric, then its score.
+    const auto* name_label = qobject_cast<QLabel*>(name);
+    const auto* name_button = qobject_cast<QAbstractButton*>(name);
+    const QString metric = name_label != nullptr    ? name_label->text()
+                           : name_button != nullptr ? name_button->text()
+                                                    : QString();
+    tile->setAccessibleName(metric.isEmpty() ? score : metric + QStringLiteral(": ") + score);
     return tile;
 }
 

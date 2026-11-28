@@ -1506,6 +1506,12 @@
   "Ready": "就緒",
   "Ready: no test videos ticked.": "就緒：未勾選測試影片。",
   "Ready: {videos}, {metrics}.": "就緒：{videos}，{metrics}。",
+  "Frame shown": "顯示的影格",
+  "Timeline": "時間軸",
+  "Loop: seconds before": "循環：之前的秒數",
+  "Loop: frames before": "循環：之前的影格數",
+  "Loop: seconds after": "循環：之後的秒數",
+  "Loop: frames after": "循環：之後的影格數",
   "{low} to {high} metrics": "{low} 到 {high} 個指標"
  },
  "plurals": {

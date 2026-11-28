@@ -32,6 +32,7 @@ FrameControls::FrameControls(QWidget* parent) : QWidget(parent) {
         show_frame_time(frame);
         emit frame_requested(frame);
     });
+    go_label->setBuddy(frame_spin);  // its name to a screen reader, as for each box below
     grid->addWidget(frame_spin, 0, 1);
     auto* go_button = new QPushButton(app::tr("Go"));
     connect(go_button, &QPushButton::clicked, this, [this] {
@@ -56,11 +57,15 @@ FrameControls::FrameControls(QWidget* parent) : QWidget(parent) {
         frame_range_tip_ = range_tip;
         return box;
     };
-    grid->addWidget(new QLabel(app::tr("Highlight range from frame:")), 0, 4, Qt::AlignRight);
+    auto* from_frame_label = new QLabel(app::tr("Highlight range from frame:"));
+    grid->addWidget(from_frame_label, 0, 4, Qt::AlignRight);
     range_start_spin = new_range_box();
+    from_frame_label->setBuddy(range_start_spin);
     grid->addWidget(range_start_spin, 0, 5);
-    grid->addWidget(new QLabel(app::tr("to frame:")), 0, 6, Qt::AlignRight);
+    auto* to_frame_label = new QLabel(app::tr("to frame:"));
+    grid->addWidget(to_frame_label, 0, 6, Qt::AlignRight);
     range_end_spin = new_range_box();
+    to_frame_label->setBuddy(range_end_spin);
     grid->addWidget(range_end_spin, 0, 7);
     clear_range_button = new QPushButton(app::tr("Clear range"));
     clear_range_button->setEnabled(false);
@@ -82,6 +87,7 @@ FrameControls::FrameControls(QWidget* parent) : QWidget(parent) {
     time_edit = new_time_box();
     time_edit->setToolTip(app::tr("Reports every visible series at the frame shown at this time (h:mm:ss.sss, or "
                                   "seconds), so two encodes can be compared at one moment."));
+    time_label->setBuddy(time_edit);
     connect(time_edit, &QLineEdit::returnPressed, this, [this] { on_time_requested(); });
     grid->addWidget(time_edit, 1, 1);
     time_go_button = new QPushButton(app::tr("Go"));
@@ -97,6 +103,8 @@ FrameControls::FrameControls(QWidget* parent) : QWidget(parent) {
     auto* to_label = new QLabel(app::tr("to time:"));
     grid->addWidget(to_label, 1, 6, Qt::AlignRight);
     range_end_time = new_time_box();
+    from_label->setBuddy(range_start_time);
+    to_label->setBuddy(range_end_time);
     grid->addWidget(range_end_time, 1, 7);
     for (QLineEdit* box : {range_start_time, range_end_time}) {
         box->setToolTip(range_time_tip);
