@@ -145,6 +145,8 @@ if(TARGET vml_app)
         app/worst_frames_tab_test.cpp
         app/title_bar_test.cpp
         app/i18n_test.cpp
+        app/dev_tools_test.cpp
+        app/keyboard_test.cpp
         app/main.cpp
         app/metric_list_test.cpp
         app/notifier_test.cpp

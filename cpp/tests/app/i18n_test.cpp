@@ -159,5 +159,20 @@ TEST(I18n, QtsOwnButtonsAreInTheChosenLanguage) {
     EXPECT_EQ(cancel.toStdString(), "Abbrechen");
 }
 
+// The developers' long-text language (dev_tools.h): each text in English,
+// two fifths longer and bracketed, its placeholders filled in, with the
+// spaces and line breaks at its ends outside the brackets.
+TEST(I18n, TheLongTextLanguageStretchesEachText) {
+    const InEnglishAfter english;
+    ASSERT_EQ(set_language(long_text_language), long_text_language);
+    EXPECT_EQ(tr("Close").toStdString(), "[Close \u00B7\u00B7]");
+    EXPECT_EQ(tr("Shortcut: {keys}", {{"keys", QStringLiteral("F5")}}).toStdString(),
+              "[Shortcut: F5 \u00B7\u00B7\u00B7\u00B7\u00B7\u00B7]");
+    EXPECT_EQ(tr("\n\nffmpeg was looked for at:").toStdString(),
+              "\n\n[ffmpeg was looked for at: \u00B7\u00B7\u00B7\u00B7\u00B7\u00B7\u00B7\u00B7\u00B7\u00B7]");
+    set_language("en");
+    EXPECT_EQ(tr("Close").toStdString(), "Close");
+}
+
 }  // namespace
 }  // namespace vml::app

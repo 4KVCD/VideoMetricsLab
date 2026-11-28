@@ -1415,6 +1415,8 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     hint_row->addWidget(stats_save_, 0, Qt::AlignTop);
     top_layout->addLayout(hint_row);
     stats_table_ = new QTableWidget;
+    // Tab leaves the table for the next control; the arrows move between its cells.
+    stats_table_->setTabKeyNavigation(false);
     auto* swatches = new ColorSwatchDelegate(stats_table_);
     connect(swatches, &ColorSwatchDelegate::clicked, this, [this](int row) { choose_video_color(row); });
     stats_table_->setItemDelegateForColumn(0, swatches);
@@ -1441,6 +1443,7 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     // drawing, its main cost, so pages are built when first shown. Until a
     // line comes, the preferred metric's tab alone.
     tabs_ = new QuietTabWidget;
+    pass_ctrl_tab_up(tabs_);  // Ctrl+Tab: the window's tabs; Ctrl+PgDn and PgUp: the metrics
     theme::set_role(tabs_, "segmented");
     // The metrics are pills in rows that wrap (TabPills), every name whole:
     // the tab bar, scrolling, cut one at an end. The bar stays, hidden.

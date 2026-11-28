@@ -150,11 +150,20 @@ bool vmaf_gpu_possible(const std::vector<GpuVendor>& gpu_vendors) {
 #endif
 }
 
+// A time box Tab leaves at once, as Windows' own do: Qt's moves from section
+// to section first (hours, minutes, seconds, milliseconds), so the Range's
+// two took eight presses to pass. The arrows and typing still move between
+// the sections.
+class TimeBox : public QTimeEdit {
+protected:
+    bool focusNextPrevChild(bool next) override { return QAbstractSpinBox::focusNextPrevChild(next); }
+};
+
 // A time in whole seconds (HH:mm:ss), applied when it is entered or a step
 // is taken, not at every digit typed: each change takes the rows' scores
 // away.
 QTimeEdit* new_seconds_edit() {
-    auto* edit = new QTimeEdit;
+    auto* edit = new TimeBox;
     // In a right-to-left window (Arabic) QTimeEdit writes the sections
     // backwards ("00:00:00" reversed); times read left to right in every
     // language. The direction must be set before the display format.

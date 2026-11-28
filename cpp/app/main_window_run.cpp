@@ -416,7 +416,11 @@ void MainWindow::begin_run(const std::vector<int>& checked, std::vector<std::sha
 // Runs `jobs` on a RunWorker of their own, its signals wired to the window.
 void MainWindow::start_run_worker(std::vector<VmafJob> jobs) {
     use_crop_store();  // black bars found are kept for the next run, beside the saved scores
-    auto* worker = new RunWorker(std::move(jobs), parallel_jobs(), settings_.gpu_metrics_together, settings_, this);
+    // A faked run (the developers' tools: main_window_dev.cpp) only this once.
+    const FakeRun fake = std::exchange(fake_run_, FakeRun::none);
+    dev_fake_run_active_ = fake != FakeRun::none;
+    auto* worker =
+        new RunWorker(std::move(jobs), parallel_jobs(), settings_.gpu_metrics_together, settings_, this, fake);
     worker_ = worker;
     connect(worker, &RunWorker::job_started, this, [this](int index) { on_job_started(index); });
     connect(worker, &RunWorker::task_progress, this,
@@ -1494,6 +1498,9 @@ void MainWindow::on_all_finished() {
 }
 
 void MainWindow::notify_run_end() {
+    if (dev_fake_run_active_) {
+        return;  // a faked run (the developers' tools) tells no one
+    }
     // The run as its message tells it: how it ended, how long it took, and
     // each test video asked for (rows removed during the run left out), by
     // the row's state, with its scores where it has them.

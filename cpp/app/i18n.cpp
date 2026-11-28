@@ -74,6 +74,30 @@ thread_local bool english_here = false;
 // not for the log.
 bool active() { return catalog.language != "en" && !english_here; }
 
+// The developers' long-text language (long_text_language): each text in
+// English, stretched by about two fifths and bracketed, so that a control
+// too narrow for a longer translation shows it, its closing bracket cut off.
+// Spaces and line breaks at either end stay outside the brackets.
+QString stretched(const QString& text) {
+    if (catalog.language != long_text_language || english_here) {
+        return text;
+    }
+    qsizetype start = 0;
+    while (start < text.size() && text.at(start).isSpace()) {
+        ++start;
+    }
+    qsizetype end = text.size();
+    while (end > start && text.at(end - 1).isSpace()) {
+        --end;
+    }
+    if (start == end) {
+        return text;
+    }
+    const qsizetype length = end - start;
+    return text.left(start) + QStringLiteral("[") + text.mid(start, length) + QStringLiteral(" ") +
+           QString(std::max<qsizetype>(2, length * 2 / 5), QChar(0x00B7)) + QStringLiteral("]") + text.mid(end);
+}
+
 // A spec's parts: [[fill]align][sign][#][0][width][grouping][.precision][type].
 struct Spec {
     QChar fill = ' ';
@@ -562,7 +586,7 @@ QString translate_line(const QString& line) {
 QString translated(const QString& text, std::span<const NamedValue> values) {
     QString shown = text;
     if (active()) {
-        shown = catalog.strings.value(text, text);
+        shown = stretched(catalog.strings.value(text, text));
     }
     return values.empty() ? shown : formatted(shown, named(values));
 }
@@ -576,6 +600,7 @@ QString counted(const char* singular, const char* plural, long long count, std::
             forms != catalog.plurals.constEnd() && !forms->isEmpty()) {
             text = forms->at(std::min<qsizetype>(plural_index(catalog.language, count), forms->size() - 1));
         }
+        text = stretched(text);
     }
     Values filled = named(values);
     filled.emplace_back(QStringLiteral("count"), count);
@@ -704,7 +729,9 @@ QString set_language(const QString& code) {
     Catalog chosen;
     const bool known = std::any_of(all_languages.begin(), all_languages.end(),
                                    [&code](const Language& language) { return language.code == code; });
-    if (code != "en" && known) {
+    if (code == long_text_language) {
+        chosen.language = code;  // English, stretched (stretched)
+    } else if (code != "en" && known) {
         chosen.language = code;
         const std::filesystem::path file =
             resource_folder() / "translations" / platform::path_from_text((code + ".json").toStdString());

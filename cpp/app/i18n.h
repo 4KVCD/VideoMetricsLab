@@ -109,6 +109,11 @@ QString language_for(const QString& ui_language);
 // The translation for Windows' display language, or "en".
 QString windows_language();
 
+// A language for developers only (dev_tools.h), in no list: the window's
+// English, each text stretched by about two fifths and bracketed, to find
+// controls that cut a longer translation off.
+inline const QString long_text_language = QStringLiteral("en-XL");
+
 // Shows the window's text in `code` from now on; English for a code with no
 // translation, or one whose catalog cannot be read. Returns the language set.
 QString set_language(const QString& code);

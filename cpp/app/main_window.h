@@ -48,6 +48,7 @@
 #include "saved_results_panel.h"
 #include "row_state.h"
 #include "run_badge.h"
+#include "shortcuts.h"
 #include "worst_frame_list.h"
 #include "vml/score_summary.h"
 #include "vml/analysis_request.h"
@@ -95,6 +96,11 @@ class Notifier;
 class OptionsPanel;
 class QuietTabWidget;
 class RunWorker;
+enum class FakeRun : int;  // run_worker.h
+namespace dev {
+enum class Command;  // dev_tools.h
+class Overlay;
+}  // namespace dev
 class ScrollingPage;
 class SettingsPanel;
 class UpdateOffer;
@@ -364,6 +370,11 @@ private:
     void offer_restart(const QString& what);
     QString restart_note_;  // the kept note of a restart to make, taken away if the setting goes back
     bool restart_on_close_ = false;  // Restart now chosen: started again as the window closes
+    dev::Overlay* dev_overlay_ = nullptr;  // with VML_DEV=1 only
+    int dev_fake_step_ = 0;                // the faked state next (next_fake_state)
+    // The next run started is faked (dev_tools.h): taken by start_run_worker.
+    FakeRun fake_run_{};                // none
+    bool dev_fake_run_active_ = false;  // the run under way is a faked one
     void notify_failed(const QString& text);
     void save_settings();
 
@@ -429,7 +440,9 @@ private:
     int videos_in_progress() const;
 
     // ------------------------------------------------------ FFmpeg's presence
-    bool check_ffmpeg(bool prompt);
+    // `as_if`: the developers' faked "can't start" (dev_tools.h): shown as
+    // if the tools were so, the window's own record of them left as it is.
+    bool check_ffmpeg(bool prompt, const std::optional<ToolsStatus>& as_if = std::nullopt);
     bool on_locate_ffmpeg();
     // Downloads FFmpeg into the app's own folder and uses it (Windows).
     void on_download_ffmpeg();
@@ -677,6 +690,19 @@ private:
     // The tab bar's right end (the indicator; VML Modern's title buttons
     // where the window has no title bar of its own), made once.
     void build_tab_corner();
+    // The window's keyboard shortcuts (shortcuts.h): each main action's key,
+    // and that key in its button's tooltip.
+    void add_shortcuts();
+    // The shortcuts on or off as Settings says (Settings.keyboard_shortcuts):
+    // their actions, and the buttons' tooltip lines.
+    void use_keyboard_shortcuts();
+    // The developers' tools (dev_tools.h, main_window_dev.cpp), with VML_DEV=1.
+    void add_dev_tools();
+    void run_dev_command(dev::Command command);
+    void restart_for_dev();
+    void next_fake_state();
+    void run_command(Command command);
+    void show_shortcuts();
     // Says how an export went on the indicator (export_indicator.h).
     void report_export(const ExportOutcome& outcome);
     // Writes an export off the window's thread (file_writes_), the indicator
@@ -1088,6 +1114,10 @@ private:
     QPushButton* cancel_button_ = nullptr;
     QCheckBox* parallel_jobs_check_ = nullptr;
     QPushButton* load_button_ = nullptr;
+    QPushButton* add_files_button_ = nullptr;
+    std::vector<QAction*> shortcut_actions_;  // add_shortcuts': on or off together
+    // The list of the window's keys (shortcuts.h), made when first shown.
+    ShortcutsDialog* shortcuts_dialog_ = nullptr;
     // The videos' colours, shared by the graphs, and Metric Graphs.
     VideoColors* video_colors_ = nullptr;
     GraphPanel* graph_panel_ = nullptr;

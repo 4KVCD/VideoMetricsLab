@@ -5,6 +5,7 @@
 
 #include <QFrame>
 #include <QSize>
+#include <QString>
 
 #include <vector>
 
@@ -12,6 +13,16 @@ class QGridLayout;
 class QLabel;
 
 namespace vml::app {
+
+// One of Video Compare's keys (or a pair, ← →) and what it does.
+struct KeyRow {
+    std::vector<QString> keys;
+    QString action;
+};
+
+// Video Compare's keys, as its guide shows them and Keyboard shortcuts lists
+// them (shortcuts.h).
+std::vector<KeyRow> video_compare_keys();
 
 class KeyGuide : public QFrame {
     Q_OBJECT

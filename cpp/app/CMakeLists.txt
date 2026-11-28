@@ -19,6 +19,7 @@ add_library(vml_app STATIC
     frame_types.cpp
     cvvdp_display_dialog.cpp
     frame_drag.cpp
+    dev_tools.cpp
     dialogs.cpp
     export_image.cpp
     export_indicator.cpp
@@ -34,6 +35,7 @@ add_library(vml_app STATIC
     graph_panel.cpp
     i18n.cpp
     key_guide.cpp
+    keyboard.cpp
     job_lines.cpp
     main_window.cpp
     main_window_compare.cpp
@@ -43,6 +45,7 @@ add_library(vml_app STATIC
     main_window_options.cpp
     main_window_rows.cpp
     resample_target_dialog.cpp
+    main_window_dev.cpp
     main_window_run.cpp
     notifier.cpp
     main_window_run_files.cpp
@@ -69,6 +72,7 @@ add_library(vml_app STATIC
     self_test.cpp
     series_colors.cpp
     settings_panel.cpp
+    shortcuts.cpp
     settings_appearance.cpp
     settings_notifications.cpp
     run_badge.cpp
