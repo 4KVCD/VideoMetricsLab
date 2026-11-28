@@ -242,6 +242,21 @@ too. It is
 always there; what it shows (Ready, the run's progress, Done or Cancelled
 until the ticks change) is `RunBadge`'s (`app/run_badge.h`).
 
+The window follows Windows' Text size (Settings > Accessibility > Text
+size). Windows does not enlarge the system font Qt gives the app with it,
+so `theme::apply_text_size()` reads it (`system_text_scale`) and sets the
+application font, and Qt's per-class fonts for tables, headings, menus and
+tooltips, at that scale: once the style is set, after each style sheet is
+set (setting one reads Windows' class fonts again), and on a ThemeChange.
+VML Modern's own sizes follow: `theme::text_scale()` is the application
+font against the system's own at 100 %, and `theme::scaled()` multiplies a
+size by it. The style sheet is
+made at that scale (`scaled_sheet`: sizes of 3 pixels or more; thin lines
+stay thin), as are containers' margins, tick boxes, the title bar and the
+row marks. A size the app sets in pixels for something that holds text is
+written `theme::scaled(n)`. A new text size while the app runs is a font
+change, which restyles the window as a theme change does.
+
 When you add to the window:
 
 - **Give a new control its role where one fits.** Most controls need none.

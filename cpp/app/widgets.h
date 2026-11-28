@@ -116,7 +116,7 @@ public:
     explicit RemoveMarkDelegate(QObject* parent = nullptr, Shape shape = Shape::remove)
         : QStyledItemDelegate(parent), shape_(shape) {}
 
-    static constexpr int mark = 14;  // the shape's size, in pixels
+    static constexpr int mark = 14;  // the shape's size, in pixels at 100 % text size (theme::scaled)
     std::function<QString(const QModelIndex&)> tooltip;
     std::function<bool(const QModelIndex&)> off;
 

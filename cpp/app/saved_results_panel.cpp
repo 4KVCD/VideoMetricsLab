@@ -137,7 +137,7 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     filter_ = new QLineEdit;
     filter_->setPlaceholderText(app::tr("Filter by file name"));
     filter_->setClearButtonEnabled(true);
-    filter_->setMinimumWidth(240);
+    filter_->setMinimumWidth(theme::scaled(240));
     connect(filter_, &QLineEdit::textChanged, this, [this] { apply_filter(); });
     top->addWidget(filter_);
     auto* refresh_button = new QPushButton(app::tr("Refresh"));
@@ -218,7 +218,7 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
         fill_column_menu(*menu);
         menu->popup(header->viewport()->mapToGlobal(position));
     });
-    table_->setMinimumHeight(200);
+    table_->setMinimumHeight(theme::scaled(200));
     connect(table_, &QTableWidget::itemSelectionChanged, this, [this] {
         show_details();
         update_buttons();
