@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <vector>
 
+#include "dev_tools.h"
 #include "keyboard.h"
 #include "main_window.h"
 #include "options_panel.h"
@@ -239,6 +240,12 @@ TEST(Keyboard, TheShortcutsTakeNoKeyAlreadyTaken) {
             << shortcut.keys.toString().toStdString();
         taken.push_back(shortcut.keys);
         EXPECT_FALSE(command_text(shortcut.command).isEmpty());
+    }
+    // The developers' keys (VML_DEV=1) too, as they are taken before any
+    // shortcut.
+    for (const dev::Key& key : dev::keys()) {
+        EXPECT_EQ(std::count(taken.begin(), taken.end(), key.keys), 0) << key.keys.toString().toStdString();
+        taken.push_back(key.keys);
     }
 }
 

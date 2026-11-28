@@ -1027,6 +1027,7 @@ void MainWindow::build_ui() {
     // until a Tab or a click moved it. Taken when the window is first shown.
     tabs_->tabBar()->setFocus(Qt::OtherFocusReason);
     add_shortcuts();
+    add_dev_tools();
 }
 
 void MainWindow::add_shortcuts() {
@@ -1848,17 +1849,19 @@ void MainWindow::follow_reference_cvvdp() {
 
 // ------------------------------------------------------- FFmpeg's presence
 
-bool MainWindow::check_ffmpeg(bool prompt) {
+bool MainWindow::check_ffmpeg(bool prompt, const std::optional<ToolsStatus>& as_if) {
     // Both tools must run, and ffmpeg be new enough. At the start (prompt),
     // a file picker to point at ffmpeg.exe is offered rather than only a
     // banner.
-    const ToolsStatus status = check_tools(settings_);
-    tools_status_ = status;
-    // A remuxed or moved reference, and a remuxed test video, keep their
-    // saved scores (file_fingerprint.h).
-    set_video_fingerprinter(fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
-    use_stream_fingerprinter(status.ffmpeg.path, status.ffprobe.path);
-    if (prompt) {
+    const ToolsStatus status = as_if ? *as_if : check_tools(settings_);
+    if (!as_if) {
+        tools_status_ = status;
+        // A remuxed or moved reference, and a remuxed test video, keep their
+        // saved scores (file_fingerprint.h).
+        set_video_fingerprinter(fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
+        use_stream_fingerprinter(status.ffmpeg.path, status.ffprobe.path);
+    }
+    if (prompt && !as_if) {
         log_tools(status, detected_gpu_vendors_);
     }
     if (status.ok()) {
@@ -1902,6 +1905,9 @@ bool MainWindow::check_ffmpeg(bool prompt) {
                        {app::tr("Locate ffmpeg.exe"), MessageButton::Role::plain},
                        {app::tr("Not now"), MessageButton::Role::plain}};
     const int answer = dialogs_.message(message).button;
+    if (as_if) {
+        return false;  // the developers' faked message: its answers do nothing
+    }
     if (answer == 0) {
         on_download_ffmpeg();
     } else if (answer == 1) {
@@ -1911,7 +1917,7 @@ bool MainWindow::check_ffmpeg(bool prompt) {
     message.text = problems.join("\n") + install + found_where +
                    app::with_program_names(app::tr("\n\nWould you like to point the app at ffmpeg.exe now?"));
     message.buttons = {{app::tr("Yes"), MessageButton::Role::primary}, {app::tr("No"), MessageButton::Role::plain}};
-    if (dialogs_.message(message).button == 0) {
+    if (dialogs_.message(message).button == 0 && !as_if) {
         return on_locate_ffmpeg();
     }
 #endif

@@ -19,6 +19,7 @@ add_library(vml_app STATIC
     frame_types.cpp
     cvvdp_display_dialog.cpp
     frame_drag.cpp
+    dev_tools.cpp
     dialogs.cpp
     export_image.cpp
     export_indicator.cpp
@@ -44,6 +45,7 @@ add_library(vml_app STATIC
     main_window_options.cpp
     main_window_rows.cpp
     resample_target_dialog.cpp
+    main_window_dev.cpp
     main_window_run.cpp
     notifier.cpp
     main_window_run_files.cpp

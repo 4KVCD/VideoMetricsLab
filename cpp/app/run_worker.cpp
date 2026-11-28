@@ -1,7 +1,10 @@
 #include "run_worker.h"
 
 #include <algorithm>
+#include <chrono>
 #include <exception>
+#include <stdexcept>
+#include <thread>
 #include <utility>
 
 #include "vml/app_log.h"
@@ -14,12 +17,40 @@
 
 namespace vml::app {
 
+namespace {
+
+// A fake run's task (FakeRun): frames counted at about 120 a
+// second to three fifths of the video, then held there, until the run is
+// cancelled; paused while the run is. A failing one fails at once. Nothing
+// is read or scored.
+void fake_task(FakeRun fake, long long total, const ProgressCallback& on_progress,
+               const CancelToken& cancel) {
+    if (fake == FakeRun::failing) {
+        throw std::runtime_error("A fake failure (VML_DEV): nothing was scored.");
+    }
+    total = std::max(total, 1000LL);
+    long long current = 0;
+    while (true) {
+        cancel.throw_if_cancelled();
+        if (!cancel.paused()) {
+            current = std::min(current + 12, total * 3 / 5);
+            if (on_progress) {
+                on_progress(current, total, 120.0);
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+}
+
+}  // namespace
+
 RunWorker::RunWorker(std::vector<VmafJob> jobs, int parallel_jobs, bool gpu_metrics_together, Settings settings,
-                     QObject* parent)
+                     QObject* parent, FakeRun fake)
     : QThread(parent),
       job_count_(jobs.size()),
       gpu_decode_(std::any_of(jobs.begin(), jobs.end(), [](const VmafJob& job) { return job.options.gpu_decode; })),
-      settings_(std::move(settings)) {
+      settings_(std::move(settings)),
+      fake_(fake) {
     qRegisterMetaType<std::vector<vml::TaskSnapshot>>();
     qRegisterMetaType<vml::ComparisonResult>();
     qRegisterMetaType<vml::MetricFailures>();
@@ -53,17 +84,25 @@ RunWorker::RunWorker(std::vector<VmafJob> jobs, int parallel_jobs, bool gpu_metr
     // The counts files state, always (they cost nothing); whole files read
     // only when asked. ffprobe as the run found it (environment_, set as it starts).
     // Each file once: every test video's pairing asks for the reference's.
-    events.count_frames = counting_each_file_once([this, read = settings_.check_frame_counts](const VideoInfo& video) {
-        return container_frame_counter(environment_.ffprobe, cancel_, read)(video);
-    });
+    if (fake == FakeRun::none) {  // a fake run reads no file
+        events.count_frames = counting_each_file_once([this, read = settings_.check_frame_counts](const VideoInfo& video) {
+            return container_frame_counter(environment_.ffprobe, cancel_, read)(video);
+        });
+    }
     scheduler_ = std::make_unique<JobScheduler>(
         std::move(jobs), parallel_jobs, std::move(events),
         [this](const VmafJob& job, const VmafOptions& options, const ProgressCallback& on_progress,
                const StatusCallback& on_status, const CancelToken& token) {
+            if (fake_ != FakeRun::none) {
+                fake_task(fake_, job.distorted_info.nb_frames, on_progress, token);
+            }
             return run_job_task(environment_, job, options, on_progress, on_status, token);
         },
         [this](const VmafJob& job, const std::vector<std::string>& keys, bool together, int concurrent_cpu_tasks,
                const PerceptualHooks& hooks, const CancelToken& token) {
+            if (fake_ != FakeRun::none) {
+                fake_task(fake_, job.distorted_info.nb_frames, hooks.on_progress, token);
+            }
             const PerceptualRequest request{environment_, job.source_info, job.distorted_info,
                                             job.options,  job.perceptual_backends, job.cvvdp,
                                             concurrent_cpu_tasks};
@@ -99,6 +138,11 @@ void RunWorker::run() {
     // A background boundary: whatever goes wrong ends the videos the run had
     // not ended, with why, rather than the program.
     try {
+        if (fake_ != FakeRun::none) {
+            scheduler_->run();  // no FFmpeg asked for: nothing is read
+            emit all_finished();
+            return;
+        }
         const ToolsStatus tools = check_tools(settings_);
         if (!tools.ok()) {
             std::string why = "FFmpeg cannot be used:";

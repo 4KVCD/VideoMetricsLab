@@ -96,6 +96,11 @@ class Notifier;
 class OptionsPanel;
 class QuietTabWidget;
 class RunWorker;
+enum class FakeRun : int;  // run_worker.h
+namespace dev {
+enum class Command;  // dev_tools.h
+class Overlay;
+}  // namespace dev
 class ScrollingPage;
 class SettingsPanel;
 class UpdateOffer;
@@ -365,6 +370,11 @@ private:
     void offer_restart(const QString& what);
     QString restart_note_;  // the kept note of a restart to make, taken away if the setting goes back
     bool restart_on_close_ = false;  // Restart now chosen: started again as the window closes
+    dev::Overlay* dev_overlay_ = nullptr;  // with VML_DEV=1 only
+    int dev_fake_step_ = 0;                // the faked state next (next_fake_state)
+    // The next run started is faked (dev_tools.h): taken by start_run_worker.
+    FakeRun fake_run_{};                // none
+    bool dev_fake_run_active_ = false;  // the run under way is a faked one
     void notify_failed(const QString& text);
     void save_settings();
 
@@ -430,7 +440,9 @@ private:
     int videos_in_progress() const;
 
     // ------------------------------------------------------ FFmpeg's presence
-    bool check_ffmpeg(bool prompt);
+    // `as_if`: the developers' faked "can't start" (dev_tools.h): shown as
+    // if the tools were so, the window's own record of them left as it is.
+    bool check_ffmpeg(bool prompt, const std::optional<ToolsStatus>& as_if = std::nullopt);
     bool on_locate_ffmpeg();
     // Downloads FFmpeg into the app's own folder and uses it (Windows).
     void on_download_ffmpeg();
@@ -684,6 +696,11 @@ private:
     // The shortcuts on or off as Settings says (Settings.keyboard_shortcuts):
     // their actions, and the buttons' tooltip lines.
     void use_keyboard_shortcuts();
+    // The developers' tools (dev_tools.h, main_window_dev.cpp), with VML_DEV=1.
+    void add_dev_tools();
+    void run_dev_command(dev::Command command);
+    void restart_for_dev();
+    void next_fake_state();
     void run_command(Command command);
     void show_shortcuts();
     // Says how an export went on the indicator (export_indicator.h).

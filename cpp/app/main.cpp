@@ -30,6 +30,7 @@
 #include <d3d9.h>
 #endif
 
+#include "dev_tools.h"
 #include "i18n.h"
 #include "main_window.h"
 #include "self_test.h"
@@ -245,7 +246,12 @@ int main(int argc, char** argv) {
         }
     });
     const Settings settings = Settings::load();
-    apply_language(QString::fromStdString(settings.language));
+    // The developers' long-text language (dev_tools.h) is asked for by the
+    // environment, never saved in the settings.
+    const QString dev_language = qEnvironmentVariable("VML_DEV_LANGUAGE");
+    apply_language(vml::app::dev::enabled() && dev_language == vml::app::long_text_language
+                       ? dev_language
+                       : QString::fromStdString(settings.language));
     // VML Modern's style sheet, set once the window is built (SheetHeld).
     std::optional<app::theme::SheetHeld> sheet_held(std::in_place);
     // Before the window is built, which reads it to colour itself.

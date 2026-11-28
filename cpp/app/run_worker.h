@@ -23,6 +23,12 @@
 
 namespace vml::app {
 
+// A run faked for the developers' tools (dev_tools.h): each task counts
+// frames until cancelled (endless) or fails at once (failing), so that the
+// window shows a run's states without one. Its type named, as the window
+// declares it without this header.
+enum class FakeRun : int { none, endless, failing };
+
 class RunWorker : public QThread {
     Q_OBJECT
 
@@ -31,8 +37,11 @@ public:
     // each video's GPU metrics in one pass when `gpu_metrics_together`
     // (otherwise one at a time), with the FFmpeg `settings` find, which is
     // checked as the run starts.
+    //
+    // A fake run (`fake`, the developers' tools only: dev_tools.h) scores
+    // nothing and reads no video (FakeRun).
     RunWorker(std::vector<VmafJob> jobs, int parallel_jobs, bool gpu_metrics_together, Settings settings,
-              QObject* parent = nullptr);
+              QObject* parent = nullptr, FakeRun fake = FakeRun::none);
     ~RunWorker() override;
 
     // From the window's thread, at any time.
@@ -74,6 +83,7 @@ private:
     const std::size_t job_count_;
     const bool gpu_decode_;  // whether a job may decode a video on the GPU
     const Settings settings_;
+    const FakeRun fake_;
     CancelToken cancel_;
     // What the run needs to know about this PC: found as it starts, before
     // any task reads it.
