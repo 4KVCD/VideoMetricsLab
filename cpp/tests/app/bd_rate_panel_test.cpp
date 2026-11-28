@@ -5,6 +5,7 @@
 
 #include <QComboBox>
 #include <QFile>
+#include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
 #include <QPushButton>
@@ -21,6 +22,7 @@
 #include <vector>
 
 #include "rate_curve_chart.h"
+#include "text_panel.h"
 #include "theme.h"
 #include "vml/platform/system.h"
 
@@ -77,7 +79,7 @@ TEST(BdRatePanel, ShowsTheBdRatesOfTwoEncoders) {
     BdRatePanel panel([&runs] { return runs; });
     QStringList informed;
     panel.dialogs.inform = [&informed](const QString& title, const QString&) { informed.append(title); };
-    panel.dialogs.alert = [](const QString& title, const QString& text) { ADD_FAILURE() << title.toStdString() << text.toStdString(); };
+    panel.notify_failed = [](const QString& title, const QString& text) { ADD_FAILURE() << title.toStdString() << text.toStdString(); };
     QString copied;
     panel.copy_text = [&copied](const QString& text) { copied = text; };
     EXPECT_FALSE(panel.report());
@@ -172,7 +174,10 @@ TEST(BdRatePanel, ShowsTheBdRatesOfTwoEncoders) {
         return std::vector<int>{0, 1, 2};
     };
     panel.anchor.add_videos_button->click();
-    EXPECT_EQ(informed, QStringList{"Bitrate unknown"});
+    EXPECT_TRUE(informed.isEmpty());  // said in the card, not a window
+    EXPECT_EQ(panel.anchor.note->text(), "1 video not added: its bitrate is not known.");
+    EXPECT_FALSE(panel.anchor.note->toolTip().isEmpty());  // its name
+    EXPECT_TRUE(panel.test.note->text().isEmpty());
     EXPECT_EQ(panel.anchor.sources.size(), 3u);
     EXPECT_EQ(panel.anchor.sources.back().second.encodes.front().sequence, "baseball");
     EXPECT_EQ(panel.anchor.sources.back().second.encodes.front().kbps, 2000);
@@ -180,6 +185,15 @@ TEST(BdRatePanel, ShowsTheBdRatesOfTwoEncoders) {
     EXPECT_TRUE(panel.warnings().contains("baseball: only in the anchor, left out"));
     panel.anchor.add_videos_button->click();  // the same videos again: replaced, not added twice
     EXPECT_EQ(panel.anchor.sources.size(), 3u);
+    // The warnings: a panel under their button, as Add/remove metrics'.
+    panel.warnings_button->click();
+    const auto* warnings = panel.findChild<TextPanel*>();
+    ASSERT_NE(warnings, nullptr);
+    EXPECT_TRUE(warnings->isVisible());
+    EXPECT_TRUE(warnings->text().contains("baseball: only in the anchor, left out"));
+    panel.findChild<TextPanel*>()->close();
+    panel.anchor.clear_button->click();
+    EXPECT_TRUE(panel.anchor.note->text().isEmpty());  // Clear takes the note with what it named
 
     panel.test.clear_button->click();
     EXPECT_FALSE(panel.report());
@@ -219,7 +233,31 @@ TEST(BdRatePanel, ScoredVideosFollowTheirLines) {
     panel.bring_videos_up_to_date();
     ASSERT_EQ(panel.anchor.sources.size(), 1u);
     EXPECT_EQ(rate_of(0), 3000);
-    EXPECT_EQ(informed, QStringList{"Bitrate unknown"});
+    EXPECT_TRUE(informed.isEmpty());
+    EXPECT_EQ(panel.anchor.note->text(), "1 video taken out: its bitrate is no longer known.");
+    EXPECT_TRUE(panel.anchor.note->toolTip().contains("q32"));
+}
+
+// A file that won't import says so where the window says what an action did
+// (the tab bar's indicator), the reason on asking: no window.
+TEST(BdRatePanel, AFileThatWontImportIsToldNotShownInAWindow) {
+    QTemporaryDir folder;
+    ASSERT_TRUE(folder.isValid());
+    BdRatePanel panel([] { return std::vector<GraphPanel::Run>{}; });
+    QStringList told;
+    panel.notify_failed = [&told](const QString& line, const QString& details) {
+        told.append(line);
+        told.append(details);
+    };
+    panel.import_file(panel.anchor, folder.filePath("none.csv"));
+    ASSERT_EQ(told.size(), 2);
+    EXPECT_EQ(told[0], "Not imported: none.csv");
+    EXPECT_TRUE(told[1].startsWith("Could not read"));
+    told.clear();
+    panel.import_file(panel.anchor, write_csv(folder, "bad.csv", "no,such,columns\n1,2,3\n"));
+    ASSERT_EQ(told.size(), 2);
+    EXPECT_EQ(told[0], "Not imported: bad.csv");
+    EXPECT_TRUE(panel.anchor.sources.empty());
 }
 
 // #205: a video scored again gets a line of another identity; the side kept
@@ -280,7 +318,7 @@ TEST(BdRatePanel, DrawsOnlyWhatTheBdRateUsed) {
     QTemporaryDir folder;
     ASSERT_TRUE(folder.isValid());
     BdRatePanel panel([] { return std::vector<GraphPanel::Run>{}; });
-    panel.dialogs.alert = [](const QString& title, const QString& text) {
+    panel.notify_failed = [](const QString& title, const QString& text) {
         ADD_FAILURE() << title.toStdString() << text.toStdString();
     };
     panel.import_file(panel.anchor, write_csv(folder, "a.csv",
@@ -316,7 +354,7 @@ TEST(BdRatePanel, ImportsEncodesFromJson) {
     QTemporaryDir folder;
     ASSERT_TRUE(folder.isValid());
     BdRatePanel panel([] { return std::vector<GraphPanel::Run>{}; });
-    panel.dialogs.alert = [](const QString& title, const QString& text) {
+    panel.notify_failed = [](const QString& title, const QString& text) {
         ADD_FAILURE() << title.toStdString() << text.toStdString();
     };
     EXPECT_EQ(panel.anchor.import_button->text().toStdString(), "Import CSV/JSON\xE2\x80\xA6");

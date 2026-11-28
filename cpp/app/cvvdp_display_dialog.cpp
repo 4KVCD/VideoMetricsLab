@@ -133,6 +133,15 @@ CvvdpDisplayDialog::CvvdpDisplayDialog(const CvvdpDisplay& display, QWidget* par
     }
     QPushButton* cancel = buttons->addButton(QDialogButtonBox::Cancel);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
+    problem_line = new QLabel;
+    problem_line->setObjectName("cvvdpProblemLine");
+    problem_line->setTextFormat(Qt::PlainText);
+    problem_line->setWordWrap(true);
+    // Two lines kept: a taken name's sentence wraps once in the dialog's width.
+    problem_line->setMinimumHeight(problem_line->fontMetrics().lineSpacing() * 2);
+    theme::style(problem_line, "color: {failed}; font-weight: 600;");
+    form->addRow(problem_line);
+    connect(name_edit, &QLineEdit::textEdited, problem_line, &QLabel::clear);  // being put right
     form->addRow(buttons);
 
     // What each box holds before the user changes anything (see display).
@@ -208,11 +217,8 @@ void CvvdpDisplayDialog::finish(const QString& wanted) {
         }
     }
     if (problem) {
-        Message message;
-        message.kind = MessageKind::warning;
-        message.title = windowTitle();
-        message.text = *problem;
-        show_message(this, message);
+        // Said in the dialog, which stays open to put it right.
+        problem_line->setText(*problem);
         return;
     }
     action = wanted;

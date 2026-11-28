@@ -382,6 +382,10 @@ public:
     // Where its exports say how they went: the window's indicator
     // (export_indicator.h). Not set: nowhere.
     ExportReport export_report;
+    // Says a failure where the window says what an action did (the tab
+    // bar's indicator): its line, and the whole reason shown on asking.
+    // Not set: nowhere.
+    std::function<void(const QString& line, const QString& details)> notify_failed;
     // The export folder and formats its save icons save in (quick_save.h).
     QuickSaves quick_saves;
     // The colours Export graph as PNG draws in (Settings' Exported graphs), asked at

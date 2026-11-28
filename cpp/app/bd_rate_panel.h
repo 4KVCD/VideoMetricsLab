@@ -34,6 +34,7 @@ class QVBoxLayout;
 namespace vml::app {
 
 class RateCurveChart;
+class TextPanel;
 
 class BdRatePanel : public QWidget {
     Q_OBJECT
@@ -66,6 +67,10 @@ public:
     std::function<std::vector<int>(const QStringList& items)> choose_videos;
     // Puts text on the clipboard.
     std::function<void(const QString& text)> copy_text;
+    // Says a failure where the window says what an action did (the tab
+    // bar's indicator, export_indicator.h): its line, and the whole reason
+    // shown on asking. Not set: nowhere.
+    std::function<void(const QString& line, const QString& details)> notify_failed;
 
     // One encoder: the anchor or the test.
     struct Side {
@@ -76,6 +81,9 @@ public:
         QPushButton* add_videos_button = nullptr;
         QPushButton* import_button = nullptr;
         QPushButton* clear_button = nullptr;
+        // Under its buttons: the scored videos last left out or taken out
+        // for want of a bitrate, their names in its tooltip; empty when none.
+        QLabel* note = nullptr;
         // Its encodes by where they came from: a CSV or JSON file ("file:"
         // and its path) or a scored video ("video:" and its line's identity). Adding
         // one again replaces it.
@@ -141,6 +149,8 @@ private:
     QString chart_name() const;
     void on_copy();
     void on_show_warnings();
+    // `side`'s note: `videos` left out or taken out (`taken_out`), or none.
+    static void show_bitrate_note(Side& side, const QStringList& videos, bool taken_out);
     // A side's sources changed: its table, the group choices and the report.
     void side_changed(Side& side);
     void refresh_side_table(Side& side);
@@ -161,6 +171,7 @@ private:
     std::function<std::vector<GraphPanel::Run>()> runs_;
     std::optional<BdRateReport> report_;
     QStringList warnings_;
+    TextPanel* warnings_panel_ = nullptr;  // the warnings button's, made when first opened
     // The sequence the chart shows, by name; none for no sequence row chosen.
     std::optional<std::string> chosen_sequence_;
     // The rows of the results table that are sequences, by row: their names.

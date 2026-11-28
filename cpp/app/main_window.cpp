@@ -663,14 +663,17 @@ void MainWindow::reopen_videos(const QString& reference, const QStringList& test
     add_test_videos(paths);
 }
 
-void MainWindow::show_status(const QString& text) { status_label_->setText(text); }
+void MainWindow::show_status(const QString& text) {
+    status_label_->setText(text);
+    status_label_->setToolTip(QString());  // a tooltip of the line before (Cannot be compared's) goes with it
+}
 
 void MainWindow::notify_done(const QString& text) { export_indicator_->show_note(text); }
 
 void MainWindow::notify_info(const QString& text) { export_indicator_->show_note(text, ExportIndicator::Note::info); }
 
-void MainWindow::notify_failed(const QString& text) {
-    export_indicator_->show_note(text, ExportIndicator::Note::failed);
+void MainWindow::notify_failed(const QString& text, const QString& details) {
+    export_indicator_->show_note(text, ExportIndicator::Note::failed, details);
 }
 
 void MainWindow::save_settings() {
@@ -863,6 +866,9 @@ void MainWindow::build_ui() {
     const auto report = [this](const ExportOutcome& outcome) { report_export(outcome); };
     const QuickSaves quick_saves = window_quick_saves();
     graph_panel_->export_report = report;
+    graph_panel_->notify_failed = [this](const QString& line, const QString& details) {
+        notify_failed(line, details);
+    };
     graph_panel_->quick_saves = quick_saves;
     worst_tab_->export_report = report;
     worst_tab_->quick_saves = quick_saves;
@@ -910,6 +916,9 @@ void MainWindow::build_ui() {
     });
     bd_rate_panel_->dialogs = standard_dialogs(bd_rate_panel_, export_dir);
     bd_rate_panel_->export_report = report;
+    bd_rate_panel_->notify_failed = [this](const QString& line, const QString& details) {
+        notify_failed(line, details);
+    };
     bd_rate_panel_->quick_saves = quick_saves;
     tabs_->addTab(new ScrollingPage(bd_rate_panel_), app::tr("BD-rate"));
     saved_results_panel_ = new SavedResultsPanel(settings_, dialogs_, *file_writes_);
@@ -1561,6 +1570,17 @@ std::vector<QWidget*> MainWindow::add_file_buttons(QBoxLayout* buttons) {
     connect(model, &QAbstractItemModel::rowsInserted, this, [this] { check_ticks_soon(); });
     connect(model, &QAbstractItemModel::rowsRemoved, this, [this] { check_ticks_soon(); });
     connect(model, &QAbstractItemModel::rowsMoved, this, [this] { check_ticks_soon(); });
+    // The footer's note of resolution tests a new reference removed is of
+    // the table as it was: it goes once a video is added or removed.
+    const auto table_changed = [this] {
+        if (!removed_note_.isEmpty()) {
+            removed_note_.clear();
+            removed_note_tip_.clear();
+            show_footer_note();
+        }
+    };
+    connect(model, &QAbstractItemModel::rowsInserted, this, table_changed);
+    connect(model, &QAbstractItemModel::rowsRemoved, this, table_changed);
     connect(model, &QAbstractItemModel::dataChanged, this, [this] { check_ticks_soon(); });
     connect(model, &QAbstractItemModel::modelReset, this, [this] { check_ticks_soon(); });
     // The card's save icon saves the selected rows' results: grayed or not

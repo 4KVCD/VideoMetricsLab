@@ -144,7 +144,8 @@ void MainWindow::load_saved_run(const std::filesystem::path& path) {
     try {
         loaded = load_run(path);
     } catch (const RunFileError& error) {
-        dialogs_.alert(app::tr("Failed to load run"), tr_message(QString::fromStdString(error.what())));
+        notify_failed(app::tr("Not imported: {file}", {{"file", name_of(path)}}),
+                      tr_message(QString::fromStdString(error.what())));
         return;
     }
     auto run = std::make_shared<CompletedRun>();

@@ -642,7 +642,9 @@ void MainWindow::save_cvvdp_preset(const CvvdpDisplayDialog& dialog, const Cvvdp
     try {
         settings_.cvvdp_presets_json = with_user_preset(presets, name, saved);
     } catch (const std::invalid_argument& error) {
-        dialogs_.alert(app::tr("CVVDP preset"), tr_message(QString::fromStdString(error.what())));
+        // The dialog checked the name and the display: kept as a failure
+        // in the indicator, should one get past it.
+        notify_failed(app::tr("CVVDP preset not saved"), tr_message(QString::fromStdString(error.what())));
         return;
     }
     if (!replacing || settings_.cvvdp_default_preset == *replacing) {

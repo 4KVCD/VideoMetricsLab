@@ -112,17 +112,17 @@ void MainWindow::show_in_video_compare(const std::string& identity, int frame, c
         tabs_->setCurrentIndex(tab_frame_compare);
         return;
     }
+    // Why the click did nothing, where the window says so (the tab bar's
+    // indicator, fading): no window to close.
     case FrameComparePanel::OpenAt::no_pair:
         // A line added from a results file, or one whose row is gone.
-        dialogs_.inform(app::tr("Not in Video Compare"),
-                        app::tr("Video Compare shows the videos of the Videos tab: this line's video is not one of "
-                                "them. Add it there to see its frames."));
+        notify_info(app::tr("Video Compare shows the videos of the Videos tab: this line's video is not one of "
+                            "them. Add it there to see its frames."));
         return;
     case FrameComparePanel::OpenAt::past_end:
-        dialogs_.inform(app::tr("Not in Video Compare"),
-                        app::tr("Video Compare's frames end at {last}, the end of its shortest video: frame "
-                                "{frame} is past it.",
-                                {{"last", frame_compare_panel_->last_frame()}, {"frame", frame}}));
+        notify_info(app::tr("Video Compare's frames end at {last}, the end of its shortest video: frame "
+                            "{frame} is past it.",
+                            {{"last", frame_compare_panel_->last_frame()}, {"frame", frame}}));
         return;
     }
 }

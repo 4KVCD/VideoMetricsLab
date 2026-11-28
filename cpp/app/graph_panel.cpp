@@ -3,6 +3,7 @@
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QColor>
+#include <QFileInfo>
 #include <QFont>
 #include <QFontMetrics>
 #include <QGroupBox>
@@ -2435,7 +2436,10 @@ void GraphPanel::on_add_saved_run() {
         add_run({std::make_shared<const ComparisonResult>(std::move(result)), QString::fromStdString(label),
                  saved_run_identity(path), true});
     } catch (const RunFileError& error) {
-        dialogs.alert(app::tr("Failed to load run"), QString::fromStdString(error.what()));
+        if (notify_failed) {
+            notify_failed(app::tr("Not imported: {file}", {{"file", QFileInfo(chosen).fileName()}}),
+                          tr_message(QString::fromStdString(error.what())));
+        }
     }
 }
 

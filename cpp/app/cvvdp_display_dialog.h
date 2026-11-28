@@ -51,6 +51,10 @@ public:
 
     // The fields, as the tests fill them in.
     QLineEdit* name_edit = nullptr;
+    // Above the buttons: why the last Save or Apply was refused (a name
+    // taken, a value CVVDP cannot model), the dialog staying open; empty
+    // until then, two lines kept so nothing moves as it comes.
+    QLabel* problem_line = nullptr;
     QSpinBox* width_spin = nullptr;
     QSpinBox* height_spin = nullptr;
     QDoubleSpinBox* diagonal_spin = nullptr;

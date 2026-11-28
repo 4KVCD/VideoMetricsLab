@@ -364,7 +364,10 @@ private:
     void offer_restart(const QString& what);
     QString restart_note_;  // the kept note of a restart to make, taken away if the setting goes back
     bool restart_on_close_ = false;  // Restart now chosen: started again as the window closes
-    void notify_failed(const QString& text);
+    // A failure, kept until clicked; `details`, where set, the whole reason
+    // in its tooltip (a file that would not import, a video that would not
+    // read).
+    void notify_failed(const QString& text, const QString& details = {});
     void save_settings();
 
     // ---------------------------------------------------------- the settings
@@ -1075,10 +1078,15 @@ private:
     QPushButton* remove_all_button_ = nullptr;
     QPushButton* remove_selected_button_ = nullptr;  // locked during a run, the rows' remove marks with it
     QPushButton* start_over_button_ = nullptr;
-    // Beside them: an armed button's line, else the length note.
+    // Beside them: an armed button's line, else the resolution tests a new
+    // reference removed and the length note.
     QLabel* footer_note_ = nullptr;
     QString length_note_;
     QString length_note_tip_;
+    // The resolution tests the last reference chosen removed, the old
+    // reference's: said until the table next changes.
+    QString removed_note_;
+    QString removed_note_tip_;
     // Remove all and Start over are clicked twice (click_twice.h).
     ClickTwice* click_twice_ = nullptr;
     QCheckBox* highlight_check_ = nullptr;

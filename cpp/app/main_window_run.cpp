@@ -459,7 +459,13 @@ bool MainWindow::confirm_skipping(const std::vector<std::pair<std::shared_ptr<Ro
     }
     const QString text = app::tr("Cannot be compared with the reference:") + "\n\n" + listed.join("\n");
     if (!others) {
-        dialogs_.warn(app::tr("Cannot compare"), text);
+        // Nothing to calculate: said on the line under Calculate metrics,
+        // each video's reason in its row and, all at once, the tooltip.
+        show_status(QString::fromUtf8("\xE2\x9A\xA0 ") +
+                    ntr("Nothing calculated: {count} ticked video cannot be compared with the reference.",
+                        "Nothing calculated: {count} ticked videos cannot be compared with the reference.",
+                        static_cast<long long>(skipped.size())));
+        status_label_->setToolTip(text);
         return false;
     }
     return dialogs_.ask(app::tr("Cannot compare"), text + "\n\n" + app::tr("Calculate the rest?"));
