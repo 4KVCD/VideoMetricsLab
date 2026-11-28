@@ -1321,8 +1321,10 @@ void MainWindow::save_job_result(std::size_t job, const RowData& row_data, const
         // rate it was read at, and a raw YUV file not by its size and format.
         return;
     }
+    // The planes calculated with their metrics, shown or not (plan_tasks),
+    // saved with them: showing them later needs no run.
     const AnalysisRequest request =
-        analysis_request(job_options_[job], requested_metrics(row_data), automatic_perceptual_backends,
+        analysis_request(job_options_[job], with_planes(requested_metrics(row_data)), automatic_perceptual_backends,
                          job_cvvdp_[job], result.source_info, result.distorted_info);
     ComparisonResult saved = result;  // the copy the write needs anyway
     take_current_rates(saved);        // a rate sampled since the video started
@@ -1395,6 +1397,15 @@ std::shared_ptr<CompletedRun> MainWindow::make_completed_run(const RowData& row_
             run->result.metric_results.copy_from(before, key);
         }
     }
+    // The planes calculated with their metrics are saved (save_job_result);
+    // shown only where their columns are.
+    std::vector<std::string> shown_planes;
+    for (const std::string& key : run->result.metric_results.keys()) {
+        if (const MetricDefinition* metric = find_metric(key); metric != nullptr && metric->is_plane() && metric_shown(key)) {
+            shown_planes.push_back(key);
+        }
+    }
+    drop_planes_not_in(run->result.metric_results, shown_planes);
     return run;
 }
 

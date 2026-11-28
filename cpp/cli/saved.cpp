@@ -419,6 +419,10 @@ int saved(const SavedArguments& arguments, const Settings& settings) {
             ok = false;
             continue;
         }
+        if (!settings.show_yuv_planes) {
+            // Saved with their metrics (with_planes); reported where the window shows them.
+            drop_planes_not_in(loaded->first.metric_results, {});
+        }
         TestVideo video = video_of(std::move(loaded->first));
         video.saved_times = std::move(times);
         add_to_groups(groups, std::move(video));

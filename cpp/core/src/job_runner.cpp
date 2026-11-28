@@ -69,18 +69,20 @@ bool contains(const std::vector<std::string>& keys, std::string_view key) {
     return std::find(keys.begin(), keys.end(), key) != keys.end();
 }
 
-// Whether `key` is VMAF YUV's U or V calculated only to make VMAF YUV: its
-// planes not asked for themselves (`asked`, the video's metrics).
-bool only_for_vmaf_yuv(const std::string& key, const std::vector<std::string>& asked) {
-    return (key == vmaf_u_key || key == vmaf_v_key) && !contains(asked, key);
+// `key` as the video's metrics (`asked`) name it: a plane not asked for
+// itself, which plan_tasks calculates with its metric, by its metric (VMAF
+// YUV for its U and V).
+std::string name_as_asked(const std::string& key, const std::vector<std::string>& asked) {
+    const MetricDefinition* metric = find_metric(key);
+    return metric != nullptr && metric->is_plane() && !contains(asked, key) ? std::string(metric->plane_of) : key;
 }
 
-// A task's `keys` as the video's metrics (`asked`) name them: VMAF YUV in
-// place of the U and V plan_tasks put there for it.
+// A task's `keys` as the video's metrics (`asked`) name them (name_as_asked),
+// each once.
 std::vector<std::string> as_asked(const std::vector<std::string>& keys, const std::vector<std::string>& asked) {
     std::vector<std::string> named;
     for (const std::string& key : keys) {
-        const std::string name = only_for_vmaf_yuv(key, asked) ? "vmaf_yuv" : key;
+        const std::string name = name_as_asked(key, asked);
         if (!contains(named, name)) {
             named.push_back(name);
         }
@@ -90,13 +92,15 @@ std::vector<std::string> as_asked(const std::vector<std::string>& keys, const st
 
 // VMAF YUV (MSU's YUV-VMAF 6:1:1), (6 VMAF + U + V) / 8 of each frame, and
 // its Y, VMAF's score, where `asked` asks for them and `results` has what
-// they are made from but not them (a saved one stands); the U and V
-// calculated only for it are left out. Nothing where VMAF and its U and V
-// were not scored on the same frames: finish() says why.
+// they are made from but not them (a saved one stands). Its Y is made with
+// it, as its U and V are kept, to be saved with it (with_planes). Nothing
+// where VMAF and its U and V were not scored on the same frames: finish()
+// says why.
 void make_vmaf_yuv(MetricResultSet& results, const std::vector<std::string>& asked) {
     const FrameMetricResult* vmaf = results.frame("vmaf");
     const FrameMetricResult* u = results.frame(vmaf_u_key);
     const FrameMetricResult* v = results.frame(vmaf_v_key);
+    bool made = false;
     if (contains(asked, "vmaf_yuv") && !results.has("vmaf_yuv") && vmaf && u && v && u->frame == vmaf->frame &&
         v->frame == vmaf->frame) {
         // The planes' provenance: VMAF's model, scored by the app's libvmaf.
@@ -107,16 +111,12 @@ void make_vmaf_yuv(MetricResultSet& results, const std::vector<std::string>& ask
             yuv.values.push_back(static_cast<float>(to_6_decimals(sum / 8.0)));
         }
         results.add(std::move(yuv));
+        made = true;
     }
-    if (contains(asked, "vmaf_yuv_y") && !results.has("vmaf_yuv_y") && vmaf) {
+    if ((made || contains(asked, "vmaf_yuv_y")) && !results.has("vmaf_yuv_y") && vmaf) {
         FrameMetricResult y = *vmaf;
         y.key = "vmaf_yuv_y";
         results.add(std::move(y));
-    }
-    for (const char* plane : {vmaf_u_key, vmaf_v_key}) {
-        if (only_for_vmaf_yuv(plane, asked)) {
-            results.remove(plane);
-        }
     }
 }
 
@@ -654,8 +654,8 @@ ComparisonResult JobRun::execute_task(std::size_t task) {
         options.set_metric_enabled(key, contains(job_.tasks[task].metric_keys, key));
     }
     for (const std::string& key : job_.tasks[task].metric_keys) {
-        if (key == vmaf_u_key || key == vmaf_v_key) {
-            options.set_metric_enabled(key, true);  // VMAF YUV's U and V, which plan_tasks put in its place
+        if (metric_definition(key).is_plane()) {
+            options.set_metric_enabled(key, true);  // calculated with its metric, asked for or not (plan_tasks)
         }
     }
     options.vmaf_on_gpu = vmaf_family_on_gpu(task);
@@ -915,7 +915,12 @@ void JobRun::finish() {
     for (const TaskState& state : tasks_) {
         if (state.result) {
             for (const auto& [key, why] : state.result->metric_failures) {
-                set_failure(metric_failures, only_for_vmaf_yuv(key, job_.metric_keys) ? "vmaf_yuv" : key, why);
+                // A plane not asked for: VMAF YUV's U or V fails VMAF YUV,
+                // made from them; another plane's metric reports its own.
+                const std::string name = name_as_asked(key, job_.metric_keys);
+                if (name == key || name == "vmaf_yuv") {
+                    set_failure(metric_failures, name, why);
+                }
             }
         }
     }
@@ -994,7 +999,7 @@ void JobRun::finish() {
         }
         return;
     }
-    const std::string metrics = metric_labels(result->metric_results.keys());
+    const std::string metrics = metric_labels(as_asked(result->metric_results.keys(), job_.metric_keys));
     if (failed.empty() && metric_failures.empty()) {
         logger.info(name() + " finished: " + metrics);
         if (events.job_finished) {
@@ -1732,14 +1737,19 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
     // the whole family would place them, and the CPU's task keeps its place
     // (JobRun::execute_task).
     //
-    // VMAF YUV and its Y are made from VMAF and its U and V (JobRun::merged),
-    // VMAF asked for with them (with_metric_inputs): the U and V are
-    // calculated in their place.
-    const bool vmaf_yuv = contains(metric_keys, "vmaf_yuv") && !saved.has("vmaf_yuv");
+    // A metric of three planes calculated here calculates its planes too,
+    // asked for or not: they come from the same pass at no extra cost, and
+    // saved (with_planes) they need no run when they are shown. VMAF YUV and
+    // its Y are made from VMAF and its U and V (JobRun::merged), VMAF asked
+    // for with them (with_metric_inputs): the U and V are calculated in their
+    // place.
+    const auto calculated = [&metric_keys, &saved](std::string_view key) {
+        return contains(metric_keys, key) && !saved.has(std::string(key));
+    };
     std::vector<std::string> keys;
     for (const MetricDefinition& metric : metrics()) {  // the registry's order
         const std::string key(metric.key);
-        const bool asked = contains(metric_keys, key) || (vmaf_yuv && (key == vmaf_u_key || key == vmaf_v_key));
+        const bool asked = contains(metric_keys, key) || (metric.is_plane() && calculated(metric.plane_of));
         if (asked && !saved.has(key) && key != "vmaf_yuv" && key != "vmaf_yuv_y") {
             keys.push_back(key);
         }

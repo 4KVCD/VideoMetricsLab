@@ -1450,7 +1450,7 @@
   "HDR VMAF model:": "HDR VMAF modell:",
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "A HDR VMAF oszlop modellje (a Netflix mellékelt HDR VMAF modelljei). Az Automatikus az 1080p modellt választja háromszoros képernyőmagasságnál, 4K összehasonlításnál pedig a 4K modellt másfélszeresnél, akárcsak a VMAF v0.6.1. Csak PQ (HDR10) videókhoz.",
   "Y, U and V of the YUV metrics": "A YUV-metrikák Y, U és V síkja",
-  "A column for each of the Y, U and V planes beside PSNR YUV avg. dB, SSIM YUV, MS-SSIM YUV, PSNR-HVS-M and VMAF YUV, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "Egy oszlop az Y, U és V síkok mindegyikéhez a PSNR YUV avg. dB, SSIM YUV, MS-SSIM YUV, PSNR-HVS-M és VMAF YUV mellett, többletköltség nélkül velük együtt számolva. A korábban pontozott videókat újra ki kell számolni a kitöltésükhöz.",
+  "A column for each of the Y, U and V planes beside PSNR YUV avg. dB, SSIM YUV, MS-SSIM YUV, PSNR-HVS-M and VMAF YUV, calculated and saved with them at no extra cost, shown or not. Videos scored before version 2.7 while this was off need Calculate again to fill them.": "Egy oszlop az Y, U és V síkok mindegyikéhez a PSNR YUV avg. dB, SSIM YUV, MS-SSIM YUV, PSNR-HVS-M és VMAF YUV mellett, többletköltség nélkül velük együtt számolva és mentve, akár látszik, akár nem. A 2.7-es verzió előtt, kikapcsolt beállítással pontozott videókat újra ki kell számolni a kitöltésükhöz.",
   "Calculated with {metric}.": "A(z) {metric} metrikával számolva.",
   "Not saved:": "Nincs mentve:",
   "Open folder": "Mappa megnyitása",

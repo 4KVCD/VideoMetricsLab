@@ -47,6 +47,16 @@ void MetricResultSet::remove(const std::string& key) {
     sequences_.erase(key);
 }
 
+void drop_planes_not_in(MetricResultSet& scores, const std::vector<std::string>& wanted) {
+    const std::vector<std::string> keys = scores.keys();  // a copy: remove changes them
+    for (const std::string& key : keys) {
+        const MetricDefinition* metric = find_metric(key);
+        if (metric != nullptr && metric->is_plane() && std::find(wanted.begin(), wanted.end(), key) == wanted.end()) {
+            scores.remove(key);
+        }
+    }
+}
+
 void MetricResultSet::add(SequenceMetricResult result) {
     remember_key(keys_, result.key);
     frames_.erase(result.key);

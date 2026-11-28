@@ -97,6 +97,11 @@ private:
     std::map<std::string, SequenceMetricResult> sequences_;
 };
 
+// Leaves out of `scores` the planes (MetricDefinition::plane_of) not in
+// `wanted`: a run calculates and saves every plane of the metrics it
+// calculates (with_planes), and shows only those asked for.
+void drop_planes_not_in(MetricResultSet& scores, const std::vector<std::string>& wanted);
+
 // The frame metrics that share one frame axis: the first one present, in
 // the registry's order, sets the frames, and the others with the same frame
 // numbers come with it (the Python app's FrameScores view).

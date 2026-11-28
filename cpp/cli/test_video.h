@@ -53,6 +53,9 @@ struct TestVideo {
     std::vector<std::string> metrics;  // the metric keys it is compared on
     // What it asks for, as its saved scores are looked up and saved under.
     AnalysisRequest request;
+    // What a run of it saves: the request's metrics with their planes, which
+    // are calculated with them asked for or not (with_planes).
+    std::vector<MetricRequestSpec> saved_metrics;
     // Whether its scores are read from and saved to the saved scores: not
     // those of a video read with --colour or with the other video's colour
     // tags, nor of a raw stream, as the saved scores know a video by its

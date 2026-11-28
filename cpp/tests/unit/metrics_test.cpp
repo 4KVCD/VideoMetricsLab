@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "reference.h"
+#include "vml/results.h"
 
 namespace vml {
 namespace {
@@ -146,6 +147,22 @@ TEST(Metrics, OrderedMetricsPutTheUsersOrderFirst) {
         registry.emplace_back(metric.key);
     }
     EXPECT_EQ(keys_of(ordered_metrics({})), registry);
+}
+
+// A run saves the planes of the YUV metrics it asks for, which are
+// calculated with them (with_planes), and the views drop the planes not
+// shown (drop_planes_not_in), keeping every other metric.
+TEST(Metrics, PlanesAreSavedWithTheirMetricAndDroppedWhereNotShown) {
+    EXPECT_EQ(with_planes({"vmaf", "psnr_yuv", "psnr_yuv_u"}),
+              (std::vector<std::string>{"vmaf", "psnr_yuv", "psnr_yuv_u", "psnr_yuv_y", "psnr_yuv_v"}));
+    EXPECT_EQ(with_planes({"psnr", "ssim"}), (std::vector<std::string>{"psnr", "ssim"}));
+
+    MetricResultSet scores;
+    for (const char* key : {"psnr_yuv", "psnr_yuv_y", "psnr_yuv_u", "vmaf", "vmaf_yuv_v"}) {
+        scores.add(FrameMetricResult{key, {0}, {0.0}, {1.0F}, {}});
+    }
+    drop_planes_not_in(scores, {"psnr_yuv_u"});
+    EXPECT_EQ(scores.keys(), (std::vector<std::string>{"psnr_yuv", "psnr_yuv_u", "vmaf"}));
 }
 
 TEST(Metrics, SectionsComeFromTheListHiddenAtFirst) {

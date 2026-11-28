@@ -880,13 +880,15 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
     const auto keep = [&](std::size_t index, const ComparisonResult& result) {
         TestVideo& target = video(index);
         target.result = result;
+        // Every plane calculated is saved; the outputs have those asked for.
+        drop_planes_not_in(target.result->metric_results, target.metrics);
         if (!target.save_scores || !cache_folder) {
             return;
         }
         try {
             const std::lock_guard lock(saving);
             store_result(*cache_folder, result.source, target.path, target.request.recipe, result,
-                         platform::path_text(target.path.stem()), target.request.metrics);
+                         platform::path_text(target.path.stem()), target.saved_metrics);
         } catch (const std::exception& error) {
             progress.message(target.label() + ": the scores could not be saved (" + error.what() + ")");
         }
@@ -1055,6 +1057,8 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
         detect_vship_device(VshipBuild::fast, gpu_probes_token());
     }
     video.request = analysis_request(video.options, video.metrics, chosen, cvvdp, source, *video.info);
+    video.saved_metrics =
+        analysis_request(video.options, with_planes(video.metrics), chosen, cvvdp, source, *video.info).metrics;
     std::optional<ComparisonResult> saved;
     if (use_saved) {
         if (auto found = load_result(cache_folder, source.path, video.path, video.request.recipe,

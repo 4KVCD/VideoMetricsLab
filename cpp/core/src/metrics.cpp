@@ -266,6 +266,18 @@ bool scored_in_app(std::string_view key) {
     return std::find(in_app.begin(), in_app.end(), scored_by(key)) != in_app.end();
 }
 
+std::vector<std::string> with_planes(std::vector<std::string> keys) {
+    const std::vector<std::string> asked = keys;
+    for (const MetricDefinition& metric : metrics()) {
+        const std::string key(metric.key);
+        if (metric.is_plane() && std::find(asked.begin(), asked.end(), metric.plane_of) != asked.end() &&
+            std::find(asked.begin(), asked.end(), key) == asked.end()) {
+            keys.push_back(key);
+        }
+    }
+    return keys;
+}
+
 std::vector<std::string> with_metric_inputs(std::vector<std::string> keys) {
     const auto has = [&keys](std::string_view key) { return std::find(keys.begin(), keys.end(), key) != keys.end(); };
     if ((has("vmaf_yuv") || has("vmaf_yuv_y")) && !has("vmaf")) {

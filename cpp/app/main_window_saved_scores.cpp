@@ -31,15 +31,18 @@ std::filesystem::path MainWindow::cache_folder() const {
     return settings_.cache_dir_path().value_or(default_cache_dir());
 }
 
-AnalysisRequest MainWindow::analysis_request_of(const RowData& row_data) const {
+AnalysisRequest MainWindow::analysis_request_of(const RowData& row_data, bool with_their_planes) const {
     // The row's request as runs save it and lookups ask for it: one place,
     // so that a lookup never asks with other settings than a run saves under.
     // Its videos as the run's result gives them (save_job_result): a
-    // resampled reference's test video is the reference itself.
+    // resampled reference's test video is the reference itself. With
+    // `with_their_planes`, its metrics' planes too, shown or not, as a run
+    // saves them (with_planes).
     const VideoInfo source = source_info_.value_or(VideoInfo{});
     const VideoInfo distorted = row_data.options.resample_test ? source : row_data.video_info.value_or(VideoInfo{});
-    return analysis_request(row_data.options, requested_metrics(row_data), automatic_perceptual_backends,
-                            row_data.cvvdp, source, distorted);
+    const std::vector<std::string> keys = requested_metrics(row_data);
+    return analysis_request(row_data.options, with_their_planes ? with_planes(keys) : keys,
+                            automatic_perceptual_backends, row_data.cvvdp, source, distorted);
 }
 
 std::shared_ptr<const RunFacts> MainWindow::saved_facts(const RowData& row_data, const ComparisonResult& shown) const {
@@ -474,7 +477,8 @@ void MainWindow::recompute_rows(const std::vector<int>& rows, bool forget_saved)
         if (forget_saved && source_info_) {
             file_writes_->submit(QStringLiteral("clear cached result for %1").arg(name_of(row_data.path)),
                                  [base, source = source_info_->path, identity = row_data.identity_path(),
-                                  request = analysis_request_of(row_data)] {
+                                  request = analysis_request_of(row_data, true)] {
+                                     // Their hidden planes too, which the run saves with them.
                                      clear_metrics(base, source, identity, request.recipe, request.metrics);
                                  });
             // Auto's saved scores (Source only) or the whole videos' (a

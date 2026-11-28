@@ -574,7 +574,7 @@ private:
 
     // ------------------------------------------------------ the saved scores
     std::filesystem::path cache_folder() const;
-    AnalysisRequest analysis_request_of(const RowData& row_data) const;
+    AnalysisRequest analysis_request_of(const RowData& row_data, bool with_their_planes = false) const;
     // Whether a lookup started (none with saved scores off, no reference, or
     // the window closing).
     bool start_cache_lookup(const std::vector<std::filesystem::path>& paths);

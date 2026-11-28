@@ -128,6 +128,12 @@ bool scored_in_app(std::string_view key);
 // need: VMAF for VMAF YUV and its Y, which are made from VMAF's score.
 std::vector<std::string> with_metric_inputs(std::vector<std::string> keys);
 
+// `keys` with the planes (MetricDefinition::plane_of) of each metric among
+// them that has planes, added after the rest: a run that calculates PSNR YUV
+// calculates its Y, U and V with it, and saves them all, so that showing
+// them later needs no run (plan_tasks).
+std::vector<std::string> with_planes(std::vector<std::string> keys);
+
 // Why pictures compared at `width` x `height` cannot be scored with the
 // metrics of `keys`, naming those they are too small for and the size each
 // needs (MetricDefinition::smallest_side); nothing when all can be.

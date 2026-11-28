@@ -1014,6 +1014,12 @@ std::vector<LoadedSavedResult> SavedResultsPanel::selected_results() const {
         const std::optional<std::pair<ComparisonResult, std::string>> loaded =
             load_saved_comparison(*saved, chosen, read);
         if (loaded) {
+            // A run saves every plane of the metrics it calculates (with_planes):
+            // opened or exported, they come only where the window shows them.
+            auto result = std::make_shared<ComparisonResult>(loaded->first);
+            if (!settings_.show_yuv_planes) {
+                drop_planes_not_in(result->metric_results, {});
+            }
             // When each score used was saved: the one picked, else its newest.
             std::map<std::string, std::chrono::system_clock::time_point> times;
             for (const std::string& key : saved->keys()) {
@@ -1024,7 +1030,7 @@ std::vector<LoadedSavedResult> SavedResultsPanel::selected_results() const {
                     }
                 }
             }
-            results.push_back({std::make_shared<const ComparisonResult>(loaded->first), qt_text(loaded->second),
+            results.push_back({std::move(result), qt_text(loaded->second),
                                saved->folder, std::move(times)});
         }
     }

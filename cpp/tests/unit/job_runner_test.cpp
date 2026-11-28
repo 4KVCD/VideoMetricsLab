@@ -873,7 +873,8 @@ TEST(JobRunner, SavedScoresAreNotCalculatedAgain) {
 // VMAF YUV is planned as VMAF's U and V, on the CPU in a task of their own
 // beside VMAF's (each heavy there: plan_tasks), and made from the three:
 // (6 VMAF + U + V) / 8 of each frame, its Y VMAF's score. The U and V asked
-// for it alone are not kept, and a failure of theirs is VMAF YUV's.
+// for it alone are kept, to be saved with it, and a failure of theirs is
+// VMAF YUV's.
 TEST(JobRunner, VmafYuvIsMadeFromVmafAndItsChromaPlanes) {
     VideoInfo source;
     source.path = "reference.mkv";
@@ -935,13 +936,39 @@ TEST(JobRunner, VmafYuvIsMadeFromVmafAndItsChromaPlanes) {
     ASSERT_NE(made.frame("vmaf_yuv"), nullptr);
     EXPECT_EQ(made.frame("vmaf_yuv")->values, (std::vector<float>{72.5F, 82.5F}));
     EXPECT_EQ(made.frame("vmaf_yuv_y")->values, made.frame("vmaf")->values);
-    EXPECT_EQ(made.keys(), (std::vector<std::string>{"vmaf", "psnr", "vmaf_yuv", "vmaf_yuv_y"}));
+    EXPECT_EQ(made.keys(),
+              (std::vector<std::string>{"vmaf", "psnr", "vmaf_yuv_u", "vmaf_yuv_v", "vmaf_yuv", "vmaf_yuv_y"}));
     ASSERT_EQ(reported.partial.size(), 1u);
     const Reported::Partial& failed = reported.partial.begin()->second;
     EXPECT_FALSE(failed.result.has_metric("vmaf_yuv"));
-    EXPECT_FALSE(failed.result.has_metric("vmaf_yuv_u"));
+    EXPECT_TRUE(failed.result.has_metric("vmaf_yuv_u"));  // scored, so saved
     EXPECT_EQ(failed.failures, (MetricFailures{{"vmaf_yuv", "its chroma is too small"}}));
     EXPECT_EQ(failed.message, "VMAF YUV (6:1:1) failed: its chroma is too small");
+}
+
+// A YUV metric that is calculated has its planes calculated with it, asked
+// for or not, to be saved; one already saved does not bring them in.
+TEST(JobRunner, PlanesAreCalculatedWithTheirMetric) {
+    VideoInfo source;
+    source.path = "reference.mkv";
+    source.width = 1920;
+    source.height = 1080;
+    source.pix_fmt = "yuv420p";
+    VideoInfo test = source;
+    test.path = "encode.mkv";
+    const VmafOptions options;
+    const std::vector<std::string> asked{"psnr_yuv", "ssim_yuv"};
+    std::vector<MetricTask> planned = plan_tasks(source, test, options, asked);
+    std::vector<std::string> keys;
+    for (const MetricTask& task : planned) {
+        keys.insert(keys.end(), task.metric_keys.begin(), task.metric_keys.end());
+    }
+    for (const char* plane : {"psnr_yuv_y", "psnr_yuv_u", "psnr_yuv_v", "ssim_yuv_y", "ssim_yuv_u", "ssim_yuv_v"}) {
+        EXPECT_TRUE(std::find(keys.begin(), keys.end(), plane) != keys.end()) << plane;
+    }
+    planned = plan_tasks(source, test, options, asked, {}, saved_scores({"psnr_yuv"}));
+    ASSERT_EQ(planned.size(), 1u);
+    EXPECT_EQ(planned[0].metric_keys, (std::vector<std::string>{"ssim_yuv", "ssim_yuv_y", "ssim_yuv_u", "ssim_yuv_v"}));
 }
 
 // A metric that has a GPU route but runs on the CPU (set there, or the GPU

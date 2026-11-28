@@ -432,6 +432,10 @@ int diff(const SavedArguments& arguments, const Settings& settings) {
         try {
             // The settings' folder, or --cache-dir's, as saved and report take it.
             runs[at] = read_comparison(arguments.items.at(at), saved_scores_use(arguments.profile, settings).folder);
+            if (!settings.show_yuv_planes) {
+                // Saved with their metrics (with_planes); compared where the window shows them.
+                drop_planes_not_in(runs[at]->metric_results, {});
+            }
         } catch (const std::exception& error) {
             unread += (unread.empty() ? "" : "\n") + arguments.items.at(at) + ": " + error.what();
         }

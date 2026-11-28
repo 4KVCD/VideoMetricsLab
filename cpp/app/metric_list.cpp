@@ -228,7 +228,8 @@ QWidget* MetricList::build_section(MetricSection section) {
                 "A column for each of the Y, U and V planes beside PSNR YUV avg. dB, SSIM YUV, MS-SSIM YUV, PSNR-HVS-M "
                 "and "
                 "VMAF YUV, "
-                "calculated with them at no extra cost. Videos scored before need Calculate again to fill them."));
+                "calculated and saved with them at no extra cost, shown or not. Videos scored before version 2.7 while "
+                "this was off need Calculate again to fill them."));
             connect(planes_box_, &QCheckBox::clicked, this, [this](bool shown) { emit planes_toggled(shown); });
             grid->addWidget(planes_box_, row, 0, 1, 2, Qt::AlignBottom);
             grid->setRowMinimumHeight(row, planes_box_->sizeHint().height() + 6);

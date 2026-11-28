@@ -1450,7 +1450,7 @@
   "HDR VMAF model:": "Modèle HDR VMAF :",
   "The HDR VMAF column's model (Netflix's bundled HDR VMAF models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1. PQ (HDR10) videos only.": "Le modèle de la colonne HDR VMAF (les modèles HDR VMAF fournis par Netflix). Automatique choisit le modèle 1080p à trois hauteurs d'écran, ou le modèle 4K à une hauteur et demie pour les comparaisons 4K, comme pour VMAF v0.6.1. Uniquement pour les vidéos PQ (HDR10).",
   "Y, U and V of the YUV metrics": "Y, U et V des métriques YUV",
-  "A column for each of the Y, U and V planes beside PSNR YUV avg. dB, SSIM YUV, MS-SSIM YUV, PSNR-HVS-M and VMAF YUV, calculated with them at no extra cost. Videos scored before need Calculate again to fill them.": "Une colonne pour chacun des plans Y, U et V à côté de PSNR YUV avg. dB, SSIM YUV, MS-SSIM YUV, PSNR-HVS-M et VMAF YUV, calculée avec elles sans coût supplémentaire. Les vidéos déjà évaluées doivent être recalculées pour les remplir.",
+  "A column for each of the Y, U and V planes beside PSNR YUV avg. dB, SSIM YUV, MS-SSIM YUV, PSNR-HVS-M and VMAF YUV, calculated and saved with them at no extra cost, shown or not. Videos scored before version 2.7 while this was off need Calculate again to fill them.": "Une colonne pour chacun des plans Y, U et V à côté de PSNR YUV avg. dB, SSIM YUV, MS-SSIM YUV, PSNR-HVS-M et VMAF YUV, calculée et enregistrée avec elles sans coût supplémentaire, affichée ou non. Les vidéos évaluées avant la version 2.7 avec cette option désactivée doivent être recalculées pour les remplir.",
   "Calculated with {metric}.": "Calculé avec {metric}.",
   "Not saved:": "Non enregistré :",
   "Open folder": "Ouvrir le dossier",
