@@ -387,7 +387,7 @@ TEST_F(FramePanelTest, TheWorstFramesListIsSteppedThroughOnItsVideo) {
     QString failure;
     QObject::connect(panel.get(), &FrameComparePanel::still_failed, [&failure](const QString& error) { failure = error; });
     panel->export_folder = [] { return QString(); };
-    panel->save_still_button->click();  // the frame pair's save icon
+    panel->save_still_button->click();  // the frame pair's save button
     EXPECT_EQ(failure.toStdString(), "No export folder: choose one in Settings.");
     EXPECT_TRUE(idle(*panel));
 }
@@ -570,7 +570,7 @@ TEST_F(FramePanelTest, TheLoopRowSaysWhatItLoops) {
     EXPECT_GE(slider.band_rect().width(), BandSlider::min_band_px);
     slider.set_band(std::nullopt);
     EXPECT_TRUE(slider.band_rect().isEmpty());
-    // The frame pair's save icon at the top card's right end, after Advanced info.
+    // The frame pair's save button at the top card's right end, after Advanced info.
     EXPECT_EQ(panel->save_still_button->parentWidget(), panel->advanced_info_button->parentWidget());
 }
 

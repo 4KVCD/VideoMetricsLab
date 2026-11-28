@@ -298,11 +298,11 @@ TEST_F(Appearance, EveryRoleInTheWindowIsOneModernStyles) {
     EXPECT_EQ(graph_card->property("vmlRole").toString(), "card");
 }
 
-// Every table, list or chart on a tab that shows data has a save icon on its
+// Every table, list or chart on a tab that shows data has a save button on its
 // card (docs/ARCHITECTURE.md, "Exports"): the nearest card, framed box or, with
 // neither, the tab's page around it holds a SaveButton. A view that is not data
 // to save (a list of files to read, one to pick from) is marked so
-// (not_exported), with why where it is made. A new card without a save icon
+// (not_exported), with why where it is made. A new card without a save button
 // fails here.
 TEST_F(Appearance, EveryCardThatShowsDataHasASaveIcon) {
     const QTabWidget* tabs = nullptr;
@@ -342,7 +342,7 @@ TEST_F(Appearance, EveryCardThatShowsDataHasASaveIcon) {
             EXPECT_FALSE(holder->findChildren<SaveButton*>().isEmpty())
                 << tabs->tabText(index).toStdString() << ": " << view->metaObject()->className() << " "
                 << view->objectName().toStdString() << " in " << holder->metaObject()->className() << " "
-                << holder->objectName().toStdString() << " has no save icon on its card";
+                << holder->objectName().toStdString() << " has no save button on its card";
         }
     }
     EXPECT_GE(views, 8);  // the tabs' tables, lists and charts were found at all

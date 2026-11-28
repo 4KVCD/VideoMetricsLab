@@ -194,7 +194,7 @@ TEST(SavedResultsPanel, ListsReadsAndDeletesTheSavedComparisons) {
         ASSERT_EQ(opened.at(1).at(0).value<std::vector<LoadedSavedResult>>().size(), 1U);
     }
 
-    // The save icon's Save as...: each kind on its own as the Videos tab's
+    // The save button's Save as...: each kind on its own as the Videos tab's
     // has them, the run file last. The rules are the tab bar's Export
     // panel's choice (segment_rule_choices, pick_segment_rules).
     QMenu menu;

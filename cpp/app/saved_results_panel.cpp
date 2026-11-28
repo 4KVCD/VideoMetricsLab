@@ -143,8 +143,8 @@ SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& di
     auto* refresh_button = new QPushButton(app::tr("Refresh"));
     connect(refresh_button, &QPushButton::clicked, this, [this] { refresh(); });
     top->addWidget(refresh_button);
-    // The list's save icon, at its top right (issue #224).
-    save_button_ = new SaveButton;
+    // The list's save button, at its top right (issue #224).
+    save_button_ = new SaveButton(app::tr("Save results"), SaveKind::data);
     save_button_->why_not = [this] {
         return selected().empty()                                   ? app::tr("Select the comparisons to save.")
                : !quick_formats || quick_formats().empty() ? no_format_text()
@@ -770,7 +770,7 @@ SavedScoresPanel* SavedResultsPanel::open_details() {
         show_details();  // the cards follow; the panel stays open
     };
     connect(panel, &SavedScoresPanel::settings_requested, this, [this] { emit scores_settings_requested(); });
-    // Its save icon: this score summary at one click, or as JSON or CSV
+    // Its save button: this score summary at one click, or as JSON or CSV
     // where asked (Save as...).
     SaveButton* save = panel->save_button();
     save->why_not = [this] {

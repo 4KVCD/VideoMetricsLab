@@ -383,16 +383,26 @@ says how each went in one place. A new export is one of the two.
 **A quick save saves what a card shows.** Every card that shows something
 exportable (a table or list, a graph, the statistics, BD-rate's table and
 chart, the Bitrate Viewer's graph, Video Compare's frame pair) has a save
-icon (`SaveButton`, quick_save.h) in its top-right corner.
+button (`SaveButton`, quick_save.h) in its top-right corner (issue #261): a
+glyph for its kind (a picture for a PNG, a small table for data), words
+saying what it saves ("Save graph", "Save statistics"), and an arrow.
 - One click saves what the card shows (its metric, conditions, dips, range
   and videos) into the export folder (Settings' Export folder, Documents
   where it is blank), in the formats Settings > Storage > *Quick saves*
   names: JSON and/or CSV for data, PNG for a graph. Its files are named as
   the Save dialog suggests them (`suggested_file_name`).
+- One button saves one thing: a picture or data, never both, and nothing
+  else changes what a click saves. Anything more (the difference the band
+  shows, a graph's data) is its own Save as... item.
+- Its words never name a format, so they don't change with *Quick saves*.
+  Its minimum width is its glyph and arrow: where its row has no room for
+  its words (a narrow window, a long translation) it shows those alone, so
+  it never widens the window. Its accessible name is its words.
 - Its tooltip says what it will save, in which formats, and where. Where it
   can't save, it is grayed and its tooltip says why: before the click, not
   in a window after it.
-- A right-click on it, or on the card's view, offers Save as...: the same
+- Its arrow (on the press, as a menu opens), Alt+Down, the menu key, or a
+  right-click on it or on the card's view, offers Save as...: the same
   saves one at a time, each with the Save dialog (`Dialogs::save_file`).
   Items read "{What} as {FORMAT}...": "Graph as PNG...", "Worst frames as
   CSV...", JSON before CSV; "..." (three ASCII dots) ends every item that
@@ -438,20 +448,22 @@ control before the click. The after-run export says only where it fails.
 ### Adding an export
 
 **A new tab or card that shows data** gets, in the same change:
-- a `SaveButton` in the card's top-right corner, its `why_not` and
+- a `SaveButton` in the card's top-right corner, its words ("Save
+  {what}", never a format) and kind (`SaveKind`: picture or data), its
+  `why_not` and
   `describe` saying what it saves or why it can't (grayed), its `save`
   going through `QuickSaves::save`: what it reads of the card is taken at
   the click, and its files are made and written on the file writer, so the
   window answers meanwhile;
-- its Save as... items on a right-click, "{What} as {FORMAT}...", JSON
-  before CSV;
+- its Save as... items on its arrow and a right-click, "{What} as
+  {FORMAT}...", JSON before CSV;
 - the Export panel's "On this tab" link, where it is the tab's main card
   (`MainWindow::tab_save`).
 
 A table, list or chart that is not data to save (a list of files to read,
 one to pick from) is marked `not_exported`, with why. The appearance tests
 (`EveryCardThatShowsDataHasASaveIcon`) fail on any other without a save
-icon on its card.
+button on its card.
 
 **A new kind of data** decides, and says in its change:
 - whether it is an archive item: then a key in `export_item_keys`, which
@@ -465,7 +477,7 @@ icon on its card.
 
 **Settings say what is written**, and nothing else does: *Exports include*
 (`Settings::export_items`, `export_formats`, `export_zip`) for the archive,
-*Quick saves* (`Settings::quick_save_formats`) for the save icons, each a
+*Quick saves* (`Settings::quick_save_formats`) for the save buttons, each a
 settings.json key. A new file format is:
 - a key in `export_format_keys`, in the order everything lists it (JSON,
   CSV, then the new one), with its tooltip in *Exports include*'s row

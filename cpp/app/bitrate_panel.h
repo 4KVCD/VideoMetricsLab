@@ -173,7 +173,7 @@ public:
     // Where its exports say how they went: the window's indicator
     // (export_indicator.h). Not set: nowhere.
     ExportReport export_report;
-    // The export folder and formats its save icon saves in (quick_save.h).
+    // The export folder and formats its save button saves in (quick_save.h).
     QuickSaves quick_saves;
     // The saved results' folder, whose saved bitrate (bitrate_store.h) a
     // file's reading looks in first and is saved to; none set: not used.
@@ -194,8 +194,8 @@ public:
     QCheckBox* frame_types_box = nullptr;
     QLabel* frame_types_legend = nullptr;
     QPushButton* reset_zoom_button = nullptr;
-    // The graph card's save icon (issue #224): the graph as PNG and the
-    // bitrate data of the files drawn.
+    // The graph card's save button (issues #224, #261): the graph as PNG;
+    // the bitrate data of the files drawn is its Save as... menu's.
     SaveButton* graph_save = nullptr;
     ChartWidget* chart = nullptr;
     ReadoutLabel* hover_label = nullptr;

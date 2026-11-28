@@ -235,7 +235,7 @@ void BdRatePanel::add_options_row(QVBoxLayout* root) {
     row->addWidget(warnings_button);
     row->addStretch(1);
     // Copy as markdown is the clipboard's, not an export: the table's and
-    // the chart's saves are their cards' save icons (add_results, add_chart).
+    // the chart's saves are their cards' save buttons (add_results, add_chart).
     copy_button = new QPushButton(app::tr("Copy as markdown"));
     connect(copy_button, &QPushButton::clicked, this, [this] { on_copy(); });
     row->addWidget(copy_button);
@@ -254,9 +254,9 @@ void BdRatePanel::add_results(QVBoxLayout* root) {
     heading_label = new QLabel;
     heading_label->setWordWrap(true);
     theme::set_role(heading_label, "title");
-    // The table's save icon in the card's top-right corner (issue #224): the
+    // The table's save button in the card's top-right corner (issue #224): the
     // table as shown, in Settings' Quick saves formats.
-    table_save = new SaveButton;
+    table_save = new SaveButton(app::tr("Save table"), SaveKind::data);
     table_save->why_not = [this] {
         return !report_                               ? nothing_shown_text()
                : quick_saves.data_formats().empty() ? no_format_text()
@@ -272,7 +272,7 @@ void BdRatePanel::add_results(QVBoxLayout* root) {
     head->addWidget(table_save, 0, Qt::AlignTop);
     layout->addLayout(head);
     results = new QTableWidget(0, 1 + static_cast<int>(metrics().size()));
-    // A right-click: the save icon's Save as... items.
+    // A right-click: the save button's Save as... items.
     results->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(results, &QWidget::customContextMenuRequested, this, [this](const QPoint& at) {
         if (report_) {
@@ -313,8 +313,8 @@ void BdRatePanel::add_chart(QVBoxLayout* root) {
     connect(metric_combo, &QComboBox::currentIndexChanged, this, [this] { refresh_chart(); });
     row->addWidget(metric_combo);
     row->addStretch(1);
-    // The chart's save icon: the chart shown, as PNG.
-    chart_save = new SaveButton;
+    // The chart's save button: the chart shown, as PNG.
+    chart_save = new SaveButton(app::tr("Save chart"), SaveKind::picture);
     chart_save->why_not = [this] { return chart->plot() ? QString() : nothing_shown_text(); };
     chart_save->describe = [] { return quick_save_tooltip(app::tr("the chart as PNG"), {}); };
     chart_save->save = [this] { save_chart(); };

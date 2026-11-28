@@ -382,7 +382,7 @@ public:
     // Where its exports say how they went: the window's indicator
     // (export_indicator.h). Not set: nowhere.
     ExportReport export_report;
-    // The export folder and formats its save icons save in (quick_save.h).
+    // The export folder and formats its save buttons save in (quick_save.h).
     QuickSaves quick_saves;
     // The colours Export graph as PNG draws in (Settings' Exported graphs), asked at
     // each export; the light chart colours when not set.
@@ -396,7 +396,7 @@ public:
     // The identities of the lines selected in the statistics table, in its
     // order (the tab bar's Export panel's "the selected videos").
     std::vector<std::string> selected_identities();
-    // The statistics' save icon, the tab's own one-click save.
+    // The statistics' save button, the tab's own one-click save.
     SaveButton* stats_save() const { return stats_save_; }
     // The identities of the Videos tab's rows' lines: those removed with
     // their row still there are what Show removed videos brings back.
@@ -519,10 +519,10 @@ private:
     void fill_graph_menu(QMenu& menu, MetricPage& page, const QPoint& position, StatsMenu& items);
     void show_graph_menu(MetricPage& page, const QPoint& position);
     // The statistics' file name without extension, and their text as JSON
-    // or CSV (export_statistics' and the save icon's).
+    // or CSV (export_statistics' and the save button's).
     QString statistics_stem() const;
     std::string statistics_text(bool json);
-    // The save icons' one-click saves, into the export folder.
+    // The save buttons' one-click saves, into the export folder.
     void save_statistics();
     void save_graph();
     // Whether the page shown draws a graph, and its PNG's name.
@@ -533,7 +533,7 @@ private:
     // The difference of the lines `pair`: its file's name, and its writing
     // to `path`, said with the files `with` once written.
     QString difference_name(const std::pair<int, int>& pair) const;
-    void write_difference(const std::pair<int, int>& pair, const QString& path, const QStringList& with);
+    void write_difference(const std::pair<int, int>& pair, const QString& path);
 
     VideoColors* colors_;
     // By series: ids rise as runs are added, and are given again in the
@@ -550,7 +550,7 @@ private:
     // The pages, table and readouts are behind the lines (view_changed).
     bool view_stale_ = false;
     FileWrites* file_writes_ = nullptr;
-    // The save icons of the statistics' card and the graph's (issue #224).
+    // The save buttons of the statistics' card and the graph's (issue #224).
     SaveButton* stats_save_ = nullptr;
     SaveButton* graph_save_ = nullptr;
 

@@ -60,20 +60,21 @@ calculated in resolution tests.
 4. Choose **Calculate metrics**. Optional two-job parallelism can help on large
    CPUs, but increases resource use and is not always faster.
 5. Inspect per-frame curves in **Metric Graphs**. Click a metric's mean column
-   to show its detailed statistics. The save icon at the statistics card's
-   top right saves the table as shown (the frame range's when one is
-   highlighted) at one click, and the one at the right end of the metrics'
-   row the graph as PNG (see [Saving and exporting](#saving-and-exporting)).
-   Right-click either for **Statistics as JSON...** or **as CSV...**, or
-   **Graph as PNG...**, with the Save dialog; right-click the statistics for
-   a row's video's export too. **Graph as PNG...** (here, in Worst Frames
+   to show its detailed statistics. **Save statistics**, at the statistics
+   card's top right, saves the table as shown (the frame range's when one is
+   highlighted) at one click, and **Save graph**, at the right end of the
+   metrics' row, the graph as PNG (see [Saving and
+   exporting](#saving-and-exporting)). Their arrows (or a right-click) offer
+   **Statistics as JSON...** or **as CSV...**, or **Graph as PNG...**, with
+   the Save dialog; right-click the statistics for a row's video's export
+   too. **Graph as PNG...** (here, in Worst Frames
    and in the Bitrate Viewer) first asks for the title written on the image,
    starting with the graph's own: type your own where the file names say
-   little, such as crf20_01.mkv. The save icon keeps the graph's own.
+   little, such as crf20_01.mkv. **Save graph** keeps the graph's own.
    With two videos shown, **Difference** draws the first minus the second,
    frame by frame, in a band under the graph with its own scale. With it on,
-   the graph's save icon saves it with the PNG, and the right-click menus
-   offer **Difference as CSV...**:
+   **Save graph**'s arrow and the right-click menus offer **Difference as
+   CSV...** (**Save graph** itself saves the PNG alone):
    every metric's difference, as `<first>_minus_<second>.csv` (the
    videos' labels), in the per-frame scores' columns: a cell is blank where
    either video lacks the frame or the metric.
@@ -102,7 +103,7 @@ calculated in resolution tests.
    shortest segment, or, with every condition, a frame where another doesn't
    hold). On the right, pick the metric in the bar at the top. The graph
    shows the video's scores with its weak segments shaded and its worst
-   frames dotted; the ⓘ beside its save icon says what each of its marks
+   frames dotted; the ⓘ beside its **Save graph** says what each of its marks
    means. Below it, side by side where the window has room and one
    above the other where it hasn't:
    - **Worst frames**: the worst frame of each of the metric's 10, 25 or 50
@@ -139,9 +140,10 @@ calculated in resolution tests.
    it in the profile picked, or **Save as new profile** in a new one; a
    profile's condition on a metric the video doesn't have is kept for videos
    that do (a preset's, once you've loaded one).
-   Each card's save icon saves what it shows at one click (the metric, the
-   conditions, the dips and the range); a right-click on the icon, or on its
-   list or graph, offers each with the Save dialog:
+   Each card's save button (**Save graph**, **Save frames**, **Save
+   segments**) saves what it shows at one click (the metric, the
+   conditions, the dips and the range); its arrow, or a right-click on it or
+   on its list or graph, offers each with the Save dialog:
    - Worst frames: **Worst frames as CSV...** or **as JSON...**, each frame
      with its rank, time and every metric's score
      (`<video>.vmaf.worst.csv`; the format is in
@@ -656,9 +658,9 @@ optional. Use still mode for frame inspection or playback mode for motion.
   Each side is one value, in seconds to the millisecond or in frames of the
   video shown: typing either one sets the other. The seconds are kept, so a
   video of another frame rate loops as long, in its own frames.
-- The frame pair's save icon, at the top card's right end, saves the frame of the reference and of the test video as
-  two PNG files in Settings' Export folder (Documents unless set); a
-  right-click, **Frame pair as PNG...**, in a folder you pick. They are named
+- **Save stills**, at the top card's right end, saves the frame of the reference and of the test video as
+  two PNG files in Settings' Export folder (Documents unless set); its
+  arrow (or a right-click), **Frame pair as PNG...**, in a folder you pick. They are named
   after the video, the frame, its time, the Worst frames score when it is
   one, and the side. They are cropped and scaled as compared, HDR mapped to
   SDR.
@@ -691,12 +693,12 @@ at each moment in the second and GOP views (where two encodes' GOPs differ,
 each moment's GOP bitrate is subtracted).
 Under the graph, **Go to frame** and **Go to time**, and the range from
 frame or from time, work as on Metric Graphs: the table then gives the
-range's figures. The save icon at the graph card's top right saves the graph
-as PNG and each drawn file's bitrate data, as the command line's `bitrate
---csv` writes it (`<video>_bitrate_frames.csv`, `_seconds.csv`, `_gops.csv`)
-and as JSON (`<video>_bitrate.json`: the same three tables), in the formats
-Settings > Storage > **Quick saves** ticks; a right-click on it or on the
-graph offers **Graph as PNG...**, **Bitrate data as JSON...** and **as
+range's figures. **Save graph**, at the graph card's top right, saves the
+graph as PNG. Its arrow, or a right-click on it or on the graph, offers
+**Graph as PNG...** and each drawn file's bitrate data, as the command
+line's `bitrate --csv` writes it (`<video>_bitrate_frames.csv`,
+`_seconds.csv`, `_gops.csv`) and as JSON (`<video>_bitrate.json`: the same
+three tables): **Bitrate data as JSON...** and **as
 CSV...**. A time is the first video shown's, from its
 start when **Adjust stream start time to zero** is ticked.
 The command line's `bitrate` command (below) reads the same numbers.
@@ -719,10 +721,11 @@ median for each value of a column of the anchor's CSV files, such as
 `class`. Click a sequence to draw its rate curves for the metric chosen:
 bitrate on a log scale, a dot per encode, and the scores both curves cover
 shaded, the range the BD-rate averages over. **Copy as markdown** copies the
-table as the command line prints it. The table card's save icon saves every
-number in full, named after the two encoders, as JSON (the command line's
-`bdrate --json`) and CSV; the chart card's, the chart as PNG. A right-click
-offers **Table as JSON...**, **Table as CSV...** or **Chart as PNG...**.
+table as the command line prints it. **Save table** saves every number in
+full, named after the two encoders, as JSON (the command line's `bdrate
+--json`) and CSV; **Save chart**, the chart as PNG. Their arrows (or a
+right-click) offer **Table as JSON...**, **Table as CSV...** or **Chart as
+PNG...**.
 The numbers are the command line's `bdrate`.
 
 ## Command line
@@ -1196,9 +1199,9 @@ for a wrong command; 4 when a run cannot be read (`error_code`
 
 ## Saved results and caches
 
-Save portable results as `.metrics.json` (a right-click on the Videos card's
-save icon, **Run file (.metrics.json)...**) or export CSV. For the scores
-alone, the Videos card's save icon saves the selected videos' results (or
+Save portable results as `.metrics.json` (the Videos card's **Save
+results** arrow, **Run file (.metrics.json)...**) or export CSV. For the
+scores alone, **Save results** saves the selected videos' results (or
 every scored video's) at one click; or tick **Results**, and **JSON** or
 **CSV**, in the tab bar's **Export** panel (see [Saving and
 exporting](#saving-and-exporting)): either gives the same file,
@@ -1221,12 +1224,12 @@ videos again:
 - **Open in Metric Graphs** (or double-click, or the first entry of the
   right-click menu) adds them as lines of their own, named "*video*
   (saved)".
-- The save icon at the list's top right saves the selected comparisons'
-  results at one click. Right-click the selected comparisons for **Export
+- **Save results**, at the list's top right, saves the selected
+  comparisons' results at one click. Right-click the selected comparisons for **Export
   this video's...** (one selected) or **Export the selected videos'...**
   (several), what the tab bar's Export panel exports (see [Saving and
-  exporting](#saving-and-exporting)); below it, and on a right-click on the
-  save icon, each kind on its own, as the Videos tab's offers them:
+  exporting](#saving-and-exporting)); below it, and on **Save results**'
+  arrow, each kind on its own, as the Videos tab's offers them:
   - **Results as JSON...** or **as CSV...**, as Export results saves them;
   - **Per-frame scores as JSON...** or **as CSV...**: a file per
     comparison to a folder (the JSON is the CSV's table: see [Per-frame
@@ -1318,13 +1321,13 @@ because their reference video is gone; it deletes those too.
 
 ### Saving from the Videos tab
 
-The save icon at the test videos card's top right saves the selected test
-videos' results (or every scored video's, with none selected) at one click,
-in the formats Settings > Storage > **Quick saves** ticks. A right-click on
-it acts on the same videos, each kind with the Save dialog:
+**Save results**, at the test videos card's top right, saves the selected
+test videos' results (or every scored video's, with none selected) at one
+click, in the formats Settings > Storage > **Quick saves** ticks. Its arrow
+(or a right-click) acts on the same videos, each kind with the Save dialog:
 
 - **Results as JSON...** / **as CSV...** and **Per-frame scores as
-  JSON...** / **as CSV...**, as Saved Results' save icon offers them;
+  JSON...** / **as CSV...**, as Saved Results' **Save results** offers them;
 - **Graphs as ZIP...** (below);
 - **Weak segments as JSON or CSV...**, by the profile in use;
 - **Run file (.metrics.json)...**: each video's whole run, which **Import
@@ -1341,7 +1344,7 @@ tab.
 
 ### Exporting graphs
 
-**Graphs as ZIP...** (a right-click on the Videos card's save icon) saves the graphs of the
+**Graphs as ZIP...** (on the Videos card's **Save results** arrow) saves the graphs of the
 test videos scored against the reference (the selected ones, or all) as one
 `.zip` file of PNG images, drawn as Metric Graphs' and the Bitrate Viewer's **Graph as PNG...** draw
 them:
@@ -1368,12 +1371,16 @@ or copied.
 There are two ways to save, and one place that says how it went:
 
 - **What a card shows, at one click:** each table's, list's and graph's
-  card has a save icon in its top-right corner. It saves what the card
-  shows into the export folder (Settings > Storage > **Export folder**,
-  Documents while blank), in the formats **Quick saves** ticks (JSON
-  and/or CSV; graphs are always PNG), never over a file already there.
-  Its tooltip says what it will save, or, grayed, why it can't. A
-  right-click offers the same, one at a time, with the Save dialog.
+  card has a save button in its top-right corner, saying what it saves
+  (**Save graph**, **Save statistics**, ...): a picture glyph on those
+  that save a PNG, a table glyph on those that save data. It saves what
+  the card shows into the export folder (Settings > Storage > **Export
+  folder**, Documents while blank), in the formats **Quick saves** ticks
+  (JSON and/or CSV; graphs are always PNG), never over a file already
+  there. Its tooltip says what it will save, or, grayed, why it can't.
+  Its arrow (or a right-click) offers the same, and more, one at a time,
+  with the Save dialog. In a narrow window a button shows its glyph and
+  arrow alone; its tooltip still says what it saves.
 - **Everything for these videos:** **Export**, at the tab bar's right end,
   opens a panel: which videos (the open tab's selection, on Videos, Metric
   Graphs' statistics or Saved Results, or all scored videos), what to

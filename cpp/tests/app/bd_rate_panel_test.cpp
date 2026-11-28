@@ -132,7 +132,7 @@ TEST(BdRatePanel, ShowsTheBdRatesOfTwoEncoders) {
     EXPECT_EQ(copied.toStdString(), bd_rate_table(*panel.report(), "fast", "slower"));
     const QString exported = folder.filePath("bd.csv");
     panel.dialogs.save_file = [&exported](const QString&, const QString&, const QString&) { return exported; };
-    // The table card's save icon: Save as... on a right-click, JSON first.
+    // The table card's save button: Save as... on a right-click, JSON first.
     QMenu items;
     panel.table_save->save_as(items);
     ASSERT_EQ(items.actions().size(), 2);

@@ -99,7 +99,7 @@ public:
     SavedResultsPanel(const Settings& settings, const Dialogs& dialogs, FileWrites& file_writes,
                       QWidget* parent = nullptr);
 
-    // The list's save icon (issue #224): the selected comparisons' results,
+    // The list's save button (issue #224): the selected comparisons' results,
     // saved at one click by the window (`save_results`, in Settings' Quick
     // saves `formats`); Save as... on a right-click is the Export menu's.
     std::function<void(const std::vector<LoadedSavedResult>& results)> save_results;
@@ -110,7 +110,7 @@ public:
     // the Videos tab would use". Unset: the newest.
     std::function<bool(const SavedComparison& saved, const std::string& key, const SavedScoreChoice& choice)>
         videos_would_use;
-    // The details panel's save icon: the selected comparison's score
+    // The details panel's save button: the selected comparison's score
     // details, saved at one click in the quick saves' formats.
     std::function<void(const std::vector<LoadedSavedResult>& results)> save_score_summary;
     SaveButton* save_button() const { return save_button_; }
@@ -193,7 +193,7 @@ public:
     // The archive of the selection, then the quick grabs
     // (add_quick_items), added to `menu`: the table's right-click's.
     void add_export_items(QMenu& menu);
-    // The quick grabs of the selection (add_quick_grabs): the save icon's
+    // The quick grabs of the selection (add_quick_grabs): the save button's
     // Save as... items.
     void add_quick_items(QMenu& menu);
     // The header's right-click menu: every column with a tick, unticked

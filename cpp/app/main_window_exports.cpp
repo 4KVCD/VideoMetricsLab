@@ -226,7 +226,7 @@ ExportPanel::Videos MainWindow::export_panel_videos() const {
 }
 
 SaveButton* MainWindow::tab_save() const {
-    // The open tab's own one-click save, its main card's save icon.
+    // The open tab's own one-click save, its main card's save button.
     switch (tabs_->currentIndex()) {
     case tab_videos:
         return videos_save_;
@@ -398,7 +398,7 @@ std::vector<int> MainWindow::export_menu_rows() const {
 }
 
 void MainWindow::fill_videos_quick_menu(QMenu& menu) {
-    // The quick grabs Saved Results' save icon offers too (add_quick_grabs),
+    // The quick grabs Saved Results' save button offers too (add_quick_grabs),
     // the run file last: of the selected rows scored, else of every scored
     // row, as they are when one is clicked (export_menu_rows: the menu's own
     // event loop delivers a run's results while it is open). The archive is

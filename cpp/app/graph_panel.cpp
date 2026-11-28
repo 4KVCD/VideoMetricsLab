@@ -1391,9 +1391,9 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     stats_hint_ = new QLabel;
     stats_hint_->setWordWrap(true);  // with a frame range it says more: wrapped, not widening the window
     theme::style(stats_hint_, "color: {muted};");
-    // The card's save icon at its top right (issue #224): the statistics
+    // The card's save button at its top right (issue #224): the statistics
     // shown, in Settings' Quick saves formats.
-    stats_save_ = new SaveButton;
+    stats_save_ = new SaveButton(app::tr("Save statistics"), SaveKind::data);
     stats_save_->why_not = [this] {
         return export_table().second.empty()          ? nothing_shown_text()
                : quick_saves.data_formats().empty() ? no_format_text()
@@ -1456,15 +1456,12 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     QBoxLayout* graph_layout = nullptr;
     QWidget* graph_card = theme::container("card", false, &graph_layout);
     graph_card->setObjectName("graphCard");
-    // The graph's save icon, at the right end of the metrics' row: the graph
-    // shown as PNG, and the difference where the band shows one.
-    graph_save_ = new SaveButton;
+    // The graph's save button, at the right end of the metrics' row: the
+    // graph shown as PNG (issue #261: the difference is Save as...'s).
+    graph_save_ = new SaveButton(app::tr("Save graph"), SaveKind::picture);
     graph_save_->why_not = [this] { return shown_graph() ? QString() : nothing_shown_text(); };
     graph_save_->describe = [this] {
-        return quick_save_tooltip(difference_on_ && shown_difference_pair()
-                                      ? app::tr("this graph as PNG and the difference as CSV")
-                                      : app::tr("this graph as PNG"),
-                                  {});
+        return quick_save_tooltip(app::tr("this graph as PNG"), {});
     };
     graph_save_->save = [this] { save_graph(); };
     graph_save_->save_as = [this](QMenu& menu) {
@@ -1692,7 +1689,7 @@ void GraphPanel::refresh_page_controls() {
     // The controls under the graph brought up to date for the page shown:
     // the Go to frame box bounded by what is drawn, so that it cannot ask
     // for a frame no line has, the range boxes likewise, and the Difference
-    // box usable where the page shows two lines. The save icons greyed or
+    // box usable where the page shows two lines. The save buttons greyed or
     // not for it.
     if (stats_save_ != nullptr && graph_save_ != nullptr) {  // made after the first pages are
         stats_save_->refresh();
@@ -2545,29 +2542,13 @@ QString GraphPanel::png_name() const {
 }
 
 void GraphPanel::save_graph() {
-    // The PNG now; the difference, which takes seconds for a feature-length
-    // run, off the window's thread, both numbered alike and said together.
+    // The graph as PNG alone (issue #261): the difference the band shows is
+    // the Save as... menu's own item (on_export_difference).
     if (!shown_graph()) {
         return;
     }
-    const QString folder = quick_saves.export_folder();
-    const std::optional<std::pair<int, int>> pair = difference_on_ ? shown_difference_pair() : std::nullopt;
-    std::vector<QString> names{png_name()};
-    if (pair) {
-        names.push_back(difference_name(*pair));
-    }
-    std::error_code ignored;
-    std::filesystem::create_directories(path_of(folder), ignored);
-    std::set<std::filesystem::path> reserved;
-    const std::vector<QString> paths = quick_save_paths(folder, names, reserved);
-    ExportOutcome png = save_as(paths.front(), [this](const QString& out) {
-        return render_export_image().save(out) ? QString() : could_not_write(out);
-    });
-    if (!png.error.isEmpty() || !pair) {
-        report_to(export_report, png);
-        return;
-    }
-    write_difference(*pair, paths.back(), png.files);
+    quick_saves.save(quick_saves.export_folder(),
+                     {image_file(png_name(), [this] { return render_export_image(); })}, export_report);
 }
 
 void GraphPanel::on_export_png() {
@@ -2592,7 +2573,7 @@ void GraphPanel::on_export_difference() {
     const QString path =
         dialogs.save_file(app::tr("Export the difference"), difference_name(*pair), app::tr("CSV file (*.csv)"));
     if (!path.isEmpty()) {
-        write_difference(*pair, path, {});
+        write_difference(*pair, path);
     }
 }
 
@@ -2611,18 +2592,18 @@ QString GraphPanel::difference_name(const std::pair<int, int>& pair) const {
         ".csv");
 }
 
-void GraphPanel::write_difference(const std::pair<int, int>& pair, const QString& path, const QStringList& with) {
+void GraphPanel::write_difference(const std::pair<int, int>& pair, const QString& path) {
     // Off the window's thread (a feature-length run's is big), said on the
-    // indicator once written, with the files `with` written before it.
+    // indicator once written.
     const QString description = app::tr("export {name}", {{"name", name_of(path_of(path))}});
     file_writes_->submit(
         description,
         [first = entries_.at(pair.first).result, second = entries_.at(pair.second).result, out = path_of(path)] {
             export_difference_csv(*first, *second, out);
         },
-        [this, path, with, description](const QString& error) {
+        [this, path, description](const QString& error) {
             report_to(export_report,
-                      error.isEmpty() ? ExportOutcome{with + QStringList{path}, {}, {}}
+                      error.isEmpty() ? ExportOutcome{QStringList{path}, {}, {}}
                                       : ExportOutcome{{},
                                                       tr_message(error),
                                                       app::tr("Could not {description}: {error}",

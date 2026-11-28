@@ -331,7 +331,7 @@ QWidget* WorstFramesTab::build_toolbar() {
 }
 
 void WorstFramesTab::offer_menu(QWidget* view, const std::function<void(QMenu*)>& fill) {
-    // A list's or the graph's right-click: its card's save icon's Save as... items.
+    // A list's or the graph's right-click: its card's save button's Save as... items.
     view->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(view, &QWidget::customContextMenuRequested, this, [view, fill](const QPoint& at) {
         QMenu menu;
@@ -983,7 +983,7 @@ void WorstFramesTab::refresh() {
     if (building_) {
         return;
     }
-    // The save icons greyed or not for what is shown now, however this ends.
+    // The save buttons greyed or not for what is shown now, however this ends.
     const auto saves = qScopeGuard([this] {
         for (SaveButton* save : saves_) {
             save->refresh();
@@ -1775,9 +1775,12 @@ std::vector<QuickFile> WorstFramesTab::quick_texts(const QString& stem,
 }
 
 SaveButton* WorstFramesTab::save_button(Card card) {
-    // A card's save icon (issue #224): what it shows, at one click, in the
-    // export folder; its Export items on a right-click.
-    auto* button = new SaveButton;
+    // A card's save button (issues #224, #261): what it shows, at one
+    // click, in the export folder; its Save as... items on its arrow.
+    auto* button = new SaveButton(card == Card::graph   ? app::tr("Save graph")
+                                  : card == Card::worst ? app::tr("Save frames")
+                                                        : app::tr("Save segments"),
+                                  card == Card::graph ? SaveKind::picture : SaveKind::data);
     saves_.push_back(button);
     switch (card) {
     case Card::graph:

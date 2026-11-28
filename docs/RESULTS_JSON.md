@@ -318,7 +318,7 @@ CSV's table.
 A leaner file than the results: a comparison's scores alone, a row a
 metric, with the statistics of its frames and how each was made, as Saved
 Results' details panel shows them. The window saves it (the details panel's
-save icon, the export menus' **Score summary**, Settings > Storage > Exports
+**Save summary**, the export menus' **Score summary**, Settings > Storage > Exports
 include); the command line writes it with `--score-summary FOLDER` (with
 `compare`, `report` and `saved show`), one file of each format a reference,
 `<reference>.score-summary.json` and `.csv`.
@@ -338,8 +338,8 @@ columns' names; numbers at their metric's precision, the bands as `> 90:
 ## Worst frames as JSON and CSV
 
 **Worst frames as JSON...** and **Worst frames as CSV...** on the Worst
-Frames tab (a right-click on its Worst frames card's save icon or on the
-list; the save icon itself writes both at one click) write the dips listed: the metric, the number of dips and the range
+Frames tab (the Worst frames card's **Save frames** arrow, or a right-click
+on the list; **Save frames** itself writes both at one click) write the dips listed: the metric, the number of dips and the range
 shown there.
 
 | Key | Meaning |

@@ -858,7 +858,7 @@ void MainWindow::build_ui() {
     graph_panel_->export_colours = export_colours;
     worst_tab_->export_colours = export_colours;
     // Every tab's exports say how they went on the indicator (build_tab_corner),
-    // and their save icons save in the export folder in Settings' Quick saves
+    // and their save buttons save in the export folder in Settings' Quick saves
     // formats, both read at each save.
     const auto report = [this](const ExportOutcome& outcome) { report_export(outcome); };
     const QuickSaves quick_saves = window_quick_saves();
@@ -1229,9 +1229,9 @@ QHBoxLayout* MainWindow::build_table_heading() {
     metrics_count_label_->setContentsMargins(10, 0, 4, 0);
     table_heading->addWidget(metrics_count_label_, 0, Qt::AlignBottom | Qt::AlignRight);
     table_heading->addWidget(metrics_button_, 0, Qt::AlignBottom);
-    // The card's save icon, at its top right (issue #224): the selected
+    // The card's save button, at its top right (issue #224): the selected
     // videos' results, else every scored video's.
-    videos_save_ = new SaveButton;
+    videos_save_ = new SaveButton(app::tr("Save results"), SaveKind::data);
     videos_save_->why_not = [this] {
         return export_menu_rows().empty()             ? nothing_scored_text()
                : quick_formats(settings_).empty() ? no_format_text()
@@ -1563,7 +1563,7 @@ std::vector<QWidget*> MainWindow::add_file_buttons(QBoxLayout* buttons) {
     connect(model, &QAbstractItemModel::rowsMoved, this, [this] { check_ticks_soon(); });
     connect(model, &QAbstractItemModel::dataChanged, this, [this] { check_ticks_soon(); });
     connect(model, &QAbstractItemModel::modelReset, this, [this] { check_ticks_soon(); });
-    // The card's save icon saves the selected rows' results: grayed or not
+    // The card's save button saves the selected rows' results: grayed or not
     // as the selection changes.
     connect(distorted_table_->selectionModel(), &QItemSelectionModel::selectionChanged, this,
             [this] { videos_save_->refresh(); });

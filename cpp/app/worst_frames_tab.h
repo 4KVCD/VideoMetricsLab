@@ -80,9 +80,9 @@ public:
     // Where its exports say how they went: the window's indicator
     // (export_indicator.h). Not set: nowhere.
     ExportReport export_report;
-    // The export folder and formats its save icons save in (quick_save.h).
+    // The export folder and formats its save buttons save in (quick_save.h).
     QuickSaves quick_saves;
-    // The worst frames list's save icon, the tab's own one-click save.
+    // The worst frames list's save button, the tab's own one-click save.
     SaveButton* worst_save() const { return saves_.size() > 1 ? saves_[1] : nullptr; }
 
     // The videos to choose from (the graph's lines, in their order). The
@@ -155,11 +155,11 @@ private:
     QWidget* build_toolbar();
     // The quick grabs (what the tab shows: the video, the metric, the
     // conditions, the dips and the range), each list's and the graph's: the
-    // same items on a right-click on its card's save icon and on the card.
+    // same items on a right-click on its card's save button and on the card.
     void fill_worst_menu(QMenu* menu);
     void fill_graph_menu(QMenu* menu);
     void fill_segments_menu(QMenu* menu);
-    // A card's save icon (quick_save.h), and its menu on a right-click on
+    // A card's save button (quick_save.h), and its menu on a right-click on
     // `view`, filled by `fill` each time.
     enum class Card { graph, worst, segments };
     SaveButton* save_button(Card card);

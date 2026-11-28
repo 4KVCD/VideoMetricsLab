@@ -286,7 +286,7 @@ public:
     void set_loop_seconds(double before, double after);
     // Loop ticked or not, as last left (the saved settings).
     void set_loop_on(bool on);
-    // Where the frame pair's save icon writes: Settings' Export folder; and
+    // Where the frame pair's save button writes: Settings' Export folder; and
     // the folder its Save as... asks for (nothing: Cancel).
     std::function<QString()> export_folder;
     std::function<QString()> choose_folder;
