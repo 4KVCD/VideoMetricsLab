@@ -1506,7 +1506,24 @@
   "Ready": "Prêt",
   "Ready: no test videos ticked.": "Prêt : aucune vidéo de test cochée.",
   "Ready: {videos}, {metrics}.": "Prêt : {videos}, {metrics}.",
-  "{low} to {high} metrics": "de {low} à {high} métriques"
+  "{low} to {high} metrics": "de {low} à {high} métriques",
+  "Anywhere in the window": "Partout dans la fenêtre",
+  "Choose the reference": "Choisir la référence",
+  "Go to a tab": "Aller à un onglet",
+  "Keyboard shortcuts": "Raccourcis clavier",
+  "Next or previous tab": "Onglet suivant ou précédent",
+  "Pause / resume": "Pause / reprise",
+  "Shortcut: {keys}": "Raccourci : {keys}",
+  "Use the keyboard shortcuts": "Utiliser les raccourcis clavier",
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Désactivés, les raccourcis de la liste (F5, Ctrl+O, Ctrl+1 à Ctrl+8 et les autres) ne font rien. Tab, Ctrl+Tab et les touches de Comparaison vidéo fonctionnent toujours.",
+  "Next or previous section of Settings, or metric of Metric Graphs": "Section suivante ou précédente de Paramètres, ou métrique de Graphiques des métriques",
+  "A frame back or forward (with Shift: ten)": "Une image en arrière ou en avant (avec Maj : dix)",
+  "The first or last frame": "La première ou la dernière image",
+  "Back or forward the graph's width": "En arrière ou en avant de la largeur du graphique",
+  "Zoom in or out": "Zoom avant ou arrière",
+  "The whole graph": "Tout le graphique",
+  "The graph's menu, with Show frame in Video Compare": "Le menu du graphique, avec « Afficher l'image dans Comparaison vidéo »",
+  "Hide the cursor": "Masquer le curseur"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

@@ -1506,7 +1506,24 @@
   "Ready": "就緒",
   "Ready: no test videos ticked.": "就緒：未勾選測試影片。",
   "Ready: {videos}, {metrics}.": "就緒：{videos}，{metrics}。",
-  "{low} to {high} metrics": "{low} 到 {high} 個指標"
+  "{low} to {high} metrics": "{low} 到 {high} 個指標",
+  "Anywhere in the window": "視窗中任何位置",
+  "Choose the reference": "選擇參考影片",
+  "Go to a tab": "前往某個分頁",
+  "Keyboard shortcuts": "鍵盤快速鍵",
+  "Next or previous tab": "下一個或上一個分頁",
+  "Pause / resume": "暫停 / 繼續",
+  "Shortcut: {keys}": "快速鍵：{keys}",
+  "Use the keyboard shortcuts": "使用鍵盤快速鍵",
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "關閉後，清單中的快速鍵（F5、Ctrl+O、Ctrl+1 到 Ctrl+8 等）不起作用。Tab、Ctrl+Tab 和影片比較的按鍵仍可使用。",
+  "Next or previous section of Settings, or metric of Metric Graphs": "設定的下一個或上一個區段，或指標圖表的指標",
+  "A frame back or forward (with Shift: ten)": "後退或前進一個影格（按住 Shift：十個）",
+  "The first or last frame": "第一個或最後一個影格",
+  "Back or forward the graph's width": "後退或前進一個圖表寬度",
+  "Zoom in or out": "放大或縮小",
+  "The whole graph": "整個圖表",
+  "The graph's menu, with Show frame in Video Compare": "圖表的選單，含「在影片比較中顯示此格」",
+  "Hide the cursor": "隱藏游標"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

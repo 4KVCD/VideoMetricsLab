@@ -188,6 +188,8 @@ QGroupBox* BdRatePanel::build_side(Side& side, const QString& title) {
     layout->addLayout(name_row);
 
     side.sequences = new QTableWidget(0, 3);
+    // Tab leaves the table for the next control; the arrows move between its cells.
+    side.sequences->setTabKeyNavigation(false);
     not_exported(side.sequences);  // the encodes compared, not data to save: the table's is the BD-rates
     side.sequences->setHorizontalHeaderLabels({app::tr("Sequence"), app::tr("Encodes"), app::tr("Metrics scored")});
     side.sequences->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -272,6 +274,8 @@ void BdRatePanel::add_results(QVBoxLayout* root) {
     head->addWidget(table_save, 0, Qt::AlignTop);
     layout->addLayout(head);
     results = new QTableWidget(0, 1 + static_cast<int>(metrics().size()));
+    // Tab leaves the table for the next control; the arrows move between its cells.
+    results->setTabKeyNavigation(false);
     // A right-click: the save icon's Save as... items.
     results->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(results, &QWidget::customContextMenuRequested, this, [this](const QPoint& at) {

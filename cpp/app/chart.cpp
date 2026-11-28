@@ -1,6 +1,8 @@
 #include "chart.h"
 
+#include <QContextMenuEvent>
 #include <QEvent>
+#include <QKeyEvent>
 #include <QFontMetrics>
 #include <QLineF>
 #include <QMouseEvent>
@@ -207,6 +209,7 @@ double nice_value_step(double span, double ticks) {
 ChartWidget::ChartWidget(QString y_axis_label, std::optional<double> fixed_y_max, bool invert_y, QWidget* parent)
     : QWidget(parent), y_axis_label_(std::move(y_axis_label)), fixed_y_max_(fixed_y_max), invert_y_(invert_y) {
     setMouseTracking(true);
+    setFocusPolicy(Qt::StrongFocus);  // Tab and a click reach it, for its keys
     setMinimumSize(240, 140);
     setAutoFillBackground(false);
     setAttribute(Qt::WA_OpaquePaintEvent);  // every pixel is painted: no clearing first
@@ -1027,7 +1030,10 @@ void ChartWidget::mouseMoveEvent(QMouseEvent* event) {
     ask_for_hover_frame();
 }
 
-void ChartWidget::report_hover(QPoint pos) { emit hovered(time_at(pos.x()), value_at(pos.y())); }
+void ChartWidget::report_hover(QPoint pos) {
+    key_time_ = time_at(pos.x());  // the keys go on from where the pointer is
+    emit hovered(*key_time_, value_at(pos.y()));
+}
 
 bool ChartWidget::waiting_for_hover_frame() const {
     return hover_frame_asked_ && hover_frame_asked_at_.elapsed() < frames_without_a_frame * frame_ms();
@@ -1127,9 +1133,11 @@ void ChartWidget::wheelEvent(QWheelEvent* event) {
     if (steps == 0) {
         return;
     }
-    const double factor = std::pow(0.8, steps);
+    zoom_by(time_at(event->position().toPoint().x()), std::pow(0.8, steps));
+}
+
+void ChartWidget::zoom_by(double anchor, double factor) {
     const View view = current_view();
-    const double anchor = time_at(event->position().toPoint().x());
     // No narrower than five of the time axis' finest steps: zoomed past them,
     // it would have one label or none.
     const double new_span = std::max(view.span * factor, 5 * time_steps.front());
@@ -1150,6 +1158,119 @@ void ChartWidget::wheelEvent(QWheelEvent* event) {
     view_ = View{new_x0, new_span};
     invalidate();
     emit view_changed();
+}
+
+bool ChartWidget::event(QEvent* event) {
+    if (event->type() == QEvent::ContextMenu &&
+        static_cast<QContextMenuEvent*>(event)->reason() == QContextMenuEvent::Keyboard) {
+        const std::span<const double> times = key_times();
+        if (!times.empty()) {
+            if (!key_time_) {  // none yet: the view's middle
+                const auto [lo, hi] = x_range();
+                move_key_cursor((lo + hi) / 2.0);
+            }
+            // At the cursor, at the top of the lines: a height every point
+            // is at or below, as the keys' readout (move_key_cursor).
+            emit customContextMenuRequested(QPoint(pixel_for_time(*key_time_), lines_rect().top() + 1));
+            event->accept();
+            return true;
+        }
+    }
+    return QWidget::event(event);
+}
+
+std::span<const double> ChartWidget::key_times() const {
+    for (const ChartSeries* series : visible_series()) {
+        if (!series->times.empty()) {
+            return series->times;
+        }
+    }
+    return {};
+}
+
+void ChartWidget::move_key_cursor(double t) {
+    key_time_ = t;
+    bring_into_view(t);
+    // Read out as the pointer is, at a height every point is at or below
+    // (value_at over the band): the frame at the cursor itself, not a dip
+    // near it, which the pointer's readout snaps to.
+    constexpr double infinity = std::numeric_limits<double>::infinity();
+    emit hovered(t, invert_y_ ? -infinity : infinity);
+}
+
+void ChartWidget::keyPressEvent(QKeyEvent* event) {
+    // Left and Right a point (Shift: ten), Home and End the first and last,
+    // Page Up and Down a view's width, + and - zoom around the cursor, 0 the
+    // whole of the data, Esc the cursor away. (The menu key: event.)
+    const std::span<const double> times = key_times();
+    const Qt::KeyboardModifiers modifiers = event->modifiers() & ~Qt::KeypadModifier;
+    const bool plain = modifiers == Qt::NoModifier;
+    const bool shift = modifiers == Qt::ShiftModifier;
+    if (times.empty() || !(plain || shift)) {
+        QWidget::keyPressEvent(event);
+        return;
+    }
+    const auto [view_lo, view_hi] = x_range();
+    // The point at the cursor, or, with none yet, the one in the view's middle.
+    const double at = key_time_.value_or((view_lo + view_hi) / 2.0);
+    const auto nearest = [&times](double t) {
+        const auto found = std::lower_bound(times.begin(), times.end(), t);
+        if (found == times.end()) {
+            return times.size() - 1;
+        }
+        const auto index = static_cast<std::size_t>(found - times.begin());
+        return index > 0 && t - times[index - 1] < *found - t ? index - 1 : index;
+    };
+    const std::size_t index = nearest(at);
+    const auto step_to = [&](long long offset) {
+        const long long last = static_cast<long long>(times.size()) - 1;
+        // Without a cursor yet, the first press puts it in the view's middle.
+        const long long to = key_time_ ? std::clamp(static_cast<long long>(index) + offset, 0LL, last)
+                                       : static_cast<long long>(index);
+        move_key_cursor(times[static_cast<std::size_t>(to)]);
+    };
+    switch (event->key()) {
+    case Qt::Key_Left:
+    case Qt::Key_Right:
+        step_to((event->key() == Qt::Key_Left ? -1 : 1) * (shift ? 10 : 1));
+        break;
+    case Qt::Key_Home:
+    case Qt::Key_End:
+        if (!plain) {
+            QWidget::keyPressEvent(event);
+            return;
+        }
+        move_key_cursor(event->key() == Qt::Key_Home ? times.front() : times.back());
+        break;
+    case Qt::Key_PageUp:
+    case Qt::Key_PageDown:
+        if (!plain) {
+            QWidget::keyPressEvent(event);
+            return;
+        }
+        move_key_cursor(times[nearest(at + (event->key() == Qt::Key_PageUp ? -1 : 1) * (view_hi - view_lo))]);
+        break;
+    case Qt::Key_Plus:
+    case Qt::Key_Equal:
+    case Qt::Key_Minus:
+        zoom_by(at, event->key() == Qt::Key_Minus ? 2.0 : 0.5);
+        break;
+    case Qt::Key_0:
+        reset_view();
+        break;
+    case Qt::Key_Escape:
+        if (!key_time_) {
+            QWidget::keyPressEvent(event);
+            return;
+        }
+        key_time_.reset();
+        emit left();
+        break;
+    default:
+        QWidget::keyPressEvent(event);
+        return;
+    }
+    event->accept();
 }
 
 QPixmap ChartWidget::render_to_pixmap(const theme::ChartColours& colours) const {

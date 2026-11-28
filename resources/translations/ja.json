@@ -1506,7 +1506,24 @@
   "Ready": "準備完了",
   "Ready: no test videos ticked.": "準備完了：チェックされたテスト動画はありません。",
   "Ready: {videos}, {metrics}.": "準備完了：{videos}、{metrics}。",
-  "{low} to {high} metrics": "{low}〜{high} 個の指標"
+  "{low} to {high} metrics": "{low}〜{high} 個の指標",
+  "Anywhere in the window": "ウィンドウ内のどこでも",
+  "Choose the reference": "参照動画を選択",
+  "Go to a tab": "タブに移動",
+  "Keyboard shortcuts": "キーボードショートカット",
+  "Next or previous tab": "次または前のタブ",
+  "Pause / resume": "一時停止 / 再開",
+  "Shortcut: {keys}": "ショートカット: {keys}",
+  "Use the keyboard shortcuts": "キーボードショートカットを使う",
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "オフにすると、一覧のショートカット (F5、Ctrl+O、Ctrl+1～Ctrl+8 など) は何もしません。Tab、Ctrl+Tab と動画比較のキーは引き続き使えます。",
+  "Next or previous section of Settings, or metric of Metric Graphs": "設定 の次または前のセクション、または 指標グラフ の指標",
+  "A frame back or forward (with Shift: ten)": "1 フレーム戻る/進む (Shift で 10)",
+  "The first or last frame": "最初または最後のフレーム",
+  "Back or forward the graph's width": "グラフの幅だけ戻る/進む",
+  "Zoom in or out": "拡大または縮小",
+  "The whole graph": "グラフ全体",
+  "The graph's menu, with Show frame in Video Compare": "グラフのメニュー (「このフレームを動画比較で表示」を含む)",
+  "Hide the cursor": "カーソルを隠す"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

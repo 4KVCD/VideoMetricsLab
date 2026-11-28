@@ -311,6 +311,8 @@ void BitratePanel::add_file_controls(QBoxLayout* root) {
 // The files' table.
 void BitratePanel::add_table(QBoxLayout* root) {
     table = new QTableWidget(0, 9);
+    // Tab leaves the table for the next control; the arrows move between its cells.
+    table->setTabKeyNavigation(false);
     not_exported(table);  // the files to read: their data is the graph card's save
     auto* swatches = new ColorSwatchDelegate(table);
     connect(swatches, &ColorSwatchDelegate::clicked, this, [this](int row) { choose_video_color(row); });

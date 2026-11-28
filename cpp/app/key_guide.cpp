@@ -33,13 +33,21 @@ QFont scaled(const QFont& font, double factor) {
 
 }  // namespace
 
+std::vector<KeyRow> video_compare_keys() {
+    return {
+        {{QStringLiteral("S")}, app::tr("Hold to see the source")},
+        {{QString::fromUtf8("\xE2\x86\x90"), QString::fromUtf8("\xE2\x86\x92")}, app::tr("Switch test video")},  // ← →
+        {{app::tr("Space")}, app::tr("Play / pause")},
+    };
+}
+
 KeyGuide::KeyGuide(QWidget* parent) : QFrame(parent) {
     setObjectName(QStringLiteral("keyGuide"));
     grid_ = new QGridLayout(this);
-    add_row(0, {QStringLiteral("S")}, app::tr("Hold to see the source"));
-    add_row(1, {QString::fromUtf8("\xE2\x86\x90"), QString::fromUtf8("\xE2\x86\x92")},  // ← →
-            app::tr("Switch test video"));
-    add_row(2, {app::tr("Space")}, app::tr("Play / pause"));
+    int row = 0;
+    for (const KeyRow& keys : video_compare_keys()) {
+        add_row(row++, keys.keys, keys.action);
+    }
     set_scale(scales.front());
     show_look();
 }

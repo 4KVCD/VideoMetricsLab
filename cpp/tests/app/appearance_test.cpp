@@ -49,6 +49,7 @@
 #include <vector>
 
 #include "chart.h"
+#include "keyboard.h"
 #include "main_window.h"
 #include "quick_save.h"
 #include "theme.h"
@@ -250,6 +251,36 @@ TEST_F(Appearance, ClassicHasNoStyleSheetOfItsOwn) {
     EXPECT_EQ(box_->title(), "Framed in Classic");
 }
 
+QPushButton* window_button(QWidget& window, const QString& text) {
+    for (QPushButton* button : window.findChildren<QPushButton*>()) {
+        if (button->text() == text && button->isVisible()) {
+            return button;
+        }
+    }
+    return nullptr;
+}
+
+void settle() {
+    QApplication::processEvents();  // the focus's change, then the ring's move queued after it
+    QApplication::processEvents();
+}
+
+TEST_F(Appearance, NoFocusRingInClassic) {
+    ASSERT_EQ(theme::current_interface(), theme::Interface::classic);  // run before Modern
+    window_->activateWindow();
+    QApplication::processEvents();
+    ASSERT_EQ(QApplication::activeWindow(), window_);
+    QPushButton* add = window_button(*window_, "Add files");
+    ASSERT_NE(add, nullptr);
+    add->clearFocus();  // focused anew
+    add->setFocus(Qt::TabFocusReason);
+    settle();
+    EXPECT_TRUE(keyboard::focus_visible());
+    const keyboard::FocusRing* ring = keyboard::ring_in(window_);
+    EXPECT_TRUE(ring == nullptr || !ring->isVisible());
+    keyboard::set_focus_visible(false);
+}
+
 // Every widget given a role is given one the style sheet styles: a role
 // misspelt, or one added without its rule, would be drawn as no role at all,
 // and only in Modern, where a review of Classic alone would not see it.
@@ -370,6 +401,44 @@ TEST_F(Appearance, NoLineAboveTheWindowsTabsInModern) {
         EXPECT_EQ(bar.pixelColor(selected.center().x(), y), ground) << "above the selected tab, row " << y;
         EXPECT_EQ(bar.pixelColor(other.center().x(), y), ground) << "above another tab, row " << y;
     }
+}
+
+// The control the keys moved to has a ring of the accent around it in VML
+// Modern, whose style sheet draws the buttons' own focus too faintly to see
+// (keyboard.h); a click takes the ring away, as on Windows. Classic draws
+// none: the system's style shows the focus.
+TEST_F(Appearance, AFocusRingAroundTheControlTheKeysMovedToInModern) {
+    ASSERT_EQ(theme::current_interface(), theme::Interface::modern);  // run after ModernLight
+    window_->activateWindow();
+    QApplication::processEvents();
+    ASSERT_EQ(QApplication::activeWindow(), window_);
+    QPushButton* add = window_button(*window_, "Add files");
+    ASSERT_NE(add, nullptr);
+    add->clearFocus();  // focused anew
+    add->setFocus(Qt::TabFocusReason);
+    settle();
+    ASSERT_TRUE(keyboard::focus_visible());
+    keyboard::FocusRing* ring = keyboard::ring_in(window_);
+    ASSERT_NE(ring, nullptr);
+    ASSERT_TRUE(ring->isVisible());
+    const QRect button(add->mapTo(window_, QPoint()), add->size());
+    const int out = keyboard::FocusRing::gap + keyboard::FocusRing::width;
+    EXPECT_EQ(ring->geometry(), button.adjusted(-out, -out, out, out));
+    // Drawn in the accent, along the middle of its top edge, over what is under it.
+    const QImage drawn = window_->grab().toImage();
+    EXPECT_EQ(drawn.pixelColor(button.center().x(), button.top() - out), accent);
+    EXPECT_EQ(drawn.pixelColor(button.center().x(), button.top() - out + 1), accent);
+
+    const QPointF at(4, 4);
+    QMouseEvent press(QEvent::MouseButtonPress, at, add->mapToGlobal(at), Qt::LeftButton, Qt::LeftButton,
+                      Qt::NoModifier);
+    QApplication::sendEvent(add, &press);
+    QMouseEvent release(QEvent::MouseButtonRelease, QPointF(-50, -50), add->mapToGlobal(QPointF(-50, -50)),
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);  // released off it: not a click
+    QApplication::sendEvent(add, &release);
+    settle();
+    EXPECT_FALSE(keyboard::focus_visible());
+    EXPECT_FALSE(ring->isVisible());
 }
 
 // Issue #203: a left click on a slider jumps to the click in Modern, as in

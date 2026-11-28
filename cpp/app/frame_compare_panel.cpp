@@ -1,5 +1,6 @@
 #include "frame_compare_panel.h"
 
+#include <QAbstractButton>
 #include <QAbstractSpinBox>
 #include <QApplication>
 #include <QCheckBox>
@@ -28,6 +29,7 @@
 #include <thread>
 
 #include "i18n.h"
+#include "keyboard.h"
 #include "key_guide.h"
 #include "metric_order.h"
 #include "text_panel.h"
@@ -1016,8 +1018,11 @@ bool FrameComparePanel::eventFilter(QObject* watched, QEvent* event) {
     }
     if (key != nullptr && type == QEvent::KeyPress && key->key() == Qt::Key_Space && unmodified) {
         QWidget* focus = QApplication::focusWidget();
+        // A button or check box the keys moved to (its focus ring shown)
+        // takes Space, as on Windows; one clicked last leaves it to play.
+        const bool focus_takes_space = keyboard::focus_visible() && qobject_cast<QAbstractButton*>(focus) != nullptr;
         if (qobject_cast<QLineEdit*>(focus) == nullptr && qobject_cast<QAbstractSpinBox*>(focus) == nullptr &&
-            qobject_cast<QComboBox*>(focus) == nullptr) {
+            qobject_cast<QComboBox*>(focus) == nullptr && !focus_takes_space) {
             if (!key->isAutoRepeat()) {
                 on_play_clicked();
             }

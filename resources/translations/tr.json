@@ -1506,7 +1506,24 @@
   "Ready": "Hazır",
   "Ready: no test videos ticked.": "Hazır: işaretli test videosu yok.",
   "Ready: {videos}, {metrics}.": "Hazır: {videos}, {metrics}.",
-  "{low} to {high} metrics": "{low} ile {high} arası metrik"
+  "{low} to {high} metrics": "{low} ile {high} arası metrik",
+  "Anywhere in the window": "Pencerenin herhangi bir yerinde",
+  "Choose the reference": "Referansı seç",
+  "Go to a tab": "Bir sekmeye git",
+  "Keyboard shortcuts": "Klavye kısayolları",
+  "Next or previous tab": "Sonraki veya önceki sekme",
+  "Pause / resume": "Duraklat / sürdür",
+  "Shortcut: {keys}": "Kısayol: {keys}",
+  "Use the keyboard shortcuts": "Klavye kısayollarını kullan",
+  "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Kapalıyken listedeki kısayollar (F5, Ctrl+O, Ctrl+1 ile Ctrl+8 arası ve diğerleri) hiçbir şey yapmaz. Tab, Ctrl+Tab ve Video Karşılaştırma tuşları çalışmaya devam eder.",
+  "Next or previous section of Settings, or metric of Metric Graphs": "Ayarlar içinde sonraki veya önceki bölüm ya da Metrik grafikleri içinde metrik",
+  "A frame back or forward (with Shift: ten)": "Bir kare geri veya ileri (Shift ile: on)",
+  "The first or last frame": "İlk veya son kare",
+  "Back or forward the graph's width": "Grafiğin genişliği kadar geri veya ileri",
+  "Zoom in or out": "Yakınlaştır veya uzaklaştır",
+  "The whole graph": "Grafiğin tamamı",
+  "The graph's menu, with Show frame in Video Compare": "Grafiğin menüsü, “Kareyi Video karşılaştırmada göster” ile",
+  "Hide the cursor": "İmleci gizle"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

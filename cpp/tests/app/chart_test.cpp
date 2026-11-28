@@ -6,7 +6,9 @@
 
 #include <QColor>
 #include <QCoreApplication>
+#include <QContextMenuEvent>
 #include <QImage>
+#include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QStringList>
@@ -20,6 +22,7 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -649,6 +652,62 @@ TEST(ExportChartColours, ThePaletteAskedForWithTheColoursChosen) {
     EXPECT_EQ(chosen.highlight, theme::chart_colours(true).highlight);  // the palette's own
     // A colour that is not one is not chosen.
     EXPECT_TRUE(same(theme::export_chart_colours("dark", "not a colour", ""), theme::chart_colours(true)));
+}
+
+// The keys (with the focus): Left and Right step the cursor through the
+// first line's points, read out as the pointer would be at a height every
+// point is at or below (the frame itself, not a dip near it); Shift steps
+// ten; Home and End go to the ends; + zooms around the cursor and 0 shows
+// all of it again; the menu key opens the right-click menu at the cursor;
+// Esc takes the cursor away (#260's keyboard path to Show frame).
+TEST_F(ChartTest, TheKeysStepZoomAndOpenTheMenuAtTheCursor) {
+    ChartWidget chart(QStringLiteral("VMAF"), 100.0);
+    chart.resize(800, 400);
+    std::vector<double> times;
+    std::vector<float> values;
+    for (int frame = 0; frame < 100; ++frame) {
+        times.push_back(frame / 25.0);
+        values.push_back(frame == 50 ? 40.0F : 90.0F);
+    }
+    chart.set_series(0, line_of(times, values));
+    std::vector<double> read;
+    double height = 0;
+    QObject::connect(&chart, &ChartWidget::hovered, [&](double t, double y) {
+        read.push_back(t);
+        height = y;
+    });
+    std::optional<QPoint> menu;
+    QObject::connect(&chart, &QWidget::customContextMenuRequested, [&](const QPoint& at) { menu = at; });
+    bool left = false;
+    QObject::connect(&chart, &ChartWidget::left, [&] { left = true; });
+    const auto press = [&chart](int key, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+        QKeyEvent event(QEvent::KeyPress, key, modifiers);
+        QCoreApplication::sendEvent(&chart, &event);
+    };
+    EXPECT_NE(chart.focusPolicy() & Qt::TabFocus, 0);
+    press(Qt::Key_Home);
+    press(Qt::Key_Right);
+    press(Qt::Key_Right, Qt::ShiftModifier);
+    press(Qt::Key_End);
+    press(Qt::Key_Left);
+    EXPECT_EQ(read, (std::vector<double>{times[0], times[1], times[11], times[99], times[98]}));
+    EXPECT_EQ(height, std::numeric_limits<double>::infinity());
+    press(Qt::Key_Plus);
+    const auto [lo, hi] = chart.x_range();
+    EXPECT_LT(hi - lo, times.back() - times.front());
+    EXPECT_LE(lo, times[98]);
+    EXPECT_GE(hi, times[98]);
+    press(Qt::Key_0);
+    EXPECT_EQ(chart.x_range(), std::pair(times.front(), times.back()));
+    // The menu key and Shift+F10, as Windows sends them: a context menu
+    // event at the chart's middle.
+    QContextMenuEvent keyboard_menu(QContextMenuEvent::Keyboard, chart.rect().center(), chart.mapToGlobal(chart.rect().center()));
+    QCoreApplication::sendEvent(&chart, &keyboard_menu);
+    ASSERT_TRUE(menu.has_value());
+    EXPECT_EQ(menu->x(), chart.pixel_for_time(times[98]));
+    EXPECT_TRUE(chart.plot_rect().contains(*menu));
+    press(Qt::Key_Escape);
+    EXPECT_TRUE(left);
 }
 
 }  // namespace
