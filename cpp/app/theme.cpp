@@ -1154,6 +1154,7 @@ QComboBox QAbstractItemView::item:hover { background: {hover}; }
 QComboBox QAbstractItemView::item:selected { background: {accent_tint}; color: {text}; }
 QComboBox QAbstractItemView::item:disabled { color: {disabled}; }
 QTabWidget::pane { border: 0; border-top: 1px solid {border}; top: -1px; }
+QTabBar { qproperty-drawBase: 0; }
 QTabBar::tab { background: transparent; color: {text_muted}; border: 0; border-bottom: 2px solid transparent; padding: 6px 12px; margin-right: 2px; }
 QTabBar::tab:selected { color: {text}; font-weight: 600; border-bottom: 2px solid {accent}; }
 QTabBar::tab:hover:!selected { color: {text}; border-bottom: 2px solid {border_strong}; }
