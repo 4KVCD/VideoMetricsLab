@@ -6,6 +6,7 @@
 #include <QBrush>
 #include <QComboBox>
 #include <QGroupBox>
+#include <QEvent>
 #include <QFrame>
 #include <QGuiApplication>
 #include <QHBoxLayout>
@@ -18,12 +19,14 @@
 #include <QPainterPath>
 #include <QPointer>
 #include <QProxyStyle>
+#include <QRegularExpression>
 #include <QScrollBar>
 #include <QStyle>
 #include <QStyleFactory>
 #include <QStyleOption>
 #include <QStyleHints>
 #include <QStyledItemDelegate>
+#include <QTimer>
 #include <QTableWidgetItem>
 #include <QtPlugin>
 #include <QVBoxLayout>
@@ -389,6 +392,21 @@ public:
 
     using QProxyStyle::polish;
 
+    // Tick boxes and radio buttons at the text's size (text_scale), as
+    // their labels are: Fusion's are a fixed size.
+    int pixelMetric(PixelMetric metric, const QStyleOption* option, const QWidget* widget) const override {
+        const int pixels = QProxyStyle::pixelMetric(metric, option, widget);
+        switch (metric) {
+        case PM_IndicatorWidth:
+        case PM_IndicatorHeight:
+        case PM_ExclusiveIndicatorWidth:
+        case PM_ExclusiveIndicatorHeight:
+            return static_cast<int>(std::lround(pixels * text_scale()));
+        default:
+            return pixels;
+        }
+    }
+
     // A drop-down's open list (issue #250). QComboBox asks for this rect as
     // it opens the list, once the list exists and before it measures its
     // rows or makes its window: the list is made as the sheet draws it here,
@@ -530,6 +548,7 @@ struct Appearance {
     std::optional<QColor> accent;
     QString classic_style;
     bool applied = false;
+    double text_scale = 1.0;  // text_scale() when the containers' room was last set
     QString sheet;
     std::optional<bool> dark;
     std::optional<QString> looks;  // looks_key()'s, when the palette was set
@@ -677,10 +696,18 @@ int& sheet_holds() {
     return holds;
 }
 
+void show_for_interface();  // below, with the widgets it shows
+
 void apply_sheet(bool dark) {
     Appearance& applied = appearance();
-    const QString sheet =
-        applied.ui == Interface::modern ? modern_style_sheet(dark, accent_in_use(dark)) : QString();
+    // At the text's size (text_scale): made again when it changes, with the
+    // containers' room.
+    const QString sheet = applied.ui == Interface::modern
+                              ? scaled_sheet(modern_style_sheet(dark, accent_in_use(dark)), text_scale())
+                              : QString();
+    if (applied.ui == Interface::modern && applied.text_scale != text_scale()) {
+        show_for_interface();
+    }
     if (sheet_holds() > 0) {
         applied.sheet = sheet;  // set when the last SheetHeld goes
         return;
@@ -688,6 +715,7 @@ void apply_sheet(bool dark) {
     if (sheet != applied.sheet || qApp->styleSheet() != sheet) {
         applied.sheet = sheet;
         qApp->setStyleSheet(sheet);
+        apply_text_size();  // a style sheet set reads Windows' fonts for some kinds of widget again
     }
 }
 
@@ -702,6 +730,37 @@ bool scheme_is_dark() {
     return QApplication::style()->standardPalette().window().color().lightness() < 128;
 }
 
+// Windows' settings changed (a ThemeChange, sent to every window): the
+// application font at Windows' Text size again (apply_text_size). A new
+// application font: Modern's sizes made again for it (text_scale). Each
+// once for a burst of them.
+class FontWatch : public QObject {
+public:
+    using QObject::QObject;
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        // Every event in the app passes here: the type, the cheapest test, first.
+        if (event->type() == QEvent::ApplicationFontChange && watched == qApp && !due_) {
+            due_ = true;
+            QTimer::singleShot(0, this, [this] {
+                due_ = false;
+                refresh();
+            });
+        } else if (event->type() == QEvent::ThemeChange && !size_due_) {
+            size_due_ = true;
+            QTimer::singleShot(0, this, [this] {
+                size_due_ = false;
+                apply_text_size();
+            });
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    bool due_ = false;
+    bool size_due_ = false;
+};
 // The widgets style() styled, and their templates. A widget leaves when it
 // is destroyed.
 QHash<QWidget*, QString>& styled() {
@@ -1016,6 +1075,7 @@ void apply_appearance(Interface ui, std::optional<QColor> accent) {
     }
     Appearance& applied = appearance();
     if (!applied.applied) {
+        qApp->installEventFilter(new FontWatch(qApp));  // the application owns it
         applied.classic_style = QApplication::style()->name();
         applied.system_accent = QGuiApplication::palette().color(QPalette::Accent);
         applied.applied = true;
@@ -1059,6 +1119,7 @@ SheetHeld::SheetHeld() {
     // there are few widgets to restyle.
     if (++sheet_holds() == 1 && QApplication::instance() != nullptr && !qApp->styleSheet().isEmpty()) {
         qApp->setStyleSheet(QString());
+        apply_text_size();
     }
 }
 
@@ -1066,6 +1127,7 @@ SheetHeld::~SheetHeld() {
     if (--sheet_holds() == 0 && appearance().applied && QApplication::instance() != nullptr &&
         qApp->styleSheet() != appearance().sheet) {
         qApp->setStyleSheet(appearance().sheet);
+        apply_text_size();  // as apply_sheet
     }
 }
 
@@ -1114,6 +1176,7 @@ std::vector<Margins>& containers() {
 // in use has it.
 void show_for_interface() {
     const bool modern = appearance().ui == Interface::modern;
+    appearance().text_scale = text_scale();
     auto& widgets = interface_only();
     std::erase_if(widgets, [](const InterfaceOnly& item) { return item.widget.isNull(); });
     for (const InterfaceOnly& item : widgets) {
@@ -1132,7 +1195,7 @@ void show_for_interface() {
     auto& padded = containers();
     std::erase_if(padded, [](const Margins& item) { return item.widget.isNull(); });
     for (const Margins& item : padded) {
-        item.widget->layout()->setContentsMargins(modern ? item.modern : item.classic);
+        item.widget->layout()->setContentsMargins(modern ? scaled(item.modern) : item.classic);
     }
 }
 
@@ -1169,7 +1232,7 @@ void classic_box(QGroupBox* box, const QString& title) {
 void modern_margins(QWidget* widget, const QMargins& modern) {
     const QMargins classic = widget->layout()->contentsMargins();
     containers().push_back({widget, modern, classic});
-    widget->layout()->setContentsMargins(appearance().ui == Interface::modern ? modern : classic);
+    widget->layout()->setContentsMargins(appearance().ui == Interface::modern ? scaled(modern) : classic);
 }
 
 QWidget* container(const char* role, bool horizontal, QBoxLayout** layout) {
@@ -1184,7 +1247,7 @@ QWidget* container(const char* role, bool horizontal, QBoxLayout** layout) {
                              : name == "toolbar"                 ? QMargins(10, 6, 10, 6)
                                                                  : QMargins();
     containers().push_back({widget, margins, QMargins()});
-    box->setContentsMargins(appearance().ui == Interface::modern ? margins : QMargins());
+    box->setContentsMargins(appearance().ui == Interface::modern ? scaled(margins) : QMargins());
     if (layout != nullptr) {
         *layout = box;
     }
@@ -1216,6 +1279,96 @@ QColor text_on(const QColor& colour) {
     const float with_black = (luminance + 0.05F) / 0.05F;
     const float with_white = 1.05F / (luminance + 0.05F);
     return with_black >= with_white ? QColor("#141416") : QColor("#ffffff");
+}
+
+double system_text_scale() {
+#ifdef _WIN32
+    DWORD percent = 0;
+    DWORD size = sizeof(percent);
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Accessibility", L"TextScaleFactor", RRF_RT_REG_DWORD,
+                     nullptr, &percent, &size) == ERROR_SUCCESS) {
+        return std::clamp(static_cast<double>(percent), 100.0, 225.0) / 100.0;  // Settings' range
+    }
+#endif
+    return 1.0;  // never set: 100 %
+}
+
+void apply_text_size() {
+    if (QApplication::instance() == nullptr) {
+        return;
+    }
+    // The fonts Qt gave the app (the system's), kept from the first call:
+    // the ones set here are not the system's any more. Qt gives some kinds
+    // of widget a font of their own from the system (a table's cells and
+    // headings, menus, tooltips), which the application font does not
+    // reach: each of those too.
+    static const char* const classes[] = {"QAbstractItemView", "QListView", "QHeaderView", "QMenu", "QMenuBar",
+                                          "QTipLabel", "QToolButton", "QComboMenuItem", "QMessageBoxLabel",
+                                          "QStatusBar", "QDockWidgetTitle", "QMdiSubWindowTitleBar", "QMenuItem",
+                                          "QComboLineEdit"};
+    static const QFont system_font = QApplication::font();
+    static const std::vector<QFont> system_class_fonts = [] {
+        std::vector<QFont> fonts;
+        for (const char* name : classes) {
+            fonts.push_back(QApplication::font(name));
+        }
+        return fonts;
+    }();
+    const double scale = system_text_scale();
+    const auto at_scale = [scale](QFont font) {
+        if (font.pointSizeF() > 0) {
+            font.setPointSizeF(font.pointSizeF() * scale);
+        } else if (font.pixelSize() > 0) {  // Windows' own fonts for some kinds of widget are in pixels
+            font.setPixelSize(static_cast<int>(std::lround(font.pixelSize() * scale)));
+        }
+        return font;
+    };
+    // Each set only where it differs: setting the application's style reads
+    // the system's class fonts again.
+    if (const QFont font = at_scale(system_font); font != QApplication::font()) {
+        QApplication::setFont(font);  // every widget's FontChange; Modern's sizes follow (FontWatch)
+    }
+    for (std::size_t i = 0; i < std::size(classes); ++i) {
+        if (const QFont font = at_scale(system_class_fonts[i]); font != QApplication::font(classes[i])) {
+            QApplication::setFont(font, classes[i]);
+        }
+    }
+}
+
+double text_scale() {
+    if (QGuiApplication::instance() == nullptr) {
+        return 1.0;
+    }
+#ifdef __APPLE__
+    constexpr double system_points = 13.0;  // macOS' system font
+#else
+    constexpr double system_points = 9.0;   // Segoe UI's, at 100 % text size
+#endif
+    const double points = QGuiApplication::font().pointSizeF();
+    return points > system_points ? points / system_points : 1.0;
+}
+
+int scaled(int pixels) { return static_cast<int>(std::lround(pixels * text_scale())); }
+
+QMargins scaled(const QMargins& margins) {
+    return {scaled(margins.left()), scaled(margins.top()), scaled(margins.right()), scaled(margins.bottom())};
+}
+
+QString scaled_sheet(const QString& sheet, double scale) {
+    if (scale == 1.0) {
+        return sheet;
+    }
+    static const QRegularExpression size(QStringLiteral(R"re((?<![\w.#-])(\d+)px)re"));
+    QString result;
+    qsizetype at = 0;
+    for (const QRegularExpressionMatch& match : size.globalMatch(sheet)) {
+        result += sheet.mid(at, match.capturedStart() - at);
+        const int pixels = match.captured(1).toInt();
+        result += QString::number(pixels < 3 ? pixels : static_cast<int>(std::lround(pixels * scale))) +
+                  QStringLiteral("px");
+        at = match.capturedEnd();
+    }
+    return result + sheet.mid(at);
 }
 
 QColor modern_colour(const char* name, bool dark) {

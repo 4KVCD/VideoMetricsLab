@@ -50,6 +50,7 @@
 #include <utility>
 
 #include "i18n.h"
+#include "theme.h"
 
 namespace vml::app {
 
@@ -1589,7 +1590,10 @@ void RemoveMarkDelegate::paint(QPainter* painter, const QStyleOptionViewItem& op
         colour.setAlphaF(0.35F);
     }
     QPen pen(colour);
-    pen.setWidthF(hovered ? 2.2 : 1.2);
+    // At the text's size (theme::text_scale), as the row's text is.
+    const double scale = theme::text_scale();
+    const int side = theme::scaled(mark);
+    pen.setWidthF((hovered ? 2.2 : 1.2) * scale);
     pen.setCapStyle(Qt::RoundCap);
     pen.setJoinStyle(Qt::RoundJoin);
     QColor tint = colour;
@@ -1598,28 +1602,28 @@ void RemoveMarkDelegate::paint(QPainter* painter, const QStyleOptionViewItem& op
     painter->setRenderHint(QPainter::Antialiasing);
     painter->setPen(pen);
     painter->setBrush(hovered ? QBrush(tint) : Qt::NoBrush);
-    const QRectF square(QPointF(0, 0), QSizeF(mark - 1, mark - 1));
+    const QRectF square(QPointF(0, 0), QSizeF(side - 1, side - 1));
     const QRectF placed = square.translated(QRectF(option.rect).center() - square.center());
     if (shape_ == Shape::remove) {
         painter->drawEllipse(placed);
-        const double arm = (mark - 1) * 0.2;
+        const double arm = (side - 1) * 0.2;
         const QPointF centre = placed.center();
         painter->drawLine(centre + QPointF(-arm, -arm), centre + QPointF(arm, arm));
         painter->drawLine(centre + QPointF(-arm, arm), centre + QPointF(arm, -arm));
     } else {
         // A box open on its right, an arrow leaving it there.
         const double left = placed.left();
-        const double top = placed.top() + 1.5;
-        const double bottom = placed.bottom() - 1.5;
+        const double top = placed.top() + 1.5 * scale;
+        const double bottom = placed.bottom() - 1.5 * scale;
         const double right = placed.left() + placed.width() * 0.62;
         const double middle = placed.center().y();
         QPainterPath box;
-        box.moveTo(right, middle - 2.6);
+        box.moveTo(right, middle - 2.6 * scale);
         box.lineTo(right, top);
         box.lineTo(left, top);
         box.lineTo(left, bottom);
         box.lineTo(right, bottom);
-        box.lineTo(right, middle + 2.6);
+        box.lineTo(right, middle + 2.6 * scale);
         if (hovered) {
             painter->fillRect(QRectF(QPointF(left, top), QPointF(right, bottom)), tint);
         }
@@ -1643,7 +1647,8 @@ QSize RemoveMarkDelegate::sizeHint(const QStyleOptionViewItem& option, const QMo
     // "✕" (Segoe UI has no such letter) sent Qt through the PC's fonts for
     // one, a quarter of a second the first time and some 20 MB. A line of
     // the cell's font is as tall as the text was.
-    return {mark + 12, std::max(mark + 6, option.fontMetrics.height())};
+    const int side = theme::scaled(mark);
+    return {side + theme::scaled(12), std::max(side + theme::scaled(6), option.fontMetrics.height())};
 }
 
 bool RemoveMarkDelegate::helpEvent(QHelpEvent* event, QAbstractItemView* view, const QStyleOptionViewItem& option,

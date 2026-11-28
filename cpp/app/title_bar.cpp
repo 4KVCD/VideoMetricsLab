@@ -118,7 +118,7 @@ protected:
         painter.drawText(pill, Qt::AlignCenter, text());
     }
     QSize sizeHint() const override {
-        return QSize(fontMetrics().horizontalAdvance(text()) + 24, 30);
+        return QSize(fontMetrics().horizontalAdvance(text()) + 24, theme::scaled(30));
     }
 };
 
@@ -153,9 +153,7 @@ TitleButtons::TitleButtons(QWidget* parent) : QWidget(parent) {
     if (glyph_font().isEmpty()) {
         theme_->setText(QStringLiteral("\u25D0"));  // a circle half dark
     } else {
-        QFont font(glyph_font());
-        font.setPixelSize(14);
-        theme_->setFont(font);
+        size_glyphs();
         theme_->setText(QStringLiteral("\uE790"));  // Color
     }
     // No arrow: the button is its glyph alone.
@@ -194,6 +192,24 @@ TitleButtons::TitleButtons(QWidget* parent) : QWidget(parent) {
     connect(theme_menu_, &QMenu::aboutToShow, this, &TitleButtons::theme_menu_opening);
     theme_->setMenu(theme_menu_);
     row->addWidget(theme_);
+}
+
+void TitleButtons::size_glyphs() {
+    if (!glyph_font().isEmpty()) {
+        QFont font(glyph_font());
+        font.setPixelSize(theme::scaled(14));
+        theme_->setFont(font);
+    }
+}
+
+void TitleButtons::changeEvent(QEvent* event) {
+    if (event->type() == QEvent::FontChange) {  // a new text size: the glyph's too
+        size_glyphs();
+        for (QWidget* button : findChildren<QToolButton*>()) {
+            button->updateGeometry();
+        }
+    }
+    QWidget::changeEvent(event);
 }
 
 void TitleButtons::set_progress(const Progress& progress) {
@@ -277,9 +293,6 @@ public:
         setText(std::move(glyph));
         setFocusPolicy(Qt::NoFocus);
         setAttribute(Qt::WA_Hover);
-        QFont font(glyph_font());
-        font.setPixelSize(10);
-        setFont(font);
     }
     void set_hot(bool hot) {
         if (hot_ != hot) {
@@ -294,7 +307,10 @@ public:
         }
     }
     bool pressed() const { return pressed_; }
-    QSize sizeHint() const override { return QSize(46, 32); }
+    // Windows' own size at 100 % text size, larger with the text
+    // (theme::text_scale) so that a larger title fits; Windows' own title
+    // bars keep theirs.
+    QSize sizeHint() const override { return QSize(theme::scaled(46), theme::scaled(32)); }
 
 protected:
     void paintEvent(QPaintEvent*) override {
@@ -314,6 +330,9 @@ protected:
             glyph = ink;
         }
         painter.setPen(glyph);
+        QFont font(glyph_font());
+        font.setPixelSize(theme::scaled(10));
+        painter.setFont(font);
         painter.drawText(rect(), Qt::AlignCenter, text());
     }
     void leaveEvent(QEvent* event) override {
@@ -371,7 +390,7 @@ bool TitleBar::wanted() {
 }
 
 TitleBar::TitleBar(QWidget* window, bool dialog) : QWidget(window), window_(window), dialog_(dialog) {
-    setFixedHeight(bar_height);
+    setFixedHeight(theme::scaled(bar_height));
     setAutoFillBackground(false);
     auto* row = new QHBoxLayout(this);
     row->setContentsMargins(10, 0, 0, 0);
@@ -668,6 +687,12 @@ void TitleBar::paintEvent(QPaintEvent*) {
 void TitleBar::changeEvent(QEvent* event) {
     if (event->type() == QEvent::PaletteChange) {
         show_active();
+    }
+    if (event->type() == QEvent::FontChange) {  // a new text size: the bar's height, and its buttons'
+        setFixedHeight(theme::scaled(bar_height));
+        for (QAbstractButton* button : findChildren<QAbstractButton*>()) {
+            button->updateGeometry();
+        }
     }
     QWidget::changeEvent(event);
 }

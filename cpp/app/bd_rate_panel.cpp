@@ -111,7 +111,7 @@ std::vector<int> choose_from_list(QWidget* parent, const QStringList& items) {
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
         item->setCheckState(Qt::Unchecked);
     }
-    list->setMinimumWidth(560);
+    list->setMinimumWidth(theme::scaled(560));
     layout->addWidget(list);
     add_dialog_buttons(dialog, layout);
     std::vector<int> chosen;
@@ -334,7 +334,7 @@ void BdRatePanel::add_chart(QVBoxLayout* root) {
             menu.exec(chart->mapToGlobal(at));
         }
     });
-    chart->setMinimumHeight(300);
+    chart->setMinimumHeight(theme::scaled(300));
     layout->addWidget(chart);
     root->addWidget(card);
 }

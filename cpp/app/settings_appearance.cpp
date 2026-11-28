@@ -238,7 +238,7 @@ QWidget* SettingsPanel::build_appearance_page() {
     for (const auto& [name, hex] : accent_presets) {
         auto* swatch = new QPushButton;
         swatch->setCheckable(true);
-        swatch->setFixedSize(28, 28);
+        swatch->setFixedSize(theme::scaled(28), theme::scaled(28));
         swatch->setToolTip(app::tr(name));
         swatch->setAccessibleName(app::tr(name));
         swatch->setProperty("hex", QString::fromLatin1(hex));

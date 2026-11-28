@@ -234,6 +234,35 @@ QWidget* container(const char* role, bool horizontal, QBoxLayout** layout = null
 // button).
 QColor text_on(const QColor& colour);
 
+// Windows' Text size (Settings > Accessibility > Text size) as a factor: 1
+// at 100 %, up to 2.25; 1 on macOS. Windows does not enlarge the system font
+// Qt gives the application with it (only WinUI apps follow it), so the app
+// reads it itself.
+double system_text_scale();
+
+// The application font at system_text_scale(): the font Qt gave the app,
+// its point size multiplied. Before the window is built (main), and again
+// when Windows says its settings changed (apply_appearance watches), so
+// every widget's text, Qt's own too, follows Windows' Text size.
+void apply_text_size();
+
+// How much larger the window's text is than the system's own at 100 %
+// (apply_text_size; 9 points, as Segoe UI's is), never less than 1.
+// VML Modern's own sizes, which Qt's widgets would not otherwise take from
+// the font, are multiplied by it: the style sheet's, a container's room,
+// the tick boxes, the title bar, a row's mark. The display's scale is
+// Qt's own (device pixels) and is not in it.
+double text_scale();
+
+// `pixels` at text_scale(), rounded; `margins` likewise.
+int scaled(int pixels);
+QMargins scaled(const QMargins& margins);
+
+// `sheet` with each size of 3 pixels or more multiplied by `scale`, rounded:
+// paddings, margins, radii, minimum sizes. 1 and 2 pixels (edges, a tab's
+// underline) are kept, as Windows keeps its own lines thin at any text size.
+QString scaled_sheet(const QString& sheet, double scale);
+
 // The Modern interface's colours by name, for dark or light: the palette's
 // and the style sheet's. In a contrast theme, the system's (contrast_colour),
 // whatever `dark`.

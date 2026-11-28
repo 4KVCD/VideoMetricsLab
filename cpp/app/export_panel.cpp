@@ -170,7 +170,7 @@ ExportPanel::ExportPanel(Settings& settings, QWidget* parent) : PopupPanel(paren
     });
     buttons->addWidget(export_);
     layout->addLayout(buttons);
-    setMinimumWidth(420);
+    setMinimumWidth(theme::scaled(420));
 }
 
 void ExportPanel::refresh() {
