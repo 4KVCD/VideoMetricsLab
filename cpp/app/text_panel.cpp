@@ -5,11 +5,9 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
-#include <QScreen>
 #include <QTimer>
 #include <QVBoxLayout>
 
-#include <algorithm>
 
 #include "i18n.h"
 #include "theme.h"
@@ -60,20 +58,5 @@ void TextPanel::set_text(const QString& text) {
 }
 
 QString TextPanel::text() const { return text_->text(); }
-
-void TextPanel::open_under(QWidget* anchor) {
-    set_anchor(anchor);
-    adjustSize();
-    QPoint at = anchor->mapToGlobal(QPoint(anchor->width() - width(), anchor->height() + 2));
-    if (const QScreen* screen = anchor->screen()) {
-        const QRect room = screen->availableGeometry();
-        at.setX(std::clamp(at.x(), room.left(), std::max(room.left(), room.right() - width())));
-        if (at.y() + height() > room.bottom()) {
-            at.setY(anchor->mapToGlobal(QPoint(0, 0)).y() - height() - 2);  // above it where there is no room below
-        }
-    }
-    move(at);
-    show();
-}
 
 }  // namespace vml::app

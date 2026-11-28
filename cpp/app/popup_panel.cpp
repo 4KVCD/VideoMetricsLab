@@ -3,6 +3,9 @@
 #include <QAbstractButton>
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QScreen>
+
+#include <algorithm>
 
 namespace vml::app {
 
@@ -72,6 +75,21 @@ void PopupPanel::hold_anchor_down(bool down) {
 void PopupPanel::open_on_press(QAbstractButton* button, std::function<void()> open) {
     button->installEventFilter(new ClosingPressFilter(button));
     QObject::connect(button, &QAbstractButton::pressed, button, [open = std::move(open)] { open(); });
+}
+
+void PopupPanel::open_under(QWidget* anchor, bool left_edges) {
+    set_anchor(anchor);
+    adjustSize();
+    QPoint at = anchor->mapToGlobal(QPoint(left_edges ? 0 : anchor->width() - width(), anchor->height() + 2));
+    if (const QScreen* screen = anchor->screen()) {
+        const QRect room = screen->availableGeometry();
+        at.setX(std::clamp(at.x(), room.left(), std::max(room.left(), room.right() - width())));
+        if (at.y() + height() > room.bottom()) {
+            at.setY(anchor->mapToGlobal(QPoint(0, 0)).y() - height() - 2);  // above it where there is no room below
+        }
+    }
+    move(at);
+    show();
 }
 
 void PopupPanel::showEvent(QShowEvent* event) {

@@ -24,9 +24,6 @@ public:
     // shown at once (a selection in it is lost).
     void set_text(const QString& text);
     QString text() const;
-    // Opens it under `anchor`, its right edge on the anchor's (as the Export
-    // panel opens), kept on screen.
-    void open_under(QWidget* anchor);
 
     QPushButton* copy_button() const { return copy_; }
 

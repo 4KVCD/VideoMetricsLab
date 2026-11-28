@@ -29,6 +29,7 @@
 #include "app_dialog.h"
 #include "i18n.h"
 #include "metric_order.h"
+#include "popup_panel.h"
 #include "rate_curve_chart.h"
 #include "theme.h"
 #include "vml/append.h"
@@ -100,10 +101,19 @@ QTableWidgetItem* text_item(const QString& text) {
     return item;
 }
 
-// The real dialog for BdRatePanel::choose_videos: a tick list.
-std::vector<int> choose_from_list(QWidget* parent, const QStringList& items) {
-    AppDialog dialog(parent, app::tr("Add scored videos"));
-    auto* layout = new QVBoxLayout(dialog.body());
+// The real chooser for BdRatePanel::choose_videos: a tick list in a panel
+// under the button (issue #239), Add adding the videos ticked. Esc or a
+// click outside closes it, adding none.
+void choose_in_panel(QWidget* anchor, const QStringList& items,
+                     const std::function<void(const std::vector<int>&)>& add) {
+    auto* panel = new PopupPanel(anchor->window());
+    panel->setObjectName(QStringLiteral("addScoredVideos"));
+    panel->setAttribute(Qt::WA_DeleteOnClose);
+    panel->setAccessibleName(app::tr("Add scored videos"));
+    auto* layout = new QVBoxLayout(panel);
+    auto* heading = new QLabel(app::tr("Add scored videos"));
+    theme::set_role(heading, "title");
+    layout->addWidget(heading);
     layout->addWidget(new QLabel(app::tr("Tick the videos to add.")));
     auto* list = new QListWidget;
     for (const QString& text : items) {
@@ -112,17 +122,35 @@ std::vector<int> choose_from_list(QWidget* parent, const QStringList& items) {
         item->setCheckState(Qt::Unchecked);
     }
     list->setMinimumWidth(560);
+    // As tall as its videos, up to a dozen: no empty rows below a few.
+    const int rows = std::clamp(static_cast<int>(items.size()), 1, 12);
+    list->setFixedHeight(list->sizeHintForRow(0) * rows + 2 * list->frameWidth() + 4);
     layout->addWidget(list);
-    add_dialog_buttons(dialog, layout);
-    std::vector<int> chosen;
-    if (dialog.exec() == QDialog::Accepted) {
+    auto* buttons = new QHBoxLayout;
+    buttons->addStretch(1);
+    auto* add_button = new QPushButton(app::tr("Add"));
+    theme::set_role(add_button, "primary");
+    add_button->setEnabled(false);  // until one is ticked
+    buttons->addWidget(add_button);
+    layout->addLayout(buttons);
+    const auto ticked = [list] {
+        std::vector<int> chosen;
         for (int row = 0; row < list->count(); ++row) {
             if (list->item(row)->checkState() == Qt::Checked) {
                 chosen.push_back(row);
             }
         }
-    }
-    return chosen;
+        return chosen;
+    };
+    QObject::connect(list, &QListWidget::itemChanged, add_button,
+                     [add_button, ticked] { add_button->setEnabled(!ticked().empty()); });
+    QObject::connect(add_button, &QPushButton::clicked, panel, [panel, ticked, add] {
+        const std::vector<int> chosen = ticked();
+        panel->close();
+        add(chosen);
+    });
+    panel->open_under(anchor, true);  // the button is at its card's left
+    list->setFocus();
 }
 
 // A side's one-encode table for a scored video.
@@ -151,7 +179,7 @@ QString video_source_key(const GraphPanel::Run& run) {
 BdRatePanel::BdRatePanel(std::function<std::vector<GraphPanel::Run>()> runs, QWidget* parent)
     : QWidget(parent), runs_(std::move(runs)) {
     dialogs = standard_dialogs(this);
-    choose_videos = [this](const QStringList& items) { return choose_from_list(this, items); };
+    choose_videos = choose_in_panel;
     copy_text = [](const QString& text) { QGuiApplication::clipboard()->setText(text); };
 
     auto* root = new QVBoxLayout(this);
@@ -206,7 +234,8 @@ QGroupBox* BdRatePanel::build_side(Side& side, const QString& title) {
     side.import_button->setToolTip(app::tr(import_tooltip));
     side.clear_button = new QPushButton(app::tr("Clear"));
     theme::set_role(side.clear_button, "quiet");  // VML Modern: read as text, a line apart
-    connect(side.add_videos_button, &QPushButton::clicked, this, [this, &side] { on_add_videos(side); });
+    // A panel under the button, opened on its press as a menu is.
+    PopupPanel::open_on_press(side.add_videos_button, [this, &side] { on_add_videos(side); });
     connect(side.import_button, &QPushButton::clicked, this, [this, &side] { on_import(side); });
     connect(side.clear_button, &QPushButton::clicked, this, [this, &side] { on_clear(side); });
     buttons->addWidget(side.add_videos_button);
@@ -362,8 +391,16 @@ void BdRatePanel::on_add_videos(Side& side) {
                               {"reference", qt_text(platform::path_text(result.source.filename()))},
                               {"rate", rate}}));
     }
+    // The panel opens on the button's press (connected in build_side), and
+    // what it adds comes later: the runs are the ones listed.
+    choose_videos(side.add_videos_button, items,
+                  [this, &side, runs](const std::vector<int>& chosen) { add_chosen_videos(side, runs, chosen); });
+}
+
+void BdRatePanel::add_chosen_videos(Side& side, const std::vector<GraphPanel::Run>& runs,
+                                    const std::vector<int>& chosen) {
     QStringList unknown;
-    for (const int index : choose_videos(items)) {
+    for (const int index : chosen) {
         const GraphPanel::Run& run = runs[static_cast<std::size_t>(index)];
         const std::optional<RateTable::Encode> encode = rate_encode(*run.result);
         const QString name = qt_text(platform::path_text(run.result->distorted.filename()));

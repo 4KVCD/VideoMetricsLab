@@ -7,6 +7,7 @@
 #include <QDoubleSpinBox>
 #include <QHeaderView>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPushButton>
@@ -26,6 +27,7 @@
 
 #include "chart.h"
 #include "graph_legend.h"
+#include "in_place_name.h"
 #include "worst_frames_tab.h"
 
 #include "quick_save.h"
@@ -35,6 +37,16 @@
 
 namespace vml::app {
 namespace {
+
+// A name typed in the profile field and Enter pressed (in_place_name.h).
+void type_name(InPlaceName* field, const QString& name) {
+    ASSERT_TRUE(field->asking());
+    field->line_edit()->setText(name);
+    field->commit();
+}
+
+// Why the name typed was refused, said beside the field; empty: it was not.
+QString refused(const InPlaceName* field) { return field->problem_line()->text(); }
 
 // A result with VMAF's `values`, a frame each at 30 a second.
 std::shared_ptr<const ComparisonResult> vmaf_result(const std::string& name, const std::vector<float>& values) {
@@ -525,13 +537,7 @@ TEST(WorstFramesTab, StartsFromAProfileAndSavesOnlyWhenAsked) {
     settings.weak_segments_all = true;
     settings.weak_segment_merge_frames = 3;
     settings.weak_segment_profiles_json = R"([{"name": "Strict", "conditions": ["vmaf<92"]}])";
-    QStringList names{"Mine", "strict"};
-    QString alerted;
     Dialogs dialogs;
-    dialogs.ask_text = [&names](const QString&, const QString&, const QString&) -> std::optional<QString> {
-        return names.takeFirst();
-    };
-    dialogs.alert = [&alerted](const QString& title, const QString&) { alerted = title; };
     Bench bench(settings, dialogs);
     WorstFramesTab* shown = &bench.tab;
     shown->set_videos({{"row:a", "a", vmaf_result("a.mkv", values)}});
@@ -566,14 +572,16 @@ TEST(WorstFramesTab, StartsFromAProfileAndSavesOnlyWhenAsked) {
     // Saved as a new profile, which is then the one picked; a name taken
     // (any case) is refused.
     shown->save_new_button()->click();
+    type_name(shown->profile_name_field(), "Mine");
     ASSERT_EQ(bench.saved.size(), 2U);
     EXPECT_EQ(bench.saved[1].first, "Mine");
     EXPECT_EQ(shown->profile_combo()->currentText(), "Mine");
     EXPECT_EQ(condition_texts(segment_profile_named(settings, "Mine")->rules.conditions),
               std::vector<std::string>{"vmaf<92"});
     shown->save_new_button()->click();
+    type_name(shown->profile_name_field(), "strict");
     EXPECT_EQ(bench.saved.size(), 2U);
-    EXPECT_EQ(alerted, "Profile not saved");
+    EXPECT_FALSE(refused(shown->profile_name_field()).isEmpty());
 }
 
 TEST(WorstFramesTab, TakesProfilesChangedInSettings) {
@@ -586,11 +594,6 @@ TEST(WorstFramesTab, TakesProfilesChangedInSettings) {
     settings.weak_segment_conditions = {"vmaf<70"};
     settings.weak_segment_profiles_json = R"([{"name": "Strict", "conditions": ["vmaf<92"]}])";
     Dialogs dialogs;
-    QString alerted;
-    dialogs.ask_text = [](const QString&, const QString&, const QString&) -> std::optional<QString> {
-        return QStringLiteral("film");
-    };
-    dialogs.alert = [&alerted](const QString& title, const QString&) { alerted = title; };
     WorstFramesTab tab(dialogs);
     const auto hand_back = [&] {
         tab.set_segment_profiles(segment_profiles(settings), segment_profile_in_use(settings).name);
@@ -612,7 +615,8 @@ TEST(WorstFramesTab, TakesProfilesChangedInSettings) {
     EXPECT_EQ(condition_texts(tab.rules().conditions), std::vector<std::string>{"vmaf<92"});  // kept
 
     tab.save_new_button()->click();
-    EXPECT_EQ(alerted, "Profile not saved");
+    type_name(tab.profile_name_field(), "film");
+    EXPECT_FALSE(refused(tab.profile_name_field()).isEmpty());
     EXPECT_EQ(condition_texts(segment_profile_named(settings, "Film")->rules.conditions),
               std::vector<std::string>{"vmaf<80"});
     ASSERT_TRUE(tab.save_button()->isEnabled());

@@ -34,6 +34,7 @@
 #include "popup_panel.h"
 #include "export_image.h"
 #include "i18n.h"
+#include "in_place_name.h"
 #include "metric_order.h"
 #include "theme.h"
 #include "widgets.h"
@@ -391,7 +392,9 @@ QWidget* WorstFramesTab::build_conditions() {
             refresh();
         }
     });
-    profile_row->addWidget(profile_combo_);
+    // Save as new profile asks for the name here, in the field.
+    profile_name_ = new InPlaceName(profile_combo_);
+    profile_row->addWidget(profile_name_);
     preset_button_ = new QPushButton(app::tr("From preset"));
     preset_button_->setToolTip(app::tr("Loads a starting point for a kind of video into these conditions, "
                                        "replacing them, to adjust as needed. Save to profile keeps them."));
@@ -413,32 +416,34 @@ QWidget* WorstFramesTab::build_conditions() {
     });
     profile_row->addStretch(1);
     column->addLayout(profile_row);
+    // Why a name typed can't be used, under the field (in_place_name.h).
+    column->addWidget(profile_name_->problem_line());
     auto* save_row = new QHBoxLayout;
     save_row->addWidget(save_button_);
     save_new_button_ = new QPushButton(app::tr("Save as new profile"));
     connect(save_new_button_, &QPushButton::clicked, this, [this] {
-        const std::optional<QString> name =
-            dialogs_.ask_text(app::tr("New weak segment profile"), app::tr("Profile name:"), QString());
-        if (!name) {
-            return;
-        }
-        const std::string text = std::string(python_strip(name->toStdString()));
-        if (!segment_profile_name_free(profiles_, text)) {
-            dialogs_.alert(app::tr("Profile not saved"),
-                           app::tr("A profile needs a name of its own, without commas, and not Default or another "
-                                   "profile's."));
-            return;
-        }
-        saved_ = rules_to_save();
-        preset_loaded_ = false;
-        profiles_.push_back({text, saved_});
-        {
-            const QSignalBlocker blocker(profile_combo_);  // shown as it is, not started again
-            profile_combo_->addItem(qt_text(text), qt_text(text));
-            profile_combo_->setCurrentIndex(profile_combo_->count() - 1);
-        }
-        emit rules_saved(text, saved_);  // the window hands the profiles back (set_segment_profiles)
-        show_saved_state();
+        profile_name_->ask(
+            QString(),
+            [this](const QString& name) -> std::optional<QString> {
+                if (segment_profile_name_free(profiles_, name.toStdString())) {
+                    return std::nullopt;
+                }
+                return app::tr("A profile needs a name of its own, without commas, and not Default or another "
+                               "profile's.");
+            },
+            [this](const QString& name) {
+                const std::string text = name.toStdString();
+                saved_ = rules_to_save();
+                preset_loaded_ = false;
+                profiles_.push_back({text, saved_});
+                {
+                    const QSignalBlocker blocker(profile_combo_);  // shown as it is, not started again
+                    profile_combo_->addItem(qt_text(text), qt_text(text));
+                    profile_combo_->setCurrentIndex(profile_combo_->count() - 1);
+                }
+                emit rules_saved(text, saved_);  // the window hands the profiles back (set_segment_profiles)
+                show_saved_state();
+            });
     });
     save_row->addWidget(save_new_button_);
     save_row->addStretch(1);

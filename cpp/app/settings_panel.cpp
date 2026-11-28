@@ -55,6 +55,7 @@
 #include "file_writes.h"
 #include "formatting.h"
 #include "i18n.h"
+#include "in_place_name.h"
 #include "metric_list.h"
 #include "metric_order.h"
 #include "results_export.h"
@@ -687,7 +688,9 @@ QGroupBox* SettingsPanel::build_weak_segments_box() {
     profile_row->addWidget(new QLabel(app::tr("Profile:")));
     weak_profile = new QComboBox;
     weak_profile->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    profile_row->addWidget(weak_profile);
+    // New and Rename ask for the name here, in the field (in_place_name.h).
+    weak_profile_name = new InPlaceName(weak_profile);
+    profile_row->addWidget(weak_profile_name);
     auto* new_profile = new QPushButton(app::tr("New"));
     new_profile->setToolTip(app::tr("A new profile, starting from this one's rules."));
     connect(new_profile, &QPushButton::clicked, this, [this] { new_weak_profile(); });
@@ -714,6 +717,8 @@ QGroupBox* SettingsPanel::build_weak_segments_box() {
     profile_row->addWidget(weak_profile_delete);
     profile_row->addStretch(1);
     layout->addLayout(profile_row);
+    // Why a name typed can't be used, under the field (in_place_name.h).
+    layout->addWidget(weak_profile_name->problem_line());
     const auto shown_keys = [] {
         std::vector<std::string> keys;
         for (const MetricDefinition* definition : shown_metrics()) {
@@ -762,25 +767,34 @@ void SettingsPanel::fill_weak_profiles() {
     weak_segments->set_rules(in_use.rules);
 }
 
+namespace {
+
+// Why `name` can't name a profile among `others`: nothing where it can.
+std::optional<QString> profile_name_problem(const std::vector<SegmentProfile>& others,
+                                                           const QString& name) {
+    if (segment_profile_name_free(others, name.toStdString())) {
+        return std::nullopt;
+    }
+    return app::tr("A profile needs a name of its own, without commas, and not Default or another "
+                               "profile's.");
+}
+
+}  // namespace
+
 void SettingsPanel::new_weak_profile() {
-    const std::optional<QString> name =
-        dialogs_.ask_text(app::tr("New weak segment profile"), app::tr("Profile name:"), QString());
-    if (!name) {
-        return;
-    }
-    const std::string text = std::string(python_strip(name->toStdString()));
-    if (!segment_profile_name_free(segment_profiles(settings_), text)) {
-        dialogs_.alert(app::tr("Profile not saved"),
-                       app::tr("A profile needs a name of its own, without commas, and not Default or another "
-                               "profile's."));
-        return;
-    }
-    store_segment_profile(settings_, text, weak_segments->rules());
-    settings_.weak_segment_profile = text;
-    fill_weak_profiles();
-    on_edited();
-    // The settings changed before on_edited looked: told here.
-    emit weak_segment_rules_changed();
+    // The name typed in the profile field, the list given back once it is.
+    weak_profile_name->ask(
+        QString(),
+        [this](const QString& name) { return profile_name_problem(segment_profiles(settings_), name); },
+        [this](const QString& name) {
+            const std::string text = name.toStdString();
+            store_segment_profile(settings_, text, weak_segments->rules());
+            settings_.weak_segment_profile = text;
+            fill_weak_profiles();
+            on_edited();
+            // The settings changed before on_edited looked: told here.
+            emit weak_segment_rules_changed();
+        });
 }
 
 void SettingsPanel::load_weak_preset(std::string_view key) {
@@ -798,37 +812,35 @@ void SettingsPanel::load_weak_preset(std::string_view key) {
 }
 
 void SettingsPanel::rename_weak_profile() {
-    std::vector<SegmentProfile> profiles = segment_profiles(settings_);
     const std::string current = segment_profile_in_use(settings_).name;
     if (current.empty()) {
         return;
     }
-    const std::optional<QString> name =
-        dialogs_.ask_text(app::tr("Rename weak segment profile"), app::tr("Profile name:"), text_of(current));
-    if (!name) {
-        return;
-    }
-    const std::string text = std::string(python_strip(name->toStdString()));
-    std::vector<SegmentProfile> others;
-    std::copy_if(profiles.begin(), profiles.end(), std::back_inserter(others),
-                 [&current](const SegmentProfile& profile) { return profile.name != current; });
-    if (!segment_profile_name_free(others, text)) {
-        dialogs_.alert(app::tr("Profile not renamed"),
-                       app::tr("A profile needs a name of its own, without commas, and not Default or another "
-                               "profile's."));
-        return;
-    }
-    for (SegmentProfile& profile : profiles) {
-        if (profile.name == current) {
-            profile.name = text;
+    const auto others = [this, current] {
+        std::vector<SegmentProfile> others;
+        for (const SegmentProfile& profile : segment_profiles(settings_)) {
+            if (profile.name != current) {
+                others.push_back(profile);
+            }
         }
-    }
-    store_segment_profiles(settings_, profiles);
-    settings_.weak_segment_profile = text;
-    fill_weak_profiles();
-    on_edited();
-    // The settings changed before on_edited looked: told here.
-    emit weak_segment_rules_changed();
+        return others;
+    };
+    weak_profile_name->ask(
+        text_of(current), [others](const QString& name) { return profile_name_problem(others(), name); },
+        [this, current](const QString& name) {
+            std::vector<SegmentProfile> profiles = segment_profiles(settings_);
+            for (SegmentProfile& profile : profiles) {
+                if (profile.name == current) {
+                    profile.name = name.toStdString();
+                }
+            }
+            store_segment_profiles(settings_, profiles);
+            settings_.weak_segment_profile = name.toStdString();
+            fill_weak_profiles();
+            on_edited();
+            // The settings changed before on_edited looked: told here.
+            emit weak_segment_rules_changed();
+        });
 }
 
 void SettingsPanel::delete_weak_profile() {

@@ -61,9 +61,13 @@ public:
     ExportReport export_report;
     // The export folder and formats its save icons save in (quick_save.h).
     QuickSaves quick_saves;
-    // Which of `items` (the scored videos) to add: their places in the list;
-    // none for Cancel.
-    std::function<std::vector<int>(const QStringList& items)> choose_videos;
+    // Asks which of `items` (the scored videos) to add, in a panel under
+    // `anchor` (the side's Add videos), as Add/remove metrics asks: `add` is
+    // given their places in the list once they are chosen, and is not called
+    // where none are (the panel closed).
+    using ChooseVideos = std::function<void(QWidget* anchor, const QStringList& items,
+                                            const std::function<void(const std::vector<int>&)>& add)>;
+    ChooseVideos choose_videos;
     // Puts text on the clipboard.
     std::function<void(const QString& text)> copy_text;
 
@@ -141,6 +145,8 @@ private:
     QString chart_name() const;
     void on_copy();
     void on_show_warnings();
+    // Add videos' second half: the chosen of `runs` into `side`.
+    void add_chosen_videos(Side& side, const std::vector<GraphPanel::Run>& runs, const std::vector<int>& chosen);
     // A side's sources changed: its table, the group choices and the report.
     void side_changed(Side& side);
     void refresh_side_table(Side& side);

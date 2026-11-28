@@ -4,8 +4,10 @@
 #include "bd_rate_panel.h"
 
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QFile>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMenu>
 #include <QPushButton>
 #include <QTableWidget>
@@ -20,12 +22,19 @@
 #include <string>
 #include <vector>
 
+#include "popup_panel.h"
 #include "rate_curve_chart.h"
 #include "theme.h"
 #include "vml/platform/system.h"
 
 namespace vml::app {
 namespace {
+
+// The Add videos panel answered at once, as `pick` picks.
+BdRatePanel::ChooseVideos answer(std::function<std::vector<int>(const QStringList&)> pick) {
+    return [pick = std::move(pick)](QWidget*, const QStringList& items,
+                                    const std::function<void(const std::vector<int>&)>& add) { add(pick(items)); };
+}
 
 // A CSV file in `folder` with `text`; its path.
 QString write_csv(const QTemporaryDir& folder, const QString& name, const QByteArray& text) {
@@ -166,11 +175,11 @@ TEST(BdRatePanel, ShowsTheBdRatesOfTwoEncoders) {
 
     // Scored videos: the one without a bitrate refused, the whole file's
     // rate among the warnings
-    panel.choose_videos = [](const QStringList& items) {
+    panel.choose_videos = answer([](const QStringList& items) {
         EXPECT_EQ(items.size(), 3);
         EXPECT_EQ(items[0], "q27.mkv (reference baseball.y4m, 6551 kb/s)");
         return std::vector<int>{0, 1, 2};
-    };
+    });
     panel.anchor.add_videos_button->click();
     EXPECT_EQ(informed, QStringList{"Bitrate unknown"});
     EXPECT_EQ(panel.anchor.sources.size(), 3u);
@@ -196,11 +205,11 @@ TEST(BdRatePanel, ScoredVideosFollowTheirLines) {
     std::vector<GraphPanel::Run> runs{scored_run("refs/clip.y4m", 2000000, false, "q27"),
                                       scored_run("refs/clip.y4m", 1000000, false, "q32")};
     BdRatePanel panel([&runs] { return runs; });
-    panel.choose_videos = [](const QStringList& items) {
+    panel.choose_videos = answer([](const QStringList& items) {
         std::vector<int> all(static_cast<std::size_t>(items.size()));
         std::iota(all.begin(), all.end(), 0);
         return all;
-    };
+    });
     QStringList informed;
     panel.dialogs.inform = [&informed](const QString& title, const QString&) { informed.append(title); };
     panel.anchor.add_videos_button->click();
@@ -234,11 +243,11 @@ TEST(BdRatePanel, AVideoScoredAgainKeepsItsPlace) {
     };
     std::vector<GraphPanel::Run> runs{run_of("run:1", 2000000)};
     BdRatePanel panel([&runs] { return runs; });
-    panel.choose_videos = [](const QStringList& items) {
+    panel.choose_videos = answer([](const QStringList& items) {
         std::vector<int> all(static_cast<std::size_t>(items.size()));
         std::iota(all.begin(), all.end(), 0);
         return all;
-    };
+    });
     panel.anchor.add_videos_button->click();
     ASSERT_EQ(panel.anchor.sources.size(), 1u);
 
@@ -263,7 +272,7 @@ TEST(BdRatePanel, WarnsOfTwoReferencesOfOneName) {
                                       scored_run("two/clip.y4m", 1000000, false, "b")};
     int asked = 0;
     BdRatePanel panel([&runs] { return runs; });
-    panel.choose_videos = [&asked](const QStringList&) { return std::vector<int>{asked++}; };
+    panel.choose_videos = answer([&asked](const QStringList&) { return std::vector<int>{asked++}; });
     panel.anchor.add_videos_button->click();
     panel.test.add_videos_button->click();
     const QString warning = "clip: its encodes have different references, " +
@@ -335,6 +344,41 @@ TEST(BdRatePanel, ImportsEncodesFromJson) {
     EXPECT_EQ(panel.anchor.name_edit->text(), "x264");
     ASSERT_EQ(panel.anchor.sequences->rowCount(), 1);
     EXPECT_EQ(panel.anchor.sequences->item(0, 0)->text(), "s1");
+}
+
+// Add videos asks in a panel under the button, as Add/remove metrics does
+// (issue #239), not a dialog: Add adds what is ticked; closed, it adds none.
+TEST(BdRatePanel, AddVideosAsksInAPanelUnderTheButton) {
+    std::vector<GraphPanel::Run> runs{scored_run("refs/clip.y4m", 2000000, false, "q27"),
+                                      scored_run("refs/clip.y4m", 1000000, false, "q32")};
+    BdRatePanel panel([&runs] { return runs; });
+    panel.anchor.add_videos_button->click();
+    auto* asked = panel.window()->findChild<PopupPanel*>("addScoredVideos");
+    ASSERT_NE(asked, nullptr);
+    EXPECT_TRUE(asked->isVisible());
+    auto* list = asked->findChild<QListWidget*>();
+    ASSERT_EQ(list->count(), 2);
+    QPushButton* add = nullptr;
+    for (QPushButton* button : asked->findChildren<QPushButton*>()) {
+        if (button->text() == "Add") {
+            add = button;
+        }
+    }
+    ASSERT_NE(add, nullptr);
+    EXPECT_FALSE(add->isEnabled());  // nothing ticked
+    list->item(1)->setCheckState(Qt::Checked);
+    ASSERT_TRUE(add->isEnabled());
+    add->click();
+    ASSERT_EQ(panel.anchor.sources.size(), 1U);
+    EXPECT_EQ(panel.anchor.sources[0].second.encodes.front().kbps, 1000);
+
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);  // the first panel gone
+    EXPECT_EQ(panel.window()->findChild<PopupPanel*>("addScoredVideos"), nullptr);
+    panel.test.add_videos_button->click();
+    auto* again = panel.window()->findChild<PopupPanel*>("addScoredVideos");
+    ASSERT_NE(again, nullptr);
+    again->close();  // Esc, or a click outside
+    EXPECT_TRUE(panel.test.sources.empty());
 }
 
 }  // namespace

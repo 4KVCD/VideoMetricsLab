@@ -81,6 +81,7 @@ class ClickTwice;
 class ElidedLabel;
 class CvvdpDisplayDialog;
 class FfmpegDownload;
+class FfmpegSetupDialog;
 class FileWrites;
 class StreamRecords;
 class BdRatePanel;
@@ -1063,6 +1064,13 @@ private:
     QPushButton* locate_ffmpeg_button_ = nullptr;
     QPushButton* download_ffmpeg_button_ = nullptr;  // Windows only
     FfmpegDownload* ffmpeg_download_ = nullptr;  // while one runs
+    // FFmpeg's setup while it is open: the one dialog for an ffmpeg the app
+    // can't use, where what goes wrong on the way is said (issue #239).
+    QPointer<FfmpegSetupDialog> ffmpeg_setup_;
+    // Opens it (or keeps it open), `problem` on its line; empty: none.
+    void open_ffmpeg_setup(const QString& problem = {});
+    // What it says is wrong, from tools_status_.
+    QString ffmpeg_setup_text() const;
     QuietTabWidget* tabs_ = nullptr;
     QGroupBox* files_box_ = nullptr;
     QLineEdit* source_edit_ = nullptr;

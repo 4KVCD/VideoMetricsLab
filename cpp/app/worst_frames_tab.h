@@ -50,6 +50,8 @@ class QVBoxLayout;
 
 namespace vml::app {
 
+class InPlaceName;
+
 class ChartWidget;
 class ElidedLabel;
 class TabPills;
@@ -129,6 +131,7 @@ public:
     QSpinBox* count_spin() const { return count_spin_; }
     QPushButton* save_button() const { return save_button_; }
     QPushButton* save_new_button() const { return save_new_button_; }
+    InPlaceName* profile_name_field() const { return profile_name_; }
     QPushButton* preset_button() const { return preset_button_; }
     QLabel* conditions_note() const { return conditions_note_; }
     ChartWidget* chart() const { return chart_; }
@@ -303,6 +306,7 @@ private:
     QTabBar* metric_bar_ = nullptr;  // hidden: metric_pills_ shows its tabs
     TabPills* metric_pills_ = nullptr;
     QComboBox* profile_combo_ = nullptr;
+    InPlaceName* profile_name_ = nullptr;  // holds profile_combo_; Save as new profile types the name in it
     QPushButton* preset_button_ = nullptr;
     QPushButton* save_button_ = nullptr;
     QPushButton* save_new_button_ = nullptr;

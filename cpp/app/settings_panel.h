@@ -56,6 +56,8 @@ struct SavedComparison;
 
 namespace vml::app {
 
+class InPlaceName;
+
 class MetricList;
 
 class FileWrites;
@@ -202,6 +204,7 @@ public:
     // Weak segments: the profile in use (its name the data, "" for Default),
     // its New, Rename and Delete, and the editor of its rules.
     QComboBox* weak_profile = nullptr;
+    InPlaceName* weak_profile_name = nullptr;  // holds weak_profile; New and Rename type the name in it
     QPushButton* weak_profile_rename = nullptr;
     QPushButton* weak_profile_delete = nullptr;
     SegmentRulesEditor* weak_segments = nullptr;
