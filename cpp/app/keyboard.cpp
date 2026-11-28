@@ -110,8 +110,22 @@ protected:
                 break;  // the same key on its way up to the focus's parents
             }
             if (moves_focus(*key) && !visible) {
-                visible = true;
-                queue();
+                if (key->key() == Qt::Key_Tab || key->key() == Qt::Key_Backtab) {
+                    visible = true;
+                    queue();
+                } else {
+                    // An arrow or paging key shows the ring only if it moved
+                    // the focus, seen once the key has been handled: one a
+                    // panel takes for itself (Video Compare's arrows switch
+                    // the test video) leaves a clicked control unringed, and
+                    // Space there still plays.
+                    QTimer::singleShot(0, this, [this, before = QPointer<QWidget>(QApplication::focusWidget())] {
+                        if (!visible && QApplication::focusWidget() != before) {
+                            visible = true;
+                            queue();
+                        }
+                    });
+                }
             }
             if (visible && press_with_enter(*key)) {
                 return true;

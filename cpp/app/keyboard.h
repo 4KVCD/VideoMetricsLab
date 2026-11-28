@@ -5,8 +5,8 @@
 // then draws their focus faintly or not at all: a tinted box behind a
 // button's text, nothing on a tab or a table. Modern draws a ring of its
 // accent around the control the keys have moved to instead, as Windows 11
-// and browsers do (:focus-visible): from the first Tab, arrow or shortcut
-// that moves the focus, until a click. A click focuses with no ring, as
+// and browsers do (:focus-visible): from the first Tab, Shift+Tab, or
+// arrow or shortcut that moves the focus, until a click. A click focuses with no ring, as
 // Windows' own controls show none for one. VML Classic is drawn by the
 // system's style, whose own focus rectangles follow the same rule.
 //
@@ -28,8 +28,7 @@ void install();
 // (Video Compare's Space presses a focused button rather than playing).
 bool focus_visible();
 
-// Shows the focus ring at once, as a key that moves the focus would: for
-// tests, and for a shortcut that moves the focus itself.
+// Shows the focus ring at once, as a key that moves the focus would (tests).
 void set_focus_visible(bool visible);
 
 // The ring drawn around the focused control, a widget of its own over the

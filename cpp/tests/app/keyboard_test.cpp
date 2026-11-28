@@ -4,6 +4,7 @@
 #include <QAbstractItemView>
 #include <QApplication>
 #include <QHeaderView>
+#include <QKeyEvent>
 #include <QPushButton>
 #include <QTabWidget>
 #include <QTableWidget>
@@ -251,6 +252,41 @@ TEST(Keyboard, EnterPressesAButtonTheKeysMovedTo) {
     QTest::keyClick(second, Qt::Key_Return);
     QApplication::processEvents();
     EXPECT_EQ(pressed, 1);
+}
+
+// An arrow a panel takes for itself (Video Compare's switch the test
+// video) moves no focus, and shows no ring: a control clicked before it
+// keeps Space for the panel. An arrow that moves the focus shows it.
+TEST(Keyboard, AnArrowShowsTheRingOnlyIfItMovedTheFocus) {
+    keyboard::install();
+    QWidget window;
+    auto* layout = new QVBoxLayout(&window);
+    auto* clicked = new QPushButton(QStringLiteral("clicked"));
+    auto* table = new QTableWidget(3, 1);
+    layout->addWidget(clicked);
+    layout->addWidget(table);
+    struct EatsArrows : QObject {
+        bool eventFilter(QObject* /*watched*/, QEvent* event) override {
+            return event->type() == QEvent::KeyPress && static_cast<QKeyEvent*>(event)->key() == Qt::Key_Right;
+        }
+    } eats;
+    clicked->installEventFilter(&eats);
+    window.show();
+    window.activateWindow();
+    ASSERT_TRUE(QTest::qWaitForWindowActive(&window));
+    keyboard::set_focus_visible(false);
+    clicked->setFocus(Qt::MouseFocusReason);
+    QTest::keyClick(clicked, Qt::Key_Right);
+    QApplication::processEvents();
+    EXPECT_FALSE(keyboard::focus_visible());
+    // A focus moved by an arrow: shown.
+    QWidget::setTabOrder(clicked, table);
+    QTest::keyClick(clicked, Qt::Key_Down);  // a push button's Down moves to the next control
+    QApplication::processEvents();
+    if (QApplication::focusWidget() != clicked) {
+        EXPECT_TRUE(keyboard::focus_visible());
+    }
+    keyboard::set_focus_visible(false);
 }
 
 }  // namespace
