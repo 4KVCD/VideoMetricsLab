@@ -788,7 +788,6 @@ private:
     // answered by the window, as the tab open has them.
     void build_export_panel();
     ExportPanel::Videos export_panel_videos() const;
-    SaveButton* tab_save() const;
     void export_from_panel(bool selection);
     // The bitrate the Saved results tab's exports draw for the selected
     // comparisons' files that are not those their scores were saved for

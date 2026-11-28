@@ -1494,7 +1494,6 @@
   "Change...": "เปลี่ยน...",
   "Export everything for these videos: results, per-frame scores, graphs, worst frames and weak segments, as Settings > Storage > Exports include says.": "ส่งออกทุกอย่างของวิดีโอเหล่านี้: ผลลัพธ์ คะแนนรายเฟรม กราฟ เฟรมที่แย่ที่สุด และช่วงอ่อน ตามที่ การตั้งค่า > ที่จัดเก็บ > การส่งออกรวม กำหนด",
   "Include": "รวม",
-  "On this tab:": "ในแท็บนี้:",
   "The same choices as Settings > Storage > Exports include: a change here is saved there. Graphs: always PNG.": "ตัวเลือกเดียวกับ การตั้งค่า > ที่จัดเก็บ > การส่งออกรวม: การเปลี่ยนแปลงที่นี่จะบันทึกที่นั่น กราฟ: เป็น PNG เสมอ",
   "The selected video on {tab}: {name}": "วิดีโอที่เลือกใน {tab}: {name}",
   "The selected videos on {tab}": "วิดีโอที่เลือกใน {tab}",

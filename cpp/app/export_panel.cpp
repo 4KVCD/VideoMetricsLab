@@ -14,7 +14,6 @@
 #include <algorithm>
 
 #include "i18n.h"
-#include "quick_save.h"
 #include "results_export.h"
 #include "theme.h"
 #include "vml/settings.h"
@@ -31,7 +30,6 @@ QLabel* heading(const QString& text) {
 }
 
 // The most the On this tab link takes, in pixels.
-constexpr int link_width = 340;
 
 bool has(const std::vector<std::string>& keys, const std::string& key) {
     return std::find(keys.begin(), keys.end(), key) != keys.end();
@@ -134,25 +132,6 @@ ExportPanel::ExportPanel(Settings& settings, QWidget* parent) : PopupPanel(paren
     folder_row->addWidget(change);
     layout->addLayout(folder_row);
 
-    // The open tab's one-click save, for the one-off.
-    auto* tab_row = new QHBoxLayout;
-    tab_label_ = new QLabel(app::tr("On this tab:"));
-    theme::style(tab_label_, "color: {muted};");
-    tab_row->addWidget(tab_label_);
-    tab_link_ = new QPushButton;
-    theme::set_role(tab_link_, "quiet");
-    tab_link_->setFlat(true);
-    connect(tab_link_, &QPushButton::clicked, this, [this] {
-        SaveButton* save = tab_save ? tab_save() : nullptr;
-        hide();
-        if (save != nullptr) {
-            save->refresh();
-            save->click();
-        }
-    });
-    tab_row->addWidget(tab_link_, 1, Qt::AlignLeft);
-    layout->addLayout(tab_row);
-
     auto* buttons = new QHBoxLayout;
     buttons->addStretch(1);
     auto* cancel = new QPushButton(app::tr("Cancel"));
@@ -206,20 +185,6 @@ void ExportPanel::refresh() {
         }
     }
     folder_label_->setText(folder ? folder() : QString());
-    SaveButton* save = tab_save ? tab_save() : nullptr;
-    tab_label_->setVisible(save != nullptr);
-    tab_link_->setVisible(save != nullptr);
-    if (save != nullptr) {
-        // What its save icon would save, as its tooltip says it (the first
-        // line), or why it can't, greyed.
-        save->refresh();
-        // Cut to the panel's width (a long video name would widen it past
-        // the window's edge), in full on hover.
-        const QString summary = save->summary();
-        tab_link_->setText(tab_link_->fontMetrics().elidedText(summary, Qt::ElideMiddle, link_width));
-        tab_link_->setToolTip(summary);
-        tab_link_->setEnabled(save->isEnabled());
-    }
     filling_ = false;
     refresh_export_button();
 }

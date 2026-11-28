@@ -444,9 +444,7 @@ control before the click. The after-run export says only where it fails.
   the click, and its files are made and written on the file writer, so the
   window answers meanwhile;
 - its Save as... items on a right-click, "{What} as {FORMAT}...", JSON
-  before CSV;
-- the Export panel's "On this tab" link, where it is the tab's main card
-  (`MainWindow::tab_save`).
+  before CSV.
 
 A table, list or chart that is not data to save (a list of files to read,
 one to pick from) is marked `not_exported`, with why. The appearance tests

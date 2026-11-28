@@ -1379,7 +1379,7 @@ There are two ways to save, and one place that says how it went:
   Graphs' statistics or Saved Results, or all scored videos), what to
   include, the weak segment rules, and the folder (**Change...**). Its
   ticks are Settings' **Exports include**, below: a change in either is
-  the other's. **On this tab** is the open tab's one-click save.
+  the other's.
 - **How it went:** beside Export, "Saved 2 files · Open folder" once
   written (it fades), or "Not saved: ... · Details" where it failed. No
   window opens to say an export worked.

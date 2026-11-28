@@ -1494,7 +1494,6 @@
   "Change...": "Ubah...",
   "Export everything for these videos: results, per-frame scores, graphs, worst frames and weak segments, as Settings > Storage > Exports include says.": "Ekspor semuanya untuk video ini: hasil, skor per bingkai, grafik, bingkai terburuk, dan segmen lemah, sesuai Pengaturan > Penyimpanan > Ekspor mencakup.",
   "Include": "Mencakup",
-  "On this tab:": "Di tab ini:",
   "The same choices as Settings > Storage > Exports include: a change here is saved there. Graphs: always PNG.": "Pilihan yang sama dengan Pengaturan > Penyimpanan > Ekspor mencakup: perubahan di sini disimpan di sana. Grafik: selalu PNG.",
   "The selected video on {tab}: {name}": "Video yang dipilih di {tab}: {name}",
   "The selected videos on {tab}": "Video yang dipilih di {tab}",

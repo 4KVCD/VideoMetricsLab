@@ -1494,7 +1494,6 @@
   "Change...": "변경...",
   "Export everything for these videos: results, per-frame scores, graphs, worst frames and weak segments, as Settings > Storage > Exports include says.": "이 비디오들의 모든 것을 내보냅니다: 결과, 프레임별 점수, 그래프, 최악 프레임, 약한 구간. 설정 > 저장소 > 내보내기 포함 항목에 따릅니다.",
   "Include": "포함",
-  "On this tab:": "이 탭에서:",
   "The same choices as Settings > Storage > Exports include: a change here is saved there. Graphs: always PNG.": "설정 > 저장소 > 내보내기 포함 항목과 같은 선택입니다: 여기서 바꾸면 그곳에 저장됩니다. 그래프: 항상 PNG.",
   "The selected video on {tab}: {name}": "{tab}에서 선택한 비디오: {name}",
   "The selected videos on {tab}": "{tab}에서 선택한 비디오",

@@ -1494,7 +1494,6 @@
   "Change...": "Módosítás...",
   "Export everything for these videos: results, per-frame scores, graphs, worst frames and weak segments, as Settings > Storage > Exports include says.": "Minden exportálása ezekhez a videókhoz: eredmények, képkockánkénti pontszámok, grafikonok, legrosszabb képkockák és gyenge szakaszok, ahogy a Beállítások > Tárolás > Az exportálás tartalma mondja.",
   "Include": "Tartalom",
-  "On this tab:": "Ezen a lapon:",
   "The same choices as Settings > Storage > Exports include: a change here is saved there. Graphs: always PNG.": "Ugyanazok a választások, mint a Beállítások > Tárolás > Az exportálás tartalma alatt: az itteni változás ott mentődik. Grafikonok: mindig PNG.",
   "The selected video on {tab}: {name}": "A kijelölt videó itt: {tab}: {name}",
   "The selected videos on {tab}": "A kijelölt videók itt: {tab}",
