@@ -1,5 +1,6 @@
 {
  "strings": {
+  "Windows' contrast theme sets the colors while it is on. The accent, theme and looks chosen here apply once it is off.": "Windows'un karşıtlık teması açıkken renkleri o belirler. Burada seçilen vurgu, tema ve görünümler, tema kapatıldığında uygulanır.",
   "Title on the graph:": "Grafikteki başlık:",
   "Show frame {frame} in Video Compare": "Kare {frame} Video karşılaştırmada göster",
   "Show frame in Video Compare": "Kareyi Video karşılaştırmada göster",

@@ -367,13 +367,7 @@ bool TitleBar::wanted() {
         QGuiApplication::platformName() != QLatin1String("windows")) {
         return false;
     }
-    HIGHCONTRASTW contrast{};
-    contrast.cbSize = sizeof(contrast);
-    if (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) &&
-        (contrast.dwFlags & HCF_HIGHCONTRASTON) != 0) {
-        return false;  // the system's colours, in the system's bar
-    }
-    return true;
+    return !theme::system_contrast();  // in a contrast theme, the system's bar in its colours
 }
 
 TitleBar::TitleBar(QWidget* window, bool dialog) : QWidget(window), window_(window), dialog_(dialog) {

@@ -1,5 +1,6 @@
 {
  "strings": {
+  "Windows' contrast theme sets the colors while it is on. The accent, theme and looks chosen here apply once it is off.": "Selama aktif, tema kontras Windows menentukan warnanya. Aksen, tema, dan tampilan yang dipilih di sini berlaku setelah tema itu dimatikan.",
   "Title on the graph:": "Judul pada grafik:",
   "Show frame {frame} in Video Compare": "Tampilkan bingkai {frame} di Bandingkan video",
   "Show frame in Video Compare": "Tampilkan bingkai di Bandingkan video",

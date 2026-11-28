@@ -190,6 +190,15 @@ QWidget* SettingsPanel::build_appearance_page() {
     interface_layout->addLayout(cards);
     page_layout->addWidget(interface_box);
 
+    // In a contrast theme, VML Modern takes its colors alone.
+    auto* contrast_note = new QLabel(app::tr("Windows' contrast theme sets the colors while it is on. The accent, "
+                                             "theme and looks chosen here apply once it is off."));
+    contrast_note->setObjectName("contrastNote");
+    contrast_note->setWordWrap(true);
+    theme::set_role(contrast_note, "notice");
+    theme::contrast_only(contrast_note);
+    page_layout->addWidget(contrast_note);
+
     // The accent, and the theme: a row each, named on the left.
     auto* look_box = new QGroupBox;
     auto* grid = new QGridLayout(look_box);

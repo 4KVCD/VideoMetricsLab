@@ -7,11 +7,14 @@
 #include <QFrame>
 #include <QGroupBox>
 #include <QLabel>
+#include <QRegularExpression>
+#include <QSet>
 #include <QString>
 
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <stdexcept>
 
 #include "theme.h"
 
@@ -104,6 +107,57 @@ TEST(Theme, ModernsStyleSheetHasEveryColourFilledIn) {
     EXPECT_TRUE(theme::modern_style_sheet(true, QColor("#1a237e")).contains("color: #ffffff; border: 1px solid #1a237e"));
     // Light and dark differ where Modern's colours do.
     EXPECT_NE(theme::modern_colour("window", true), theme::modern_colour("window", false));
+}
+
+// Windows' Night Sky contrast theme, each colour told apart from the others
+// (its button face nudged off its background) so that a name drawn in the
+// wrong one shows.
+theme::SystemColours night_sky() {
+    return {QColor("#000000"), QColor("#ffffff"), QColor("#a6a6a6"), QColor("#d6b4fd"),
+            QColor("#2b2b2b"), QColor("#8080ff"), QColor("#010101"), QColor("#fefefe")};
+}
+
+// Every colour Modern names, its window's and its sheet's, has one of the
+// contrast theme's: a colour added later without one fails here rather than
+// keeping its own colour in a contrast theme.
+TEST(Theme, EveryColourHasAContrastThemesColour) {
+    const theme::SystemColours system = night_sky();
+    const QSet<QRgb> allowed{system.window.rgb(),    system.window_text.rgb(),    system.gray_text.rgb(),
+                             system.highlight.rgb(), system.highlight_text.rgb(), system.link.rgb(),
+                             system.button.rgb(),    system.button_text.rgb()};
+    for (const QString& name : theme::contrast_names()) {
+        QColor colour;
+        EXPECT_NO_THROW(colour = theme::contrast_colour(name.toUtf8().constData(), system)) << name.toStdString();
+        EXPECT_TRUE(allowed.contains(colour.rgb())) << name.toStdString();
+    }
+    EXPECT_THROW(theme::contrast_colour("no_such_colour", system), std::out_of_range);
+    const theme::ChartColours chart = theme::contrast_chart_colours(system);
+    for (const QColor& colour : {chart.background, chart.text, chart.axis, chart.grid, chart.crosshair,
+                                 chart.difference, chart.highlight}) {
+        EXPECT_TRUE(allowed.contains(colour.rgb())) << colour.name().toStdString();
+    }
+}
+
+// Modern's sheet in a contrast theme holds the theme's colours alone (its
+// chevrons' too), and every {name} in it is filled.
+TEST(Theme, TheContrastSheetHasTheSystemsColoursAlone) {
+    const theme::SystemColours system = night_sky();
+    const QSet<QString> allowed{system.window.name(),    system.window_text.name(),    system.gray_text.name(),
+                                system.highlight.name(), system.highlight_text.name(), system.link.name(),
+                                system.button.name(),    system.button_text.name()};
+    const QString sheet = theme::contrast_style_sheet(system);
+    const QRegularExpression colour(QStringLiteral(R"re(#([0-9a-f]{8}|[0-9a-f]{6})\b|chevron-[a-z]+-([0-9a-f]{6})|rgba?\()re"));
+    int found = 0;
+    for (const QRegularExpressionMatch& match : colour.globalMatch(sheet)) {
+        ++found;
+        const QString text = match.captured(0);
+        ASSERT_FALSE(text.startsWith("rgb")) << "a tint: " << text.toStdString();
+        const QString hex = match.captured(1).isEmpty() ? match.captured(2) : match.captured(1);
+        EXPECT_TRUE(allowed.contains("#" + hex)) << text.toStdString();
+    }
+    EXPECT_GT(found, 50);
+    const QRegularExpression unfilled(QStringLiteral(R"re(\{[a-z_]+\})re"));
+    EXPECT_FALSE(unfilled.match(sheet).hasMatch()) << unfilled.match(sheet).captured(0).toStdString();
 }
 
 }  // namespace

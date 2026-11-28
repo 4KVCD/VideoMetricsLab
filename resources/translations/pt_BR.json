@@ -1,5 +1,6 @@
 {
  "strings": {
+  "Windows' contrast theme sets the colors while it is on. The accent, theme and looks chosen here apply once it is off.": "Enquanto está ativado, o tema de contraste do Windows define as cores. O destaque, o tema e os visuais escolhidos aqui valem quando ele for desativado.",
   "Title on the graph:": "Título no gráfico:",
   "Show frame {frame} in Video Compare": "Mostrar o quadro {frame} em Comparar vídeos",
   "Show frame in Video Compare": "Mostrar o quadro em Comparar vídeos",

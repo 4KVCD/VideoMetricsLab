@@ -1,5 +1,6 @@
 {
  "strings": {
+  "Windows' contrast theme sets the colors while it is on. The accent, theme and looks chosen here apply once it is off.": "Windows 的對比佈景主題開啟時，色彩由它決定。在此選擇的強調色、主題和外觀會在它關閉後套用。",
   "Title on the graph:": "圖表標題：",
   "Show frame {frame} in Video Compare": "在影片比較中顯示第 {frame} 格",
   "Show frame in Video Compare": "在影片比較中顯示此格",
