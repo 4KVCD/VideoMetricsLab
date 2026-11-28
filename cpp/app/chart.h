@@ -175,6 +175,13 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
+    // The keys, with the focus (Tab reaches the chart): a cursor on the first
+    // line's points read out as the pointer is (hovered), the view zoomed and
+    // panned, and the right-click menu at the cursor.
+    void keyPressEvent(QKeyEvent* event) override;
+    // The menu key and Shift+F10 (Windows sends them as a context menu
+    // event, at the chart's middle): the right-click menu at the cursor.
+    bool event(QEvent* event) override;
 
 private:
     friend class ChartTest;         // the chart's tests (tests/app)
@@ -235,6 +242,15 @@ private:
     // (cursor_pixel), it stays on its frame when the chart is resized,
     // zoomed or panned.
     std::optional<double> cursor_time_;
+    // The keys' cursor (keyPressEvent): a time of the first line's points.
+    std::optional<double> key_time_;
+    // The times the keys step through: the first line shown's.
+    std::span<const double> key_times() const;
+    // The keys' cursor to `t`, brought into view, read out (hovered).
+    void move_key_cursor(double t);
+    // The time axis zoomed by `factor` around `anchor`, which stays where it
+    // is: the wheel's and the keys' zoom.
+    void zoom_by(double anchor, double factor);
     std::optional<View> view_;  // nothing: all of the data
     std::pair<double, double> y_range_{0.0, 1.0};
     std::optional<QPoint> pan_origin_;

@@ -1516,7 +1516,14 @@
   "Shortcut: {keys}": "Комбінація клавіш: {keys}",
   "Use the keyboard shortcuts": "Використовувати комбінації клавіш",
   "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Якщо вимкнено, комбінації зі списку (F5, Ctrl+O, Ctrl+1–Ctrl+8 та інші) нічого не роблять. Tab, Ctrl+Tab і клавіші порівняння відео працюють і далі.",
-  "Next or previous section of Settings, or metric of Metric Graphs": "Наступний або попередній розділ «Налаштування» чи метрика «Графіки метрик»"
+  "Next or previous section of Settings, or metric of Metric Graphs": "Наступний або попередній розділ «Налаштування» чи метрика «Графіки метрик»",
+  "A frame back or forward (with Shift: ten)": "Кадр назад або вперед (із Shift — десять)",
+  "The first or last frame": "Перший або останній кадр",
+  "Back or forward the graph's width": "Назад або вперед на ширину графіка",
+  "Zoom in or out": "Збільшити або зменшити",
+  "The whole graph": "Увесь графік",
+  "The graph's menu, with Show frame in Video Compare": "Меню графіка, з пунктом «Показати кадр у Порівнянні відео»",
+  "Hide the cursor": "Сховати курсор"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

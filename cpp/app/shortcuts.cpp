@@ -103,6 +103,20 @@ ShortcutsDialog::ShortcutsDialog(QWidget* parent) : AppDialog(parent, app::tr("K
     add_heading(app::tr("Videos"));
     add_row(key_text(remove_keys()), app::tr("Remove selected"));
 
+    // Metric Graphs' and the Bitrate Viewer's graphs, once Tab or a click
+    // has given one the focus (ChartWidget::keyPressEvent).
+    add_heading(app::tr("Graphs"));
+    const auto named = [](int key) { return key_text(QKeySequence(key)); };
+    add_row(QString::fromUtf8("\xE2\x86\x90 \xE2\x86\x92"), app::tr("A frame back or forward (with Shift: ten)"));  // ← →
+    add_row(named(Qt::Key_Home) + QStringLiteral(", ") + named(Qt::Key_End), app::tr("The first or last frame"));
+    add_row(named(Qt::Key_PageUp) + QStringLiteral(", ") + named(Qt::Key_PageDown),
+            app::tr("Back or forward the graph's width"));
+    add_row(QString::fromUtf8("+ \xE2\x88\x92"), app::tr("Zoom in or out"));  // + −
+    add_row(QStringLiteral("0"), app::tr("The whole graph"));
+    add_row(named(Qt::Key_Menu) + QStringLiteral(", ") + key_text(QKeySequence(Qt::SHIFT | Qt::Key_F10)),
+            app::tr("The graph's menu, with Show frame in Video Compare"));
+    add_row(named(Qt::Key_Escape), app::tr("Hide the cursor"));
+
     add_heading(app::tr("Video Compare"));
     for (const KeyRow& row : video_compare_keys()) {
         add_row(row.keys.size() == 2 ? row.keys[0] + QStringLiteral(" ") + row.keys[1] : row.keys.front(), row.action);

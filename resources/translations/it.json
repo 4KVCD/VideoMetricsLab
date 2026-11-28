@@ -1516,7 +1516,14 @@
   "Shortcut: {keys}": "Scorciatoia: {keys}",
   "Use the keyboard shortcuts": "Usa le scorciatoie da tastiera",
   "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Disattivate, le scorciatoie dell'elenco (F5, Ctrl+O, da Ctrl+1 a Ctrl+8 e le altre) non fanno nulla. Tab, Ctrl+Tab e i tasti di Confronto video funzionano comunque.",
-  "Next or previous section of Settings, or metric of Metric Graphs": "Sezione successiva o precedente di Impostazioni, o metrica di Grafici metriche"
+  "Next or previous section of Settings, or metric of Metric Graphs": "Sezione successiva o precedente di Impostazioni, o metrica di Grafici metriche",
+  "A frame back or forward (with Shift: ten)": "Un fotogramma indietro o avanti (con Maiusc: dieci)",
+  "The first or last frame": "Il primo o l'ultimo fotogramma",
+  "Back or forward the graph's width": "Indietro o avanti della larghezza del grafico",
+  "Zoom in or out": "Ingrandisci o riduci",
+  "The whole graph": "Tutto il grafico",
+  "The graph's menu, with Show frame in Video Compare": "Il menu del grafico, con «Mostra il fotogramma in Confronto video»",
+  "Hide the cursor": "Nascondi il cursore"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

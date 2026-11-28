@@ -1516,7 +1516,14 @@
   "Shortcut: {keys}": "Sneltoets: {keys}",
   "Use the keyboard shortcuts": "Sneltoetsen gebruiken",
   "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Uit doen de sneltoetsen uit de lijst (F5, Ctrl+O, Ctrl+1 tot Ctrl+8 en de rest) niets. Tab, Ctrl+Tab en de toetsen van Videovergelijking blijven werken.",
-  "Next or previous section of Settings, or metric of Metric Graphs": "Volgende of vorige sectie van Instellingen, of metriek van Metriekgrafieken"
+  "Next or previous section of Settings, or metric of Metric Graphs": "Volgende of vorige sectie van Instellingen, of metriek van Metriekgrafieken",
+  "A frame back or forward (with Shift: ten)": "Een beeld terug of vooruit (met Shift: tien)",
+  "The first or last frame": "Het eerste of laatste beeld",
+  "Back or forward the graph's width": "De breedte van de grafiek terug of vooruit",
+  "Zoom in or out": "In- of uitzoomen",
+  "The whole graph": "De hele grafiek",
+  "The graph's menu, with Show frame in Video Compare": "Het menu van de grafiek, met ‘Frame tonen in Video vergelijken’",
+  "Hide the cursor": "De cursor verbergen"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

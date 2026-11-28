@@ -1516,7 +1516,14 @@
   "Shortcut: {keys}": "الاختصار: {keys}",
   "Use the keyboard shortcuts": "استخدام اختصارات لوحة المفاتيح",
   "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "عند الإيقاف، لا تفعل الاختصارات الموجودة في القائمة (F5 وCtrl+O وCtrl+1 إلى Ctrl+8 وغيرها) شيئًا. يظل Tab وCtrl+Tab ومفاتيح «مقارنة الفيديو» تعمل.",
-  "Next or previous section of Settings, or metric of Metric Graphs": "القسم التالي أو السابق في «الإعدادات»، أو المقياس في «رسوم المقاييس»"
+  "Next or previous section of Settings, or metric of Metric Graphs": "القسم التالي أو السابق في «الإعدادات»، أو المقياس في «رسوم المقاييس»",
+  "A frame back or forward (with Shift: ten)": "إطار للخلف أو للأمام (مع Shift: عشرة)",
+  "The first or last frame": "الإطار الأول أو الأخير",
+  "Back or forward the graph's width": "للخلف أو للأمام بعرض الرسم",
+  "Zoom in or out": "تكبير أو تصغير",
+  "The whole graph": "الرسم كله",
+  "The graph's menu, with Show frame in Video Compare": "قائمة الرسم، مع «عرض الإطار في مقارنة الفيديو»",
+  "Hide the cursor": "إخفاء المؤشر"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

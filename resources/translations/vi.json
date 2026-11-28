@@ -1516,7 +1516,14 @@
   "Shortcut: {keys}": "Phím tắt: {keys}",
   "Use the keyboard shortcuts": "Dùng phím tắt",
   "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Khi tắt, các phím tắt trong danh sách (F5, Ctrl+O, Ctrl+1 đến Ctrl+8 và các phím khác) không làm gì. Tab, Ctrl+Tab và các phím của So sánh video vẫn hoạt động.",
-  "Next or previous section of Settings, or metric of Metric Graphs": "Mục tiếp theo hoặc trước đó của Cài đặt, hoặc chỉ số của Biểu đồ chỉ số"
+  "Next or previous section of Settings, or metric of Metric Graphs": "Mục tiếp theo hoặc trước đó của Cài đặt, hoặc chỉ số của Biểu đồ chỉ số",
+  "A frame back or forward (with Shift: ten)": "Lùi hoặc tiến một khung hình (với Shift: mười)",
+  "The first or last frame": "Khung hình đầu hoặc cuối",
+  "Back or forward the graph's width": "Lùi hoặc tiến bằng chiều rộng biểu đồ",
+  "Zoom in or out": "Phóng to hoặc thu nhỏ",
+  "The whole graph": "Toàn bộ biểu đồ",
+  "The graph's menu, with Show frame in Video Compare": "Menu của biểu đồ, có “Hiện khung trong So sánh video”",
+  "Hide the cursor": "Ẩn con trỏ"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

@@ -1516,7 +1516,14 @@
   "Shortcut: {keys}": "Zkratka: {keys}",
   "Use the keyboard shortcuts": "Používat klávesové zkratky",
   "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "Vypnuto: zkratky ze seznamu (F5, Ctrl+O, Ctrl+1 až Ctrl+8 a ostatní) nic nedělají. Tab, Ctrl+Tab a klávesy Porovnání videa fungují dál.",
-  "Next or previous section of Settings, or metric of Metric Graphs": "Další nebo předchozí oddíl v Nastavení, nebo metrika v Grafy metrik"
+  "Next or previous section of Settings, or metric of Metric Graphs": "Další nebo předchozí oddíl v Nastavení, nebo metrika v Grafy metrik",
+  "A frame back or forward (with Shift: ten)": "O snímek zpět nebo vpřed (se Shiftem: deset)",
+  "The first or last frame": "První nebo poslední snímek",
+  "Back or forward the graph's width": "Zpět nebo vpřed o šířku grafu",
+  "Zoom in or out": "Přiblížit nebo oddálit",
+  "The whole graph": "Celý graf",
+  "The graph's menu, with Show frame in Video Compare": "Nabídka grafu, s „Zobrazit snímek v Porovnání videa“",
+  "Hide the cursor": "Skrýt kurzor"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [

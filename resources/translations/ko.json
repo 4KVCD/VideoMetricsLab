@@ -1516,7 +1516,14 @@
   "Shortcut: {keys}": "단축키: {keys}",
   "Use the keyboard shortcuts": "키보드 단축키 사용",
   "Off, the shortcuts in the list (F5, Ctrl+O, Ctrl+1 to Ctrl+8 and the rest) do nothing. Tab, Ctrl+Tab and Video Compare's keys still work.": "끄면 목록의 단축키(F5, Ctrl+O, Ctrl+1~Ctrl+8 등)가 아무 동작도 하지 않습니다. Tab, Ctrl+Tab과 영상 비교의 키는 계속 작동합니다.",
-  "Next or previous section of Settings, or metric of Metric Graphs": "설정의 다음 또는 이전 섹션, 또는 지표 그래프의 지표"
+  "Next or previous section of Settings, or metric of Metric Graphs": "설정의 다음 또는 이전 섹션, 또는 지표 그래프의 지표",
+  "A frame back or forward (with Shift: ten)": "한 프레임 뒤로 또는 앞으로 (Shift: 열 프레임)",
+  "The first or last frame": "첫 프레임 또는 마지막 프레임",
+  "Back or forward the graph's width": "그래프 너비만큼 뒤로 또는 앞으로",
+  "Zoom in or out": "확대 또는 축소",
+  "The whole graph": "그래프 전체",
+  "The graph's menu, with Show frame in Video Compare": "그래프 메뉴('이 프레임을 영상 비교에서 보기' 포함)",
+  "Hide the cursor": "커서 숨기기"
  },
  "plurals": {
   "Deleted the saved scores of {count} comparison.": [
