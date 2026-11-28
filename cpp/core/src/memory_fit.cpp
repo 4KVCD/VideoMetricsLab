@@ -20,8 +20,8 @@ constexpr std::array<std::string_view, 8> gpu_metrics{"vmaf",    "vmaf_neg",    
 
 // The group `key` belongs to (memory_groups), by its metric's key: a plane's
 // metric's, VMAF's for VMAF YUV's planes (made with VMAF's U and V from VMAF,
-// JobRun::merged), and PSNR YUV's for PSNR YUV MSE (from the planes PSNR YUV
-// reads, in its pass).
+// JobRun::merged), and PSNR YUV avg. dB's for PSNR YUV (avg. MSE), from the
+// planes PSNR YUV avg. dB reads, in its pass.
 std::string group_name(const std::string& key) {
     const MetricDefinition& metric = metric_definition(key);
     const std::string_view name = metric.is_plane() ? metric.plane_of : metric.key;

@@ -1349,7 +1349,7 @@ TEST_F(GraphPanelTest, TabsAndColumnsAreTheScoredMetrics) {
     panel.add_run({shared(std::move(d)), "d", {}, true});
     EXPECT_EQ(shown_metrics(panel),
               (std::vector<std::string>{"vmaf", "psnr_yuv", "psnr_yuv_y", "psnr_yuv_u", "psnr_yuv_v"}));
-    EXPECT_EQ(means(), (std::vector<std::string>{"VMAF v0.6.1", "PSNR YUV (6:1:1)", "PSNR Y", "PSNR U",
+    EXPECT_EQ(means(), (std::vector<std::string>{"VMAF v0.6.1", "PSNR YUV avg. dB (6:1:1)", "PSNR Y", "PSNR U",
                                                  "PSNR V"}));
     EXPECT_EQ(table(panel).item(0, 3)->text(), "—");  // c has no Y plane
     EXPECT_EQ(table(panel).item(1, 3)->text(), "42.00");

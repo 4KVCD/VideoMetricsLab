@@ -225,7 +225,8 @@ QWidget* MetricList::build_section(MetricSection section) {
             // under the five that have them, with no tick of their own.
             planes_box_ = new QCheckBox(app::tr("Y, U and V of the YUV metrics"));
             planes_box_->setToolTip(app::tr(
-                "A column for each of the Y, U and V planes beside PSNR YUV, SSIM YUV, MS-SSIM YUV, PSNR-HVS-M and "
+                "A column for each of the Y, U and V planes beside PSNR YUV avg. dB, SSIM YUV, MS-SSIM YUV, PSNR-HVS-M "
+                "and "
                 "VMAF YUV, "
                 "calculated with them at no extra cost. Videos scored before need Calculate again to fill them."));
             connect(planes_box_, &QCheckBox::clicked, this, [this](bool shown) { emit planes_toggled(shown); });

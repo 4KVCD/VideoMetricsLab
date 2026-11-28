@@ -536,7 +536,7 @@ TEST_F(Appearance, MetricHeadingsFitTheirColumns) {
         tallest = std::max(tallest, needed.height());
     }
     EXPECT_GE(header->minimumHeight(), tallest);  // as tall as the tallest heading, shown or not
-    QString long_heading;  // "PSNR YUV MSE (dB)", on two lines
+    QString long_heading;  // "PSNR YUV (6:1:1)", on two lines
     for (const MetricColumn& item : metric_columns()) {
         if (std::string_view(item.key) == "psnr_yuv_mse") {
             long_heading = table->horizontalHeaderItem(item.column)->text();

@@ -521,7 +521,7 @@ which way is better, and its broad ranges where they have a source (the
 app's own bands, or the metric's authors' scale). *General purpose* (VMAF
 v0.6.1, VMAF NEG, VMAF v1, HDR VMAF, PSNR, SSIM, XPSNR, SSIMULACRA2,
 Butteraugli and CVVDP) is what a new install shows, HDR VMAF unticked.
-*Specialized* (PSNR YUV, PSNR YUV avg. MSE, SSIM YUV, MS-SSIM, MS-SSIM YUV,
+*Specialized* (PSNR YUV avg. dB, PSNR YUV, SSIM YUV, MS-SSIM, MS-SSIM YUV,
 PSNR-HVS-M, CAMBI, CIEDE2000 and VMAF YUV) is open too, so every metric is in
 sight; its heading folds it away. On a screen too small for the whole list,
 the panel scrolls. A tick there shows or hides a metric's column,
@@ -539,7 +539,7 @@ original, which FFmpeg's `xpsnr` filter wants as its first input whatever
 its inputs are called, so it differs from FFmpeg commands that give the test
 video first (`[dist][ref]xpsnr`).
 
-PSNR YUV (6:1:1) and SSIM YUV (6:1:1), among the Specialized metrics, weigh the planes as
+PSNR YUV avg. dB (6:1:1) and SSIM YUV (6:1:1), among the Specialized metrics, weigh the planes as
 JVET's common test conditions weigh PSNR (their YUV BD-rates) and MSU's
 codec comparisons weigh YUV-SSIM, for comparing with those: each frame's (6 x Y + Cb + Cr) / 8 of its three planes' PSNR or
 SSIM, and the score is the mean of the frames'. VVenC's and VTM's own
@@ -554,14 +554,14 @@ for every metric here, so a 4:4:4 video's chroma scores are those of its
 4:2:0 form. Turning either on makes the decoders hand over whole pictures
 rather than their luma alone, which costs some speed and memory.
 
-PSNR YUV avg. MSE (6:1:1) is the YUV-PSNR MSU's codec comparisons report
+PSNR YUV (6:1:1) is the YUV-PSNR MSU's codec comparisons report
 (their "YUV-PSNR avg. MSE 6:1:1"): each frame's PSNR of its planes' squared
 errors weighted (6 x Y + Cb + Cr) / 8, and the score the PSNR of the frames'
-mean error, as MSU's VQMT averages a video's PSNR. PSNR YUV averages the dB
+mean error, as MSU's VQMT averages a video's PSNR. PSNR YUV avg. dB averages the dB
 instead, of the planes and of the frames, so this one is a little lower,
 more so where a few frames or one plane are much worse. It is calculated from
-the same planes' PSNR as PSNR YUV, in the same pass: beside PSNR YUV it costs
-nothing more, alone it costs what PSNR YUV does. A plane at libvmaf's ceiling
+the same planes' PSNR as PSNR YUV avg. dB, in the same pass: beside that one it costs
+nothing more, alone it costs what PSNR YUV avg. dB does. A plane at libvmaf's ceiling
 counts as the ceiling (MSU gives an identical frame 100 dB), so near-lossless
 frames score a little lower than MSU's.
 
@@ -609,7 +609,7 @@ and CIEDE2000 read the chroma, so turning one on makes the decoders hand over
 whole pictures, as the 6:1:1 metrics do.
 
 **Y, U and V of the YUV metrics**, in Add/remove metrics' Specialized section, adds
-a column for each plane (Y, U, V) beside PSNR YUV, SSIM YUV, MS-SSIM YUV,
+a column for each plane (Y, U, V) beside PSNR YUV avg. dB, SSIM YUV, MS-SSIM YUV,
 PSNR-HVS-M and VMAF YUV, for the ones shown. The planes are calculated in their metric's
 pass at no extra cost, whenever that metric is ticked; they have no tick box
 of their own. Videos scored before the switch was turned on show empty plane

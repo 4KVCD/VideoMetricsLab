@@ -269,7 +269,7 @@ TEST(Settings, MetricsAddedSinceTheSaveAreHiddenAtFirst) {
 // ticked but hidden, so showing one is enough to calculate it, and HDR VMAF
 // shown but unticked (General purpose: ticked, every SDR video would fail
 // it); settings saved before PSNR YUV and SSIM YUV were ticked keep them as
-// saved: shown and unticked, and hide PSNR YUV avg. MSE and VMAF YUV, which
+// saved: shown and unticked, and hide PSNR YUV (avg. MSE) and VMAF YUV, which
 // they did not list yet.
 TEST(Settings, SpecializedMetricsStartTickedButHiddenInNewSettingsOnly) {
     using Keys = std::vector<std::string>;

@@ -183,7 +183,7 @@ TEST(Libvmaf, PsnrYuvWeighsTheLumaSixTimesTheChroma) {
 
 // The 6:1:1 metrics leave PSNR and SSIM as they were (XPSNR's own PSNR
 // takes PSNR's place with XPSNR on), and chroma that matches counts as SSIM 1
-// and as PSNR's 72 dB ceiling at 10 bits, in PSNR YUV avg. MSE as that
+// and as PSNR's 72 dB ceiling at 10 bits, in PSNR YUV (avg. MSE) as that
 // ceiling's error.
 TEST(Libvmaf, YuvMetricsLeaveTheLumaScoresAsTheyWere) {
     if (!std::filesystem::exists(libvmaf_folder() / platform::shared_library_name("libvmaf"))) {

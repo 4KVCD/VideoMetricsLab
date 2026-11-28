@@ -35,7 +35,7 @@ namespace vml::app {
 
 // A column heading on two lines where that makes it narrower: `text` split at
 // the space that makes its wider line the narrowest, in `metrics` ("PSNR YUV
-// avg. MSE (6:1:1)" -> "PSNR YUV avg.\nMSE (6:1:1)"); unchanged without a
+// (6:1:1)" -> "PSNR YUV\n(6:1:1)"); unchanged without a
 // space. Qt's header measures and draws the two lines itself.
 QString two_line_heading(const QString& text, const QFontMetrics& metrics);
 

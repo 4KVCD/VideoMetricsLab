@@ -59,13 +59,13 @@ const std::array<MetricDefinition, 34> registry{{
     // by libvmaf). PQ videos only.
     {"vmaf_hdr", "HDR VMAF", "HDR VMAF", "HDR VMAF", "HDR VMAF", 2, "", frame, higher_is_better, arithmetic,
      std::nullopt, vmaf_thresholds, bool_option("compute_vmaf_hdr"), {}, vmaf_smallest_side},
-    {"psnr", "PSNR", "PSNR", "PSNR (dB)", "PSNR (dB)", 2, " dB", frame, higher_is_better, arithmetic,
+    {"psnr", "PSNR", "PSNR", "PSNR", "PSNR (dB)", 2, " dB", frame, higher_is_better, arithmetic,
      std::nullopt, psnr_thresholds, libvmaf_feature("name=psnr"), {}, 0},
     {"ssim", "SSIM", "SSIM", "SSIM", "SSIM", 4, "", frame, higher_is_better, arithmetic, std::nullopt,
      ssim_thresholds, libvmaf_feature("name=float_ssim"), {}, 11},
     // XPSNR is the one metric that reports infinity (an identical frame),
     // and is averaged its own way (stats.h).
-    {"xpsnr", "XPSNR", "XPSNR", "XPSNR (dB)", "XPSNR (dB)", 2, " dB", frame, higher_is_better,
+    {"xpsnr", "XPSNR", "XPSNR", "XPSNR", "XPSNR (dB)", 2, " dB", frame, higher_is_better,
      square_mean_root_db, std::nullopt, xpsnr_thresholds, bool_option("compute_xpsnr"), {}, 0},
     {"ssimulacra2", "SSIMULACRA2", "SSIMULACRA2", "SSIMULACRA2", "SSIMULACRA2", 2, "", frame, higher_is_better,
      arithmetic, 100.0, ssimulacra2_thresholds, std::nullopt, "perceptual", 8},
@@ -80,7 +80,8 @@ const std::array<MetricDefinition, 34> registry{{
     // weigh YUV-SSIM. Scored by the app's own
     // libvmaf-fast only: FFmpeg's filter has no SSIM of the chroma. Chroma
     // needs 11 samples for SSIM's window, so twice that for 4:2:0.
-    {"psnr_yuv", "PSNR YUV (6:1:1)", "PSNR YUV", "PSNR YUV (dB)", "PSNR YUV (dB)", 2, " dB", frame,
+    {"psnr_yuv", "PSNR YUV avg. dB (6:1:1)", "PSNR YUV avg. dB", "PSNR YUV avg. dB (6:1:1)", "PSNR YUV avg. dB", 2,
+     " dB", frame,
      higher_is_better, arithmetic, std::nullopt, psnr_thresholds, bool_option("compute_psnr_yuv"), {}, 0},
     // The planes of PSNR YUV, SSIM YUV, MS-SSIM YUV and PSNR-HVS-M (VMAF
     // YUV's are further down, after it), each after its metric (shown with Add/remove metrics' "Y, U and V of the
@@ -95,12 +96,12 @@ const std::array<MetricDefinition, 34> registry{{
     // MSU's YUV-PSNR "avg. MSE" 6:1:1: the three planes' mean squared errors
     // weighted (6 Y + Cb + Cr) / 8 in each frame's value, and averaged over
     // the frames as errors too (MSU's VQMT averages a video's PSNR as its
-    // frames' MSE), where PSNR YUV averages the dB of planes and frames. From
-    // the planes PSNR YUV reads, in its pass.
-    {"psnr_yuv_mse", "PSNR YUV avg. MSE (6:1:1)", "PSNR YUV MSE", "PSNR YUV MSE (dB)", "PSNR YUV MSE (dB)", 2,
+    // frames' MSE), where PSNR YUV avg. dB averages the dB of planes and
+    // frames. From the planes PSNR YUV avg. dB reads, in its pass.
+    {"psnr_yuv_mse", "PSNR YUV (6:1:1)", "PSNR YUV", "PSNR YUV (6:1:1)", "PSNR YUV (dB)", 2,
      " dB", frame, higher_is_better, mean_error_db, std::nullopt, psnr_thresholds,
      bool_option("compute_psnr_yuv_mse"), {}, 0},
-    {"ssim_yuv", "SSIM YUV (6:1:1)", "SSIM YUV", "SSIM YUV", "SSIM YUV", 4, "", frame, higher_is_better,
+    {"ssim_yuv", "SSIM YUV (6:1:1)", "SSIM YUV", "SSIM YUV (6:1:1)", "SSIM YUV", 4, "", frame, higher_is_better,
      arithmetic, std::nullopt, ssim_thresholds, bool_option("compute_ssim_yuv"), {}, 22},
     {"ssim_yuv_y", "SSIM Y", "SSIM Y", "Y", "SSIM Y", 4, "", frame, higher_is_better, arithmetic,
      std::nullopt, {}, bool_option("compute_ssim_yuv_y"), {}, 22, "ssim_yuv"},
@@ -115,7 +116,7 @@ const std::array<MetricDefinition, 34> registry{{
     // weighted 6:1:1 as SSIM YUV.
     {"ms_ssim", "MS-SSIM", "MS-SSIM", "MS-SSIM", "MS-SSIM", 4, "", frame, higher_is_better, arithmetic,
      std::nullopt, {}, bool_option("compute_ms_ssim"), {}, 0},
-    {"ms_ssim_yuv", "MS-SSIM YUV (6:1:1)", "MS-SSIM YUV", "MS-SSIM YUV", "MS-SSIM YUV", 4, "", frame,
+    {"ms_ssim_yuv", "MS-SSIM YUV (6:1:1)", "MS-SSIM YUV", "MS-SSIM YUV (6:1:1)", "MS-SSIM YUV", 4, "", frame,
      higher_is_better, arithmetic, std::nullopt, {}, bool_option("compute_ms_ssim_yuv"), {}, 0},
     {"ms_ssim_yuv_y", "MS-SSIM Y", "MS-SSIM Y", "Y", "MS-SSIM Y", 4, "", frame, higher_is_better,
      arithmetic, std::nullopt, {}, bool_option("compute_ms_ssim_yuv_y"), {}, 0, "ms_ssim_yuv"},
@@ -127,7 +128,7 @@ const std::array<MetricDefinition, 34> registry{{
     // contrast-masked, contrast-sensitivity-weighted DCT error of 8x8 blocks,
     // 0.8 Y + 0.1 Cb + 0.1 Cr in the error. +infinity for an identical (or
     // fully masked) frame, so averaged as its error.
-    {"psnr_hvs", "PSNR-HVS-M", "PSNR-HVS-M", "PSNR-HVS-M (dB)", "PSNR-HVS-M (dB)", 2, " dB", frame,
+    {"psnr_hvs", "PSNR-HVS-M", "PSNR-HVS-M", "PSNR-HVS-M", "PSNR-HVS-M (dB)", 2, " dB", frame,
      higher_is_better, mean_error_db, std::nullopt, {}, bool_option("compute_psnr_hvs"), {}, 0},
     {"psnr_hvs_y", "PSNR-HVS-M Y", "PSNR-HVS-M Y", "Y", "PSNR-HVS-M Y (dB)", 2, " dB", frame,
      higher_is_better, mean_error_db, std::nullopt, {}, bool_option("compute_psnr_hvs_y"), {}, 0, "psnr_hvs"},
@@ -149,7 +150,7 @@ const std::array<MetricDefinition, 34> registry{{
     // metrics are (chroma_vmaf.h), and the job combines the three
     // (JobRun::merged). Chroma planes under VMAF's smallest side fail the
     // metric alone (cpu_metrics_unfit).
-    {"vmaf_yuv", "VMAF YUV (6:1:1)", "VMAF YUV", "VMAF YUV", "VMAF YUV", 2, "", frame, higher_is_better,
+    {"vmaf_yuv", "VMAF YUV (6:1:1)", "VMAF YUV", "VMAF YUV (6:1:1)", "VMAF YUV", 2, "", frame, higher_is_better,
      arithmetic, 100.0, vmaf_thresholds, bool_option("compute_vmaf_yuv"), {}, 0},
     {"vmaf_yuv_y", "VMAF Y", "VMAF Y", "Y", "VMAF Y", 2, "", frame, higher_is_better, arithmetic, 100.0, {},
      bool_option("compute_vmaf_yuv_y"), {}, 0, "vmaf_yuv"},
@@ -334,12 +335,12 @@ const std::array<KeyedGuide, 19> guides{{
       N_("Structural similarity of the luma (Y) plane: how much of the pictures' local structure, contrast and brightness is kept. Up to 1, higher is better."),
       ssim_ranges, "the app's SSIM bands, ssim_thresholds above"}},
     {"psnr_yuv",
-     {N_("PSNR with color, as JVET weighs it"),
-      N_("(6 x Y + Cb + Cr) / 8 of the three planes' PSNR, as JVET's common test conditions weigh it. In dB, higher is better."),
+     {N_("PSNR with color, averaging dB as JVET does"),
+      N_("(6 x Y + Cb + Cr) / 8 of the three planes' PSNR, averaged over the frames in dB, as JVET's common test conditions weigh it. A little above PSNR YUV (6:1:1), which averages the errors. In dB, higher is better."),
       psnr_ranges, "the app's PSNR bands, psnr_thresholds above"}},
     {"psnr_yuv_mse",
-     {N_("PSNR with color, as MSU reports it"),
-      N_("PSNR of the three planes' squared errors weighted (6 x Y + Cb + Cr) / 8 and averaged over the frames before turning into dB, as MSU's codec comparisons report YUV-PSNR (avg. MSE). A little below PSNR YUV, more so where a few frames or one plane are much worse. In dB, higher is better."),
+     {N_("PSNR with color, averaging errors as MSU does"),
+      N_("PSNR of the three planes' squared errors weighted (6 x Y + Cb + Cr) / 8 and averaged over the frames before turning into dB, as MSU's codec comparisons report YUV-PSNR (avg. MSE). A little below PSNR YUV avg. dB, more so where a few frames or one plane are much worse. In dB, higher is better."),
       psnr_ranges, "the app's PSNR bands, psnr_thresholds above"}},
     {"ssim_yuv",
      {N_("SSIM with color, as MSU weighs it"),
