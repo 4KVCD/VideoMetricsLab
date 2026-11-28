@@ -349,6 +349,9 @@ std::variant<VmafJob, QString> MainWindow::job_for(const RowData& row_data) cons
         }
     }
     MetricResultSet kept = reusable_results(row_data);
+    if (row_data.completed_run) {
+        keep_exact_lumas(kept, row_data.completed_run->result.metric_results, metric_keys);
+    }
     std::vector<MetricTask> tasks;
     bool share_decode = false;
     GpuAnswers gpu_answers;

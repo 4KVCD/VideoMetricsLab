@@ -73,6 +73,20 @@ const CpuFeature* cpu_feature(std::string_view key);
 // metrics, PSNR-HVS-M and CIEDE2000 do; the others read the luma alone.
 bool cpu_metrics_read_chroma(const std::vector<std::string>& metrics);
 
+// Whether the scorer keeps `key`'s values as calculated beside the rounded
+// ones (PairScores::exact, FrameMetricResult::exact): PSNR, SSIM and the
+// planes of PSNR YUV and SSIM YUV, which those 6:1:1 metrics are made of.
+bool keeps_exact(std::string_view key);
+
+// Whether `key` (PSNR YUV, PSNR YUV avg. MSE, SSIM YUV) can be made from its
+// planes as calculated (keeps_exact): its Y saved, and its U and V scored
+// without the Y (plan_tasks, JobRun::merged).
+bool made_of_exact_planes(std::string_view key);
+
+// `key`'s (made_of_exact_planes) score of a frame whose planes scored `y`,
+// `u` and `v` as calculated, made and rounded as the scorer makes it.
+double yuv_score(std::string_view key, double y, double u, double v);
+
 // What CAMBI (the banding of the test video alone) needs to know of the test
 // video when the pictures compared are not its own: its own size (a video
 // scaled up to the source's is banded as it was encoded: CAMBI scales it

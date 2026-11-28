@@ -8,6 +8,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <span>
 #include <string>
 #include <utility>
@@ -24,6 +25,9 @@ struct PairScores {
     // only known once they are scored: HDR VMAF, whose scorer falls back to
     // the CPU where VMAF v1's engine cannot take its model (vmaf_hdr.h).
     std::vector<std::string> features_on_gpu;
+    // The metrics' scores before they were rounded, for those kept so
+    // (keeps_exact, libvmaf_cpu.h), by key.
+    std::map<std::string, std::vector<double>> exact;
 };
 
 // A plane of a picture where it is: its first sample, and the bytes from one

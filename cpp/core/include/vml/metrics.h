@@ -134,6 +134,12 @@ std::vector<std::string> with_metric_inputs(std::vector<std::string> keys);
 // them later needs no run (plan_tasks).
 std::vector<std::string> with_planes(std::vector<std::string> keys);
 
+// The metric whose saved file holds `key`'s scores: a YUV metric's Y plane
+// is the same score as the metric of the luma alone (PSNR YUV's Y is PSNR,
+// SSIM YUV's is SSIM, MS-SSIM YUV's is MS-SSIM, VMAF YUV's is VMAF), saved
+// once for both (metric_cache); `key` itself for any other.
+std::string_view saved_as(std::string_view key);
+
 // Why pictures compared at `width` x `height` cannot be scored with the
 // metrics of `keys`, naming those they are too small for and the size each
 // needs (MetricDefinition::smallest_side); nothing when all can be.

@@ -27,6 +27,7 @@
 #include "vml/hardware_decoding.h"
 #include "vml/isolated.h"
 #include "vml/libvmaf.h"
+#include "vml/libvmaf_cpu.h"
 #include "vml/metrics.h"
 #include "vml/number_format.h"
 #include "vml/perceptual.h"
@@ -120,15 +121,75 @@ void make_vmaf_yuv(MetricResultSet& results, const std::vector<std::string>& ask
     }
 }
 
+// A 6:1:1 metric of the CPU's libvmaf and its planes' keys (made_of_exact_planes).
+struct PlanesMetric {
+    std::string_view key, y, u, v;
+};
+constexpr std::array<PlanesMetric, 3> planes_metrics{{{"psnr_yuv", "psnr_yuv_y", "psnr_yuv_u", "psnr_yuv_v"},
+                                                      {"psnr_yuv_mse", "psnr_yuv_y", "psnr_yuv_u", "psnr_yuv_v"},
+                                                      {"ssim_yuv", "ssim_yuv_y", "ssim_yuv_u", "ssim_yuv_v"}}};
+
+bool has_exact(const FrameMetricResult* result) {
+    return result != nullptr && !result->exact.empty() && result->exact.size() == result->values.size();
+}
+
+// The Y plane `y` with its scores as calculated (FrameMetricResult::exact),
+// under its own key or as the plain metric it is (saved_as: PSNR's for
+// PSNR YUV's Y), if `results` has it so.
+const FrameMetricResult* exact_luma(const MetricResultSet& results, std::string_view y) {
+    for (const std::string_view key : {y, saved_as(y)}) {
+        if (const FrameMetricResult* plane = results.frame(std::string(key)); has_exact(plane)) {
+            return plane;
+        }
+    }
+    return nullptr;
+}
+
+// PSNR YUV, PSNR YUV (MSE) and SSIM YUV where `asked` asks for them and
+// `results` has their Y, U and V with their scores as calculated but not
+// them: a run that had the Y saved calculates the U and V alone
+// (plan_tasks). Each frame's score is yuv_score's, the sum and rounding of
+// the run of all three planes, so it is that run's score; the Y is added
+// under its plane's key too, as that run gives it. Nothing where the three
+// were not scored on the same frames: finish() says why.
+void make_611(MetricResultSet& results, const std::vector<std::string>& asked) {
+    for (const PlanesMetric& metric : planes_metrics) {
+        const std::string key(metric.key);
+        const FrameMetricResult* y = exact_luma(results, metric.y);
+        const FrameMetricResult* u = results.frame(std::string(metric.u));
+        const FrameMetricResult* v = results.frame(std::string(metric.v));
+        if (!contains(asked, key) || results.has(key) || y == nullptr || !has_exact(u) || !has_exact(v) ||
+            u->frame != y->frame || v->frame != y->frame) {
+            continue;
+        }
+        // The planes' provenance: the app's libvmaf, as it scores all three.
+        FrameMetricResult made{key, y->frame, y->time, {}, u->provenance, u->av1_grain_dav1d};
+        made.values.reserve(y->exact.size());
+        for (std::size_t frame = 0; frame < y->exact.size(); ++frame) {
+            made.values.push_back(static_cast<float>(yuv_score(key, y->exact[frame], u->exact[frame], v->exact[frame])));
+        }
+        if (!results.has(std::string(metric.y))) {
+            FrameMetricResult plane = *y;
+            plane.key = std::string(metric.y);
+            results.add(std::move(plane));
+        }
+        results.add(std::move(made));
+    }
+}
+
 // `result` with only every `step`-th frame (0, step, 2*step...): the frames
 // a subsampled request covers, as libvmaf's n_subsample scores them.
 FrameMetricResult sampled_every(const FrameMetricResult& result, int step) {
     FrameMetricResult kept{result.key, {}, {}, {}, result.provenance, result.av1_grain_dav1d};
+    const bool exact = result.exact.size() == result.frame.size();
     for (std::size_t i = 0; i < result.frame.size(); ++i) {
         if (result.frame[i] % step == 0) {
             kept.frame.push_back(result.frame[i]);
             kept.time.push_back(result.time[i]);
             kept.values.push_back(result.values[i]);
+            if (exact) {
+                kept.exact.push_back(result.exact[i]);
+            }
         }
     }
     return kept;
@@ -926,7 +987,18 @@ void JobRun::finish() {
     }
     if (job_.cached_result && !saved_scores_fit()) {
         for (const std::string& key : job_.cached_metrics.keys()) {
-            if (!task_calculates(key)) {
+            const bool luma_kept_alone =
+                std::any_of(planes_metrics.begin(), planes_metrics.end(),
+                            [&key](const PlanesMetric& metric) { return metric.y == key; }) &&
+                !contains(job_.metric_keys, key);  // for its YUV metric (keep_exact_lumas): that one says it
+            if (!task_calculates(key) && !luma_kept_alone) {
+                set_failure(metric_failures, key, saved_with_other_black_bars);
+            }
+        }
+        // A YUV metric planned to be made of its saved Y (make_611) is not made either.
+        for (const PlanesMetric& metric : planes_metrics) {
+            const std::string key(metric.key);
+            if (contains(job_.metric_keys, key) && !task_calculates(key)) {
                 set_failure(metric_failures, key, saved_with_other_black_bars);
             }
         }
@@ -965,6 +1037,20 @@ void JobRun::finish() {
         set_failure(metric_failures, "vmaf_yuv",
                     result->has_metric("vmaf") ? "it needs VMAF and its U and V scored on the same frames"
                                                : "it is made from VMAF's score, which failed");
+    }
+    // A YUV metric planned to be made of its saved Y and its U and V (make_611) and not made, nor failed: the
+    // three were not scored on the same frames.
+    for (const PlanesMetric& metric : planes_metrics) {
+        const std::string key(metric.key);
+        if (result && !cancelled && contains(job_.metric_keys, key) && !result->has_metric(key) &&
+            !task_calculates(key) &&
+            std::none_of(metric_failures.begin(), metric_failures.end(),
+                         [&key](const auto& failure) { return failure.first == key; }) &&
+            std::none_of(failed.begin(), failed.end(), [this, &metric](std::size_t task) {
+                return contains(job_.tasks[task].metric_keys, metric.u) || contains(job_.tasks[task].cpu_beside, metric.u);
+            })) {
+            set_failure(metric_failures, key, "it needs its saved Y and its U and V scored on the same frames");
+        }
     }
     PerceptualFailures why_failed = metric_failures;  // each metric once, as the events say it
     for (const std::size_t task : failed) {
@@ -1417,6 +1503,7 @@ std::optional<ComparisonResult> JobRun::merged() const {
     }
     if (result) {
         make_vmaf_yuv(result->metric_results, job_.metric_keys);
+        make_611(result->metric_results, job_.metric_keys);
     }
     return result;
 }
@@ -1725,6 +1812,20 @@ std::vector<std::string> fallback_notes(const std::vector<std::pair<std::string,
     return notes;
 }
 
+void keep_exact_lumas(MetricResultSet& kept, const MetricResultSet& saved, const std::vector<std::string>& asked) {
+    for (const PlanesMetric& metric : planes_metrics) {
+        const std::string y(metric.y);
+        if (!contains(asked, metric.key) || kept.has(y)) {
+            continue;
+        }
+        if (const FrameMetricResult* luma = exact_luma(saved, y)) {
+            FrameMetricResult plane = *luma;
+            plane.key = y;
+            kept.add(std::move(plane));
+        }
+    }
+}
+
 std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& test, const VmafOptions& options,
                                    const std::vector<std::string>& metric_keys,
                                    const PerceptualBackends& perceptual_backends, const MetricResultSet& saved,
@@ -1752,6 +1853,18 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
         const bool asked = contains(metric_keys, key) || (metric.is_plane() && calculated(metric.plane_of));
         if (asked && !saved.has(key) && key != "vmaf_yuv" && key != "vmaf_yuv_y") {
             keys.push_back(key);
+        }
+    }
+    // PSNR YUV, PSNR YUV (MSE) and SSIM YUV whose Y is saved with its scores
+    // as calculated (PSNR's or SSIM's, or their Y's: the same scores) are
+    // made of it and their U and V, calculated alone (make_611): their
+    // scores are the same, without a pass over the luma. Only where the U
+    // and V are calculated here (saved, they are rounded).
+    for (const PlanesMetric& metric : planes_metrics) {
+        if (contains(keys, metric.key) && exact_luma(saved, metric.y) != nullptr && contains(keys, metric.u) &&
+            contains(keys, metric.v)) {
+            std::erase(keys, metric.key);
+            std::erase(keys, metric.y);
         }
     }
     const bool vmaf = contains(metric_keys, "vmaf");

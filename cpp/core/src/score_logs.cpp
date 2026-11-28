@@ -246,6 +246,9 @@ void keep_range(ParsedScores& scores, const FrameRange& range, double fps) {
         for (const auto& [key, values] : scores.metrics) {
             kept.metrics[key].push_back(i < values.size() ? values[i] : std::nanf(""));
         }
+        for (const auto& [key, values] : scores.exact) {
+            kept.exact[key].push_back(i < values.size() ? values[i] : std::nan(""));
+        }
     }
     kept.time = times_of(kept.frame, fps);
     scores = std::move(kept);

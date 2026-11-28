@@ -278,6 +278,17 @@ std::vector<std::string> with_planes(std::vector<std::string> keys) {
     return keys;
 }
 
+std::string_view saved_as(std::string_view key) {
+    constexpr std::array<std::pair<std::string_view, std::string_view>, 4> luma_planes{
+        {{"psnr_yuv_y", "psnr"}, {"ssim_yuv_y", "ssim"}, {"ms_ssim_yuv_y", "ms_ssim"}, {"vmaf_yuv_y", "vmaf"}}};
+    for (const auto& [plane, metric] : luma_planes) {
+        if (key == plane) {
+            return metric;
+        }
+    }
+    return key;
+}
+
 std::vector<std::string> with_metric_inputs(std::vector<std::string> keys) {
     const auto has = [&keys](std::string_view key) { return std::find(keys.begin(), keys.end(), key) != keys.end(); };
     if ((has("vmaf_yuv") || has("vmaf_yuv_y")) && !has("vmaf")) {

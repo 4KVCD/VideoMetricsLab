@@ -28,6 +28,33 @@ std::size_t order_of(const std::string& key) {
     return static_cast<std::size_t>(found - all.begin());
 }
 
+// A YUV metric's Y plane is saved in its plain metric's file (metric_path):
+// listed under the Y's key too, from that file, where the folder has the
+// YUV metric's planes and no file of the Y's own (one saved before). The
+// file's bytes are counted once, under the plain metric.
+void list_luma_planes(std::vector<SavedScoreFile>& scores) {
+    const auto has = [&scores](const std::string& key) {
+        return std::any_of(scores.begin(), scores.end(), [&key](const SavedScoreFile& score) { return score.key == key; });
+    };
+    std::vector<SavedScoreFile> planes;
+    for (const SavedScoreFile& chroma : scores) {
+        if (!chroma.key.ends_with("_u")) {
+            continue;
+        }
+        const std::string luma = chroma.key.substr(0, chroma.key.size() - 1) + "y";
+        const std::string_view metric = saved_as(luma);
+        if (metric == luma || has(luma)) {
+            continue;
+        }
+        for (const SavedScoreFile& score : scores) {
+            if (score.key == metric) {
+                planes.push_back({score.file, luma, score.saved, 0});
+            }
+        }
+    }
+    scores.insert(scores.end(), planes.begin(), planes.end());
+}
+
 }  // namespace
 
 std::vector<std::string> SavedComparison::keys() const {
@@ -80,6 +107,7 @@ std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path&
                 saved.scores.push_back({file->path(), name.substr(0, hash), when, bytes});
             }
         }
+        list_luma_planes(saved.scores);
         std::stable_sort(saved.scores.begin(), saved.scores.end(),
                          [](const SavedScoreFile& a, const SavedScoreFile& b) {
                              const std::size_t x = order_of(a.key);
@@ -113,8 +141,13 @@ std::optional<std::pair<ComparisonResult, std::string>> load_saved_comparison(
         }
         for (const std::filesystem::path& file : files) {
             if (auto score = read(file); score && !score->outdated) {
-                std::visit([&loaded](auto&& metric) { loaded->first.metric_results.add(std::move(metric)); },
-                           std::move(score->metric));
+                // Under the key listed: a YUV metric's Y is read from its plain metric's file (list_luma_planes).
+                std::visit(
+                    [&loaded, &key](auto&& metric) {
+                        metric.key = key;
+                        loaded->first.metric_results.add(std::move(metric));
+                    },
+                    std::move(score->metric));
                 break;
             }
         }

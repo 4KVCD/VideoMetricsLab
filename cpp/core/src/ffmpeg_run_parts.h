@@ -38,6 +38,9 @@ struct ParsedScores {
     std::map<std::string, std::string> failed;
     // PairScores::features_on_gpu: HDR VMAF where the GPU calculated its features.
     std::vector<std::string> features_on_gpu;
+    // PairScores::exact: the scores of `metrics` kept as calculated, for
+    // those the app's libvmaf scored so (keeps_exact).
+    std::map<std::string, std::vector<double>> exact;
 
     bool has(const std::string& key) const { return metrics.contains(key); }
 };

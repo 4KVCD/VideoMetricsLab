@@ -4,7 +4,9 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <initializer_list>
 #include <stdexcept>
+#include <string_view>
 
 #include "vml/app_log.h"
 #include "vml/chroma_vmaf.h"
@@ -82,6 +84,21 @@ bool is_chroma_vmaf(std::string_view key) { return key == vmaf_u_key || key == v
 double psnr_of_weighted_mse(double y, double cb, double cr) {
     const auto error = [](double psnr) { return std::pow(10.0, -psnr / 10.0); };
     return -10.0 * std::log10((6 * error(y) + error(cb) + error(cr)) / 8);
+}
+
+// `feature`'s value of a frame from what its features read as calculated:
+// `value` (its feature) and `cb` and `cr` (a 6:1:1 metric's chroma ones).
+double combined(const CpuFeature& feature, double value, double cb, double cr) {
+    switch (feature.value) {
+    case CpuFeature::Value::planes_611:
+        return (6 * value + cb + cr) / 8;
+    case CpuFeature::Value::planes_611_mse:
+        return psnr_of_weighted_mse(value, cb, cr);
+    case CpuFeature::Value::delta_e:
+        return std::pow(10.0, (45.0 - value) / 20.0);  // +infinity (identical) gives 0
+    default:
+        return value;
+    }
 }
 
 // The limits cpu_metrics_unfit checks, from libvmaf's extractors.
@@ -183,7 +200,9 @@ std::string cambi_feature(const ExtractorOptions& options) {
 // comes from the squared errors it sums anyway (its option "psnr"), not a
 // pass of its own over both pictures (4K PSNR + SSIM + XPSNR 6% faster with
 // Intel's decoder, 11% with NVIDIA's); PSNR then scores the chroma alone, for
-// PSNR YUV.
+// PSNR YUV. A run that has PSNR's or SSIM's Y saved asks for the U and V
+// planes alone (JobRun's make_611 makes the 6:1:1 of them), and PSNR and
+// SSIM then score the chroma alone.
 std::vector<Extractor> extractors_for(const std::vector<std::string>& requested, int frame_rate,
                                       const ExtractorOptions& cambi) {
     std::vector<std::string> metrics;
@@ -193,21 +212,30 @@ std::vector<Extractor> extractors_for(const std::vector<std::string>& requested,
         }
         metrics.emplace_back(scored_by(metric));
     }
+    const auto asked = [&requested](std::initializer_list<std::string_view> keys) {
+        return std::any_of(keys.begin(), keys.end(), [&requested](std::string_view key) {
+            return std::find(requested.begin(), requested.end(), key) != requested.end();
+        });
+    };
     const bool psnr_yuv = has(metrics, "psnr_yuv") || has(metrics, "psnr_yuv_mse");  // the planes' PSNR
     const bool ssim_yuv = has(metrics, "ssim_yuv");
-    const bool psnr = psnr_yuv || has(metrics, "psnr");
+    const bool psnr_luma = asked({"psnr", "psnr_yuv", "psnr_yuv_mse", "psnr_yuv_y"});
+    const bool ssim_luma = asked({"ssim", "ssim_yuv", "ssim_yuv_y"});
     const bool xpsnr = has(metrics, "xpsnr");
     std::vector<Extractor> extractors;
-    if (psnr && (!xpsnr || psnr_yuv)) {
+    if (psnr_yuv || (psnr_luma && !xpsnr)) {
         // Set both ways, as libvmaf's PSNR reads the chroma of a 4:2:0
         // picture by default.
         extractors.push_back({"psnr", {{"enable_chroma", psnr_yuv ? "true" : "false"},
-                                       {"enable_luma", xpsnr ? "false" : "true"}}});
+                                       {"enable_luma", psnr_luma && !xpsnr ? "true" : "false"}}});
     }
-    if (ssim_yuv || has(metrics, "ssim")) {
+    if (ssim_yuv || ssim_luma) {
         extractors.push_back({"float_ssim", {}});
         if (ssim_yuv) {
             extractors.back().options.emplace_back("enable_chroma", "true");
+        }
+        if (!ssim_luma) {
+            extractors.back().options.emplace_back("enable_luma", "false");  // libvmaf-fast's
         }
     }
     if (xpsnr) {
@@ -215,7 +243,7 @@ std::vector<Extractor> extractors_for(const std::vector<std::string>& requested,
         // FFmpeg's filter weights by its first input, the source in the app's
         // commands.
         extractors.push_back({"xpsnr", {{"frame_rate", std::to_string(frame_rate)}}});
-        if (psnr) {
+        if (psnr_luma) {
             extractors.back().options.emplace_back("psnr", "true");
         }
     }
@@ -286,6 +314,23 @@ const CpuFeature* cpu_feature(std::string_view key) {
     const auto found = std::find_if(cpu_features.begin(), cpu_features.end(),
                                     [&](const CpuFeature& feature) { return feature.key == key; });
     return found == cpu_features.end() ? nullptr : &*found;
+}
+
+bool keeps_exact(std::string_view key) {
+    const std::string_view metric = scored_by(key);
+    return key == "psnr" || key == "ssim" || (key != metric && (metric == "psnr_yuv" || metric == "ssim_yuv"));
+}
+
+bool made_of_exact_planes(std::string_view key) {
+    return key == "psnr_yuv" || key == "psnr_yuv_mse" || key == "ssim_yuv";
+}
+
+double yuv_score(std::string_view key, double y, double u, double v) {
+    const CpuFeature* feature = cpu_feature(key);
+    if (feature == nullptr || !made_of_exact_planes(key)) {
+        throw std::invalid_argument(std::string(key) + " is not made of its planes' scores");
+    }
+    return python_round(combined(*feature, y, u, v), feature->decimals);
 }
 
 bool cpu_metrics_read_chroma(const std::vector<std::string>& metrics) {
@@ -820,20 +865,24 @@ PairScores CpuScorer::finish() {
         };
         std::vector<double> column;
         column.reserve(result.frames.size());
+        const bool exact = keeps_exact(metric) && !metric_on_gpu;
+        std::vector<double> exact_column;
+        exact_column.reserve(exact ? result.frames.size() : 0);
+        const bool of_planes = feature.value == Value::planes_611 || feature.value == Value::planes_611_mse;
         const std::string_view name = metric == "cambi" ? std::string_view(cambi_feature_) : feature.feature;
         for (const unsigned frame : result.frames) {
-            double value = read(name, frame);
             // at full precision, then rounded once
-            if (feature.value == Value::planes_611) {
-                value = (6 * value + read(feature.cb, frame) + read(feature.cr, frame)) / 8;
-            } else if (feature.value == Value::planes_611_mse) {
-                value = psnr_of_weighted_mse(value, read(feature.cb, frame), read(feature.cr, frame));
-            } else if (feature.value == Value::delta_e) {
-                value = std::pow(10.0, (45.0 - value) / 20.0);  // +infinity (identical) gives 0
-            }
+            const double value = combined(feature, read(name, frame), of_planes ? read(feature.cb, frame) : 0.0,
+                                          of_planes ? read(feature.cr, frame) : 0.0);
             column.push_back(python_round(value, feature.decimals));
+            if (exact) {
+                exact_column.push_back(value);
+            }
         }
         result.by_metric.emplace_back(metric, std::move(column));
+        if (exact) {
+            result.exact.emplace(metric, std::move(exact_column));
+        }
     }
     return result;
 }

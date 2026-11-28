@@ -307,6 +307,7 @@ void append_scores(PairScores& scores, PairScores&& more, const std::string& wha
     for (auto& metric : more.by_metric) {
         scores.by_metric.push_back(std::move(metric));
     }
+    scores.exact.merge(more.exact);
     scores.features_on_gpu.insert(scores.features_on_gpu.end(), more.features_on_gpu.begin(),
                                   more.features_on_gpu.end());
 }

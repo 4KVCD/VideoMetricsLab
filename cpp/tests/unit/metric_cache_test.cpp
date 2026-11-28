@@ -9,6 +9,7 @@
 #include "vml/crop_detect.h"
 #include "vml/cvvdp.h"
 #include "vml/film_grain_detect.h"
+#include "vml/metrics.h"
 
 #include <gtest/gtest.h>
 
@@ -98,7 +99,9 @@ void lay_saved_scores(const test::Folder& folder, const std::filesystem::path& b
 }
 
 // A loaded result holds the scores `expected` lists (as metric_cache.json
-// lists them), with their frames and provenance, and the label saved.
+// lists them), with their frames and provenance, and the label saved; and,
+// where asked, a YUV metric's Y as the plain metric's score it is filed as
+// (saved_as), which the Python app saved apart.
 void expect_loaded(const std::optional<std::pair<ComparisonResult, std::string>>& loaded,
                    const nlohmann::json& expected, const std::string& label) {
     if (expected.empty()) {
@@ -108,7 +111,16 @@ void expect_loaded(const std::optional<std::pair<ComparisonResult, std::string>>
     ASSERT_TRUE(loaded.has_value());
     EXPECT_EQ(loaded->second, label);
     const MetricResultSet& results = loaded->first.metric_results;
-    ASSERT_EQ(results.keys().size(), expected.size());
+    std::size_t luma_planes = 0;
+    for (const std::string& key : results.keys()) {
+        if (const std::string plain(saved_as(key)); plain != key) {
+            SCOPED_TRACE(key);
+            ASSERT_NE(results.frame(plain), nullptr);
+            EXPECT_EQ(results.frame(key)->values, results.frame(plain)->values);
+            ++luma_planes;
+        }
+    }
+    ASSERT_EQ(results.keys().size(), expected.size() + luma_planes);
     for (const nlohmann::json& metric : expected) {
         const std::string key = metric.at("key");
         SCOPED_TRACE(key);
@@ -267,6 +279,65 @@ TEST(MetricCache, ADisplayCompanionsPathLeadsBackToItsRow) {
     EXPECT_EQ(cvvdp_display_variant_parent(film), std::nullopt);
     EXPECT_EQ(cvvdp_display_variant_parent(twin), std::nullopt);
     EXPECT_EQ(cvvdp_display_variant_parent("encodes/film [CVVDP on sdr] cut.mkv"), std::nullopt);
+}
+
+// A YUV metric's Y is filed as its plain metric (PSNR YUV's Y in PSNR's
+// file): saved once, with its scores as calculated, and loaded under either
+// key; Recalculate's clear of the Y takes the file.
+TEST(MetricCache, AYuvMetricsYIsSavedOnceAsItsPlainMetricWithItsExactScores) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mp4", "s");
+    touch(folder / "t.mp4", "t");
+    const AnalysisRequest request = request_from(stored);
+    ComparisonResult result = test::result_from(stored.at("result"));
+    FrameMetricResult psnr = *result.metric_results.frame("psnr");
+    psnr.exact.assign(psnr.values.begin(), psnr.values.end());
+    psnr.exact.front() += 1e-7;  // as calculated, before its rounding to 6 decimals
+    FrameMetricResult y = psnr;
+    y.key = "psnr_yuv_y";
+    result.metric_results = MetricResultSet();
+    result.metric_results.add(y);  // as a run of PSNR YUV alone gives it
+    const MetricRequestSpec psnr_spec = *request.metric("psnr");
+    MetricRequestSpec y_spec = psnr_spec;
+    y_spec.key = "psnr_yuv_y";
+    const std::filesystem::path base = folder / "cache";
+    store_result(base, folder / "s.mp4", folder / "t.mp4", request.recipe, result, "t", {y_spec});
+    const std::filesystem::path directory = recipe_directory(base, folder / "s.mp4", folder / "t.mp4", request.recipe);
+    EXPECT_EQ(metric_path(directory, y_spec), metric_path(directory, psnr_spec));
+    const auto score_files = [&directory] {
+        std::size_t count = 0;
+        for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+            count += entry.path().extension() == ".npz" ? 1 : 0;
+        }
+        return count;
+    };
+    EXPECT_EQ(score_files(), 1u);
+    for (const MetricRequestSpec& spec : {psnr_spec, y_spec}) {
+        SCOPED_TRACE(spec.key);
+        const auto loaded = load_result(base, folder / "s.mp4", folder / "t.mp4", request.recipe, {spec},
+                                        request.perceptual_backends);
+        ASSERT_TRUE(loaded.has_value());
+        const FrameMetricResult* metric = loaded->first.metric_results.frame(spec.key);
+        ASSERT_NE(metric, nullptr);
+        EXPECT_EQ(metric->values, psnr.values);
+        EXPECT_EQ(metric->exact, psnr.exact);
+    }
+    // A Y without them (another route's, MS-SSIM's on the GPU) leaves the saved score as it is.
+    FrameMetricResult other = y;
+    other.exact.clear();
+    for (float& value : other.values) {
+        value += 1;
+    }
+    result.metric_results = MetricResultSet();
+    result.metric_results.add(other);
+    store_result(base, folder / "s.mp4", folder / "t.mp4", request.recipe, result, "t", {y_spec});
+    const auto kept = load_result(base, folder / "s.mp4", folder / "t.mp4", request.recipe, {psnr_spec},
+                                  request.perceptual_backends);
+    ASSERT_TRUE(kept.has_value());
+    EXPECT_EQ(kept->first.metric_results.frame("psnr")->values, psnr.values);
+    clear_metrics(base, folder / "s.mp4", folder / "t.mp4", request.recipe, {y_spec});
+    EXPECT_FALSE(std::filesystem::exists(metric_path(directory, psnr_spec)));
 }
 
 // A duration limit's scores, saved before ranges under the name of the range

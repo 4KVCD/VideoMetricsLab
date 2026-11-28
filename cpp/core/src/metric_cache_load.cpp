@@ -46,6 +46,7 @@ bool fit_frames(FrameMetricResult& metric, long long end, long long video_frames
     metric.frame.resize(kept);
     metric.time.resize(std::min(kept, metric.time.size()));
     metric.values.resize(std::min(kept, metric.values.size()));
+    metric.exact.resize(std::min(kept, metric.exact.size()));
     return true;
 }
 
@@ -151,9 +152,15 @@ bool cut_frames(FrameMetricResult& metric, long long start, std::optional<long l
         values = std::vector(values.begin() + static_cast<std::ptrdiff_t>(from),
                              values.begin() + static_cast<std::ptrdiff_t>(to));
     };
+    const bool exact = metric.exact.size() == metric.values.size();  // the scores as calculated, where saved
     keep(metric.frame);
     keep(metric.time);
     keep(metric.values);
+    if (exact) {
+        keep(metric.exact);
+    } else {
+        metric.exact.clear();
+    }
     return true;
 }
 

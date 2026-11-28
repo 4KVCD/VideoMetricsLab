@@ -156,7 +156,9 @@ bool made_as_chosen(const std::string& key, const std::optional<std::string>& ch
                     const std::function<bool(const std::string&)>& gpu_can_score);
 
 // The file of a comparison's `folder` that holds the score of `spec`: its
-// request, VMAF's model included, names it (metric_identity_hash).
+// request, VMAF's model included, names it (metric_identity_hash). A YUV
+// metric's Y plane is the plain metric's score and is filed as that metric
+// (saved_as, metrics.h): PSNR YUV's Y is in PSNR's file.
 std::filesystem::path metric_path(const std::filesystem::path& directory, const MetricRequestSpec& spec);
 
 // Whether a run asking for `spec` takes the saved score `file` of the

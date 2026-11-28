@@ -51,6 +51,11 @@ struct FrameMetricResult {
     // from the saved scores or a run file (which says nothing: false);
     // nothing for one this run made, whose pair says. Saved only there.
     std::optional<bool> av1_grain_dav1d = std::nullopt;
+    // `values` as calculated, before they were rounded to 6 decimals, for a
+    // plane a 6:1:1 metric can be made from later (keeps_exact,
+    // libvmaf_cpu.h); empty otherwise. PSNR's and SSIM's are saved (metric_cache), so that PSNR
+    // YUV and SSIM YUV take a saved Y as it was and calculate only U and V.
+    std::vector<double> exact = {};
 
     // The one number for the whole video, by the metric's own way of
     // averaging; nothing when no frame has a score.

@@ -589,6 +589,7 @@ ParsedScores gpu_scores(const PairScores& scored, double fps, const VmafOptions&
     scores.frame.assign(scored.frames.begin(), scored.frames.end());
     scores.time = times_of(scores.frame, fps);
     scores.features_on_gpu = scored.features_on_gpu;
+    scores.exact = scored.exact;
     for (const auto& [key, values] : scored.by_metric) {
         std::vector<float>& column = scores.metrics[key];
         for (const double value : values) {
@@ -1224,7 +1225,8 @@ std::optional<std::string> hwaccel_from(const nlohmann::json& text) {
 }
 
 // The scores the GPU's process leaves for its parent: the frame numbers,
-// then each metric's values in `order`, as this PC stores them.
+// then each metric's values in `order`, then the values as calculated of
+// those in `exact` (ParsedScores::exact), as this PC stores them.
 constexpr const char* scores_file = "scores.bin";
 
 ParsedScores read_scores(const nlohmann::json& result, const std::filesystem::path& folder, double fps) {
@@ -1239,6 +1241,11 @@ ParsedScores read_scores(const nlohmann::json& result, const std::filesystem::pa
         std::vector<float>& values = scores.metrics[key];
         values.resize(count);
         file.read(reinterpret_cast<char*>(values.data()), static_cast<std::streamsize>(count * sizeof(float)));
+    }
+    for (const std::string& key : result.value("exact", std::vector<std::string>{})) {
+        std::vector<double>& values = scores.exact[key];
+        values.resize(count);
+        file.read(reinterpret_cast<char*>(values.data()), static_cast<std::streamsize>(count * sizeof(double)));
     }
     if (!file) {
         throw std::runtime_error("The scores could not be read back from the process that made them.");
@@ -1906,10 +1913,22 @@ nlohmann::json scoring_task(const nlohmann::json& request, const std::filesystem
         file.write(reinterpret_cast<const char*>(values.data()),
                    static_cast<std::streamsize>(values.size() * sizeof(float)));
     }
+    std::vector<std::string> exact;
+    for (const auto& [key, values] : scores.exact) {
+        if (std::find(scores.order.begin(), scores.order.end(), key) != scores.order.end() &&
+            values.size() == scores.frame.size()) {
+            file.write(reinterpret_cast<const char*>(values.data()),
+                       static_cast<std::streamsize>(values.size() * sizeof(double)));
+            exact.push_back(key);
+        }
+    }
     if (!file) {
         throw std::runtime_error("The scores could not be written.");
     }
-    return {{"frames", scores.frame.size()}, {"order", scores.order}, {"features_on_gpu", scores.features_on_gpu}};
+    return {{"frames", scores.frame.size()},
+            {"order", scores.order},
+            {"features_on_gpu", scores.features_on_gpu},
+            {"exact", exact}};
 }
 
 bool follows_vulkan_engine(std::string_view key) {
@@ -2245,6 +2264,9 @@ ParsedScores take_metrics(ParsedScores& scores, const std::vector<std::string>& 
         }
         taken.metrics[key] = std::move(scores.metrics.at(key));
         scores.metrics.erase(key);
+        if (auto exact = scores.exact.extract(key)) {
+            taken.exact.insert(std::move(exact));
+        }
         taken.order.push_back(key);
         if (const auto on_gpu = std::find(scores.features_on_gpu.begin(), scores.features_on_gpu.end(), key);
             on_gpu != scores.features_on_gpu.end()) {
@@ -2728,8 +2750,12 @@ ComparisonResult score_pair_once(const RunEnvironment& environment, const VideoI
             MetricProvenance provenance = run_provenance(key, key_model, options, environment.ffmpeg_version,
                                                          scores->cpu_keys, scores->gpu_keys, scores->gpu_backend);
             mark_range(provenance, range);
-            result.metric_results.add(
-                FrameMetricResult{key, part.frame, part.time, part.metrics.at(key), std::move(provenance)});
+            FrameMetricResult metric{key, part.frame, part.time, part.metrics.at(key), std::move(provenance)};
+            if (const auto exact = part.exact.find(key);
+                exact != part.exact.end() && exact->second.size() == metric.values.size()) {
+                metric.exact = exact->second;
+            }
+            result.metric_results.add(std::move(metric));
         }
         result.metric_failures.insert(part.failed.begin(), part.failed.end());
     }

@@ -597,6 +597,9 @@ void SavedResultsPanel::show_details() {
             if (*stop) {
                 return read;  // not complete: not used
             }
+            if (read.scores.contains(file.file)) {
+                continue;  // a YUV metric's Y, listed from its plain metric's file, read already
+            }
             read.scores[file.file] = read_saved_score(file.file);
             if (const std::optional<SavedScore>& score = read.scores[file.file]) {
                 if (const MetricDefinition* metric = find_metric(file.key)) {

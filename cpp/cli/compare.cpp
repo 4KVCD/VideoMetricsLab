@@ -1061,8 +1061,12 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
         analysis_request(video.options, with_planes(video.metrics), chosen, cvvdp, source, *video.info).metrics;
     std::optional<ComparisonResult> saved;
     if (use_saved) {
+        // With PSNR YUV's and SSIM YUV's Y, which let them calculate their U and V alone (keep_exact_lumas).
+        std::vector<MetricRequestSpec> lumas;
+        std::copy_if(video.saved_metrics.begin(), video.saved_metrics.end(), std::back_inserter(lumas),
+                     [](const MetricRequestSpec& spec) { return spec.key == "psnr_yuv_y" || spec.key == "ssim_yuv_y"; });
         if (auto found = load_result(cache_folder, source.path, video.path, video.request.recipe,
-                                     video.request.metrics, video.request.perceptual_backends)) {
+                                     video.request.metrics, video.request.perceptual_backends, lumas)) {
             saved = std::move(found->first);
             // The bitrates as read now, as the window takes them
             // (on_saved_found): an older version may have taken the whole
@@ -1086,11 +1090,13 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
         kept = reusable(*saved, video.request.metrics, chosen,
                         [build](const std::string&) { return detect_vship_device(build, gpu_probes_token()).first.has_value(); },
                         colour_tags(source, *video.info));
+        keep_exact_lumas(kept, saved->metric_results, video.metrics);
     }
     if (std::all_of(video.metrics.begin(), video.metrics.end(), [&kept](const std::string& key) { return kept.has(key); })) {
         // Everything asked for is saved: nothing to run, as the window runs
         // nothing for a row that has its scores.
         video.result = std::move(saved);
+        drop_planes_not_in(video.result->metric_results, video.metrics);  // a Y loaded for keep_exact_lumas
         video.from_cache = true;
         RunFacts facts;
         facts.settings = VideoSettings{source, *video.info, options, video.metrics, backends, cvvdp};

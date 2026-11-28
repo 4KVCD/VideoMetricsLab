@@ -33,6 +33,7 @@
 #include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
 #include "vml/hardware_decoding.h"
+#include "vml/metrics.h"
 #include "vml/model_select.h"
 #include "vml/npz.h"
 #include "vml/number_format.h"
@@ -367,28 +368,50 @@ std::string metadata(const std::string& key, const char* kind, const MetricReque
     return python_json_compact(data);
 }
 
+// The request whose file holds `spec`'s scores: a YUV metric's Y plane is
+// saved as the plain metric it equals (saved_as), one file for both.
+MetricRequestSpec saved_spec(const MetricRequestSpec& spec) {
+    MetricRequestSpec saved = spec;
+    saved.key = std::string(saved_as(spec.key));
+    return saved;
+}
+
+// The file named after `spec` itself, where a YUV metric's Y plane was
+// saved before it was filed as its plain metric (metric_path): still read.
+std::filesystem::path own_metric_path(const std::filesystem::path& directory, const MetricRequestSpec& spec) {
+    return directory / platform::path_from_text(spec.key + "_" + metric_identity_hash(spec) + ".npz");
+}
+
 // The request a perceptual score is saved under: the implementation that
 // made it, so that a CPU score never passes for a Vship GPU one, nor one
 // Vship build's for the other's. A score the run's other build made (Vship
 // 5.1.2 standing in for Vship-fast) is so kept for that build's requests.
 MetricRequestSpec stored_spec(const MetricRequestSpec& spec, const MetricProvenance& provenance) {
-    MetricRequestSpec stored = spec;
+    MetricRequestSpec stored = saved_spec(spec);
     if (spec.backend_id == "perceptual") {
         stored.implementation_compatibility_id = provenance.implementation_compatibility_id;
     }
     return stored;
 }
 
+// Whether a score of `key` is saved with its scores as calculated (the
+// "exact" array): PSNR's and SSIM's, the Y that PSNR YUV and SSIM YUV take
+// from the save to calculate only their U and V (JobRun's make_611).
+bool saves_exact(const std::string& key) { return key == "psnr" || key == "ssim"; }
+
 void store_metric(const std::filesystem::path& directory, const FrameMetricResult& result,
                   const MetricRequestSpec& spec, const DecodingMarks& marks) {
     const MetricRequestSpec stored = stored_spec(spec, result.provenance);
     const std::string described =
-        metadata(result.key, "frame", stored, result.provenance, marks, result.av1_grain_dav1d);
-    write_atomically(metric_path(directory, stored),
-                     npz_bytes({{"metadata", npy_text(described)},
-                                {"frame", npy_int32(result.frame)},
-                                {"time", npy_float64(result.time)},
-                                {"values", npy_float32(result.values)}}));
+        metadata(stored.key, "frame", stored, result.provenance, marks, result.av1_grain_dav1d);
+    std::vector<std::pair<std::string, NpyArray>> arrays{{"metadata", npy_text(described)},
+                                                         {"frame", npy_int32(result.frame)},
+                                                         {"time", npy_float64(result.time)},
+                                                         {"values", npy_float32(result.values)}};
+    if (saves_exact(stored.key) && !result.exact.empty() && result.exact.size() == result.values.size()) {
+        arrays.emplace_back("exact", npy_float64(result.exact));
+    }
+    write_atomically(metric_path(directory, stored), npz_bytes(arrays));
 }
 
 void store_metric(const std::filesystem::path& directory, const SequenceMetricResult& result,
@@ -396,7 +419,7 @@ void store_metric(const std::filesystem::path& directory, const SequenceMetricRe
     const MetricRequestSpec stored = stored_spec(spec, result.provenance);
     std::vector<std::pair<std::string, NpyArray>> arrays{
         {"metadata",
-         npy_text(metadata(result.key, "sequence", stored, result.provenance, marks, result.av1_grain_dav1d))},
+         npy_text(metadata(stored.key, "sequence", stored, result.provenance, marks, result.av1_grain_dav1d))},
         {"score", npy_float64_scalar(result.score)}};
     if (result.has_timeline()) {
         arrays.emplace_back("frame", npy_int32(result.frame));
@@ -541,11 +564,15 @@ FrameMetricResult sampled_every(FrameMetricResult result, int step) {
         return result;
     }
     FrameMetricResult kept{result.key, {}, {}, {}, result.provenance, result.av1_grain_dav1d};
+    const bool exact = result.exact.size() == result.frame.size();
     for (std::size_t i = 0; i < result.frame.size(); ++i) {
         if (result.frame[i] % step == 0) {
             kept.frame.push_back(result.frame[i]);
             kept.time.push_back(result.time[i]);
             kept.values.push_back(result.values[i]);
+            if (exact) {
+                kept.exact.push_back(result.exact[i]);
+            }
         }
     }
     return kept;
@@ -608,9 +635,15 @@ std::optional<LoadedMetric> load_metric_file(const std::filesystem::path& path, 
                 return std::nullopt;
             }
             auto& [frame, time, values] = *frames;
-            return sampled_every(FrameMetricResult{spec.key, std::move(frame), std::move(time), std::move(values),
-                                                   *provenance, marked},
-                                 spec.coverage ? spec.coverage->step : 1);
+            FrameMetricResult result{spec.key, std::move(frame), std::move(time), std::move(values), *provenance, marked};
+            if (arrays.contains("exact")) {
+                // A score saved before it had them, or cut short: none, the rounded scores stand alone.
+                if (std::optional<std::vector<double>> exact = npy_numbers(arrays.at("exact"));
+                    exact && exact->size() == result.values.size()) {
+                    result.exact = std::move(*exact);
+                }
+            }
+            return sampled_every(std::move(result), spec.coverage ? spec.coverage->step : 1);
         }
         if (kind == "sequence") {
             std::optional<std::vector<double>> score_value;
@@ -1119,6 +1152,17 @@ std::optional<LoadedMetric> load_metric(const std::filesystem::path& directory, 
     const std::vector<ColourTags> infos = context_colour_tags(context);
     const DecodingMarks marks = decoding_marks(context);
     const auto stale = [&infos](const LoadedMetric& metric) { return stale_score(provenance_of(metric), infos); };
+    if (saved_as(spec.key) != spec.key) {
+        // A YUV metric's Y: the plain metric's score, from its file, or from
+        // the Y's own file of before (own_metric_path).
+        std::optional<LoadedMetric> result = load_metric(directory, saved_spec(spec), backend, context);
+        if (!result) {
+            result = load_metric_file(own_metric_path(directory, spec), spec, marks);
+            return result && !stale(*result) ? result : std::nullopt;
+        }
+        std::visit([&spec](auto& metric) { metric.key = spec.key; }, *result);
+        return result;
+    }
     if (is_auto_perceptual(spec)) {
         for (const auto& [path, concrete] : auto_perceptual_candidates(directory, spec)) {
             if (backend == "cpu" && is_vship_id(concrete.implementation_compatibility_id)) {
@@ -1945,7 +1989,7 @@ bool made_as_chosen(const std::string& key, const std::optional<std::string>& ch
 }
 
 std::filesystem::path metric_path(const std::filesystem::path& directory, const MetricRequestSpec& spec) {
-    return directory / platform::path_from_text(spec.key + "_" + metric_identity_hash(spec) + ".npz");
+    return own_metric_path(directory, saved_spec(spec));
 }
 
 bool run_takes(const std::filesystem::path& folder, const MetricRequestSpec& spec, const std::filesystem::path& file,
@@ -2050,11 +2094,37 @@ std::filesystem::path store_result(const std::filesystem::path& base, const std:
             return false;
         }
     };
+    // A plain metric and its YUV metric's Y share a file (metric_path): it is
+    // written once, from the score that has its scores as calculated where
+    // one has (saves_exact), and the Y's own file of before goes.
+    std::vector<const MetricRequestSpec*> ordered;
     for (const MetricRequestSpec& spec : specs) {
+        ordered.push_back(&spec);
+    }
+    std::stable_partition(ordered.begin(), ordered.end(), [&result](const MetricRequestSpec* spec) {
+        const FrameMetricResult* metric = result.metric_results.frame(spec->key);
+        return metric != nullptr && !metric->exact.empty();
+    });
+    std::set<std::filesystem::path> written;
+    for (const MetricRequestSpec* spec_of : ordered) {
+        const MetricRequestSpec& spec = *spec_of;
         if (const FrameMetricResult* metric = result.metric_results.frame(spec.key)) {
-            if (answers_request(spec, metric->provenance) &&
-                !overwrites_marks(spec, metric->provenance, metric->av1_grain_dav1d)) {
+            if (!answers_request(spec, metric->provenance) ||
+                overwrites_marks(spec, metric->provenance, metric->av1_grain_dav1d)) {
+                continue;
+            }
+            // A Y never replaces its plain metric's saved score, which another route may have made (a CPU
+            // MS-SSIM, 1e-6 from the GPU's on a few frames), except to add the scores as calculated (the CPU's
+            // PSNR and SSIM, the same either way).
+            const std::filesystem::path path = metric_path(directory, stored_spec(spec, metric->provenance));
+            const bool alias = saved_as(spec.key) != spec.key;
+            const bool keep_saved = alias && metric->exact.empty() && std::filesystem::exists(path);
+            if (!keep_saved && written.insert(path).second) {
                 store_metric(directory, *metric, spec, marks);
+            }
+            if (alias) {
+                std::error_code ignored;
+                std::filesystem::remove(own_metric_path(directory, spec), ignored);
             }
         } else if (const SequenceMetricResult* sequence = result.metric_results.sequence(spec.key)) {
             if (answers_request(spec, sequence->provenance) &&
@@ -2086,16 +2156,22 @@ int clear_metrics(const std::filesystem::path& base, const std::filesystem::path
             }
             continue;
         }
-        if (spec.key == "vmaf" && spec.backend_id == "ffmpeg") {
-            for (const auto& [path, concrete] : vmaf_equivalents(directory, spec)) {
+        // A YUV metric's Y goes with the plain metric's file that holds it,
+        // and with its own file of before (own_metric_path).
+        const MetricRequestSpec saved = saved_spec(spec);
+        if (saved.key == "vmaf" && saved.backend_id == "ffmpeg") {
+            for (const auto& [path, concrete] : vmaf_equivalents(directory, saved)) {
                 remove(path);
             }
-        } else if (spec.key == "vmaf_v1" && spec.backend_id == "ffmpeg") {
-            for (const auto& [path, concrete] : old_v1_scores(directory, spec)) {
+        } else if (saved.key == "vmaf_v1" && saved.backend_id == "ffmpeg") {
+            for (const auto& [path, concrete] : old_v1_scores(directory, saved)) {
                 remove(path);
             }
         }
         remove(metric_path(directory, spec));
+        if (saved.key != spec.key) {
+            remove(own_metric_path(directory, spec));
+        }
     }
     // The folder goes with its last score.
     std::error_code error;

@@ -22,6 +22,7 @@
 #include "vml/film_grain_detect.h"
 #include "vml/gpu_cpu_metrics.h"
 #include "vml/gpu_decoders.h"
+#include "vml/libvmaf_cpu.h"
 #include "vml/run_record.h"
 
 namespace vml {
@@ -944,6 +945,83 @@ TEST(JobRunner, VmafYuvIsMadeFromVmafAndItsChromaPlanes) {
     EXPECT_TRUE(failed.result.has_metric("vmaf_yuv_u"));  // scored, so saved
     EXPECT_EQ(failed.failures, (MetricFailures{{"vmaf_yuv", "its chroma is too small"}}));
     EXPECT_EQ(failed.message, "VMAF YUV (6:1:1) failed: its chroma is too small");
+}
+
+// PSNR YUV whose Y is saved with its scores as calculated (a saved PSNR's)
+// is planned as its U and V alone and made of the three as a run of all
+// three planes makes it (yuv_score), its Y PSNR's; SSIM YUV, whose SSIM was
+// saved without such scores (before they were saved), is calculated whole.
+TEST(JobRunner, PsnrYuvTakesASavedPsnrAndCalculatesOnlyItsChroma) {
+    VideoInfo source;
+    source.path = "reference.mkv";
+    source.width = 1920;
+    source.height = 1080;
+    source.pix_fmt = "yuv420p";
+    VideoInfo test = source;
+    test.path = "encode.mkv";
+    VmafJob job;
+    job.source_info = source;
+    job.distorted_info = test;
+    job.options.compute_vmaf = false;
+    job.metric_keys = {"psnr", "ssim", "psnr_yuv", "ssim_yuv"};
+    for (const std::string& key : job.metric_keys) {
+        job.options.set_metric_enabled(key, true);
+    }
+    job.cached_result = result_with({{"ssim", {0, 1}}});
+    FrameMetricResult psnr{"psnr", {0, 1}, {0.0, 1 / 24.0}, {40.123457F, 41.5F}, {}};
+    psnr.exact = {40.1234567891, 41.5};
+    job.cached_result->metric_results.add(psnr);
+    job.cached_metrics = job.cached_result->metric_results;
+    job.tasks = plan_tasks(source, test, job.options, job.metric_keys, {}, job.cached_metrics);
+    ASSERT_EQ(job.tasks.size(), 1u);
+    EXPECT_EQ(job.tasks[0].metric_keys, (std::vector<std::string>{"psnr_yuv_u", "psnr_yuv_v", "ssim_yuv", "ssim_yuv_y",
+                                                                   "ssim_yuv_u", "ssim_yuv_v"}));
+
+    const std::map<std::string, std::vector<double>> calculated{
+        {"psnr_yuv_u", {30.2500001, 31.0}}, {"psnr_yuv_v", {35.0000004, 36.0}}, {"ssim_yuv", {0.9, 0.95}},
+        {"ssim_yuv_y", {0.9, 0.95}},        {"ssim_yuv_u", {0.9, 0.95}},        {"ssim_yuv_v", {0.9, 0.95}}};
+    Reported reported;
+    run_jobs(
+        {job}, 1, reported.events(),
+        [&](const VmafJob&, const VmafOptions& options, const ProgressCallback&, const StatusCallback&,
+            const CancelToken&) {
+            ComparisonResult result;
+            for (const std::string& key : options.requested_metrics()) {
+                const std::vector<double>& scores = calculated.at(key);
+                std::vector<float> rounded;
+                for (const double score : scores) {
+                    rounded.push_back(static_cast<float>(score));
+                }
+                FrameMetricResult metric{key, {0, 1}, {0.0, 1 / 24.0}, std::move(rounded), {}};
+                metric.exact = scores;
+                result.metric_results.add(std::move(metric));
+            }
+            return result;
+        },
+        24, CancelToken());
+
+    ASSERT_EQ(reported.finished.size(), 1u);
+    const MetricResultSet& made = reported.finished.at(0).metric_results;
+    ASSERT_NE(made.frame("psnr_yuv"), nullptr);
+    EXPECT_EQ(made.frame("psnr_yuv")->values,
+              (std::vector<float>{static_cast<float>(yuv_score("psnr_yuv", 40.1234567891, 30.2500001, 35.0000004)),
+                                  static_cast<float>(yuv_score("psnr_yuv", 41.5, 31.0, 36.0))}));
+    ASSERT_NE(made.frame("psnr_yuv_y"), nullptr);
+    EXPECT_EQ(made.frame("psnr_yuv_y")->values, psnr.values);
+    EXPECT_EQ(made.frame("ssim_yuv")->values, (std::vector<float>{0.9F, 0.95F}));
+}
+
+// A saved PSNR with its scores as calculated is kept for PSNR YUV, PSNR not
+// asked for, as its Y; a rounded SSIM is not kept for SSIM YUV.
+TEST(JobRunner, AYuvMetricKeepsItsSavedPlainMetricAsItsY) {
+    MetricResultSet saved = result_with({{"psnr", {0, 1}}, {"ssim", {0, 1}}}).metric_results;
+    FrameMetricResult psnr = *saved.frame("psnr");
+    psnr.exact = {40.1234567891, 41.5};
+    saved.add(psnr);
+    MetricResultSet kept;
+    keep_exact_lumas(kept, saved, {"psnr_yuv", "ssim_yuv"});
+    EXPECT_EQ(kept.keys(), (std::vector<std::string>{"psnr_yuv_y"}));
+    EXPECT_EQ(kept.frame("psnr_yuv_y")->exact, psnr.exact);
 }
 
 // A YUV metric that is calculated has its planes calculated with it, asked

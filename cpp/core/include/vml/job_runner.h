@@ -128,6 +128,13 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
                                    const MetricResultSet& saved = MetricResultSet(), bool share_decode = false,
                                    const GpuAnswers& gpu = {});
 
+// The Y plane, with its scores as calculated, of each PSNR YUV, PSNR YUV
+// (MSE) and SSIM YUV in `asked` that `saved` has (its plane's or its plain
+// metric's: saved_as), added to `kept` under the plane's key: what a run
+// keeps (plan_tasks's `saved`) so that it calculates their U and V alone,
+// PSNR or SSIM asked for or not.
+void keep_exact_lumas(MetricResultSet& kept, const MetricResultSet& saved, const std::vector<std::string>& asked);
+
 // What the CPU's task says of the metrics a failed check of the GPU sent it
 // (`failures`, each metric's key and why): a note for each reason, with its
 // metrics, of those calculated (`calculated`) only: a saved score moved
